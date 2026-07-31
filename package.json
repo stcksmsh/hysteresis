@@ -1,0 +1,24 @@
+{
+  "name": "hysteresis",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "npm run build:worklet && concurrently -k -n worklet,vite \"vite build --config vite.worklet.config.ts --watch\" \"vite\"",
+    "build:worklet": "vite build --config vite.worklet.config.ts",
+    "build": "npm run build:worklet && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.worker.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "fft.js": "^4.0.4"
+  },
+  "devDependencies": {
+    "@types/audioworklet": "^0.0.100",
+    "concurrently": "^10.0.4",
+    "typescript": "^5.9.3",
+    "vite": "^8.2.0",
+    "vitest": "^4.1.10"
+  }
+}
