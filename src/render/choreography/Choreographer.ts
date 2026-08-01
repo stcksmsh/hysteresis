@@ -52,9 +52,14 @@ export class Choreographer {
         dropTrigger = { active: true, strength: event.strength, age: 0 }
         this.windupSpring.addImpulse(RELEASE_IMPULSE * (0.5 + event.strength))
         this.windupSpring.setTarget(0)
-      } else if (event.type === 'onset') {
-        onsetPulses.push({ strength: event.strength })
       }
+    }
+
+    // Every band that moved becomes its own pulse, each carrying its own
+    // stereo position — that is what spreads a dense arrangement across the
+    // field instead of collapsing it onto one whole-mix position.
+    for (const hit of frame.spectralHits) {
+      onsetPulses.push({ strength: hit.strength, tone: hit.tone, pan: hit.pan })
     }
 
     this.windupSpring.setTarget(frame.buildProgress)
@@ -86,6 +91,7 @@ export class Choreographer {
       centroid: frame.centroid,
       flatness: frame.flatness,
       energy: frame.energy,
+      pan: frame.pan,
 
       paletteMix,
       hueShift,

@@ -8,15 +8,18 @@
     "build:worklet": "vite build --config vite.worklet.config.ts",
     "build": "npm run build:worklet && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.worker.json",
-    "test": "vitest run"
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.worker.json && tsc --noEmit -p tsconfig.tools.json",
+    "test": "vitest run",
+    "compile": "tsx tools/compile/index.ts"
   },
   "dependencies": {
     "fft.js": "^4.0.4"
   },
   "devDependencies": {
     "@types/audioworklet": "^0.0.100",
+    "@types/node": "^24.9.2",
     "concurrently": "^10.0.4",
+    "tsx": "^4.20.6",
     "typescript": "^5.9.3",
     "vite": "^8.2.0",
     "vitest": "^4.1.10"

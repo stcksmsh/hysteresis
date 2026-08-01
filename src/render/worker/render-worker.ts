@@ -1,5 +1,5 @@
 /// <reference lib="webworker" />
-import type { MainToRenderWorker, RenderWorkerToMain, StateFrame, StructuralEvent } from '../../shared/types'
+import type { MainToRenderWorker, RenderWorkerToMain, SpectralHit, StateFrame, StructuralEvent } from '../../shared/types'
 import { createGlContext, WebGL2UnavailableError, type GlCapabilities } from './gl/context'
 import { createFbo, deleteFbo, type Fbo } from './gl/fbo'
 import { sceneRegistry, DEFAULT_SCENE_ID } from './scenes/registry'
@@ -15,6 +15,17 @@ const PERSISTENCE_DECAY = 0.85
 const BLOOM_THRESHOLD = 0.55
 const BLOOM_STRENGTH = 0.6
 
+// Adaptive quality. Substep scaling reacts continuously (free); resolution
+// steps down only after sustained overrun, and only one way, because
+// reallocating sim buffers resets the pattern and would thrash visibly.
+const FRAME_BUDGET_MS = 22 // ~45fps; above this we start shedding work
+const FRAME_COMFORT_MS = 15 // below this we give work back
+const FRAME_TIME_SMOOTHING = 0.1
+const QUALITY_STEP = 0.04
+const RESOLUTION_STEPS = [420, 300, 220]
+const RESOLUTION_STEP_AFTER_MS = 3000 // sustained overrun before dropping resolution
+const STATS_INTERVAL_MS = 500
+
 let caps: GlCapabilities | null = null
 let running = false
 let reducedMotion = false
@@ -23,6 +34,12 @@ let lastLoopTime: number | null = null
 let canvasRef: OffscreenCanvas | null = null
 let scene: Scene | null = null
 let currentDpr = 1
+
+let smoothedFrameMs = 16
+let qualityScale = 1
+let resolutionStep = 0
+let overrunSinceMs: number | null = null
+let lastStatsPost = 0
 
 let sceneFbo: Fbo | null = null
 let persistencePass: PersistencePass | null = null
@@ -48,6 +65,8 @@ const fallbackFrame: StateFrame = {
   bandsRaw: { sub: 0, low: 0, mid: 0, presence: 0, air: 0 },
   centroid: 0,
   flatness: 0,
+  pan: 0,
+  spectralHits: [],
   events: [],
 }
 
@@ -57,6 +76,7 @@ const fallbackFrame: StateFrame = {
 // then-release feel), but discrete events accumulate here and get drained
 // once per rendered frame so a transient between two rAF ticks is never lost.
 let pendingEvents: StructuralEvent[] = []
+let pendingHits: SpectralHit[] = []
 
 // Debug-only overrides (?debug=1 scene-tuning sliders): patched onto
 // whichever StateFrame is active each frame, so the full real choreography
@@ -98,10 +118,14 @@ function loop(t: number) {
     debugDropPending = false
   }
 
+  const hits = pendingHits
+  pendingHits = []
+
   const effectiveFrame: StateFrame = {
     ...base,
     buildProgress: debugOverrides.buildProgress ?? base.buildProgress,
     tension: debugOverrides.tension ?? base.tension,
+    spectralHits: hits,
     events,
   }
 
@@ -121,7 +145,40 @@ function loop(t: number) {
 
   compositePass.apply(null, sceneFbo.width, sceneFbo.height, currentTexture, bloomTexture, BLOOM_STRENGTH)
 
+  if (dt > 0) updateAdaptiveQuality(dt * 1000, t)
+
   rafHandle = raf(loop)
+}
+
+function updateAdaptiveQuality(frameMs: number, t: number) {
+  smoothedFrameMs += (frameMs - smoothedFrameMs) * FRAME_TIME_SMOOTHING
+
+  if (smoothedFrameMs > FRAME_BUDGET_MS) {
+    qualityScale = Math.max(0.15, qualityScale - QUALITY_STEP)
+    if (overrunSinceMs === null) overrunSinceMs = t
+  } else {
+    if (smoothedFrameMs < FRAME_COMFORT_MS) {
+      qualityScale = Math.min(1, qualityScale + QUALITY_STEP * 0.5)
+    }
+    overrunSinceMs = null
+  }
+  scene?.setQuality?.(qualityScale)
+
+  // Substeps are already floored; if we're still over budget after a
+  // sustained stretch, the resolution itself is the problem.
+  const stuckAtMinQuality = qualityScale <= 0.2
+  const sustained = overrunSinceMs !== null && t - overrunSinceMs > RESOLUTION_STEP_AFTER_MS
+  if (stuckAtMinQuality && sustained && resolutionStep < RESOLUTION_STEPS.length - 1) {
+    resolutionStep++
+    scene?.setSimMaxEdge?.(RESOLUTION_STEPS[resolutionStep])
+    qualityScale = 1
+    overrunSinceMs = null
+  }
+
+  if (t - lastStatsPost > STATS_INTERVAL_MS) {
+    lastStatsPost = t
+    post({ kind: 'stats', fps: smoothedFrameMs > 0 ? 1000 / smoothedFrameMs : 0 })
+  }
 }
 
 function start() {
@@ -154,6 +211,29 @@ function allocatePipeline(width: number, height: number) {
   else bloomPass = new BloomPass(gl, width, height, caps.floatFbo)
 
   if (!compositePass) compositePass = new CompositePass(gl)
+}
+
+function switchScene(sceneId: string) {
+  const factory = sceneRegistry[sceneId]
+  // Ignore unknown ids rather than throwing — a stale picker value should
+  // never take down the render loop.
+  if (!factory || !caps || !canvasRef || sceneId === scene?.id) return
+
+  scene?.dispose()
+  scene = factory()
+  scene.init({
+    gl: caps.gl,
+    width: canvasRef.width,
+    height: canvasRef.height,
+    dpr: currentDpr,
+    reducedMotion,
+    floatFbo: caps.floatFbo,
+  })
+
+  // Cost differs per scene, so previous backoff decisions don't carry over.
+  qualityScale = 1
+  overrunSinceMs = null
+  scene.setQuality?.(qualityScale)
 }
 
 function sceneContext(width: number, height: number, dpr: number): SceneContext | null {
@@ -224,6 +304,7 @@ self.onmessage = (e: MessageEvent<MainToRenderWorker>) => {
     case 'state': {
       latestStateFrame = msg.frame
       pendingEvents.push(...msg.frame.events)
+      pendingHits.push(...msg.frame.spectralHits)
       break
     }
     case 'setReducedMotion': {
@@ -235,8 +316,7 @@ self.onmessage = (e: MessageEvent<MainToRenderWorker>) => {
       break
     }
     case 'setScene': {
-      // Multiple registered scenes land alongside future metaphors; only
-      // one is registered today.
+      switchScene(msg.sceneId)
       break
     }
     case 'debugSetParam': {

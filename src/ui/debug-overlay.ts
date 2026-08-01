@@ -2,7 +2,7 @@ import type { MainToRenderWorker, StateFrame } from '../shared/types'
 import { BAND_NAMES } from '../audio/worklet/bands'
 import { Choreographer } from '../render/choreography/Choreographer'
 
-const NUMERIC_FIELDS = ['tempo', 'tempoConfidence', 'beatPhase', 'barPhase', 'buildProgress', 'tension', 'energy', 'centroid', 'flatness'] as const
+const NUMERIC_FIELDS = ['tempo', 'tempoConfidence', 'beatPhase', 'barPhase', 'buildProgress', 'tension', 'energy', 'centroid', 'flatness', 'pan'] as const
 const BAR_FIELDS = ['buildProgress', 'tension'] as const
 const MAX_LOG_ENTRIES = 10
 
@@ -80,6 +80,7 @@ export class DebugOverlay {
     for (const field of NUMERIC_FIELDS) {
       numbersWrap.appendChild(this.makeNumberRow(field))
     }
+    numbersWrap.appendChild(this.makeNumberRow('fps'))
     panel.appendChild(numbersWrap)
 
     this.eventLog = document.createElement('div')
@@ -104,6 +105,14 @@ export class DebugOverlay {
   update(frame: StateFrame): void {
     this.pending = frame
     if (frame.events.length > 0) this.logEvents(frame.events, frame.t)
+  }
+
+  // Render-thread frame rate, reported by the render worker. Worth seeing
+  // directly: on a software renderer a low frame rate reads as "the visual
+  // isn't moving", which is indistinguishable from a choreography bug by eye.
+  setFps(fps: number): void {
+    const el = this.numbers.get('fps')
+    if (el) el.textContent = fps.toFixed(1)
   }
 
   dispose(): void {

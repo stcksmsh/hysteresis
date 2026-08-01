@@ -8,7 +8,11 @@ const canvas = document.querySelector<HTMLCanvasElement>('#scene')!
 const ui = document.querySelector<HTMLDivElement>('#ui')!
 
 const engine = new AudioEngine()
-mountControls(ui, engine)
+
+// Bound once the render worker exists; the picker is simply inert if the
+// browser never got as far as creating one.
+let postToWorker: ((msg: MainToRenderWorker) => void) | null = null
+mountControls(ui, engine, (sceneId) => postToWorker?.({ kind: 'setScene', sceneId }))
 
 function showFallback(message: string) {
   canvas.style.display = 'none'
@@ -25,8 +29,11 @@ if (!('transferControlToOffscreen' in canvas)) {
     type: 'module',
   })
 
+  let overlay: DebugOverlay | null = null
+
   worker.onmessage = (e: MessageEvent<RenderWorkerToMain>) => {
     if (e.data.kind === 'error') showFallback(e.data.message)
+    else if (e.data.kind === 'stats') overlay?.setFps(e.data.fps)
   }
 
   const offscreen = canvas.transferControlToOffscreen()
@@ -34,6 +41,7 @@ if (!('transferControlToOffscreen' in canvas)) {
 
   const post = (msg: MainToRenderWorker, transfer?: Transferable[]) =>
     transfer ? worker.postMessage(msg, transfer) : worker.postMessage(msg)
+  postToWorker = post
 
   post(
     {
@@ -64,7 +72,8 @@ if (!('transferControlToOffscreen' in canvas)) {
   engine.onStateFrame((frame) => post({ kind: 'state', frame }))
 
   if (isDebugEnabled()) {
-    const overlay = new DebugOverlay(ui, post)
-    engine.onStateFrame((frame) => overlay.update(frame))
+    overlay = new DebugOverlay(ui, post)
+    const activeOverlay = overlay
+    engine.onStateFrame((frame) => activeOverlay.update(frame))
   }
 }

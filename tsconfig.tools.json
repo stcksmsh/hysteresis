@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022"],
+    "strict": true,
+    "noEmit": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "types": ["node"]
+  },
+  "include": [
+    "tools/**/*.ts",
+    "src/shared/constants.ts",
+    "src/shared/timeline.ts",
+    "src/audio/worklet/fft.ts",
+    "src/audio/worklet/spectral.ts",
+    "src/audio/worklet/onset.ts",
+    "src/audio/worklet/envelope.ts"
+  ]
+}

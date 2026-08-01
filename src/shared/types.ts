@@ -10,6 +10,18 @@ export interface StructuralEvent {
   type: 'onset' | 'drop' | 'breakStart' | 'breakEnd' | 'downbeat'
   strength: number
   t: number
+  // Where this event sat in the mix, when meaningful (onsets). `tone` is the
+  // dominant band as 0..1 (sub -> air); `pan` is -1..1 (left -> right).
+  tone?: number
+  pan?: number
+}
+
+// One element of the mix that just moved, with where it sits: `tone` is its
+// band position (0 = low, 1 = high), `pan` that band's own stereo balance.
+export interface SpectralHit {
+  tone: number
+  pan: number
+  strength: number
 }
 
 export interface StateFrame {
@@ -24,6 +36,10 @@ export interface StateFrame {
   bandsRaw: BandEnergies
   centroid: number
   flatness: number
+  pan: number // -1 (left) .. 1 (right), whole-mix balance
+  // Per-band hits for this hop. Transient like `events` — the render worker
+  // accumulates them across hops so none are lost between frames.
+  spectralHits: SpectralHit[]
   events: StructuralEvent[]
 }
 
@@ -35,6 +51,8 @@ export interface DropTrigger {
 
 export interface OnsetPulse {
   strength: number
+  tone: number // 0 = sub, 1 = air — drives vertical placement
+  pan: number // -1..1 — drives horizontal placement
 }
 
 export interface ParamBus {
@@ -55,6 +73,7 @@ export interface ParamBus {
   centroid: number
   flatness: number
   energy: number
+  pan: number
 
   paletteMix: number
   hueShift: number
