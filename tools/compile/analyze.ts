@@ -21,7 +21,10 @@ export interface StemAnalysis {
 
 const CENTROID_CEILING_HZ = 8000
 const ONSET_THRESHOLD = 0.3
-const ENVELOPE_RATE_HZ = 20
+// Exported: structure.ts's baked buildProgress/tension curves must share
+// this rate with the per-track envelopes above, since Timeline.envelopes
+// carries one `rate` for all of them.
+export const ENVELOPE_RATE_HZ = 20
 
 function percentile(sorted: Float32Array, p: number): number {
   if (sorted.length === 0) return 0

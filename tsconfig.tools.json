@@ -3,7 +3,10 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "lib": ["ES2022"],
+    // DOM only for ambient types (OffscreenCanvas etc. appear in shared/types.ts,
+    // now transitively imported for StructuralEvent/BandEnergies) — nothing under
+    // tools/ actually runs in a browser or touches these APIs at runtime.
+    "lib": ["ES2022", "DOM"],
     "strict": true,
     "noEmit": true,
     "isolatedModules": true,

@@ -5,6 +5,7 @@ export function mountControls(
   container: HTMLElement,
   engine: AudioEngine,
   onSceneChange?: (sceneId: string) => void,
+  onTimelineFile?: (file: File) => void,
 ): void {
   const wrap = document.createElement('div')
   wrap.style.cssText = 'position:fixed;left:16px;bottom:16px;display:flex;gap:8px;align-items:center'
@@ -38,6 +39,19 @@ export function mountControls(
 
   wrap.appendChild(fileInput)
   wrap.appendChild(playPause)
+
+  if (onTimelineFile) {
+    const timelineInput = document.createElement('input')
+    timelineInput.type = 'file'
+    timelineInput.accept = '.hyst'
+    timelineInput.title = 'Optional baked timeline (.hyst) — drives visuals from ground truth instead of live analysis'
+    timelineInput.style.color = '#eee'
+    timelineInput.addEventListener('change', () => {
+      const file = timelineInput.files?.[0]
+      if (file) onTimelineFile(file)
+    })
+    wrap.appendChild(timelineInput)
+  }
 
   if (onSceneChange) {
     const scenePicker = document.createElement('select')

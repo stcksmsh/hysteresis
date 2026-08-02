@@ -5,7 +5,8 @@ import type { Timeline, TimelineEvent, TimelineTrack } from '../../src/shared/ti
 import { HYST_FORMAT_VERSION } from '../../src/shared/timeline'
 import type { RawProject } from './project-schema'
 import { decodeWavFile } from './wav'
-import { analyzeStem } from './analyze'
+import { analyzeStem, type StemAnalysis, ENVELOPE_RATE_HZ } from './analyze'
+import { detectStructure } from './structure'
 
 function encodeEnvelope(bytes: Uint8Array): string {
   return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString('base64')
@@ -29,13 +30,15 @@ export function compile(projectPath: string): Timeline {
 
   const tracks: TimelineTrack[] = []
   const events: TimelineEvent[] = []
-  let envelopeRate = 20
+  const analyses: StemAnalysis[] = []
+  let envelopeRate = ENVELOPE_RATE_HZ
   const envelopeTracks: { level: string; tone: string }[] = []
 
   project.tracks.forEach((rawTrack, trackIndex) => {
     const stemPath = join(projectDir, rawTrack.stem)
     const wav = decodeWavFile(stemPath)
     const analysis = analyzeStem(wav)
+    analyses.push(analysis)
     envelopeRate = analysis.envelopeRate
 
     tracks.push({
@@ -62,6 +65,9 @@ export function compile(projectPath: string): Timeline {
 
   events.sort((a, b) => a.t - b.t)
 
+  const mixWav = decodeWavFile(join(projectDir, project.mix))
+  const structure = detectStructure(mixWav, analyses, project.tempoMap, project.markers, project.duration, envelopeRate)
+
   return {
     version: HYST_FORMAT_VERSION,
     duration: project.duration,
@@ -69,7 +75,14 @@ export function compile(projectPath: string): Timeline {
     markers: project.markers,
     tracks,
     events,
-    envelopes: { rate: envelopeRate, tracks: envelopeTracks },
+    envelopes: {
+      rate: envelopeRate,
+      tracks: envelopeTracks,
+      buildProgress: encodeEnvelope(structure.buildProgress),
+      tension: encodeEnvelope(structure.tension),
+    },
+    sections: structure.sections,
+    structuralEvents: structure.structuralEvents,
   }
 }
 
@@ -89,7 +102,11 @@ function main(): void {
 
   const eventCount = timeline.events.length
   const trackCount = timeline.tracks.length
-  console.log(`wrote ${outputPath} — ${trackCount} tracks, ${eventCount} events, ${timeline.duration.toFixed(1)}s`)
+  const drops = timeline.structuralEvents?.filter((e) => e.type === 'drop').length ?? 0
+  const sections = timeline.sections?.length ?? 0
+  console.log(
+    `wrote ${outputPath} — ${trackCount} tracks, ${eventCount} events, ${drops} drops, ${sections} sections, ${timeline.duration.toFixed(1)}s`,
+  )
 }
 
 // Only run as a CLI, not when imported by tests.

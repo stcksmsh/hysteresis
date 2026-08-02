@@ -126,4 +126,109 @@ describe('compile', () => {
     for (const v of level) if (v > 0) sawNonZero = true
     expect(sawNonZero).toBe(true)
   })
+
+  it('is a v2 file', () => {
+    expect(compile(projectPath).version).toBe(2)
+  })
+})
+
+// A second fixture, purpose-built to exercise offline structure detection
+// end-to-end: a genuine two-sided silence (both stems drop out together,
+// 4-6s, matching a named "Breakdown" region so marker-based and per-stem
+// detection can be cross-checked) and a genuine multi-stem coincident level
+// jump (~9s, no marker — this one only per-stem detection can find).
+const DUR2 = 12
+const N2 = SR * DUR2
+
+function ampAt(t: number): number {
+  if (t >= 4 && t < 6) return 0
+  if (t >= 9) return 1.8
+  return 1
+}
+
+const kick2 = new Float32Array(N2)
+const hat2 = new Float32Array(N2)
+for (let t = 0; t < DUR2; t += beatSec) {
+  const amp = ampAt(t)
+  if (amp === 0) continue
+  const start = Math.floor(t * SR)
+  for (let i = 0; i < SR * 0.1; i++) {
+    if (start + i >= N2) break
+    const env = Math.exp(-i / (SR * 0.02))
+    kick2[start + i] += Math.sin(2 * Math.PI * 55 * (i / SR)) * env * amp
+  }
+}
+for (let t = beatSec / 2; t < DUR2; t += beatSec) {
+  const amp = ampAt(t)
+  if (amp === 0) continue
+  const start = Math.floor(t * SR)
+  for (let i = 0; i < SR * 0.02; i++) {
+    if (start + i >= N2) break
+    const env = Math.exp(-i / (SR * 0.005))
+    hat2[start + i] += (Math.random() * 2 - 1) * env * amp
+  }
+}
+
+const dir2 = mkdtempSync(join(tmpdir(), 'hysteresis-compile-structure-test-'))
+afterAll(() => rmSync(dir2, { recursive: true, force: true }))
+writeMonoWav(join(dir2, 'kick.wav'), kick2)
+writeMonoWav(join(dir2, 'hat.wav'), hat2)
+writeMonoWav(join(dir2, 'mix.wav'), kick2.map((v, i) => v + hat2[i]))
+
+const project2 = {
+  duration: DUR2,
+  tempoMap: [{ t: 0, bpm: 120, num: 4, den: 4 }],
+  markers: [{ t: 4, end: 6, name: 'Breakdown' }],
+  tracks: [
+    { name: 'Kick', pan: 0, stem: 'kick.wav' },
+    { name: 'Hat', pan: 0.9, stem: 'hat.wav' },
+  ],
+  mix: 'mix.wav',
+}
+const projectPath2 = join(dir2, 'project.json')
+writeFileSync(projectPath2, JSON.stringify(project2))
+
+describe('compile — offline structure detection', () => {
+  it('turns a named region into a classified section', () => {
+    const timeline = compile(projectPath2)
+    const breakSection = timeline.sections?.find((s) => s.kind === 'break')
+    expect(breakSection).toBeDefined()
+    expect(breakSection!.start).toBeCloseTo(4, 0)
+    expect(breakSection!.end).toBeCloseTo(6, 0)
+  })
+
+  it('detects the coincident multi-stem jump as a drop, with no marker to hint it', () => {
+    const timeline = compile(projectPath2)
+    const drops = timeline.structuralEvents?.filter((e) => e.type === 'drop') ?? []
+    expect(drops.length).toBeGreaterThan(0)
+    expect(drops.some((e) => Math.abs(e.t - 9) < 1.5)).toBe(true)
+  })
+
+  it('bakes a buildProgress envelope that anticipates the detected drop', () => {
+    const timeline = compile(projectPath2)
+    expect(timeline.envelopes?.buildProgress).toBeDefined()
+    const curve = decodeEnvelope(timeline.envelopes!.buildProgress!)
+    const rate = timeline.envelopes!.rate
+    const early = curve[Math.round(1 * rate)]
+    const nearDrop = curve[Math.round(8.5 * rate)]
+    expect(nearDrop).toBeGreaterThan(early)
+  })
+
+  it('bakes a tension envelope that is higher during the breakdown than during the busy section', () => {
+    const timeline = compile(projectPath2)
+    expect(timeline.envelopes?.tension).toBeDefined()
+    const curve = decodeEnvelope(timeline.envelopes!.tension!)
+    const rate = timeline.envelopes!.rate
+    const duringBreak = curve[Math.round(5 * rate)]
+    const duringGroove = curve[Math.round(1 * rate)]
+    expect(duringBreak).toBeGreaterThan(duringGroove)
+  })
+
+  it('emits downbeats from the tempo map alone', () => {
+    const timeline = compile(projectPath2)
+    const downbeats = timeline.structuralEvents?.filter((e) => e.type === 'downbeat') ?? []
+    // 120bpm 4/4 over 12s: a downbeat every 2s, ~6 of them.
+    expect(downbeats.length).toBeGreaterThanOrEqual(4)
+    expect(downbeats.length).toBeLessThanOrEqual(7)
+  })
 })

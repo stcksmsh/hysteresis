@@ -7,6 +7,7 @@ export class AudioEngine {
   private workletNode: AudioWorkletNode | null = null
   private sourceNode: AudioBufferSourceNode | null = null
   private listeners = new Set<StateFrameListener>()
+  private startedAtCtxTime: number | null = null
 
   onStateFrame(listener: StateFrameListener): () => void {
     this.listeners.add(listener)
@@ -15,6 +16,14 @@ export class AudioEngine {
 
   get isPlaying(): boolean {
     return this.ctx?.state === 'running' && this.sourceNode !== null
+  }
+
+  // Seconds since the current source started, in the source's own timeline.
+  // ctx.currentTime freezes while suspended, so this stays correct across
+  // pause/resume with no extra bookkeeping — it just stops advancing.
+  get currentTime(): number {
+    if (!this.ctx || this.startedAtCtxTime === null) return 0
+    return this.ctx.currentTime - this.startedAtCtxTime
   }
 
   async pause(): Promise<void> {
@@ -45,6 +54,7 @@ export class AudioEngine {
     source.connect(ctx.destination)
     if (this.workletNode) source.connect(this.workletNode)
 
+    this.startedAtCtxTime = ctx.currentTime
     source.start()
     this.sourceNode = source
   }

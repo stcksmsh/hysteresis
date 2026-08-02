@@ -1,3 +1,5 @@
+import type { StructuralEvent } from './types'
+
 // The baked timeline format. Produced offline by the compiler from a REAPER
 // project plus its stems; consumed by the browser to drive visuals in sync
 // with a bounced mix.
@@ -6,7 +8,15 @@
 // per-track separation, exact pan and exact timing are resolved once, offline,
 // where there is no realtime budget and no ambiguity. Only this file and the
 // mix ship.
-export const HYST_FORMAT_VERSION = 1
+//
+// v2 adds `sections`/`structuralEvents` and baked `buildProgress`/`tension`
+// envelopes — musical structure the compiler now derives offline (see
+// tools/compile/structure.ts) instead of leaving entirely to the realtime
+// worklet. `sections`/`structuralEvents`/the two new envelope tracks are all
+// optional so a v1-shaped file (or one from a stripped-down producer) still
+// type-checks; a consumer without them just gets flat 0 for those signals,
+// same as before v2 existed.
+export const HYST_FORMAT_VERSION = 2
 
 export interface TempoMarker {
   t: number // seconds
@@ -46,10 +56,24 @@ export interface TimelineEvent {
 // Coarse per-track envelopes, base64-encoded Uint8 arrays sampled at `rate`
 // Hz. Transient events alone would render nothing for sustained material — a
 // pad or a held bass has no onsets to speak of — so level and brightness are
-// also carried continuously.
+// also carried continuously. `buildProgress`/`tension` are the same idea
+// applied to musical structure: baked once offline (non-causally — see
+// tools/compile/structure.ts) instead of integrated live from a cold start
+// every time the file is opened.
 export interface TimelineEnvelopes {
   rate: number
   tracks: { level: string; tone: string }[]
+  buildProgress?: string
+  tension?: string
+}
+
+// A labelled span of the arrangement, e.g. a build ramping into a drop, or a
+// breakdown. Comes from REAPER regions the project already names (via
+// `classifyMarker`) where present; detection fills in the rest.
+export interface TimelineSection {
+  start: number
+  end: number
+  kind: SectionKind
 }
 
 export interface Timeline {
@@ -60,6 +84,12 @@ export interface Timeline {
   tracks: TimelineTrack[]
   events: TimelineEvent[]
   envelopes?: TimelineEnvelopes
+  sections?: TimelineSection[]
+  // drop/breakStart/breakEnd/downbeat — the same shape the realtime worklet
+  // emits in StateFrame.events, so a Timeline consumer can replay these
+  // directly rather than reinventing a schema. Per-instrument onsets are
+  // *not* duplicated here — they're already exact in `events` above.
+  structuralEvents?: StructuralEvent[]
 }
 
 export function decodeEnvelope(base64: string): Uint8Array {
