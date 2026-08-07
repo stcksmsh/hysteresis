@@ -5,22 +5,34 @@ builds, drops, breaks, groove — instead of instantaneous amplitude. It has
 memory and anticipation: it winds up during builds, releases on drops, and
 goes suspended during breaks.
 
-See `HYSTERESIS.md` for the full design doc. Ships as a package the host
-mounts once:
+See `HYSTERESIS.md` for the original design doc and `IO_PAGE_CHANGESET.md`
+§6 (in `stcksmsh.github.io`) for the interface as actually integrated. Ships
+as a package the host mounts once:
 
 ```ts
 import { init } from 'hysteresis'
 
-const handle = init(canvas, { analyser, audioContext, source })
-handle.setTransport({ type: 'play' })
-handle.setPosition(seconds)
-await handle.loadSidecar('/audio/track.sidecar.json')
-handle.setAccent('#ff5c38')
-handle.setTier('full')
+const instance = init(canvas, {
+  accent: [0.68, 0.2, 33], // OKLCH [L, C, H]
+  tier: 'full',
+  getAudioContext: () => audioBus?.ctx ?? null, // null until the host's first play click
+  getAnalyser: () => audioBus?.analyser ?? null,
+})
+instance.setAccent([0.7, 0.15, 200])
+instance.setTier('cheap')
+instance.resize()
+instance.destroy()
 ```
 
 No DOM ownership beyond the canvas, no routing, no player UI, no
 `AudioContext` creation — all of that is the host's job (the IO page repo).
+Transport (`play`/`pause`/`seek`/`trackchange`/`position`) and the
+precomputed sidecar URL (`trackchange`'s `track.envelope`) aren't pushed
+through this API at all — `init()` listens for them itself on a `window`
+`"player:transport"` `CustomEvent` bus, matching the host's own
+`src/lib/player-bus.ts`. `getAudioContext`/`getAnalyser` are polled (not
+assumed present at call time) since the shared bus is created lazily on the
+host's first play click, well after this package typically mounts.
 
 Three-layer architecture:
 
