@@ -1,111 +1,84 @@
 import './styles.css'
-import type { MainToRenderWorker, RenderWorkerToMain, StateFrame } from './shared/types'
-import type { Timeline } from './shared/timeline'
-import { HYST_FORMAT_VERSION } from './shared/timeline'
-import { AudioEngine } from './audio/AudioEngine'
-import { TimelineSource } from './audio/TimelineSource'
-import { mountControls } from './ui/controls'
-import { DebugOverlay, isDebugEnabled } from './ui/debug-overlay'
+import { init } from './index'
 
+// Local dev harness ONLY — exercises the public init() API exactly as a host
+// (the IO page) would. Not shipped: the actual package entry point is
+// src/index.ts (built via `npm run build:lib`), and everything below —
+// file picking, AudioContext creation, transport — is the host's job per
+// HYSTERESIS.md §7/§10, not this repo's.
+//
+// init() is called immediately, with one persistent <audio> element as the
+// source (never swapped) — matching §7's "host mounts once, never destroys",
+// and specifically so the idle Lissajous state (§8) is visible before any
+// file is ever picked. Swapping tracks changes `audio.src`, not the graph.
 const canvas = document.querySelector<HTMLCanvasElement>('#scene')!
 const ui = document.querySelector<HTMLDivElement>('#ui')!
 
-const engine = new AudioEngine()
+const audio = new Audio()
+audio.crossOrigin = 'anonymous'
 
-// Bound once the render worker exists; the picker is simply inert if the
-// browser never got as far as creating one.
-let postToWorker: ((msg: MainToRenderWorker) => void) | null = null
-let overlay: DebugOverlay | null = null
-let timelineSource: TimelineSource | null = null
+const ctx = new AudioContext()
+const sourceNode = ctx.createMediaElementSource(audio)
+sourceNode.connect(ctx.destination)
 
-// While a .hyst is loaded, it fully replaces the live worklet as the source
-// of StateFrames — both would otherwise drive the scene at once and fight
-// each other's choreography.
-function dispatchFrame(frame: StateFrame): void {
-  postToWorker?.({ kind: 'state', frame })
-  overlay?.update(frame)
-}
+const workletUrl = new URL(`${import.meta.env.BASE_URL}worklets/feature-worklet.js`, window.location.href)
+const handle = init(canvas, {
+  analyser: ctx.createAnalyser(),
+  audioContext: ctx,
+  source: sourceNode,
+  workletUrl,
+})
 
-async function loadTimelineFile(file: File): Promise<void> {
-  const text = await file.text()
-  const timeline = JSON.parse(text) as Timeline
-  if (timeline.version !== HYST_FORMAT_VERSION) {
-    console.error(`[main] .hyst version ${timeline.version} does not match expected ${HYST_FORMAT_VERSION}`)
-    return
+let objectUrl: string | null = null
+let posRafHandle: number | null = null
+
+function trackPosition(): void {
+  if (posRafHandle !== null) cancelAnimationFrame(posRafHandle)
+  const tick = () => {
+    handle.setPosition(audio.currentTime)
+    posRafHandle = requestAnimationFrame(tick)
   }
-  timelineSource?.stop()
-  timelineSource = new TimelineSource(timeline, () => engine.currentTime)
-  timelineSource.onStateFrame(dispatchFrame)
-  timelineSource.start()
+  tick()
 }
 
-mountControls(
-  ui,
-  engine,
-  (sceneId) => postToWorker?.({ kind: 'setScene', sceneId }),
-  (file) => void loadTimelineFile(file),
-)
+async function loadAndPlay(file: File): Promise<void> {
+  await ctx.resume() // AudioContext starts suspended until a user gesture — this handler is one
+  if (objectUrl) URL.revokeObjectURL(objectUrl)
+  objectUrl = URL.createObjectURL(file)
 
-function showFallback(message: string) {
-  canvas.style.display = 'none'
-  const el = document.createElement('div')
-  el.style.cssText = 'padding:24px;font-family:system-ui,sans-serif;color:#eee;max-width:480px'
-  el.textContent = `HYSTERESIS couldn't start: ${message}. Try a recent version of Chrome, Firefox, or Safari.`
-  ui.appendChild(el)
+  handle.setTransport({ type: 'trackchange' })
+  audio.src = objectUrl
+  await audio.play()
+  handle.setTransport({ type: 'play' })
+  trackPosition()
 }
 
-if (!('transferControlToOffscreen' in canvas)) {
-  showFallback('OffscreenCanvas is not supported in this browser')
-} else {
-  const worker = new Worker(new URL('./render/worker/render-worker.ts', import.meta.url), {
-    type: 'module',
-  })
+const wrap = document.createElement('div')
+wrap.style.cssText = 'position:fixed;left:16px;bottom:16px;display:flex;gap:8px;align-items:center'
 
-  worker.onmessage = (e: MessageEvent<RenderWorkerToMain>) => {
-    if (e.data.kind === 'error') showFallback(e.data.message)
-    else if (e.data.kind === 'stats') overlay?.setFps(e.data.fps)
+const fileInput = document.createElement('input')
+fileInput.type = 'file'
+fileInput.accept = 'audio/*'
+fileInput.style.color = '#eee'
+fileInput.addEventListener('change', () => {
+  const file = fileInput.files?.[0]
+  if (file) void loadAndPlay(file)
+})
+wrap.appendChild(fileInput)
+
+const playPause = document.createElement('button')
+playPause.textContent = 'Pause'
+playPause.addEventListener('click', async () => {
+  if (audio.paused) {
+    await audio.play()
+    handle.setTransport({ type: 'play' })
+    playPause.textContent = 'Pause'
+  } else {
+    audio.pause()
+    handle.setTransport({ type: 'pause' })
+    playPause.textContent = 'Resume'
   }
+})
+wrap.appendChild(playPause)
 
-  const offscreen = canvas.transferControlToOffscreen()
-  const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
-
-  const post = (msg: MainToRenderWorker, transfer?: Transferable[]) =>
-    transfer ? worker.postMessage(msg, transfer) : worker.postMessage(msg)
-  postToWorker = post
-
-  post(
-    {
-      kind: 'init',
-      canvas: offscreen,
-      dpr: window.devicePixelRatio,
-      reducedMotion: reducedMotionQuery.matches,
-    },
-    [offscreen],
-  )
-
-  const resizeObserver = new ResizeObserver((entries) => {
-    const entry = entries[0]
-    if (!entry) return
-    const { width, height } = entry.contentRect
-    post({ kind: 'resize', cssWidth: width, cssHeight: height, dpr: window.devicePixelRatio })
-  })
-  resizeObserver.observe(canvas)
-
-  document.addEventListener('visibilitychange', () => {
-    post({ kind: 'visibility', hidden: document.hidden })
-  })
-
-  reducedMotionQuery.addEventListener('change', (e) => {
-    post({ kind: 'setReducedMotion', value: e.matches })
-  })
-
-  // Live worklet frames drive the scene directly; once a .hyst is loaded,
-  // TimelineSource takes over via the same dispatchFrame path instead.
-  engine.onStateFrame((frame) => {
-    if (!timelineSource) dispatchFrame(frame)
-  })
-
-  if (isDebugEnabled()) {
-    overlay = new DebugOverlay(ui, post)
-  }
-}
+ui.appendChild(wrap)

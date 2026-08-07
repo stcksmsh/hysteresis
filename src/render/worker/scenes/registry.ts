@@ -1,13 +1,14 @@
 import type { Scene } from './Scene'
-import { ReactionDiffusionScene } from './reaction-diffusion/ReactionDiffusionScene'
-import { ReactiveGeometryScene } from './reactive-geometry/ReactiveGeometryScene'
+import { JuliaScene } from './julia/JuliaScene'
+import { MandelbulbScene } from './mandelbulb/MandelbulbScene'
 
-export { DEFAULT_SCENE_ID } from '../../../shared/scenes'
+// One fixed visual identity (HYSTERESIS.md §4) — no scene picker in the
+// package API (§1). `julia` is the only scene render-worker.ts ever
+// switches to by default; `mandelbulb-hero` is registered for a future
+// host-driven landing view (§4c) but nothing in this repo activates it yet.
+export const DEFAULT_SCENE_ID = 'julia'
 
-// Ids must match SCENE_OPTIONS in src/shared/scenes.ts, which is what the
-// picker UI is built from.
 export const sceneRegistry: Record<string, () => Scene> = {
-  'reaction-diffusion': () => new ReactionDiffusionScene('organic'),
-  'reaction-diffusion-graphic': () => new ReactionDiffusionScene('graphic'),
-  'reactive-geometry': () => new ReactiveGeometryScene(),
+  julia: () => new JuliaScene(),
+  'mandelbulb-hero': () => new MandelbulbScene(),
 }

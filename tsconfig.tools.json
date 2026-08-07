@@ -5,7 +5,7 @@
     "moduleResolution": "Bundler",
     // DOM only for ambient types (OffscreenCanvas etc. appear in shared/types.ts,
     // now transitively imported for StructuralEvent/BandEnergies) — nothing under
-    // tools/ actually runs in a browser or touches these APIs at runtime.
+    // scripts/ actually runs in a browser or touches these APIs at runtime.
     "lib": ["ES2022", "DOM"],
     "strict": true,
     "noEmit": true,
@@ -15,12 +15,15 @@
     "types": ["node"]
   },
   "include": [
-    "tools/**/*.ts",
+    "scripts/**/*.ts",
     "src/shared/constants.ts",
-    "src/shared/timeline.ts",
+    "src/shared/sidecar.ts",
+    "src/shared/types.ts",
     "src/audio/worklet/fft.ts",
+    "src/audio/worklet/bands.ts",
     "src/audio/worklet/spectral.ts",
     "src/audio/worklet/onset.ts",
-    "src/audio/worklet/envelope.ts"
+    "src/audio/worklet/envelope.ts",
+    "src/audio/worklet/brain/**/*.ts"
   ]
 }

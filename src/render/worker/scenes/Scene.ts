@@ -10,17 +10,16 @@ export interface SceneContext {
 }
 
 // The only thing a scene ever sees is a ParamBus (choreographed, spring-
-// driven output) — never raw audio, never Layer 1/2 internals. This is what
-// lets particles/fluid/reactive-geometry get added later as alternate
-// scenes without touching anything upstream.
+// driven output) — never raw audio, never Layer 1/2 internals, with the one
+// deliberate exception of ParamBus.scope (the oscilloscope beam's waveform
+// trace, HYSTERESIS.md §4b). This is what lets an alternate scene (e.g. the
+// Mandelbulb hero) get added without touching anything upstream.
 export interface Scene {
   readonly id: string
   // Does this scene want the generic persistence/feedback pass applied to
-  // its output? Reaction-diffusion's own ping-pong sim already is long-
-  // memory feedback, so it opts out; a memoryless scene (geometry, particles)
-  // opts in for trail/glow memory.
-  // Not `readonly` literals: variants of one scene differ on these — the
-  // graphic reaction-diffusion opts out of bloom to avoid the soft wash.
+  // its output, for trail/glow memory? The Julia scene's own `c` already
+  // carries frame-to-frame state on its own, so it opts out by default.
+  // Not `readonly` literals: a scene may want to change this at runtime.
   readonly wantsPersistencePass: boolean
   readonly wantsBloom: boolean
 
@@ -37,4 +36,9 @@ export interface Scene {
   // may reset scene state, so the worker uses it sparingly.
   setQuality?(scale: number): void
   setSimMaxEdge?(maxEdge: number): void
+
+  // Host accent color (HYSTERESIS.md §7's setAccent), forwarded as linear
+  // 0..1 RGB — parsing the host's CSS color string happens on the main
+  // thread (src/index.ts), not in the worker.
+  setAccent?(rgb: [number, number, number]): void
 }

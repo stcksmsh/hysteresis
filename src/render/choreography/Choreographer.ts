@@ -95,6 +95,9 @@ export class Choreographer {
 
       paletteMix,
       hueShift,
+
+      scope: frame.scope,
+      idle: frame.idle ?? false,
     }
   }
 }

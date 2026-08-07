@@ -1,5 +1,12 @@
 /// <reference lib="webworker" />
-import type { MainToRenderWorker, RenderWorkerToMain, SpectralHit, StateFrame, StructuralEvent } from '../../shared/types'
+import type {
+  MainToRenderWorker,
+  PowerTier,
+  RenderWorkerToMain,
+  SpectralHit,
+  StateFrame,
+  StructuralEvent,
+} from '../../shared/types'
 import { createGlContext, WebGL2UnavailableError, type GlCapabilities } from './gl/context'
 import { createFbo, deleteFbo, type Fbo } from './gl/fbo'
 import { sceneRegistry, DEFAULT_SCENE_ID } from './scenes/registry'
@@ -68,7 +75,11 @@ const fallbackFrame: StateFrame = {
   pan: 0,
   spectralHits: [],
   events: [],
+  scope: null,
+  idle: true,
 }
+
+let currentTier: PowerTier = 'full'
 
 // StateFrames arrive at analysis-hop rate (~90Hz), rendering at display
 // refresh (~60Hz) — a rate mismatch. Continuous fields use the latest frame
@@ -143,7 +154,14 @@ function loop(t: number) {
     bloomTexture = bloomPass.apply(currentTexture, BLOOM_THRESHOLD)
   }
 
-  compositePass.apply(null, sceneFbo.width, sceneFbo.height, currentTexture, bloomTexture, BLOOM_STRENGTH)
+  compositePass.apply(
+    null,
+    sceneFbo.width,
+    sceneFbo.height,
+    currentTexture,
+    bloomTexture,
+    BLOOM_STRENGTH * BLOOM_STRENGTH_SCALE[currentTier],
+  )
 
   if (dt > 0) updateAdaptiveQuality(dt * 1000, t)
 
@@ -213,37 +231,21 @@ function allocatePipeline(width: number, height: number) {
   if (!compositePass) compositePass = new CompositePass(gl)
 }
 
-function switchScene(sceneId: string) {
-  const factory = sceneRegistry[sceneId]
-  // Ignore unknown ids rather than throwing — a stale picker value should
-  // never take down the render loop.
-  if (!factory || !caps || !canvasRef || sceneId === scene?.id) return
-
-  scene?.dispose()
-  scene = factory()
-  scene.init({
-    gl: caps.gl,
-    width: canvasRef.width,
-    height: canvasRef.height,
-    dpr: currentDpr,
-    reducedMotion,
-    floatFbo: caps.floatFbo,
-  })
-
-  // Cost differs per scene, so previous backoff decisions don't carry over.
-  qualityScale = 1
-  overrunSinceMs = null
-  scene.setQuality?.(qualityScale)
-}
-
 function sceneContext(width: number, height: number, dpr: number): SceneContext | null {
   if (!caps) return null
   return { gl: caps.gl, width, height, dpr, reducedMotion, floatFbo: caps.floatFbo }
 }
 
+// Power tiers (HYSTERESIS.md §8): `full` caps only against melting a 4K/
+// high-DPR display; `cheap`/`idle-only` cap harder since neither needs to
+// look crisp — cheap trades resolution for headroom, idle-only is nearly
+// static content anyway.
+const DPR_CAP: Record<PowerTier, number> = { full: 2, cheap: 1.25, 'idle-only': 1 }
+const BLOOM_STRENGTH_SCALE: Record<PowerTier, number> = { full: 1, cheap: 0.5, 'idle-only': 0.5 }
+
 function resize(canvas: OffscreenCanvas, cssWidth: number, cssHeight: number, dpr: number) {
   // Cap DPR and absolute resolution so a 4K/high-DPR display doesn't melt.
-  const cappedDpr = Math.min(dpr, 2)
+  const cappedDpr = Math.min(dpr, DPR_CAP[currentTier])
   const maxEdge = 2560
   let w = Math.round(cssWidth * cappedDpr)
   let h = Math.round(cssHeight * cappedDpr)
@@ -315,8 +317,13 @@ self.onmessage = (e: MessageEvent<MainToRenderWorker>) => {
       }
       break
     }
-    case 'setScene': {
-      switchScene(msg.sceneId)
+    case 'setAccent': {
+      scene?.setAccent?.(msg.rgb)
+      break
+    }
+    case 'setTier': {
+      currentTier = msg.tier
+      if (canvasRef) resize(canvasRef, canvasRef.width / currentDpr, canvasRef.height / currentDpr, currentDpr)
       break
     }
     case 'debugSetParam': {

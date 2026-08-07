@@ -9,7 +9,7 @@ import { BuildDetector } from './brain/build-detector'
 import { DropDetector } from './brain/drop-detector'
 import { BreakDetector } from './brain/break-detector'
 import { PlacementBands } from './placement-bands'
-import { FFT_SIZE, HOP_SIZE } from '../../shared/constants'
+import { FFT_SIZE, HOP_SIZE, SCOPE_SIZE } from '../../shared/constants'
 import type { BandEnergies, SpectralHit, StateFrame, StructuralEvent, WorkletToMain } from '../../shared/types'
 
 // Centroid is normalized against this practical ceiling (Hz), not Nyquist —
@@ -65,6 +65,7 @@ class FeatureProcessor extends AudioWorkletProcessor implements AudioWorkletProc
   private flux = new SpectralFlux(this.fft.bins)
   private orderedL = new Float32Array(FFT_SIZE)
   private orderedR = new Float32Array(FFT_SIZE)
+  private scopeBuffer = new Float32Array(SCOPE_SIZE)
   private placementBands: PlacementBands
 
   private bandRanges: BandRanges
@@ -254,6 +255,7 @@ class FeatureProcessor extends AudioWorkletProcessor implements AudioWorkletProc
     }
 
     const energy = this.energyTrajectory.update(broadbandEnergy)
+    const scope = this.extractScope()
 
     const frame: StateFrame = {
       t: tNow,
@@ -270,8 +272,27 @@ class FeatureProcessor extends AudioWorkletProcessor implements AudioWorkletProc
       pan,
       spectralHits,
       events,
+      scope,
     }
     this.port.postMessage({ kind: 'state', frame } satisfies WorkletToMain)
+  }
+
+  // Beam waveform: trigger on the first rising zero-crossing in the ordered
+  // (chronological) ring buffer so the trace sits still frame to frame
+  // instead of jittering — a static window would resample a different phase
+  // of a periodic waveform every hop. Search is bounded to leave room for a
+  // full SCOPE_SIZE window after the trigger.
+  private extractScope(): Float32Array {
+    const maxStart = FFT_SIZE - SCOPE_SIZE
+    let trigger = 0
+    for (let i = 1; i < maxStart; i++) {
+      if (this.orderedL[i - 1] <= 0 && this.orderedL[i] > 0) {
+        trigger = i
+        break
+      }
+    }
+    for (let i = 0; i < SCOPE_SIZE; i++) this.scopeBuffer[i] = this.orderedL[trigger + i]
+    return this.scopeBuffer
   }
 }
 

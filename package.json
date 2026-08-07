@@ -1,16 +1,29 @@
 {
   "name": "hysteresis",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "dev": "npm run build:worklet && concurrently -k -n worklet,vite \"vite build --config vite.worklet.config.ts --watch\" \"vite\"",
     "build:worklet": "vite build --config vite.worklet.config.ts",
     "build": "npm run build:worklet && vite build",
+    "build:lib": "npm run build:worklet && vite build --config vite.lib.config.ts && tsc -p tsconfig.lib.json",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.worker.json && tsc --noEmit -p tsconfig.tools.json",
     "test": "vitest run",
-    "compile": "tsx tools/compile/index.ts"
+    "analyze": "tsx scripts/analyze.ts"
   },
   "dependencies": {
     "fft.js": "^4.0.4"

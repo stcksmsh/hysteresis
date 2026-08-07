@@ -6,8 +6,8 @@ export interface DecodedWav {
   duration: number
 }
 
-// Minimal RIFF/WAVE reader for the compiler. Only needs to handle what REAPER
-// writes when rendering stems — PCM 16/24/32-bit and 32-bit float — so it
+// Minimal RIFF/WAVE reader for scripts/analyze.ts. Only needs to handle what
+// a typical DAW bounce writes — PCM 16/24/32-bit and 32-bit float — so it
 // stays deliberately small rather than pulling in a dependency.
 export function decodeWavFile(path: string): DecodedWav {
   const buf = readFileSync(path)

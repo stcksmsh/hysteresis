@@ -23,9 +23,9 @@ export function createGlContext(canvas: OffscreenCanvas): GlCapabilities {
     throw new WebGL2UnavailableError()
   }
 
-  // Needed for float-format ping-pong FBOs (reaction-diffusion sim, Phase 4).
-  // Absence is not fatal here — scenes that need it fall back to a packed
-  // 8-bit encoding; this just records whether that fallback is required.
+  // Needed for float-format FBOs (the bloom/persistence passes' ping-pong
+  // buffers). Absence is not fatal here — they fall back to a packed 8-bit
+  // encoding; this just records whether that fallback is required.
   const floatFbo = gl.getExtension('EXT_color_buffer_float') !== null
 
   return { gl, floatFbo }

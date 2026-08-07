@@ -41,6 +41,14 @@ export interface StateFrame {
   // accumulates them across hops so none are lost between frames.
   spectralHits: SpectralHit[]
   events: StructuralEvent[]
+  // Trigger-locked mono waveform (SCOPE_SIZE samples), for the oscilloscope
+  // beam only — the one place the render path reads raw samples rather than
+  // analysed state (HYSTERESIS.md §4b). null when no audio is attached.
+  scope: Float32Array | null
+  // True only for the render worker's synthetic fallback frame (no track
+  // ever loaded/attached yet) — real worklet/StructureSource frames never
+  // set this. Drives the "nothing playing" idle path (HYSTERESIS.md §8).
+  idle?: boolean
 }
 
 export interface DropTrigger {
@@ -77,7 +85,17 @@ export interface ParamBus {
 
   paletteMix: number
   hueShift: number
+
+  // Raw waveform for the oscilloscope beam — passed through unshaped, never
+  // spring-driven (see StateFrame.scope). null when idle/no audio.
+  scope: Float32Array | null
+  idle: boolean
 }
+
+// Power tiers (HYSTERESIS.md §8): `full` runs Julia + beam + bloom +
+// Mandelbulb hero; `cheap` drops bloom weight/DPR/FPS and the hero; `idle-
+// only` drops live analysis entirely and only ever shows the idle c-drift.
+export type PowerTier = 'full' | 'cheap' | 'idle-only'
 
 export type WorkletToMain =
   | { kind: 'state'; frame: StateFrame }
@@ -89,10 +107,11 @@ export type MainToRenderWorker =
   | { kind: 'state'; frame: StateFrame }
   | { kind: 'resize'; cssWidth: number; cssHeight: number; dpr: number }
   | { kind: 'visibility'; hidden: boolean }
-  | { kind: 'setScene'; sceneId: string }
   | { kind: 'setReducedMotion'; value: boolean }
-  // Phase-4 scene tuning: manually nudge choreography params before the real
-  // Choreographer is wired in (Phase 5). Not used once that lands.
+  | { kind: 'setAccent'; rgb: [number, number, number] }
+  | { kind: 'setTier'; tier: PowerTier }
+  // Debug-only (?debug=1): manually nudge choreography params without a
+  // loaded track, and force a drop for tuning the release feel.
   | { kind: 'debugSetParam'; key: 'buildProgress' | 'tension'; value: number }
   | { kind: 'debugTriggerDrop' }
 
