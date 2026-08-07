@@ -1,0 +1,9 @@
+{
+  "slug": "hysteresis",
+  "title": "HYSTERESIS",
+  "tagline": "A music visualizer that reacts to structure, not amplitude — a Julia-set substrate that winds up on builds and releases on drops.",
+  "status": "active",
+  "stack": ["TypeScript", "WebGL2", "Web Audio API"],
+  "repo": "https://github.com/stcksmsh/hysteresis",
+  "accent": [0.68, 0.2, 33]
+}
