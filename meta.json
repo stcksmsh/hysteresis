@@ -1,9 +1,9 @@
 {
-  "slug": "hysteresis",
-  "title": "HYSTERESIS",
-  "tagline": "A music visualizer that reacts to structure, not amplitude — a Julia-set substrate that winds up on builds and releases on drops.",
+  "slug": "sinteza-viz",
+  "title": "the СИНТЕЗА visualizer",
+  "tagline": "A music visualizer built on hysteresis: the image itself accumulates history, winding up on builds and releasing on drops instead of just reacting to the instant.",
   "status": "active",
   "stack": ["TypeScript", "WebGL2", "Web Audio API"],
-  "repo": "https://github.com/stcksmsh/hysteresis",
+  "repo": "https://github.com/stcksmsh/sinteza-viz",
   "accent": [0.68, 0.2, 33]
 }
