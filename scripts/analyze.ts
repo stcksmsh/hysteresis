@@ -25,7 +25,8 @@ function main(): void {
 
   console.log(
     `wrote ${outputPath} — ${sidecar.tempo.toFixed(1)}bpm, ${sidecar.beats.length} beats, ` +
-      `${sidecar.events.length} events, ${sidecar.sections.length} sections, ${sidecar.duration.toFixed(1)}s`,
+      `${sidecar.events.length} events, ${sidecar.onsets.length} onsets, ${sidecar.sections.length} sections, ` +
+      `${sidecar.duration.toFixed(1)}s`,
   )
 }
 

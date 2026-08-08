@@ -24,9 +24,19 @@ function liveFrame(t: number, overrides: Partial<StateFrame> = {}): StateFrame {
   }
 }
 
+// Flat envelopes at a low rate (2Hz over the 20s test duration = 40 samples)
+// are enough to exercise sampleEnvelope's interpolation without needing a
+// real analysis run — individual synthesize() tests override specific
+// envelopes/onsets where the value matters.
+const ENVELOPE_LENGTH = 40
+const ENVELOPE_RATE = 2
+function flatEnvelope(value: number): number[] {
+  return new Array(ENVELOPE_LENGTH).fill(value)
+}
+
 function makeSidecar(overrides: Partial<Sidecar> = {}): Sidecar {
   return {
-    schema: 1,
+    schema: 2,
     duration: 20,
     tempo: 128,
     beats: [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4],
@@ -36,8 +46,18 @@ function makeSidecar(overrides: Partial<Sidecar> = {}): Sidecar {
       { type: 'breakStart', t: 10, strength: 0.9 },
       { type: 'breakEnd', t: 12, strength: 0.1 },
     ],
-    energyEnvelope: [],
-    envelopeRate: 20,
+    onsets: [],
+    energyEnvelope: flatEnvelope(0),
+    bandEnvelope: {
+      sub: flatEnvelope(0),
+      low: flatEnvelope(0),
+      mid: flatEnvelope(0),
+      presence: flatEnvelope(0),
+      air: flatEnvelope(0),
+    },
+    centroidEnvelope: flatEnvelope(0),
+    flatnessEnvelope: flatEnvelope(0),
+    envelopeRate: ENVELOPE_RATE,
     ...overrides,
   }
 }
@@ -104,5 +124,71 @@ describe('StructureSource', () => {
     expect(source.active).toBe(false)
     const frame = liveFrame(1)
     expect(source.fuse(frame, 1)).toBe(frame)
+  })
+
+  describe('synthesize() — position-only mode (no live audio)', () => {
+    it('throws with no sidecar loaded', () => {
+      const source = new StructureSource()
+      expect(() => source.synthesize(1)).toThrow()
+    })
+
+    it('marks the frame idle (keeps the beam animating with no real waveform) while structure stays real', () => {
+      const source = new StructureSource()
+      source.load(makeSidecar())
+      const frame = source.synthesize(6) // inside the build section
+      expect(frame.idle).toBe(true)
+      expect(frame.scope).toBeNull()
+      expect(frame.buildProgress).toBeGreaterThan(0)
+      expect(frame.tempo).toBe(128)
+    })
+
+    it('interpolates band/centroid/flatness/energy envelopes at the given position', () => {
+      const source = new StructureSource()
+      source.load(
+        makeSidecar({
+          bandEnvelope: {
+            sub: flatEnvelope(0.2),
+            low: flatEnvelope(0.1),
+            mid: flatEnvelope(0),
+            presence: flatEnvelope(0),
+            air: flatEnvelope(0),
+          },
+          centroidEnvelope: flatEnvelope(0.3),
+          flatnessEnvelope: flatEnvelope(0.7),
+          energyEnvelope: flatEnvelope(0.5),
+        }),
+      )
+      const frame = source.synthesize(3)
+      expect(frame.bandsRaw.sub).toBeCloseTo(0.2, 5)
+      expect(frame.bandsRaw.low).toBeCloseTo(0.1, 5)
+      expect(frame.centroid).toBeCloseTo(0.3, 5)
+      expect(frame.flatness).toBeCloseTo(0.7, 5)
+      expect(frame.energy).toBeCloseTo(0.5, 5)
+    })
+
+    it('emits each onset exactly once as position advances past it, as a spectralHit', () => {
+      const source = new StructureSource()
+      source.load(makeSidecar({ onsets: [{ t: 5, strength: 0.8, tone: 0.1, pan: -0.4 }] }))
+
+      expect(source.synthesize(4.9).spectralHits).toHaveLength(0)
+      const atOnset = source.synthesize(5.1).spectralHits
+      expect(atOnset).toHaveLength(1)
+      expect(atOnset[0]).toEqual({ tone: 0.1, pan: -0.4, strength: 0.8 })
+      expect(source.synthesize(5.2).spectralHits).toHaveLength(0)
+    })
+
+    it('still fires structural events (drop) from the sidecar timeline', () => {
+      const source = new StructureSource()
+      source.load(makeSidecar())
+      expect(source.synthesize(7.9).events.some((e) => e.type === 'drop')).toBe(false)
+      expect(source.synthesize(8.1).events.some((e) => e.type === 'drop')).toBe(true)
+    })
+
+    it('resyncTo skips already-passed onsets after a seek, same as events', () => {
+      const source = new StructureSource()
+      source.load(makeSidecar({ onsets: [{ t: 5, strength: 0.8, tone: 0.1, pan: -0.4 }] }))
+      source.resyncTo(6) // seek past the onset at t=5
+      expect(source.synthesize(6).spectralHits).toHaveLength(0)
+    })
   })
 })

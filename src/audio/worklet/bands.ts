@@ -36,3 +36,21 @@ export function bandEnergiesFromMagnitudes(mags: Float32Array, ranges: BandRange
     out[name] = count > 0 ? Math.sqrt(sumSq / count) : 0
   }
 }
+
+// Dominant band as a 0..1 position across the spectrum (sub -> air). Gives a
+// kick and a hi-hat clearly different values, which reads better as vertical
+// placement than a smoothly-varying centroid would. Shared by the live
+// worklet (feature-worklet.ts) and the offline analyzer (scripts/structure.ts)
+// so an onset's `tone` means the same thing whichever path produced it.
+export function dominantBandTone(bands: BandEnergies): number {
+  let bestIndex = 0
+  let bestValue = -1
+  for (let i = 0; i < BAND_NAMES.length; i++) {
+    const v = bands[BAND_NAMES[i]]
+    if (v > bestValue) {
+      bestValue = v
+      bestIndex = i
+    }
+  }
+  return bestIndex / (BAND_NAMES.length - 1)
+}

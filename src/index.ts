@@ -17,8 +17,13 @@ export type { Sidecar } from './shared/sidecar'
 export interface VizOpts {
   accent: [number, number, number] // OKLCH [L, C, H] — site's current --accent
   tier: PowerTier
-  getAudioContext: () => AudioContext | null
-  getAnalyser: () => AnalyserNode | null
+  // Optional: a host with no live AnalyserNode at all (a cross-origin embed
+  // like SoundCloud/Bandcamp — nothing to attach a Worklet to) can omit
+  // these entirely rather than pass closures that always return null.
+  // Position-only mode (a loaded sidecar + setPosition/seek transport
+  // events, see StructureSource.synthesize()) drives the visual instead.
+  getAudioContext?: () => AudioContext | null
+  getAnalyser?: () => AnalyserNode | null
   // Where the compiled feature-worklet module lives. `audioWorklet.addModule()`
   // targets aren't asset-scanned by bundlers the way `new Worker(new URL(...))`
   // is, so this can't always be defaulted correctly for every consumer's
@@ -140,20 +145,24 @@ export function init(canvas: HTMLCanvasElement, opts: VizOpts): VizInstance {
   post({ kind: 'setAccent', rgb: oklchToLinearSrgb(...opts.accent) })
   post({ kind: 'setTier', tier })
 
-  // opts.getAudioContext()/getAnalyser() are null until the shared bus is
-  // created on the site's first play click (IO_PAGE_CHANGESET.md §3) — this
-  // package mounts well before that's guaranteed to exist, so poll rather
-  // than assume it's there at init time. Attaches downstream of the
-  // AnalyserNode itself (not a separate "source" node — the site's contract
-  // doesn't expose one) — an AnalyserNode taps the signal without altering
-  // it, so it's an equally valid attach point for our own Worklet.
+  // opts.getAudioContext()/getAnalyser() are null (or absent entirely) until
+  // the shared bus is created on the site's first play click (IO_PAGE_CHANGESET.md
+  // §3) — this package mounts well before that's guaranteed to exist, so
+  // poll rather than assume it's there at init time. Attaches downstream of
+  // the AnalyserNode itself (not a separate "source" node — the site's
+  // contract doesn't expose one) — an AnalyserNode taps the signal without
+  // altering it, so it's an equally valid attach point for our own Worklet.
+  // A host that never provides one at all (SoundCloud/Bandcamp — genuinely
+  // no live signal to tap) just polls forever harmlessly; startSynthLoopIfNeeded
+  // below is what actually drives the visual for those tracks.
   let audioPollHandle: ReturnType<typeof setInterval> | null = null
   function tryAttachAudio(): void {
     if (tier === 'idle-only' || engine.attached) return
-    const ctx = opts.getAudioContext()
-    const analyser = opts.getAnalyser()
+    const ctx = opts.getAudioContext?.()
+    const analyser = opts.getAnalyser?.()
     if (!ctx || !analyser) return
     void engine.attach(ctx, workletUrl, analyser)
+    stopSynthLoop() // live audio just proved available — it's richer and takes over for good
     if (audioPollHandle !== null) {
       clearInterval(audioPollHandle)
       audioPollHandle = null
@@ -162,6 +171,30 @@ export function init(canvas: HTMLCanvasElement, opts: VizOpts): VizInstance {
   tryAttachAudio()
   if (!engine.attached && tier !== 'idle-only') {
     audioPollHandle = setInterval(tryAttachAudio, AUDIO_POLL_INTERVAL_MS)
+  }
+
+  // Position-only mode (SINTEZA_VIZ.md §5): drives StateFrames purely from
+  // a loaded sidecar + the live position clock, for tracks with no
+  // AnalyserNode to attach to at all. Runs only while live audio hasn't
+  // (yet) attached — the moment it does, tryAttachAudio's stopSynthLoop()
+  // call above hands off to the richer live path for good, never both at
+  // once.
+  let synthRafHandle: number | null = null
+  function synthLoopTick(): void {
+    if (!structureSource.active || engine.attached || tier === 'idle-only') {
+      synthRafHandle = null
+      return
+    }
+    post({ kind: 'state', frame: structureSource.synthesize(positionSec) })
+    synthRafHandle = requestAnimationFrame(synthLoopTick)
+  }
+  function startSynthLoopIfNeeded(): void {
+    if (synthRafHandle !== null || engine.attached || tier === 'idle-only' || !structureSource.active) return
+    synthRafHandle = requestAnimationFrame(synthLoopTick)
+  }
+  function stopSynthLoop(): void {
+    if (synthRafHandle !== null) cancelAnimationFrame(synthRafHandle)
+    synthRafHandle = null
   }
 
   async function loadSidecar(url: string): Promise<void> {
@@ -173,6 +206,7 @@ export function init(canvas: HTMLCanvasElement, opts: VizOpts): VizInstance {
     }
     structureSource.load(json as Sidecar)
     structureSource.resyncTo(positionSec)
+    startSynthLoopIfNeeded()
   }
 
   function onTransport(e: Event): void {
@@ -215,6 +249,7 @@ export function init(canvas: HTMLCanvasElement, opts: VizOpts): VizInstance {
       post({ kind: 'setTier', tier })
       if (tier === 'idle-only') {
         engine.detach()
+        stopSynthLoop()
         if (audioPollHandle !== null) {
           clearInterval(audioPollHandle)
           audioPollHandle = null
@@ -224,6 +259,7 @@ export function init(canvas: HTMLCanvasElement, opts: VizOpts): VizInstance {
         if (!engine.attached && audioPollHandle === null) {
           audioPollHandle = setInterval(tryAttachAudio, AUDIO_POLL_INTERVAL_MS)
         }
+        startSynthLoopIfNeeded()
       }
     },
 
@@ -232,6 +268,7 @@ export function init(canvas: HTMLCanvasElement, opts: VizOpts): VizInstance {
       destroyed = true
       window.removeEventListener(TRANSPORT_EVENT, onTransport)
       if (audioPollHandle !== null) clearInterval(audioPollHandle)
+      stopSynthLoop()
       engine.detach()
       resizeObserver?.disconnect()
       reducedMotionQuery.removeEventListener('change', onReducedMotionChange)
