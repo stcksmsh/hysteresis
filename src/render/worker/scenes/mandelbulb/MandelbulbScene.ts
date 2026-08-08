@@ -20,7 +20,7 @@ interface Uniforms {
   uMaxSteps: WebGLUniformLocation | null
 }
 
-// Optional landing-view hero (HYSTERESIS.md §4c) — NOT part of the default
+// Optional landing-view hero (SINTEZA_VIZ.md §4c) — NOT part of the default
 // persistent-background registry entry. Raymarching is too expensive to run
 // always-on; a host that wants this needs to swap it in for a dedicated
 // landing canvas and pause it off-screen itself (IntersectionObserver is a
@@ -29,6 +29,7 @@ interface Uniforms {
 export class MandelbulbScene implements Scene {
   readonly id = 'mandelbulb-hero'
   readonly wantsPersistencePass = false
+  readonly wantsMemoryField = false
   readonly wantsBloom = true
 
   private gl!: WebGL2RenderingContext

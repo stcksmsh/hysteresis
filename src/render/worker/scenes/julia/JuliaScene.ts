@@ -352,12 +352,13 @@ function findVortexTarget(
 }
 
 // The Julia substrate + oscilloscope beam as one visual identity
-// (HYSTERESIS.md §4) — not two selectable scenes. Substrate carries mood and
+// (SINTEZA_VIZ.md §4) — not two selectable scenes. Substrate carries mood and
 // memory via a slowly-chased `c`; the beam rides on top as the sharp,
 // legible, beat-carrying element.
 export class JuliaScene implements Scene {
   readonly id = 'julia'
   readonly wantsPersistencePass = false
+  readonly wantsMemoryField = true
   readonly wantsBloom = true
 
   private gl!: WebGL2RenderingContext

@@ -3,7 +3,7 @@ import type { StateFrame, WorkletToMain } from '../shared/types'
 export type StateFrameListener = (frame: StateFrame) => void
 
 // Attach-only: this repo never owns the AudioContext or the transport
-// (HYSTERESIS.md §7) — the host creates/decodes/plays audio and hands us
+// (SINTEZA_VIZ.md §7) — the host creates/decodes/plays audio and hands us
 // `{ audioContext, source }`; we just addModule() the feature worklet and
 // tap `source` downstream of it.
 export class AudioEngine {
@@ -33,7 +33,7 @@ export class AudioEngine {
       if (e.data.kind === 'state') {
         for (const listener of this.listeners) listener(e.data.frame)
       } else if (e.data.kind === 'error') {
-        console.error('[hysteresis] worklet error:', e.data.message)
+        console.error('[sinteza-viz] worklet error:', e.data.message)
       }
     }
 

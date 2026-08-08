@@ -9,7 +9,7 @@ export type { Sidecar } from './shared/sidecar'
 
 // Matches the IO page's actual §6 contract (IO_PAGE_CHANGESET.md, and
 // src/lib/{viz-bus,player-bus,audio-bus}.ts in stcksmsh.github.io) — not the
-// original HYSTERESIS.md draft, which predates real integration constraints
+// original SINTEZA_VIZ.md draft, which predates real integration constraints
 // (getAudioContext/getAnalyser can be null at init time; accent is OKLCH,
 // not a CSS string; transport arrives on a window CustomEvent bus, not
 // pushed through this API). Kept intentionally this small — see the "don't
@@ -116,7 +116,7 @@ export function init(canvas: HTMLCanvasElement, opts: VizOpts): VizInstance {
     worker = new Worker(new URL('./render/worker/render-worker.ts', import.meta.url), { type: 'module' })
     postToWorker = post
     worker.onmessage = (e: MessageEvent<RenderWorkerToMain>) => {
-      if (e.data.kind === 'error') console.error('[hysteresis]', e.data.message)
+      if (e.data.kind === 'error') console.error('[sinteza-viz]', e.data.message)
     }
 
     const offscreen = canvas.transferControlToOffscreen()
@@ -134,7 +134,7 @@ export function init(canvas: HTMLCanvasElement, opts: VizOpts): VizInstance {
     resizeObserver.observe(canvas)
     reducedMotionQuery.addEventListener('change', onReducedMotionChange)
   } else {
-    console.error('[hysteresis] OffscreenCanvas is not supported in this browser; the visual will not render')
+    console.error('[sinteza-viz] OffscreenCanvas is not supported in this browser; the visual will not render')
   }
 
   post({ kind: 'setAccent', rgb: oklchToLinearSrgb(...opts.accent) })
@@ -168,7 +168,7 @@ export function init(canvas: HTMLCanvasElement, opts: VizOpts): VizInstance {
     const res = await fetch(url)
     const json: unknown = await res.json()
     if (!isSidecar(json)) {
-      console.error(`[hysteresis] ${url} is not a recognised sidecar (schema mismatch)`)
+      console.error(`[sinteza-viz] ${url} is not a recognised sidecar (schema mismatch)`)
       return
     }
     structureSource.load(json as Sidecar)

@@ -4,7 +4,7 @@ import { basename, extname, resolve } from 'node:path'
 import { decodeWavFile } from './wav'
 import { analyzeMix } from './structure'
 
-// Offline analysis tool (HYSTERESIS.md §6): one WAV master in, one
+// Offline analysis tool (SINTEZA_VIZ.md §6): one WAV master in, one
 // <slug>.sidecar.json out. This repo produces it; the host (IO page) serves
 // it as a static asset and calls loadSidecar(url) on trackchange.
 function main(): void {

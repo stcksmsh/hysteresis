@@ -13,6 +13,8 @@ import { sceneRegistry, DEFAULT_SCENE_ID } from './scenes/registry'
 import type { Scene, SceneContext } from './scenes/Scene'
 import { Choreographer } from '../choreography/Choreographer'
 import { PersistencePass } from './passes/persistence-pass'
+import { MemoryFieldPass } from './passes/memory-field-pass'
+import { OnsetParticles } from './passes/onset-particles'
 import { BloomPass } from './passes/bloom-pass'
 import { CompositePass } from './passes/composite-pass'
 
@@ -50,8 +52,11 @@ let lastStatsPost = 0
 
 let sceneFbo: Fbo | null = null
 let persistencePass: PersistencePass | null = null
+let memoryFieldPass: MemoryFieldPass | null = null
+let onsetParticles: OnsetParticles | null = null
 let bloomPass: BloomPass | null = null
 let compositePass: CompositePass | null = null
+let currentAccent: [number, number, number] = [1, 0.36, 0.22] // vermilion default (#FF5C38), matches JuliaScene's own default
 
 const choreographer = new Choreographer()
 
@@ -145,7 +150,22 @@ function loop(t: number) {
   scene.render(sceneFbo.framebuffer)
 
   let currentTexture = sceneFbo.texture
-  if (scene.wantsPersistencePass && persistencePass && !reducedMotion) {
+  if (scene.wantsMemoryField && memoryFieldPass && !reducedMotion) {
+    const aspect = sceneFbo.width / Math.max(1, sceneFbo.height)
+    const fieldResult = memoryFieldPass.apply(currentTexture, dt, {
+      decay: params.fieldDecay,
+      flowStrength: params.flowStrength,
+      symmetry: params.symmetry,
+      aspect,
+    })
+    currentTexture = fieldResult.texture
+    // Particles skipped on cheap/idle-only (SINTEZA_VIZ.md §8) — the same
+    // tiers that already drop live analysis/onset detail elsewhere.
+    if (onsetParticles && currentTier === 'full') {
+      onsetParticles.update(dt, params.onsetPulses, params.flowStrength)
+      onsetParticles.render(fieldResult.framebuffer, fieldResult.width, fieldResult.height, aspect, currentAccent)
+    }
+  } else if (scene.wantsPersistencePass && persistencePass && !reducedMotion) {
     currentTexture = persistencePass.apply(currentTexture, PERSISTENCE_DECAY)
   }
 
@@ -225,6 +245,11 @@ function allocatePipeline(width: number, height: number) {
   if (persistencePass) persistencePass.resize(width, height)
   else persistencePass = new PersistencePass(gl, width, height, caps.floatFbo)
 
+  if (memoryFieldPass) memoryFieldPass.resize(width, height)
+  else memoryFieldPass = new MemoryFieldPass(gl, width, height, caps.floatFbo)
+
+  if (!onsetParticles) onsetParticles = new OnsetParticles(gl)
+
   if (bloomPass) bloomPass.resize(width, height)
   else bloomPass = new BloomPass(gl, width, height, caps.floatFbo)
 
@@ -236,7 +261,7 @@ function sceneContext(width: number, height: number, dpr: number): SceneContext 
   return { gl: caps.gl, width, height, dpr, reducedMotion, floatFbo: caps.floatFbo }
 }
 
-// Power tiers (HYSTERESIS.md §8): `full` caps only against melting a 4K/
+// Power tiers (SINTEZA_VIZ.md §8): `full` caps only against melting a 4K/
 // high-DPR display; `cheap`/`idle-only` cap harder since neither needs to
 // look crisp — cheap trades resolution for headroom, idle-only is nearly
 // static content anyway.
@@ -318,6 +343,7 @@ self.onmessage = (e: MessageEvent<MainToRenderWorker>) => {
       break
     }
     case 'setAccent': {
+      currentAccent = msg.rgb
       scene?.setAccent?.(msg.rgb)
       break
     }

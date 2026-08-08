@@ -1,8 +1,8 @@
-// The precomputed sidecar format (HYSTERESIS.md §6). Produced offline by
+// The precomputed sidecar format (SINTEZA_VIZ.md §6). Produced offline by
 // scripts/analyze.ts from a single WAV master; consumed by StructureSource
 // to fuse reliable, look-ahead structure (beats/sections/events) onto the
 // live per-frame signal. Detail (bands/onsets/energy) is never carried here
-// — it is always live (HYSTERESIS.md §5's fusion rule).
+// — it is always live (SINTEZA_VIZ.md §5's fusion rule).
 export const SIDECAR_SCHEMA_VERSION = 1
 
 export type SidecarSectionKind = 'build' | 'drop' | 'break' | 'other'
