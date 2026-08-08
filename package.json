@@ -10,7 +10,9 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    }
+    },
+    "./dist/render-worker.js": "./dist/render-worker.js",
+    "./dist/worklets/feature-worklet.js": "./dist/worklets/feature-worklet.js"
   },
   "files": [
     "dist"
