@@ -1,5 +1,6 @@
 node_modules/
 dist/
 public/worklets/
+public/render-worker.js
 *.log
 .DS_Store

@@ -16,10 +16,11 @@
     "dist"
   ],
   "scripts": {
-    "dev": "npm run build:worklet && concurrently -k -n worklet,vite \"vite build --config vite.worklet.config.ts --watch\" \"vite\"",
+    "dev": "npm run build:worklet && npm run build:render-worker && concurrently -k -n worklet,render-worker,vite \"vite build --config vite.worklet.config.ts --watch\" \"vite build --config vite.render-worker.config.ts --watch\" \"vite\"",
     "build:worklet": "vite build --config vite.worklet.config.ts",
-    "build": "npm run build:worklet && vite build",
-    "build:lib": "npm run build:worklet && vite build --config vite.lib.config.ts && tsc -p tsconfig.lib.json",
+    "build:render-worker": "vite build --config vite.render-worker.config.ts",
+    "build": "npm run build:worklet && npm run build:render-worker && vite build",
+    "build:lib": "npm run build:worklet && npm run build:render-worker && vite build --config vite.lib.config.ts && tsc -p tsconfig.lib.json",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.worker.json && tsc --noEmit -p tsconfig.tools.json",
     "test": "vitest run",
