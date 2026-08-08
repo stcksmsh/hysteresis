@@ -159,6 +159,9 @@ function loop(t: number) {
       aspect,
     })
     currentTexture = fieldResult.texture
+    // Foreground hero layer (e.g. the beam) — crisp on top of the smeared
+    // substrate, not fed into it (see Scene.renderForeground's doc comment).
+    scene.renderForeground?.(fieldResult.framebuffer)
     // Particles skipped on cheap/idle-only (SINTEZA_VIZ.md §8) — the same
     // tiers that already drop live analysis/onset detail elsewhere.
     if (onsetParticles && currentTier === 'full') {

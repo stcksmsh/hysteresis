@@ -34,6 +34,15 @@ export interface Scene {
   resize(ctx: SceneContext): void
   update(dt: number, params: ParamBus): void
   render(targetFbo: WebGLFramebuffer | null): void
+  // Optional foreground layer, for scenes with wantsMemoryField=true that
+  // want a sharp element on top of the smeared result — drawn additively
+  // (no clear) by the render worker AFTER the memory field pass, so it
+  // reads crisp against the softened substrate instead of getting pre-mixed
+  // into it every frame (SINTEZA_VIZ.md §4c: the beam is rhythm — sharp,
+  // thin — the substrate is mood — slow, smeared; they need to read as
+  // different bands of the image). Scenes without a foreground layer, or
+  // that don't use the memory field, just omit this.
+  renderForeground?(targetFbo: WebGLFramebuffer | null): void
   dispose(): void
 
   // Optional adaptive-quality hooks. The render worker drives these from

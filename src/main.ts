@@ -33,12 +33,20 @@ function ensureAudioBus(): { ctx: AudioContext; analyser: AnalyserNode } {
 }
 
 const workletUrl = new URL(`${import.meta.env.BASE_URL}worklets/feature-worklet.js`, window.location.href)
+// index.ts's own renderWorkerUrl default is relative to wherever its
+// MODULE's own chunk ends up (import.meta.url) — fine when that's dist/
+// root (the lib build), but this dev harness's own app-mode build hashes
+// src/index.ts into dist/assets/, which breaks that default the same way
+// it broke for stcksmsh.github.io (see VizOpts.renderWorkerUrl's doc
+// comment). BASE_URL + the known public/ filename sidesteps it entirely.
+const renderWorkerUrl = new URL(`${import.meta.env.BASE_URL}render-worker.js`, window.location.href)
 init(canvas, {
   accent: [0.68, 0.2, 33], // vermilion, matching SINTEZA_VIZ.md's default
   tier: 'full',
   getAudioContext: () => bus?.ctx ?? null,
   getAnalyser: () => bus?.analyser ?? null,
   workletUrl,
+  renderWorkerUrl,
 })
 
 function emitTransport(detail: object): void {
