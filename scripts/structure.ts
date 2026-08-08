@@ -1,6 +1,13 @@
 import { WindowedFFT } from '../src/audio/worklet/fft'
-import { computeBandRanges, bandEnergiesFromMagnitudes, BAND_NAMES, type BandName, type BandRanges } from '../src/audio/worklet/bands'
-import { spectralCentroidHz } from '../src/audio/worklet/spectral'
+import {
+  computeBandRanges,
+  bandEnergiesFromMagnitudes,
+  dominantBandTone,
+  BAND_NAMES,
+  type BandName,
+  type BandRanges,
+} from '../src/audio/worklet/bands'
+import { spectralCentroidHz, spectralFlatness } from '../src/audio/worklet/spectral'
 import { SpectralFlux } from '../src/audio/worklet/onset'
 import { EnvelopeFollower, AdaptiveNormalizer } from '../src/audio/worklet/envelope'
 import { BeatTracker, BarTracker } from '../src/audio/worklet/brain/beat-tracker'
@@ -9,9 +16,41 @@ import { DropDetector } from '../src/audio/worklet/brain/drop-detector'
 import { BreakDetector } from '../src/audio/worklet/brain/break-detector'
 import { FFT_SIZE, HOP_SIZE } from '../src/shared/constants'
 import type { BandEnergies } from '../src/shared/types'
-import type { Sidecar, SidecarEvent, SidecarSection } from '../src/shared/sidecar'
+import type { Sidecar, SidecarBandEnvelope, SidecarEvent, SidecarOnset, SidecarSection } from '../src/shared/sidecar'
 import { SIDECAR_SCHEMA_VERSION } from '../src/shared/sidecar'
 import type { DecodedWav } from './wav'
+
+// Same rising-edge threshold feature-worklet.ts uses live, so an offline
+// onset means the same thing a live one does.
+const ONSET_EVENT_THRESHOLD = 0.4
+
+// scripts/structure.ts downmixes to mono before analysis (see `mono` below),
+// so there is no real stereo signal left to place an onset with. This is a
+// deterministic, non-measured stand-in purely so onset particles/beam
+// placement in position-only mode (schema 2) has some spread instead of
+// collapsing every onset onto the center.
+function syntheticPan(t: number): number {
+  return Math.sin(t * 37.13) * 0.6
+}
+
+// Downsamples a per-hop Float32Array to envelopeRate-Hz samples the same way
+// the original energyEnvelope loop did — shared across every envelope field
+// schema 2 adds so they all agree on timing.
+function downsample(raw: Float32Array, hopsPerSample: number, envelopeLength: number): number[] {
+  const out: number[] = new Array(envelopeLength)
+  for (let i = 0; i < envelopeLength; i++) {
+    const s = i * hopsPerSample
+    const e = Math.min(raw.length, s + hopsPerSample)
+    let sum = 0
+    let n = 0
+    for (let h = s; h < e; h++) {
+      sum += raw[h]
+      n++
+    }
+    out[i] = n > 0 ? clamp01(sum / n) : 0
+  }
+  return out
+}
 
 const CENTROID_CEILING_HZ = 8000
 const NORMALIZER_DECAY_MS = 6000
@@ -103,12 +142,23 @@ export function analyzeMix(wav: DecodedWav): Sidecar {
   const totalHops = Math.max(0, Math.floor((frameCount - FFT_SIZE) / HOP_SIZE) + 1)
   const window = new Float32Array(FFT_SIZE)
   const energyRaw = new Float32Array(totalHops)
+  const bandRaw: Record<BandName, Float32Array> = {
+    sub: new Float32Array(totalHops),
+    low: new Float32Array(totalHops),
+    mid: new Float32Array(totalHops),
+    presence: new Float32Array(totalHops),
+    air: new Float32Array(totalHops),
+  }
+  const centroidRaw = new Float32Array(totalHops)
+  const flatnessRaw = new Float32Array(totalHops)
 
   const beats: number[] = []
   const events: SidecarEvent[] = []
+  const onsets: SidecarOnset[] = []
   const dropTimes: number[] = []
   let lastBeatPhase = 0
   let lastBarPhase = 0
+  let wasAboveOnsetThreshold = false
   let finalTempo = 120
   let tempoSum = 0
   let tempoSamples = 0
@@ -128,9 +178,12 @@ export function analyzeMix(wav: DecodedWav): Sidecar {
     }
     const lowEnergy = (bandsRaw.sub + bandsRaw.low) / 2
     energyRaw[h] = (bandsRaw.sub + bandsRaw.low + bandsRaw.mid + bandsRaw.presence + bandsRaw.air) / 5
+    for (const name of BAND_NAMES) bandRaw[name][h] = bandsRaw[name]
 
     const centroidHz = spectralCentroidHz(mags, sampleRate, FFT_SIZE)
     const centroid = Math.min(1, centroidHz / CENTROID_CEILING_HZ)
+    centroidRaw[h] = centroid
+    flatnessRaw[h] = spectralFlatness(mags)
     const novelty = fluxNormalizer.normalize(flux.update(mags))
 
     const tNow = start / sampleRate
@@ -139,6 +192,14 @@ export function analyzeMix(wav: DecodedWav): Sidecar {
 
     if (beatPhase < lastBeatPhase - 0.5) beats.push(tNow)
     lastBeatPhase = beatPhase
+
+    // Same rising-edge onset rule feature-worklet.ts uses live (SINTEZA_VIZ.md
+    // §5) — for position-only playback (schema 2), this is the only source
+    // of onset pulses at all.
+    if (novelty > ONSET_EVENT_THRESHOLD && !wasAboveOnsetThreshold) {
+      onsets.push({ t: tNow, strength: novelty, tone: dominantBandTone(bandsRaw), pan: syntheticPan(tNow) })
+    }
+    wasAboveOnsetThreshold = novelty > ONSET_EVENT_THRESHOLD
 
     if (barPhase < lastBarPhase - 0.5) events.push({ type: 'downbeat', t: tNow, strength: 1 })
     lastBarPhase = barPhase
@@ -173,20 +234,19 @@ export function analyzeMix(wav: DecodedWav): Sidecar {
 
   const hopsPerEnvelopeSample = Math.max(1, Math.round(1 / ENVELOPE_RATE_HZ / hopSec))
   const envelopeLength = Math.max(1, Math.ceil(totalHops / hopsPerEnvelopeSample))
-  const energyEnvelope: number[] = new Array(envelopeLength)
-  for (let i = 0; i < envelopeLength; i++) {
-    const s = i * hopsPerEnvelopeSample
-    const e = Math.min(totalHops, s + hopsPerEnvelopeSample)
-    let sum = 0
-    let n = 0
-    for (let h = s; h < e; h++) {
-      sum += energyRaw[h]
-      n++
-    }
-    energyEnvelope[i] = n > 0 ? clamp01(sum / n) : 0
+  const energyEnvelope = downsample(energyRaw, hopsPerEnvelopeSample, envelopeLength)
+  const bandEnvelope: SidecarBandEnvelope = {
+    sub: downsample(bandRaw.sub, hopsPerEnvelopeSample, envelopeLength),
+    low: downsample(bandRaw.low, hopsPerEnvelopeSample, envelopeLength),
+    mid: downsample(bandRaw.mid, hopsPerEnvelopeSample, envelopeLength),
+    presence: downsample(bandRaw.presence, hopsPerEnvelopeSample, envelopeLength),
+    air: downsample(bandRaw.air, hopsPerEnvelopeSample, envelopeLength),
   }
+  const centroidEnvelope = downsample(centroidRaw, hopsPerEnvelopeSample, envelopeLength)
+  const flatnessEnvelope = downsample(flatnessRaw, hopsPerEnvelopeSample, envelopeLength)
 
   events.sort((a, b) => a.t - b.t)
+  onsets.sort((a, b) => a.t - b.t)
 
   return {
     schema: SIDECAR_SCHEMA_VERSION,
@@ -195,7 +255,11 @@ export function analyzeMix(wav: DecodedWav): Sidecar {
     beats,
     sections,
     events,
+    onsets,
     energyEnvelope,
+    bandEnvelope,
+    centroidEnvelope,
+    flatnessEnvelope,
     envelopeRate: ENVELOPE_RATE_HZ,
   }
 }

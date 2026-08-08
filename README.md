@@ -65,9 +65,25 @@ npm run analyze -- path/to/master.wav [output.sidecar.json]
 ```
 
 Ingests one WAV master (no DAW project, no stems) and emits a
-`<slug>.sidecar.json` — tempo, beats, sections, structural events, an energy
-envelope. This repo produces it; the host serves it as a static asset and
-calls `loadSidecar(url)` on `trackchange`.
+`<slug>.sidecar.json` (schema 2) — tempo, beats, sections, structural events,
+an onset list, and per-band/centroid/flatness energy envelopes. This repo
+produces it; the host serves it as a static asset and calls `loadSidecar(url)`
+on `trackchange`.
+
+**Two ways a host can use it**, and `init()` picks automatically based on
+whether live audio ever attaches:
+- **Self-hosted `<audio>`/AudioContext**: sidecar supplies structure (beats,
+  drops, sections — with look-ahead), live analysis supplies detail. This is
+  the original mode.
+- **SoundCloud/Bandcamp embeds (no `AnalyserNode` reachable at all)**: if
+  it's your own track, run `analyze` against the original master and the
+  richer schema-2 sidecar drives the *entire* visual from playback position
+  alone — feed `setPosition` from the embed's own position API (e.g.
+  SoundCloud Widget's `PLAY_PROGRESS`), no Worklet attach needed. The
+  oscilloscope beam falls back to its idle Lissajous (no real waveform
+  survives an offline envelope) — everything else is genuinely reactive.
+
+See `SINTEZA_VIZ.md` §5 for the full fusion rules.
 
 ## Develop
 

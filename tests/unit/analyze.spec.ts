@@ -23,13 +23,49 @@ function makeKickTrain(bpm: number, durationSec: number): DecodedWav {
 }
 
 describe('analyzeMix', () => {
-  it('produces a schema-1 sidecar with the right duration', () => {
+  it('produces a schema-2 sidecar with the right duration', () => {
     const wav = makeKickTrain(120, 10)
     const sidecar = analyzeMix(wav)
-    expect(sidecar.schema).toBe(1)
+    expect(sidecar.schema).toBe(2)
     expect(sidecar.duration).toBeCloseTo(10, 1)
     expect(sidecar.envelopeRate).toBeGreaterThan(0)
     expect(sidecar.energyEnvelope.length).toBeGreaterThan(0)
+  })
+
+  it('emits per-band/centroid/flatness envelopes the same length as energyEnvelope', () => {
+    const wav = makeKickTrain(120, 10)
+    const sidecar = analyzeMix(wav)
+    const n = sidecar.energyEnvelope.length
+    expect(sidecar.bandEnvelope.sub.length).toBe(n)
+    expect(sidecar.bandEnvelope.low.length).toBe(n)
+    expect(sidecar.bandEnvelope.mid.length).toBe(n)
+    expect(sidecar.bandEnvelope.presence.length).toBe(n)
+    expect(sidecar.bandEnvelope.air.length).toBe(n)
+    expect(sidecar.centroidEnvelope.length).toBe(n)
+    expect(sidecar.flatnessEnvelope.length).toBe(n)
+    for (const arr of [sidecar.bandEnvelope.sub, sidecar.centroidEnvelope, sidecar.flatnessEnvelope]) {
+      for (const v of arr) {
+        expect(Number.isFinite(v)).toBe(true)
+        expect(v).toBeGreaterThanOrEqual(0)
+        expect(v).toBeLessThanOrEqual(1)
+      }
+    }
+  })
+
+  it('detects onsets on a kick train and tags each with a low-band tone', () => {
+    const wav = makeKickTrain(120, 10)
+    const sidecar = analyzeMix(wav)
+    expect(sidecar.onsets.length).toBeGreaterThan(3)
+    for (const onset of sidecar.onsets) {
+      expect(onset.t).toBeGreaterThanOrEqual(0)
+      expect(onset.t).toBeLessThanOrEqual(sidecar.duration)
+      expect(onset.strength).toBeGreaterThan(0)
+      expect(onset.pan).toBeGreaterThanOrEqual(-1)
+      expect(onset.pan).toBeLessThanOrEqual(1)
+    }
+    // A 60Hz decaying burst is unambiguously sub/low, never presence/air.
+    const avgTone = sidecar.onsets.reduce((s, o) => s + o.tone, 0) / sidecar.onsets.length
+    expect(avgTone).toBeLessThan(0.5)
   })
 
   it('locks onto roughly the true tempo of a steady kick train', () => {

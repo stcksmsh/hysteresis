@@ -23,7 +23,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.worker.json && tsc --noEmit -p tsconfig.tools.json",
     "test": "vitest run",
-    "analyze": "tsx scripts/analyze.ts"
+    "analyze": "tsx scripts/analyze.ts",
+    "prepare": "npm run build:lib"
   },
   "dependencies": {
     "fft.js": "^4.0.4"

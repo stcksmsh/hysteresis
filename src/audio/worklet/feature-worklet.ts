@@ -1,6 +1,6 @@
 /// <reference types="audioworklet" />
 import { WindowedFFT } from './fft'
-import { computeBandRanges, bandEnergiesFromMagnitudes, BAND_NAMES, type BandName, type BandRanges } from './bands'
+import { computeBandRanges, bandEnergiesFromMagnitudes, dominantBandTone, BAND_NAMES, type BandName, type BandRanges } from './bands'
 import { spectralCentroidHz, spectralFlatness } from './spectral'
 import { SpectralFlux } from './onset'
 import { EnvelopeFollower, AdaptiveNormalizer } from './envelope'
@@ -34,22 +34,6 @@ const DROP_NORMALIZER_DECAY_MS = 45000
 // Pan is a slow, structural property of the mix — smoothing it keeps a
 // single off-centre hi-hat from throwing the whole placement sideways.
 const PAN_SMOOTHING = 0.15
-
-// Dominant band as a 0..1 position across the spectrum (sub -> air). Gives
-// a kick and a hi-hat clearly different values, which reads better as
-// vertical placement than a smoothly-varying centroid would.
-function dominantBandTone(bands: BandEnergies): number {
-  let bestIndex = 0
-  let bestValue = -1
-  for (let i = 0; i < BAND_NAMES.length; i++) {
-    const v = bands[BAND_NAMES[i]]
-    if (v > bestValue) {
-      bestValue = v
-      bestIndex = i
-    }
-  }
-  return bestIndex / (BAND_NAMES.length - 1)
-}
 
 class FeatureProcessor extends AudioWorkletProcessor implements AudioWorkletProcessorImpl {
   private ringL = new Float32Array(FFT_SIZE)

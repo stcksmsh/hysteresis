@@ -45,9 +45,12 @@ export interface StateFrame {
   // beam only — the one place the render path reads raw samples rather than
   // analysed state (SINTEZA_VIZ.md §4b). null when no audio is attached.
   scope: Float32Array | null
-  // True only for the render worker's synthetic fallback frame (no track
-  // ever loaded/attached yet) — real worklet/StructureSource frames never
-  // set this. Drives the "nothing playing" idle path (SINTEZA_VIZ.md §8).
+  // True for the render worker's synthetic fallback frame (no track ever
+  // loaded/attached yet — SINTEZA_VIZ.md §8's "nothing playing" idle path)
+  // AND for StructureSource.synthesize()'s position-only frames (music IS
+  // playing, but there's no live waveform to trace — this is the existing
+  // lever that keeps the beam's idle Lissajous animating instead of frozen).
+  // Real live worklet/fused frames never set this.
   idle?: boolean
 }
 

@@ -177,21 +177,41 @@ retint via `setAccent`).
 
 ## 5. Live + precomputed fusion
 
-Live analysis can't look ahead; offline can. So:
+Live analysis can't look ahead; offline can. Fusion has two distinct modes depending on whether
+the host has a real `AnalyserNode` to attach to at all:
+
+**Self-hosted audio (live + precomputed fusion, `StructureSource.fuse()`):**
 - **Structure from the sidecar:** beats, sections, build/drop/break markers, energy envelope —
   precomputed offline, frame-accurately synced to the host's `position` feed. Look-ahead lets
   the feedback field *start densifying before* a drop it can see coming — anticipation, which is
   what makes it feel like the music rather than a meter.
-- **Detail from the live signal:** band envelopes, beam, onset particles — always live.
+- **Detail from the live signal:** band envelopes, beam, onset particles — live.
 - **Fusion rule:** sidecar loaded → structural gestures fire from the timeline; otherwise fall
   back to live Layer 2 detection. Detail is live either way.
+
+**SoundCloud / position-only mode (no live audio at all, `StructureSource.synthesize()`):** a
+cross-origin embed (SoundCloud, Bandcamp) has no `AnalyserNode` to tap — the iframe's audio is
+unreachable. But the *master* isn't: if the track is your own, `scripts/analyze.ts` runs against
+the original WAV and the schema-2 sidecar carries enough (per-band/centroid/flatness envelopes,
+a synthetic-but-real onset list) to drive the whole visual purely from playback **position** —
+`init()` never attaches a Worklet for these tracks at all, it just posts `setPosition` from the
+host's own position feed (e.g. the SoundCloud Widget API's `PLAY_PROGRESS`) and everything reads
+off the sidecar. The one thing that can't be recovered offline is the oscilloscope beam's real
+waveform (no phase information survives an FFT envelope) — the beam plays its idle Lissajous
+figure instead of a fake trace; every other layer (Julia, memory field, particles, symmetry)
+reacts to the genuine track structure. If live audio *does* attach later (e.g. tier/host changes
+mid-session), it takes over for good — the two modes are mutually exclusive per track, never
+both at once.
 
 ---
 
 ## 6. Offline analysis tool (produces the sidecar) — lives in THIS repo
 
-- `scripts/analyze.ts` (Node): ingests a WAV master, emits `<slug>.sidecar.json`:
-  `{ schema:1, tempo, beats[], sections[], events:[{type,t,strength}], energyEnvelope[] }`.
+- `scripts/analyze.ts` (Node): ingests a WAV master, emits `<slug>.sidecar.json` (schema 2):
+  `{ schema:2, tempo, beats[], sections[], events[], onsets[], energyEnvelope[], bandEnvelope,
+  centroidEnvelope[], flatnessEnvelope[], envelopeRate }`. `bandEnvelope`/`centroidEnvelope`/
+  `flatnessEnvelope`/`onsets` exist specifically to make §5's position-only mode possible — a
+  schema-1 sidecar (structure only) can't drive a track with no live audio at all.
 - Same Layer 1/2 logic offline, with look-ahead + optional hand-correction pass.
 - **Output is consumed by the IO page** as a static asset (`public/audio/<slug>.sidecar.json`).
   This repo *produces* it; the IO page *serves* it. Only artifact crossing the boundary besides
