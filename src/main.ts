@@ -34,7 +34,7 @@ function ensureAudioBus(): { ctx: AudioContext; analyser: AnalyserNode } {
 
 const workletUrl = new URL(`${import.meta.env.BASE_URL}worklets/feature-worklet.js`, window.location.href)
 init(canvas, {
-  accent: [0.68, 0.2, 33], // vermilion, matching HYSTERESIS.md's default
+  accent: [0.68, 0.2, 33], // vermilion, matching SINTEZA_VIZ.md's default
   tier: 'full',
   getAudioContext: () => bus?.ctx ?? null,
   getAnalyser: () => bus?.analyser ?? null,

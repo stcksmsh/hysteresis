@@ -27,7 +27,7 @@ function clamp01(v: number): number {
 // idea the old stem-based compiler used (see git history), just anchored to
 // one estimated tempo instead of an exact DAW tempo map. StructureSource
 // re-derives the eased 0->1 curve from these spans at playback time — the
-// sidecar only carries the span, not a baked curve (HYSTERESIS.md §6).
+// sidecar only carries the span, not a baked curve (SINTEZA_VIZ.md §6).
 function buildWindowsFromDrops(dropTimes: number[], tempoBpm: number, duration: number): SidecarSection[] {
   const barSec = (4 * 60) / Math.max(1, tempoBpm)
   const windowSec = BUILD_WINDOW_BARS * barSec
@@ -55,7 +55,7 @@ function breakSectionsFromEvents(events: SidecarEvent[]): SidecarSection[] {
 
 // Runs the same causal Layer 1/2 primitives the realtime worklet uses, but
 // offline over the whole mix so tempo/beats/structure converge once rather
-// than being estimated live from a cold start (HYSTERESIS.md §6). Single WAV
+// than being estimated live from a cold start (SINTEZA_VIZ.md §6). Single WAV
 // master in, no stems or DAW project required — the simpler model §6 asks
 // for, trading away the per-stem precision the old REAPER-based pipeline had.
 export function analyzeMix(wav: DecodedWav): Sidecar {

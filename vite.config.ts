@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite'
 
 export default defineConfig({
-  base: '/hysteresis/',
+  base: '/sinteza-viz/',
   worker: {
     format: 'es',
   },

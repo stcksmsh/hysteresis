@@ -12,7 +12,7 @@ export const TEMPO_MAX_BPM = 190
 export const BAND_EDGES_HZ = [20, 80, 250, 2000, 6000, 20000] as const
 
 // Oscilloscope beam ring buffer length (mono samples), taken from a
-// zero-crossing trigger point each hop so the trace sits still (HYSTERESIS.md
+// zero-crossing trigger point each hop so the trace sits still (SINTEZA_VIZ.md
 // §2/§4b). At 44.1-48kHz this covers roughly one low-mid cycle's worth of
 // waveform.
 export const SCOPE_SIZE = 1024

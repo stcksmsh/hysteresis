@@ -14,7 +14,7 @@ const int MAX_ITER = 8;
 const float BAILOUT = 2.5;
 
 // Classic distance-estimated Mandelbulb (power-8 default, driven toward
-// power-9/10 by build/tension — HYSTERESIS.md §4c). Landing-hero only: this
+// power-9/10 by build/tension — SINTEZA_VIZ.md §4c). Landing-hero only: this
 // is far too expensive to run as a persistent background.
 float mandelbulbDE(vec3 pos, float power) {
   vec3 z = pos;

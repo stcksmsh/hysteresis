@@ -43,11 +43,11 @@ export interface StateFrame {
   events: StructuralEvent[]
   // Trigger-locked mono waveform (SCOPE_SIZE samples), for the oscilloscope
   // beam only — the one place the render path reads raw samples rather than
-  // analysed state (HYSTERESIS.md §4b). null when no audio is attached.
+  // analysed state (SINTEZA_VIZ.md §4b). null when no audio is attached.
   scope: Float32Array | null
   // True only for the render worker's synthetic fallback frame (no track
   // ever loaded/attached yet) — real worklet/StructureSource frames never
-  // set this. Drives the "nothing playing" idle path (HYSTERESIS.md §8).
+  // set this. Drives the "nothing playing" idle path (SINTEZA_VIZ.md §8).
   idle?: boolean
 }
 
@@ -86,13 +86,22 @@ export interface ParamBus {
   paletteMix: number
   hueShift: number
 
+  // Memory field (SINTEZA_VIZ.md §4b): ping-pong retention 0..1 (closer to 1
+  // = longer memory), curl-noise advection strength this frame, and the
+  // earned-symmetry domain-warp amount (0 = organic, 1 = full kaleidoscope
+  // fold applied only to the field's own advection sampling, never the
+  // fresh frame — see MemoryFieldPass).
+  fieldDecay: number
+  flowStrength: number
+  symmetry: number
+
   // Raw waveform for the oscilloscope beam — passed through unshaped, never
   // spring-driven (see StateFrame.scope). null when idle/no audio.
   scope: Float32Array | null
   idle: boolean
 }
 
-// Power tiers (HYSTERESIS.md §8): `full` runs Julia + beam + bloom +
+// Power tiers (SINTEZA_VIZ.md §8): `full` runs Julia + beam + bloom +
 // Mandelbulb hero; `cheap` drops bloom weight/DPR/FPS and the hero; `idle-
 // only` drops live analysis entirely and only ever shows the idle c-drift.
 export type PowerTier = 'full' | 'cheap' | 'idle-only'

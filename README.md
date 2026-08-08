@@ -1,16 +1,17 @@
-# HYSTERESIS
+# the СИНТЕЗА visualizer
 
 A framework-agnostic visualizer package that reacts to musical *structure* —
-builds, drops, breaks, groove — instead of instantaneous amplitude. It has
-memory and anticipation: it winds up during builds, releases on drops, and
-goes suspended during breaks.
+builds, drops, breaks, groove — instead of instantaneous amplitude. It's
+built on hysteresis: the image itself accumulates history, so what's on
+screen depends on the whole recent signal, not just this instant. It winds
+up during builds, releases on drops, and goes suspended during breaks.
 
-See `HYSTERESIS.md` for the original design doc and `IO_PAGE_CHANGESET.md`
-§6 (in `stcksmsh.github.io`) for the interface as actually integrated. Ships
-as a package the host mounts once:
+See `SINTEZA_VIZ.md` for the design doc and `IO_PAGE_CHANGESET.md` §6 (in
+`stcksmsh.github.io`) for the interface as actually integrated. Ships as a
+package the host mounts once:
 
 ```ts
-import { init } from 'hysteresis'
+import { init } from 'sinteza-viz'
 
 const instance = init(canvas, {
   accent: [0.68, 0.2, 33], // OKLCH [L, C, H]
@@ -45,10 +46,17 @@ Three-layer architecture:
   detector, drop detector, break/tension detector. Fused with a precomputed
   sidecar's structure when one is loaded (`src/audio/StructureSource.ts`) —
   detail (bands/onsets/energy) is always live either way.
-- **Layer 3 (`src/render/choreography/`, `src/render/worker/scenes/julia/`)**
-  — choreography (spring-damper driven parameters) and the visual scene: an
-  animated Julia-set substrate + oscilloscope beam, rendered via WebGL2 on an
-  `OffscreenCanvas` in a dedicated Worker.
+- **Layer 3 (`src/render/choreography/`, `src/render/worker/scenes/julia/`,
+  `src/render/worker/passes/`)** — choreography (spring-damper driven
+  parameters) and the visual scene, rendered via WebGL2 on an
+  `OffscreenCanvas` in a dedicated Worker: an animated Julia-set substrate,
+  fed into a curl-noise-advected feedback field that is THE signature
+  layer — the image itself accumulates and decays the last few seconds of
+  the song — an oscilloscope beam riding on top, and onset-triggered
+  particles dragged through the same flow field. Earned symmetry (a
+  tension/build-driven domain warp, snapping to full symmetry for one bar
+  on a drop) modulates the feedback field's own advection, never applied as
+  a constant filter.
 
 ## Offline sidecar tool
 
@@ -68,7 +76,7 @@ npm install
 npm run dev
 ```
 
-Opens at `http://localhost:5173/hysteresis/`. This is a local dev harness
+Opens at `http://localhost:5173/sinteza-viz/`. This is a local dev harness
 only (`src/main.ts`) — a bare file picker exercising the real `init()` API,
 not what ships. Building the actual package is `npm run build:lib`.
 
@@ -80,7 +88,7 @@ npm run build       # the local dev-harness demo site (GitHub Pages)
 npm run preview
 ```
 
-`vite.config.ts` sets `base: '/hysteresis/'` to match the demo's GitHub
+`vite.config.ts` sets `base: '/sinteza-viz/'` to match the demo's GitHub
 Pages project-pages subpath; it does not affect the library build.
 
 ## Test

@@ -6,7 +6,7 @@ const SAMPLE_RATE = 48000
 
 // Synthetic "kick train": a short decaying low-frequency burst on a fixed
 // grid, silence between — deterministic and DAW-independent, exactly the
-// single-WAV-master case the offline tool (HYSTERESIS.md §6) targets.
+// single-WAV-master case the offline tool (SINTEZA_VIZ.md §6) targets.
 function makeKickTrain(bpm: number, durationSec: number): DecodedWav {
   const n = Math.floor(durationSec * SAMPLE_RATE)
   const data = new Float32Array(n)

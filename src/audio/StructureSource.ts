@@ -21,7 +21,7 @@ function beatPositionAt(beats: number[], t: number): { beatPhase: number; barPha
 
 // Eased ramp across whichever 'build' section contains `t`, 0 outside one —
 // synthesized on the fly rather than stored, since the sidecar only carries
-// section spans (HYSTERESIS.md §6), not a baked curve.
+// section spans (SINTEZA_VIZ.md §6), not a baked curve.
 function buildProgressAt(sidecar: Sidecar, t: number): number {
   for (const s of sidecar.sections) {
     if (s.kind === 'build' && t >= s.start && t <= s.end) {
@@ -43,7 +43,7 @@ function tensionAt(sidecar: Sidecar, t: number): number {
   return 0
 }
 
-// Fuses precomputed sidecar structure onto live StateFrames (HYSTERESIS.md
+// Fuses precomputed sidecar structure onto live StateFrames (SINTEZA_VIZ.md
 // §5's fusion rule): structure — tempo/beatPhase/barPhase/buildProgress/
 // tension/drop|break|downbeat events — comes from the sidecar once loaded;
 // detail — bands, onsets, energy, the scope buffer — always stays live.

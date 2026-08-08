@@ -74,7 +74,7 @@ int iteratePerturbed(vec2 delta0, out vec2 finalZ) {
 
 // Violet-black substrate (СИНТЕЗА), low-contrast at rest so body text stays
 // readable over it; blends toward the host's accent as paletteMix (windup)
-// rises (HYSTERESIS.md §4a).
+// rises (SINTEZA_VIZ.md §4a).
 vec3 palette(float t, float hueShift, float paletteMix, vec3 accent) {
   vec3 base = vec3(0.04, 0.035, 0.07);
   vec3 violet = vec3(0.29, 0.18, 0.55);
