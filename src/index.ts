@@ -31,6 +31,9 @@ export interface VizOpts {
   // path relative to this module, which works when this package is built
   // and consumed as a normal dependency (see vite.lib.config.ts).
   workletUrl?: string | URL
+  // Where the compiled render-worker module lives. Same reasoning/default
+  // as workletUrl — see RENDER_WORKER_PATH below and vite.render-worker.config.ts.
+  renderWorkerUrl?: string | URL
 }
 
 export interface VizInstance {
@@ -89,10 +92,23 @@ function oklchToLinearSrgb(l: number, c: number, hDeg: number): [number, number,
   return [clamp01(r), clamp01(g), clamp01(bl)]
 }
 
+// Deliberately NOT inlined as a literal `new URL('./render-worker.js', import.meta.url)`
+// argument to `new Worker(...)` below — that exact literal-inline pattern is
+// what Vite's build specially detects and bundles/rewrites (see
+// vite.render-worker.config.ts's comment for why that breaks once this
+// package is installed as a dependency elsewhere). Routing it through a
+// variable first is what keeps this package's own lib build from doing that
+// rewrite, so the reference stays a portable, relative, run-time-resolved
+// URL — exactly like workletUrl's default above (audioWorklet.addModule()
+// was never subject to this rewrite in the first place; this achieves the
+// same portability for the Worker path by opting out of it deliberately).
+const RENDER_WORKER_PATH = './render-worker.js'
+
 export function init(canvas: HTMLCanvasElement, opts: VizOpts): VizInstance {
   const engine = new AudioEngine()
   const structureSource = new StructureSource()
   const workletUrl = opts.workletUrl ?? new URL('./worklets/feature-worklet.js', import.meta.url)
+  const renderWorkerUrl = opts.renderWorkerUrl ?? new URL(RENDER_WORKER_PATH, import.meta.url)
 
   let positionSec = 0
   let tier: PowerTier = opts.tier
@@ -118,7 +134,7 @@ export function init(canvas: HTMLCanvasElement, opts: VizOpts): VizInstance {
 
   let resizeObserver: ResizeObserver | null = null
   if ('transferControlToOffscreen' in canvas) {
-    worker = new Worker(new URL('./render/worker/render-worker.ts', import.meta.url), { type: 'module' })
+    worker = new Worker(renderWorkerUrl, { type: 'module' })
     postToWorker = post
     worker.onmessage = (e: MessageEvent<RenderWorkerToMain>) => {
       if (e.data.kind === 'error') console.error('[sinteza-viz]', e.data.message)
