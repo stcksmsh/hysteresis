@@ -112,5 +112,10 @@ void main() {
   float t = smoothIter / float(MAX_ITER);
   vec3 color = palette(t, uHueShift, uPaletteMix, uAccent);
   color = mix(color, vec3(0.0), uFlash);
+  // The substrate is the background layer, the beam is the foreground hero
+  // (SINTEZA_VIZ.md §4a vs §4c, JuliaScene.render() vs renderForeground())
+  // — dimmed here so it reads as atmosphere behind the beam rather than
+  // competing with it for attention.
+  color *= 0.35;
   fragColor = vec4(color, 1.0);
 }

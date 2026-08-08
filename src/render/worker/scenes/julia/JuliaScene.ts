@@ -203,9 +203,13 @@ const NAV_PAN_MAX_RADIUS = 0.8
 const IDLE_DRIFT_SPEED = 0.05 // rad/sec — slow enough to read as "stationary", not spinning
 
 const IDLE_BEAM_POINTS = 220
-const BEAM_HALF_WIDTH = 0.006
-const BEAM_INTENSITY_IDLE = 0.5
-const BEAM_INTENSITY_PLAYING = 1.1
+// Foreground hero (SINTEZA_VIZ.md §4c) — thicker/brighter than the original
+// tuning so the beam clearly reads as the primary element against the now-
+// dimmer substrate (julia.frag.glsl dims its own output 0.6x), not a thin
+// accent on top of it.
+const BEAM_HALF_WIDTH = 0.009
+const BEAM_INTENSITY_IDLE = 0.65
+const BEAM_INTENSITY_PLAYING = 1.4
 const BEAM_SCOPE_GAIN = 3.2
 const MAX_SEGMENTS = Math.max(SCOPE_SIZE - 1, IDLE_BEAM_POINTS - 1)
 
@@ -784,6 +788,11 @@ export class JuliaScene implements Scene {
     return texture
   }
 
+  // Substrate only — the memory field's background layer (SINTEZA_VIZ.md
+  // §4a/§4b). The beam is deliberately NOT drawn here: it's the sharp,
+  // rhythm-carrying foreground layer (§4c) and needs to stay crisp frame to
+  // frame, not get pre-mixed into the substrate before the memory field
+  // smears it — see renderForeground below.
   render(targetFbo: WebGLFramebuffer | null): void {
     const gl = this.gl
     gl.bindFramebuffer(gl.FRAMEBUFFER, targetFbo)
@@ -812,20 +821,32 @@ export class JuliaScene implements Scene {
     gl.uniform1f(this.juliaUniforms.uPaletteFlip, this.paletteFlip)
     gl.uniform1f(this.juliaUniforms.uFlash, this.flash)
     this.drawFullscreenQuad()
+  }
 
-    if (this.beamSegmentCount > 0 && this.flash < 0.98) {
-      gl.enable(gl.BLEND)
-      gl.blendFunc(gl.ONE, gl.ONE)
-      gl.useProgram(this.beamProgram)
-      gl.uniform1f(this.beamUniforms.uAspect, this.aspect)
-      gl.uniform1f(this.beamUniforms.uHalfWidth, BEAM_HALF_WIDTH)
-      gl.uniform3f(this.beamUniforms.uColor, this.accent[0], this.accent[1], this.accent[2])
-      gl.uniform1f(this.beamUniforms.uIntensity, this.beamIntensity * (1 - this.flash))
-      gl.bindVertexArray(this.beamVao)
-      gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, this.beamSegmentCount)
-      gl.bindVertexArray(null)
-      gl.disable(gl.BLEND)
-    }
+  // The foreground hero layer (SINTEZA_VIZ.md §4c) — drawn additively onto
+  // whatever's already in targetFbo (the memory field's smeared result),
+  // never cleared. Called by the render worker AFTER the memory field pass,
+  // not as part of render() above, so the beam reads sharp against the
+  // softened substrate instead of getting smeared into it every frame; it
+  // still picks up a whisper of trail on SUBSEQUENT frames once this
+  // frame's draw becomes part of next frame's "previous" memory buffer —
+  // consistent with the field's own motion without dominating it.
+  renderForeground(targetFbo: WebGLFramebuffer | null): void {
+    if (this.beamSegmentCount === 0 || this.flash >= 0.98) return
+    const gl = this.gl
+    gl.bindFramebuffer(gl.FRAMEBUFFER, targetFbo)
+    gl.viewport(0, 0, this.width, this.height)
+    gl.enable(gl.BLEND)
+    gl.blendFunc(gl.ONE, gl.ONE)
+    gl.useProgram(this.beamProgram)
+    gl.uniform1f(this.beamUniforms.uAspect, this.aspect)
+    gl.uniform1f(this.beamUniforms.uHalfWidth, BEAM_HALF_WIDTH)
+    gl.uniform3f(this.beamUniforms.uColor, this.accent[0], this.accent[1], this.accent[2])
+    gl.uniform1f(this.beamUniforms.uIntensity, this.beamIntensity * (1 - this.flash))
+    gl.bindVertexArray(this.beamVao)
+    gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, this.beamSegmentCount)
+    gl.bindVertexArray(null)
+    gl.disable(gl.BLEND)
   }
 
   dispose(): void {
