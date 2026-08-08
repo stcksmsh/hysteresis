@@ -24,15 +24,20 @@ export interface VizOpts {
   // events, see StructureSource.synthesize()) drives the visual instead.
   getAudioContext?: () => AudioContext | null
   getAnalyser?: () => AnalyserNode | null
-  // Where the compiled feature-worklet module lives. `audioWorklet.addModule()`
-  // targets aren't asset-scanned by bundlers the way `new Worker(new URL(...))`
-  // is, so this can't always be defaulted correctly for every consumer's
-  // build. Optional, not part of the site's own contract — defaults to a
-  // path relative to this module, which works when this package is built
-  // and consumed as a normal dependency (see vite.lib.config.ts).
+  // Where the compiled feature-worklet/render-worker modules live. Optional
+  // — both default to a path relative to this module (`import.meta.url`),
+  // which resolves correctly when this package's own dist/index.js is
+  // loaded as-is. It does NOT survive every consumer's bundler: if the
+  // consumer inlines/re-bundles dist/index.js into its own differently-
+  // located chunk (confirmed with Astro/Vite — see stcksmsh.github.io's
+  // SintezaBackground.tsx), the relative default resolves against the
+  // WRONG final location and 404s. When that happens, resolve the asset
+  // through the bundler's own mechanism instead of trusting the default —
+  // e.g. Vite's `?url` suffix against this package's exported subpaths:
+  //   import renderWorkerUrl from 'sinteza-viz/dist/render-worker.js?url'
+  //   import workletUrl from 'sinteza-viz/dist/worklets/feature-worklet.js?url'
+  // and pass them here explicitly.
   workletUrl?: string | URL
-  // Where the compiled render-worker module lives. Same reasoning/default
-  // as workletUrl — see RENDER_WORKER_PATH below and vite.render-worker.config.ts.
   renderWorkerUrl?: string | URL
 }
 
