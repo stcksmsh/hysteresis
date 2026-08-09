@@ -1,5 +1,5 @@
 import { SpringDamper } from './spring-damper'
-import type { StateFrame, ParamBus, DropTrigger, OnsetPulse } from '../../shared/types'
+import type { StateFrame, ParamBus, DropTrigger } from '../../shared/types'
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v))
@@ -97,7 +97,6 @@ export class Choreographer {
 
   update(frame: StateFrame, dt: number): ParamBus {
     let dropTrigger: DropTrigger | null = null
-    const onsetPulses: OnsetPulse[] = []
 
     this.symmetryHoldSec = Math.max(0, this.symmetryHoldSec - dt)
 
@@ -109,13 +108,6 @@ export class Choreographer {
         this.flowStrengthSpring.addImpulse(FLOW_SHOCKWAVE_IMPULSE * (0.5 + event.strength))
         this.symmetryHoldSec = SYMMETRY_DROP_HOLD_SEC
       }
-    }
-
-    // Every band that moved becomes its own pulse, each carrying its own
-    // stereo position — that is what spreads a dense arrangement across the
-    // field instead of collapsing it onto one whole-mix position.
-    for (const hit of frame.spectralHits) {
-      onsetPulses.push({ strength: hit.strength, tone: hit.tone, pan: hit.pan })
     }
 
     this.windupSpring.setTarget(frame.buildProgress)
@@ -164,7 +156,6 @@ export class Choreographer {
       suspension,
 
       dropTrigger,
-      onsetPulses,
 
       bands: frame.bandsRaw,
       centroid: frame.centroid,

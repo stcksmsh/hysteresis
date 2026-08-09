@@ -97,12 +97,18 @@ Choreography follows MEMORY → PROCESSING → RESOLUTION:
 
 ---
 
-## 4. Visual composition (RESOLVED) — four layers, one flow field
+## 4. Visual composition (RESOLVED) — three layers, one flow field
 
-Four layers occupying different *bands of the image* the way instruments occupy bands of a mix,
+Three layers occupying different *bands of the image* the way instruments occupy bands of a mix,
 so they read clearly instead of turning to soup. Slow/large carries mood, sharp/thin carries
-rhythm, granular carries transients. **One shared curl-noise flow field ties all four together**
-— it is what makes the mix feel like a single organism, not stacked demos.
+rhythm. **One shared curl-noise flow field ties them together** — it is what makes the mix feel
+like a single organism, not stacked demos.
+
+(A fourth, granular layer — onset particles, sparks dragged by the same flow field — shipped in
+v3 and was deliberately removed afterward: the disliked failure mode was less "no transient layer
+at all" and more "particles visibly erupting from the fractal shape specifically", which read as
+distracting rather than as a texture of the mix. If a transient layer comes back, it should not
+spawn from positions that visually read as tied to the substrate's own shape.)
 
 Rendered in СИНТЕЗА: violet-black `#0A0912` substrate, vermilion `#FF5C38` accent (host may
 retint via `setAccent`).
@@ -137,13 +143,6 @@ retint via `setAccent`).
   underneath as it moves — its own trail is consistent with the field's motion.
 - Idle: slow Lissajous. Playing: trigger-locked real-time XY/waveform trace.
 
-### 4d. Onset particles — transients (granular)
-- Sparks injected on kicks/hats/onsets (from `ParamBus.onsetPulses`), then **caught and dragged
-  by the same curl-noise flow field**, so their trails are consistent with everything else's
-  motion (single organism). Rendered additively straight onto the memory field, so they persist
-  and smear the same way everything else in the field does.
-- Density/brightness ← onset strength. Skipped on `cheap`/`idle-only`.
-
 ### Earned symmetry (modulates 4b's warp — never a constant filter)
 - Symmetry is **always a response, never a constant kaleidoscope.** Fold-count and mirror-
   strength are driven parameters, applied to the flow field's domain (domain warp) — specifically
@@ -160,9 +159,8 @@ retint via `setAccent`).
 1. Julia substrate + beam → offscreen FBO (`JuliaScene`, unchanged from v2)
 2. composite into feedback buffer + advect through curl-noise flow field + decay (ping-pong)
    — with earned-symmetry domain warp applied to the advection sampling coordinate
-3. onset particles → additive, dragged by the same flow field, straight onto the feedback buffer
-4. bloom — multi-pass gaussian on a downsampled buffer
-5. composite + color grade to screen
+3. bloom — multi-pass gaussian on a downsampled buffer
+4. composite + color grade to screen
 - WebGL2 primary; render on a Worker via `OffscreenCanvas` where supported (main-thread
   fallback). WebGPU a later optional branch (needs WebGL2 path regardless).
 
@@ -185,7 +183,7 @@ the host has a real `AnalyserNode` to attach to at all:
   precomputed offline, frame-accurately synced to the host's `position` feed. Look-ahead lets
   the feedback field *start densifying before* a drop it can see coming — anticipation, which is
   what makes it feel like the music rather than a meter.
-- **Detail from the live signal:** band envelopes, beam, onset particles — live.
+- **Detail from the live signal:** band envelopes, beam — live.
 - **Fusion rule:** sidecar loaded → structural gestures fire from the timeline; otherwise fall
   back to live Layer 2 detection. Detail is live either way.
 
@@ -198,8 +196,8 @@ a synthetic-but-real onset list) to drive the whole visual purely from playback 
 host's own position feed (e.g. the SoundCloud Widget API's `PLAY_PROGRESS`) and everything reads
 off the sidecar. The one thing that can't be recovered offline is the oscilloscope beam's real
 waveform (no phase information survives an FFT envelope) — the beam plays its idle Lissajous
-figure instead of a fake trace; every other layer (Julia, memory field, particles, symmetry)
-reacts to the genuine track structure. If live audio *does* attach later (e.g. tier/host changes
+figure instead of a fake trace; every other layer (Julia, memory field, symmetry) reacts to the
+genuine track structure. If live audio *does* attach later (e.g. tier/host changes
 mid-session), it takes over for good — the two modes are mutually exclusive per track, never
 both at once.
 
@@ -241,9 +239,9 @@ Analysis and rendering are internal and invisible to the host.
   Lissajous, the feedback field keeps flowing/decaying gently. Never frozen or dead (except under
   reduced-motion, where the host freezes it).
 - **Tiers:**
-  - `full` — all four layers + earned symmetry + bloom + (landing) Mandelbulb, OffscreenCanvas.
-  - `cheap` — Julia + feedback field + beam, reduced FFT, no particles, no Mandelbulb, lighter
-    bloom, capped DPR/FPS.
+  - `full` — all three layers + earned symmetry + bloom + (landing) Mandelbulb, OffscreenCanvas.
+  - `cheap` — Julia + feedback field + beam, reduced FFT, no Mandelbulb, lighter bloom, capped
+    DPR/FPS.
   - `idle-only` — Julia autopilot + gentle feedback + beam Lissajous, no live analysis attach.
 - Respect `prefers-reduced-motion` — host disables the canvas; package must also no-op cleanly.
 - Cap device pixel ratio, target 60fps with graceful degradation; the background must never make
@@ -260,7 +258,9 @@ Analysis and rendering are internal and invisible to the host.
 5. **Feedback/memory field ping-pong + curl-noise advection** — the signature layer, tuned by
    hand (decay + warp) until the "remembering" look is right. This was the make-or-break step
    for v3.
-6. Onset particles dragged by the shared flow field.
+6. ~~Onset particles dragged by the shared flow field~~ — built for v3, then deliberately removed
+   (see §4's note) once live, particles visibly erupting from the fractal shape read as
+   distracting rather than as a texture of the mix.
 7. Earned-symmetry domain warp (fold count / snap / flatness bloom).
 8. ~~`scripts/analyze.ts` + sidecar schema; live+precomputed fusion~~ — done (v2).
 9. Bloom + color-grade polish; OffscreenCanvas worker + fallback — done (v2).

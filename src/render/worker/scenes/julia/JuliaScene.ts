@@ -500,8 +500,8 @@ export class JuliaScene implements Scene {
     this.thetaSweep += Math.max(0.003, thetaSpeed) * dt // never fully stalls, even under heavy tension
     this.radialPhase += RADIAL_SPEED * dt
 
-    // Deliberately NOT reading onsetPulses here — they fire per spectral
-    // band per hop (dozens/sec during a dense mix), and kicking theta on
+    // Deliberately NOT reacting to per-onset spectral hits here — they fire
+    // per band per hop (dozens/sec during a dense mix), and kicking theta on
     // each one was the actual source of the "glitchy, too fast" motion:
     // a burst of onsets could advance the sweep and yank `c` several times
     // in one rendered frame. Only structural events below move `c` directly.

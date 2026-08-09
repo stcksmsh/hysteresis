@@ -60,12 +60,6 @@ export interface DropTrigger {
   age: number
 }
 
-export interface OnsetPulse {
-  strength: number
-  tone: number // 0 = sub, 1 = air — drives vertical placement
-  pan: number // -1..1 — drives horizontal placement
-}
-
 export interface ParamBus {
   beatPhase: number
   barPhase: number
@@ -78,7 +72,6 @@ export interface ParamBus {
   suspension: number
 
   dropTrigger: DropTrigger | null
-  onsetPulses: OnsetPulse[]
 
   bands: BandEnergies
   centroid: number

@@ -14,7 +14,6 @@ import type { Scene, SceneContext } from './scenes/Scene'
 import { Choreographer } from '../choreography/Choreographer'
 import { PersistencePass } from './passes/persistence-pass'
 import { MemoryFieldPass } from './passes/memory-field-pass'
-import { OnsetParticles } from './passes/onset-particles'
 import { BloomPass } from './passes/bloom-pass'
 import { CompositePass } from './passes/composite-pass'
 
@@ -53,7 +52,6 @@ let lastStatsPost = 0
 let sceneFbo: Fbo | null = null
 let persistencePass: PersistencePass | null = null
 let memoryFieldPass: MemoryFieldPass | null = null
-let onsetParticles: OnsetParticles | null = null
 let bloomPass: BloomPass | null = null
 let compositePass: CompositePass | null = null
 let currentAccent: [number, number, number] = [1, 0.36, 0.22] // vermilion default (#FF5C38), matches JuliaScene's own default
@@ -162,12 +160,6 @@ function loop(t: number) {
     // Foreground hero layer (e.g. the beam) — crisp on top of the smeared
     // substrate, not fed into it (see Scene.renderForeground's doc comment).
     scene.renderForeground?.(fieldResult.framebuffer)
-    // Particles skipped on cheap/idle-only (SINTEZA_VIZ.md §8) — the same
-    // tiers that already drop live analysis/onset detail elsewhere.
-    if (onsetParticles && currentTier === 'full') {
-      onsetParticles.update(dt, params.onsetPulses, params.flowStrength)
-      onsetParticles.render(fieldResult.framebuffer, fieldResult.width, fieldResult.height, aspect, currentAccent)
-    }
   } else if (scene.wantsPersistencePass && persistencePass && !reducedMotion) {
     currentTexture = persistencePass.apply(currentTexture, PERSISTENCE_DECAY)
   }
@@ -250,8 +242,6 @@ function allocatePipeline(width: number, height: number) {
 
   if (memoryFieldPass) memoryFieldPass.resize(width, height)
   else memoryFieldPass = new MemoryFieldPass(gl, width, height, caps.floatFbo)
-
-  if (!onsetParticles) onsetParticles = new OnsetParticles(gl)
 
   if (bloomPass) bloomPass.resize(width, height)
   else bloomPass = new BloomPass(gl, width, height, caps.floatFbo)
