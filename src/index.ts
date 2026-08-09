@@ -109,6 +109,12 @@ function oklchToLinearSrgb(l: number, c: number, hDeg: number): [number, number,
 // same portability for the Worker path by opting out of it deliberately).
 const RENDER_WORKER_PATH = './render-worker.js'
 
+// See the ResizeObserver callback below for why this needs to be debounced,
+// not immediate. Long enough to bridge a mobile browser's address-bar
+// collapse/expand animation (typically ~200-300ms), short enough that a
+// genuine window resize still feels responsive.
+const RESIZE_DEBOUNCE_MS = 150
+
 export function init(canvas: HTMLCanvasElement, opts: VizOpts): VizInstance {
   const engine = new AudioEngine()
   const structureSource = new StructureSource()
@@ -120,6 +126,7 @@ export function init(canvas: HTMLCanvasElement, opts: VizOpts): VizInstance {
   let destroyed = false
   let worker: Worker | null = null
   let postToWorker: ((msg: MainToRenderWorker, transfer?: Transferable[]) => void) | null = null
+  let resizeDebounceHandle: ReturnType<typeof setTimeout> | null = null
 
   const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
   const onReducedMotionChange = (e: MediaQueryListEvent) => post({ kind: 'setReducedMotion', value: e.matches })
@@ -155,7 +162,24 @@ export function init(canvas: HTMLCanvasElement, opts: VizOpts): VizInstance {
       const entry = entries[0]
       if (!entry) return
       const { width, height } = entry.contentRect
-      post({ kind: 'resize', cssWidth: width, cssHeight: height, dpr: window.devicePixelRatio })
+      // Debounced, not immediate: a resize reallocates the whole render
+      // pipeline (every pass's FBOs, including MemoryFieldPass's ping-pong
+      // buffers — deleted and recreated from scratch, wiping the
+      // accumulated memory-field trail history). A `position:fixed;
+      // inset:0` canvas shouldn't need to resize from scrolling at all,
+      // but on mobile a scroll gesture that crosses the point where the
+      // browser's address bar finishes collapsing/expanding changes the
+      // *dynamic* viewport height mid-gesture, and the observer fires
+      // repeatedly during that animation — each firing was a full,
+      // expensive reallocation AND a visible field reset, exactly the
+      // "stutter"/"resets" reported when scrolling past that point.
+      // Coalescing rapid-fire observations into one call after the size
+      // has actually settled fixes both.
+      if (resizeDebounceHandle !== null) clearTimeout(resizeDebounceHandle)
+      resizeDebounceHandle = setTimeout(() => {
+        resizeDebounceHandle = null
+        post({ kind: 'resize', cssWidth: width, cssHeight: height, dpr: window.devicePixelRatio })
+      }, RESIZE_DEBOUNCE_MS)
     })
     resizeObserver.observe(canvas)
     reducedMotionQuery.addEventListener('change', onReducedMotionChange)
@@ -289,6 +313,7 @@ export function init(canvas: HTMLCanvasElement, opts: VizOpts): VizInstance {
       destroyed = true
       window.removeEventListener(TRANSPORT_EVENT, onTransport)
       if (audioPollHandle !== null) clearInterval(audioPollHandle)
+      if (resizeDebounceHandle !== null) clearTimeout(resizeDebounceHandle)
       stopSynthLoop()
       engine.detach()
       resizeObserver?.disconnect()
