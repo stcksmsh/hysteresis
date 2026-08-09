@@ -28,11 +28,12 @@ export interface SidecarEvent {
   strength: number
 }
 
-// A single-band-resolution onset, for driving the beam/onset-particles in
-// position-only mode the same way live SpectralHits do. `pan` has no real
-// stereo source — scripts/structure.ts downmixes to mono before analysis —
-// so it's a deterministic pseudo-position from `t`, a visual placement aid
-// only, not a measurement.
+// A single-band-resolution onset, matching live SpectralHits' shape so
+// position-only mode (StructureSource.synthesize()) can populate
+// StateFrame.spectralHits from the sidecar the same way live analysis does.
+// `pan` has no real stereo source — scripts/structure.ts downmixes to mono
+// before analysis — so it's a deterministic pseudo-position from `t`, a
+// visual placement aid only, not a measurement.
 export interface SidecarOnset {
   t: number
   strength: number

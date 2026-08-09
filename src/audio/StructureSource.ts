@@ -178,8 +178,7 @@ export class StructureSource {
 
   // Onsets due in the half-open window [lastPosition, t) — mirrors
   // collectEvents but against the separate onsets list/cursor and produces
-  // SpectralHit (what Choreographer's onsetPulses actually reads), not
-  // StructuralEvent.
+  // SpectralHit (StateFrame.spectralHits' element type), not StructuralEvent.
   private collectOnsets(t: number): SpectralHit[] {
     if (!this.sidecar) return []
     const hits: SpectralHit[] = []
