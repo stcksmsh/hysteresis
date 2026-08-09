@@ -29,6 +29,15 @@ const FLOW_STRENGTH_DAMPING = 9
 const FLOW_STRENGTH_BASE = 1
 const FLOW_STRENGTH_BUILD_GAIN = 2.2
 const FLOW_SHOCKWAVE_IMPULSE = 30 // tuned by feel, mirrors RELEASE_IMPULSE's role for windup
+// energy (RMS loudness) is the one signal continuously available for a
+// track's *entire* runtime — buildProgress/tension only exist inside the
+// sparse build/break spans the offline section-detector actually finds,
+// which for a typical track is a small fraction of the total length. Without
+// this, the field (and, below, the Julia scene's own sweep/zoom rate) sat at
+// its resting churn for most of a song regardless of how loud/energetic it
+// actually was — the real cause behind "doesn't work with the music enough".
+const ENERGY_SMOOTH_SEC = 0.25
+const FLOW_STRENGTH_ENERGY_GAIN = 0.9
 
 // Earned symmetry (SINTEZA_VIZ.md §4d) — always a response, never a constant
 // filter: rises with tension/build, blooms briefly on a sustained tonal
@@ -82,6 +91,7 @@ export class Choreographer {
   private suspensionEnv = new DtSmoother(SUSPENSION_ATTACK_SEC, SUSPENSION_RELEASE_SEC)
   private flowStrengthSpring = new SpringDamper(FLOW_STRENGTH_STIFFNESS, FLOW_STRENGTH_DAMPING, FLOW_STRENGTH_BASE)
   private symmetrySmooth = new DtSmoother(SYMMETRY_ATTACK_SEC, SYMMETRY_RELEASE_SEC)
+  private energySmooth = new DtSmoother(ENERGY_SMOOTH_SEC, ENERGY_SMOOTH_SEC)
   private symmetryHoldSec = 0
   private hue = 0
 
@@ -114,6 +124,7 @@ export class Choreographer {
     const buildProgress = this.buildSmooth.update(frame.buildProgress, dt)
     const tension = this.tensionSmooth.update(frame.tension, dt)
     const suspension = this.suspensionEnv.update(frame.tension, dt)
+    const energy = clamp(this.energySmooth.update(frame.energy, dt), 0, 1)
 
     this.hue = (this.hue + dt * HUE_DRIFT_PER_SEC) % 1
     const hueShift = (this.hue + frame.centroid * 0.1) % 1
@@ -128,7 +139,9 @@ export class Choreographer {
       FIELD_DECAY_GROOVE + (FIELD_DECAY_BREAK_MAX - FIELD_DECAY_GROOVE) * suspension,
     )
 
-    this.flowStrengthSpring.setTarget(FLOW_STRENGTH_BASE + FLOW_STRENGTH_BUILD_GAIN * Math.max(windup, tension))
+    this.flowStrengthSpring.setTarget(
+      FLOW_STRENGTH_BASE + FLOW_STRENGTH_BUILD_GAIN * Math.max(windup, tension) + FLOW_STRENGTH_ENERGY_GAIN * energy,
+    )
     const flowStrength = Math.max(0, this.flowStrengthSpring.update(dt))
 
     const flatnessBloom =
@@ -156,7 +169,7 @@ export class Choreographer {
       bands: frame.bandsRaw,
       centroid: frame.centroid,
       flatness: frame.flatness,
-      energy: frame.energy,
+      energy,
       pan: frame.pan,
 
       paletteMix,

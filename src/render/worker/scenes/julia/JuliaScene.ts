@@ -19,6 +19,14 @@ import { SCOPE_SIZE } from '../../../../shared/constants'
 const THETA_SPEED_BASE = 0.008 // rad/sec at rest — one full boundary sweep in ~13min idle
 const THETA_SPEED_WINDUP_GAIN = 0.02 // builds gently accelerate how fast the constant morphs
 const THETA_SPEED_TENSION_GAIN = -0.006 // a break/suspension slows the morph — "held", not stalled
+// windup/tension only exist inside the sparse build/break spans a track
+// actually has (often a small fraction of its length) — without this, the
+// sweep sat at THETA_SPEED_BASE for most of a song regardless of how loud/
+// energetic it actually was. energy (RMS loudness, continuously available
+// for the whole track) fills that gap; kept modest relative to the other
+// gains so it reads as ambient breathing, not a replacement for the
+// build/drop dynamics.
+const THETA_SPEED_ENERGY_GAIN = 0.012
 const THETA_DROP_JUMP = 0.1 // radians — a drop nudges into fresh boundary territory, not a cut
 
 // Small radial wobble around the boundary itself: r<1 dips just inside the
@@ -65,6 +73,12 @@ const DIRECT_ZOOM_THRESHOLD = 0.0006
 const ZOOM_MIN = 1e-6
 const ZOOM_RATE_BASE = 0.018 // ln(zoom)/sec at rest — a full dive takes ~9min idle
 const ZOOM_RATE_WINDUP_GAIN = 0.1 // builds accelerate the dive, gently — this used to run away
+// Same energy-fills-the-gap rationale as THETA_SPEED_ENERGY_GAIN above — kept
+// small enough that a loud track's average dive still takes minutes, not
+// seconds (this also feeds the zoom-floor reset's cadence, see JuliaScene's
+// module comment on POST_FLASH_SEC — a much bigger gain here would make that
+// reset noticeably more frequent, not just more responsive).
+const ZOOM_RATE_ENERGY_GAIN = 0.012
 // Zoom runs at this fraction of normal speed until navConfidence (see
 // updateNavigation) confirms real local detail has actually been found,
 // ramping to full speed as it does — gives navigation real wall-clock time
@@ -480,7 +494,9 @@ export class JuliaScene implements Scene {
     // overshoot can't spike the sweep/zoom rate into feeling glitchy.
     const windup = clamp(params.windup, 0, 1)
     const suspension = clamp(Math.max(params.tension, params.suspension), 0, 1)
-    const thetaSpeed = THETA_SPEED_BASE + THETA_SPEED_WINDUP_GAIN * windup + THETA_SPEED_TENSION_GAIN * suspension
+    const energy = clamp(params.energy, 0, 1)
+    const thetaSpeed =
+      THETA_SPEED_BASE + THETA_SPEED_WINDUP_GAIN * windup + THETA_SPEED_TENSION_GAIN * suspension + THETA_SPEED_ENERGY_GAIN * energy
     this.thetaSweep += Math.max(0.003, thetaSpeed) * dt // never fully stalls, even under heavy tension
     this.radialPhase += RADIAL_SPEED * dt
 
@@ -676,7 +692,8 @@ export class JuliaScene implements Scene {
     // scale that mattered, so tracking never looked like it "worked" even
     // when pan genuinely was headed the right way.
     const seekSlowdown = ZOOM_SEEK_MIN_FACTOR + (1 - ZOOM_SEEK_MIN_FACTOR) * this.navConfidence
-    const rate = (ZOOM_RATE_BASE + ZOOM_RATE_WINDUP_GAIN * windup) * seekSlowdown
+    const energy = clamp(params.energy, 0, 1)
+    const rate = (ZOOM_RATE_BASE + ZOOM_RATE_WINDUP_GAIN * windup + ZOOM_RATE_ENERGY_GAIN * energy) * seekSlowdown
     this.zoomLog -= rate * dt
 
     const logFloor = Math.log(ZOOM_MIN)
