@@ -95,8 +95,16 @@ const ZOOM_OUT_PAN_RETURN_RATE = 0.3 // 1/sec — pan eases back toward the orig
 // animation from that depth would take far too long to be practical, so
 // that path keeps the quick cut; the empty-space path above doesn't need
 // one anymore since it's never a cut to begin with.
+//
+// POST_FLASH_SEC was originally 0.28 — at idle zoom rate, PRE_FLASH_LOG_WINDOW
+// stretches the fade-to-black over ~28s, so a ~0.3s fade back in read as an
+// abrupt pop/stutter after that much buildup (reported as "stutters/resets"
+// even though the reset itself is rare — maybe once every 13-20 minutes at
+// idle rate, math checks out — the mismatch is what actually reads as
+// broken). Lengthened so the reveal reads as a deliberate matching "breath"
+// instead of a snap.
 const PRE_FLASH_LOG_WINDOW = 0.5
-const POST_FLASH_SEC = 0.28
+const POST_FLASH_SEC = 1.6
 
 // Each dive starts centered on the origin (the critical point z=0 — always
 // structurally relevant at low zoom) and then drifts, gradually, toward
