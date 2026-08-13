@@ -220,9 +220,19 @@ const NAV_SCALE_MIN_FRACTION = 0.08
 // 0.8 sits comfortably inside that guaranteed-non-trivial disc, which
 // simulation confirmed is generally enough room to reach real detail
 // without ever approaching the unconditionally-empty region beyond |z|=2.
-const NAV_PAN_MAX_RADIUS = 0.8
+const NAV_PAN_MAX_RADIUS = 0.45
 
-const IDLE_DRIFT_SPEED = 0.05 // rad/sec — slow enough to read as "stationary", not spinning
+// The hard backstop above still let a dive wander its full radius almost
+// immediately, which read as "never actually centered". Each dive now
+// starts pinned dead-center (see diveElapsedSec, reset in retarget()) and
+// the allowed drift radius ramps from 0 up to NAV_PAN_MAX_RADIUS over this
+// many real seconds of active (non-idle) navigation — "near/completely
+// center at first, then it can go a bit off".
+const NAV_PAN_RAMP_SEC = 30
+
+// 1/sec ease rate pulling pan back to the origin while idle (see
+// updateNavigation) — slow enough to read as "settling", not a snap.
+const IDLE_RECENTER_RATE = 0.05
 
 const IDLE_BEAM_POINTS = 220
 // Foreground hero (SINTEZA_VIZ.md §4c) — thicker/brighter than the original
@@ -410,6 +420,7 @@ export class JuliaScene implements Scene {
   private height = 0
   private aspect = 1
   private accent: [number, number, number] = [1, 0.36, 0.22] // vermilion default (#FF5C38)
+  private showIdleBeam = true
 
   private thetaSweep = 0
   private radialPhase = 0
@@ -446,6 +457,9 @@ export class JuliaScene implements Scene {
   private navEmptySec = 0
   private navConfidence = 0
   private navCheckAccum = 0
+  // Real (non-idle) seconds since the current dive started — drives the
+  // pan-radius ramp in updateNavigation (see NAV_PAN_RAMP_SEC).
+  private diveElapsedSec = 0
 
   constructor() {
     const start = cardioidPoint(0)
@@ -464,6 +478,7 @@ export class JuliaScene implements Scene {
     const dist = Math.hypot(target.x, target.y) || 1
     this.headingX = (target.x / dist) * NAV_INITIAL_HEADING_STRENGTH
     this.headingY = (target.y / dist) * NAV_INITIAL_HEADING_STRENGTH
+    this.diveElapsedSec = 0
   }
 
   init(ctx: SceneContext): void {
@@ -523,7 +538,7 @@ export class JuliaScene implements Scene {
     this.springCx.update(dt)
     this.springCy.update(dt)
 
-    this.updateNavigation(dt)
+    this.updateNavigation(dt, params.idle)
     this.updateZoom(dt, params)
     this.updateBeamGeometry(params)
   }
@@ -540,11 +555,29 @@ export class JuliaScene implements Scene {
   // held for NAV_EMPTY_RETRY_AFTER_SEC before trying a local re-search, and
   // only escalating to the zoom-out reveal (see updateZoom) if that also
   // comes up empty.
-  private updateNavigation(dt: number): void {
+  private updateNavigation(dt: number, idle: boolean): void {
     // While zooming back out (see updateZoomOut), pan is being eased back
     // toward the origin directly — searching/steering against a target
     // that's about to be discarded anyway would just fight that motion.
     if (this.zoomingOut) return
+
+    // No audio driving the scene (nothing loaded yet, or paused) — hold the
+    // view near the origin instead of running the vortex-seeking autopilot.
+    // Without this gate, the dive starts wandering toward off-center detail
+    // the instant the page loads, so the hero art reads as perpetually
+    // drifting off-frame before anyone has even pressed play. Easing pan
+    // back at IDLE_RECENTER_RATE (rather than snapping it) keeps this
+    // consistent with every other idle transition in the scene.
+    if (idle) {
+      const ease = Math.min(1, IDLE_RECENTER_RATE * dt)
+      this.panX -= this.panX * ease
+      this.panY -= this.panY * ease
+      this.headingX *= 1 - NAV_HEADING_SMOOTH
+      this.headingY *= 1 - NAV_HEADING_SMOOTH
+      this.navCheckAccum = 0
+      this.navEmptySec = 0
+      return
+    }
 
     this.navCheckAccum += dt
     if (this.navCheckAccum >= NAV_CHECK_INTERVAL_SEC) {
@@ -654,19 +687,23 @@ export class JuliaScene implements Scene {
       }
     }
 
+    this.diveElapsedSec += dt
     const speed = Math.min(this.zoom * NAV_PAN_SPEED, NAV_PAN_SPEED_ABS_MAX)
     this.panX += this.headingX * speed * dt
     this.panY += this.headingY * speed * dt
 
-    // Hard backstop (see NAV_PAN_MAX_RADIUS) — independent of how well the
-    // distance estimate is scoring things, pan structurally cannot leave
-    // this disc.
+    // Hard backstop — independent of how well the distance estimate is
+    // scoring things, pan structurally cannot leave this disc. The disc
+    // itself starts at zero radius (dead-centered) and ramps up to
+    // NAV_PAN_MAX_RADIUS over NAV_PAN_RAMP_SEC, so a dive always opens on a
+    // centered composition before it's allowed to wander.
+    const maxRadius = NAV_PAN_MAX_RADIUS * clamp(this.diveElapsedSec / NAV_PAN_RAMP_SEC, 0, 1)
     const dist = Math.hypot(this.panX, this.panY)
-    if (dist > NAV_PAN_MAX_RADIUS) {
-      const nx = this.panX / dist
-      const ny = this.panY / dist
-      this.panX = nx * NAV_PAN_MAX_RADIUS
-      this.panY = ny * NAV_PAN_MAX_RADIUS
+    if (dist > maxRadius) {
+      const nx = dist > 0 ? this.panX / dist : 0
+      const ny = dist > 0 ? this.panY / dist : 0
+      this.panX = nx * maxRadius
+      this.panY = ny * maxRadius
       // Remove only the outward-pointing component of heading, keep
       // whatever's tangential — slides along the wall looking for a way
       // in, instead of fighting straight into it every frame.
@@ -890,9 +927,21 @@ export class JuliaScene implements Scene {
     this.accent = rgb
   }
 
+  setShowIdleBeam(value: boolean): void {
+    this.showIdleBeam = value
+  }
+
   private updateBeamGeometry(params: ParamBus): void {
     const gl = this.gl
     const scope = params.idle ? null : params.scope
+
+    if (!scope && !this.showIdleBeam) {
+      // Idle, and the host has opted out of the idle figure — draw nothing
+      // rather than the Lissajous curve (renderForeground already skips
+      // entirely when beamSegmentCount is 0).
+      this.beamSegmentCount = 0
+      return
+    }
 
     if (scope) {
       const n = scope.length

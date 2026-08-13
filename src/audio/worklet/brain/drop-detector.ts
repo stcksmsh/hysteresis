@@ -18,7 +18,19 @@ const THINNED_CREDIT_REQUIRED_SEC = 0.8
 // the credit gate alone can reject genuine drops. A jump this large is
 // unambiguous on its own: inside a steady groove the slow envelope is
 // already high, so kicks can never produce a gap of this size.
+//
+// That reasoning has a hole right at the start of a track (or after any
+// long quiet stretch): the slow envelope reads low there for the mundane
+// reason that nothing has played yet, not because a groove was thinned out.
+// The very first energetic moment — the beat simply starting — then reads
+// as an "unambiguous" jump and fires a false drop. grooveSec below gates
+// this path on a groove having actually, demonstrably existed (slow energy
+// genuinely elevated for real time, tracked cumulatively, never reset) —
+// the bypass is for skipping the *credit* requirement on a real breakdown,
+// not for skipping the requirement that there was something to break down.
 const STRONG_JUMP_THRESHOLD = 0.5
+const MIN_GROOVE_ENERGY = JUMP_THRESHOLD
+const GROOVE_ESTABLISHED_REQUIRED_SEC = 3.0
 const THINNED_CREDIT_MAX_SEC = 6
 const THINNED_CREDIT_DECAY_RATE = 0.5 // credit lost per second while not thinned
 
@@ -31,7 +43,7 @@ const CONFIRM_WINDOW_SEC = 0.3
 // so real drops get disarmed), while a slow-release envelope props up a lone
 // spike long enough to pass. Occupancy separates them cleanly — a drop holds
 // energy up across most of the window, a percussive hit only briefly.
-const CONFIRM_ELEVATED_FRACTION = 0.4
+const CONFIRM_ELEVATED_FRACTION = 0.5
 const ELEVATED_MARGIN = JUMP_THRESHOLD * 0.5
 
 // The confirm window is already ~1 beat, so waiting for the *next* beat
@@ -39,6 +51,17 @@ const ELEVATED_MARGIN = JUMP_THRESHOLD * 0.5
 const BEAT_SNAP_LOOKAHEAD_SEC = 0.15
 
 const REFRACTORY_SEC = 8.0
+
+// Both envelopes seed from the first real input (see EnvelopeFollower), so
+// they don't spuriously "jump" just from climbing off zero — but if that
+// first input happens to be near-silence (a quiet intro, a countoff), the
+// slow (2500ms) envelope still hasn't caught up to the fast (80ms) one by
+// the time the track's actual first hit lands, so that ordinary opening hit
+// reads as a huge fast/slow gap and satisfies STRONG_JUMP_THRESHOLD on its
+// own — an unambiguous-looking "drop" that's really just the track
+// starting. Held for one slow-envelope time constant plus margin before any
+// detection is allowed at all, same mechanism as the post-drop refractory.
+const STARTUP_GRACE_SEC = 4.0
 
 export interface DropEvent {
   strength: number
@@ -56,6 +79,8 @@ export class DropDetector {
   private elevatedHops = 0
   private windowHops = 0
   private hopSec: number
+  private startedAt: number | null = null
+  private grooveSec = 0
 
   constructor(hopMs: number) {
     this.fastEnergy = new EnvelopeFollower(FAST_MS, FAST_MS, hopMs)
@@ -64,12 +89,15 @@ export class DropDetector {
   }
 
   update(lowEnergy: number, tension: number, beatPhase: number, tempoBpm: number, tNow: number): DropEvent | null {
+    if (this.startedAt === null) this.startedAt = tNow
+
     const fast = this.fastEnergy.update(lowEnergy)
     const slow = this.slowEnergy.update(lowEnergy)
+    if (slow > MIN_GROOVE_ENERGY) this.grooveSec += this.hopSec
 
     this.updateThinnedCredit(tension)
 
-    if (tNow < this.refractoryUntil) {
+    if (tNow - this.startedAt < STARTUP_GRACE_SEC || tNow < this.refractoryUntil) {
       this.disarm()
       return null
     }
@@ -78,7 +106,7 @@ export class DropDetector {
 
     if (this.armedAt === null) {
       const structural = jump > JUMP_THRESHOLD && this.thinnedCreditSec >= THINNED_CREDIT_REQUIRED_SEC
-      const unambiguous = jump > STRONG_JUMP_THRESHOLD
+      const unambiguous = jump > STRONG_JUMP_THRESHOLD && this.grooveSec >= GROOVE_ESTABLISHED_REQUIRED_SEC
       const qualifies = structural || unambiguous
       if (qualifies) {
         this.armedAt = tNow

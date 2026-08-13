@@ -115,6 +115,7 @@ export type MainToRenderWorker =
   | { kind: 'setReducedMotion'; value: boolean }
   | { kind: 'setAccent'; rgb: [number, number, number] }
   | { kind: 'setTier'; tier: PowerTier }
+  | { kind: 'setShowIdleBeam'; value: boolean }
   // Debug-only (?debug=1): manually nudge choreography params without a
   // loaded track, and force a drop for tuning the release feel.
   | { kind: 'debugSetParam'; key: 'buildProgress' | 'tension'; value: number }

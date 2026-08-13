@@ -57,4 +57,10 @@ export interface Scene {
   // 0..1 RGB — parsing the host's CSS color string happens on the main
   // thread (src/index.ts), not in the worker.
   setAccent?(rgb: [number, number, number]): void
+
+  // Host toggle for the idle-state oscilloscope figure (SINTEZA_VIZ.md
+  // §4c's Lissajous beam) — some hosts find its constant motion distracting
+  // against the rest of a page when no track is playing. Scenes without an
+  // idle beam just omit this.
+  setShowIdleBeam?(value: boolean): void
 }

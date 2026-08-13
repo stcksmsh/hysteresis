@@ -91,6 +91,12 @@ vec3 palette(float t, float hueShift, float paletteMix, vec3 accent) {
 void main() {
   vec2 uv = vUv * 2.0 - 1.0;
   uv.x *= uAspect;
+  // Fixed 90° rotation of the sampled plane (not the frame itself, which
+  // stays whatever aspect the canvas is) — the cardioid-boundary detail this
+  // scene navigates tends to spread more along one axis than the other, and
+  // rotating it into the wide hero canvas's long axis reads as noticeably
+  // more centered/filled than the un-rotated orientation did.
+  uv = vec2(-uv.y, uv.x);
 
   vec2 z;
   int iter;

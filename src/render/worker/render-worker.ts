@@ -21,7 +21,7 @@ declare const self: DedicatedWorkerGlobalScope
 
 const PERSISTENCE_DECAY = 0.85
 const BLOOM_THRESHOLD = 0.55
-const BLOOM_STRENGTH = 0.6
+const BLOOM_STRENGTH = 0.45
 
 // Adaptive quality. Substep scaling reacts continuously (free); resolution
 // steps down only after sustained overrun, and only one way, because
@@ -343,6 +343,10 @@ self.onmessage = (e: MessageEvent<MainToRenderWorker>) => {
     case 'setTier': {
       currentTier = msg.tier
       if (canvasRef) resize(canvasRef, canvasRef.width / currentDpr, canvasRef.height / currentDpr, currentDpr)
+      break
+    }
+    case 'setShowIdleBeam': {
+      scene?.setShowIdleBeam?.(msg.value)
       break
     }
     case 'debugSetParam': {

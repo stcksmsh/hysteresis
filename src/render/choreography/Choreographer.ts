@@ -48,6 +48,13 @@ const SYMMETRY_ATTACK_SEC = 0.5
 const SYMMETRY_RELEASE_SEC = 2.2
 const SYMMETRY_TENSION_GAIN = 0.5
 const SYMMETRY_BUILD_GAIN = 0.55
+// A floor, not a starting point that decays away — the fold (see
+// MemoryFieldPass) now holds a fixed wedge count, so a low, steady mirror
+// blend no longer has the wedge-sliding "spin" that motivated hiding it
+// entirely at rest. Reads as a subtle texture in the memory field at all
+// times, per SINTEZA_VIZ.md §4d's own "earned, not a constant filter" —
+// this is a quiet baseline underneath that, not a replacement for it.
+const SYMMETRY_FLOOR = 0.18
 const FLATNESS_BLOOM_THRESHOLD = 0.75
 const FLATNESS_BLOOM_GAIN = 0.6
 // A single-frame target spike would only ever nudge the (0.5s-attack)
@@ -140,9 +147,13 @@ export class Choreographer {
       frame.flatness > FLATNESS_BLOOM_THRESHOLD
         ? ((frame.flatness - FLATNESS_BLOOM_THRESHOLD) / (1 - FLATNESS_BLOOM_THRESHOLD)) * FLATNESS_BLOOM_GAIN
         : 0
-    let symmetryTarget = clamp(tension * SYMMETRY_TENSION_GAIN + buildProgress * SYMMETRY_BUILD_GAIN + flatnessBloom, 0, 1)
+    let symmetryTarget = clamp(
+      tension * SYMMETRY_TENSION_GAIN + buildProgress * SYMMETRY_BUILD_GAIN + flatnessBloom,
+      SYMMETRY_FLOOR,
+      1,
+    )
     if (this.symmetryHoldSec > 0) symmetryTarget = 1
-    const symmetry = clamp(this.symmetrySmooth.update(symmetryTarget, dt), 0, 1)
+    const symmetry = clamp(this.symmetrySmooth.update(symmetryTarget, dt), SYMMETRY_FLOOR, 1)
 
     return {
       beatPhase: frame.beatPhase,

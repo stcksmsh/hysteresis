@@ -15,8 +15,14 @@ export interface MemoryFieldParams {
 const NOISE_SIZE = 128
 const FLOW_SCALE = 2.5 // spatial frequency of the curl sample relative to screen UV
 const FLOW_DRIFT_SPEED = 0.04 // noise-sample drift per second, at flowStrength's groove baseline (1)
-const FOLD_MIN = 1
-const FOLD_MAX = 7
+// Wedge count used to be interpolated with symmetry (1 fold at rest, up to
+// 7 at full strength) — but the wedge boundaries are angle-anchored at
+// theta=0, so a *changing* fold count visibly slides/rotates the mirrored
+// copies against each other as symmetry rises and falls. That's the "spin"
+// during a drop: not intentional motion, just the wedge geometry itself
+// changing shape every frame. Fixed at a single count instead, so only
+// uMirrorStrength (a plain blend, no geometry change) responds to symmetry.
+const FOLD_COUNT = 6
 const MIRROR_ONSET = 0.1 // symmetry has to clear this floor before any fold blends in at all
 
 function clamp01(v: number): number {
@@ -104,7 +110,6 @@ export class MemoryFieldPass {
     this.flowUvY = (this.flowUvY + drift * dt * 0.31) % 1000
 
     const symmetry = clamp01(params.symmetry)
-    const foldCount = FOLD_MIN + (FOLD_MAX - FOLD_MIN) * symmetry
     const mirrorStrength = clamp01((symmetry - MIRROR_ONSET) / (1 - MIRROR_ONSET))
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.back.framebuffer)
@@ -130,7 +135,7 @@ export class MemoryFieldPass {
     // texel-to-texel), so flowStrength can act as a direct multiplier
     // without a separate free scale constant here.
     gl.uniform1f(this.uniforms.uFlowStrength, params.flowStrength * 0.02)
-    gl.uniform1f(this.uniforms.uFoldCount, foldCount)
+    gl.uniform1f(this.uniforms.uFoldCount, FOLD_COUNT)
     gl.uniform1f(this.uniforms.uMirrorStrength, mirrorStrength)
 
     drawFullscreenQuad(gl, this.quad)

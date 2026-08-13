@@ -39,6 +39,11 @@ export interface VizOpts {
   // and pass them here explicitly.
   workletUrl?: string | URL
   renderWorkerUrl?: string | URL
+  // Idle-state oscilloscope figure (SINTEZA_VIZ.md §4c's Lissajous beam,
+  // shown when nothing is playing) can read as distracting motion against
+  // the rest of a page — default true, opt out per-host. Toggle at runtime
+  // via VizInstance.setShowIdleBeam.
+  showIdleBeam?: boolean
 }
 
 export interface VizInstance {
@@ -46,6 +51,7 @@ export interface VizInstance {
   destroy(): void
   setAccent(accent: [number, number, number]): void
   setTier(tier: PowerTier): void
+  setShowIdleBeam(value: boolean): void
 }
 
 // ---- window CustomEvent bus this listens to (IO_PAGE_CHANGESET.md §6.3) ----
@@ -189,6 +195,7 @@ export function init(canvas: HTMLCanvasElement, opts: VizOpts): VizInstance {
 
   post({ kind: 'setAccent', rgb: oklchToLinearSrgb(...opts.accent) })
   post({ kind: 'setTier', tier })
+  post({ kind: 'setShowIdleBeam', value: opts.showIdleBeam ?? true })
 
   // opts.getAudioContext()/getAnalyser() are null (or absent entirely) until
   // the shared bus is created on the site's first play click (IO_PAGE_CHANGESET.md
@@ -286,6 +293,10 @@ export function init(canvas: HTMLCanvasElement, opts: VizOpts): VizInstance {
 
     setAccent(accent) {
       post({ kind: 'setAccent', rgb: oklchToLinearSrgb(...accent) })
+    },
+
+    setShowIdleBeam(value) {
+      post({ kind: 'setShowIdleBeam', value })
     },
 
     setTier(next) {

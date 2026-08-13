@@ -35,12 +35,14 @@ function run(choreographer: Choreographer, frame: (t: number) => StateFrame, sec
 }
 
 describe('Choreographer — memory field drivers (SINTEZA_VIZ.md §4b/§4d)', () => {
-  it('groove/idle settles to short memory, baseline flow, and no symmetry', () => {
+  it('groove/idle settles to short memory, baseline flow, and floor-level symmetry', () => {
     const choreographer = new Choreographer()
     const params = run(choreographer, () => makeFrame(), 2)
     expect(params.fieldDecay).toBeCloseTo(0.86, 1)
     expect(params.flowStrength).toBeCloseTo(1, 0)
-    expect(params.symmetry).toBeLessThan(0.05)
+    // A low degree of kaleidoscope fold is always active (SYMMETRY_FLOOR),
+    // not zero at rest — it only rises meaningfully above that floor.
+    expect(params.symmetry).toBeCloseTo(0.18, 2)
   })
 
   it('a sustained build lengthens memory and raises symmetry ("processing")', () => {
