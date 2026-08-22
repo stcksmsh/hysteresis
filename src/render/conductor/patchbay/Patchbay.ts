@@ -30,7 +30,20 @@ export class Patchbay {
             `patchbay "${config.id}": route "${route.from}" -> "${route.to}" passThrough mismatch (both the route and the target must agree)`,
           )
         }
+        if (route.from !== 'scope' && route.from !== 'idle') {
+          throw new Error(
+            `patchbay "${config.id}": route "${route.from}" -> "${route.to}" is not a valid pass-through bus field ("scope" or "idle")`,
+          )
+        }
         continue
+      }
+      // route.from is deliberately typed as a plain string (Route.ts), not
+      // keyof SignalBus, since it also has to admit "scope"/"idle" above —
+      // so a typo here isn't a compile error. Catching it at construction
+      // time (rather than resolve()'s cast to number every frame) turns a
+      // silent NaN-through-the-pipeline bug into a clear, immediate error.
+      if (!(route.from in SIGNAL_TAGS)) {
+        throw new Error(`patchbay "${config.id}": route "${route.from}" -> "${route.to}" is not a known bus signal`)
       }
       const tag = SIGNAL_TAGS[route.from as keyof typeof SIGNAL_TAGS]
       if (tag && !target.acceptsTags.includes(tag)) {

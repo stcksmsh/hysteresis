@@ -82,7 +82,6 @@ export class Conductor {
       if (event.type === 'drop') {
         dropTrigger = { active: true, strength: event.strength, age: 0 }
         this.windupSpring.addImpulse(RELEASE_IMPULSE * (0.5 + event.strength))
-        this.windupSpring.setTarget(0)
         this.dropImpulseValue = Math.max(this.dropImpulseValue, event.strength)
       } else if (event.type === 'onset') {
         this.onsetImpulseValue = Math.max(this.onsetImpulseValue, event.strength)

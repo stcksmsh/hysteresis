@@ -80,6 +80,13 @@ vec2 advect(vec2 domainUv) {
   return domainUv - flow * uFlowStrength;
 }
 
+// NOTE: this deliberately doubles the pass's texture-fetch cost (11 fetches
+// per fragment vs. the pre-cross-fade version's 6 — two full curlAt/advect
+// evaluations instead of one, since the raw and folded UVs generally land on
+// unrelated parts of the noise texture with little cache reuse between
+// them). That's the accepted cost of actually fixing the seam/dead-zone bug
+// above rather than an accidental double-sample — see this file's git log
+// if a lower-power target ever needs this pass cheaper.
 void main() {
   // uPrev's CLAMP_TO_EDGE wrap (gl/fbo.ts) handles the out-of-[0,1] case —
   // no manual clamp needed here.

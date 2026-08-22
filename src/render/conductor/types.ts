@@ -36,7 +36,11 @@ export interface SignalBus {
 
   // bar
   barPhase: number
-  downbeatPulse: number // 0..1 decaying pulse on beat 1
+  // 0..1 decaying pulse on beat 1. Computed every frame but NOT currently
+  // routed to any screen target in screen-only.ts/screen-targets.ts —
+  // present on the bus (per the spec's signal set, §3.1) and available for
+  // a future route, but presently dead weight for ScreenOutput specifically.
+  downbeatPulse: number
 
   // section — sparse, dramatic, no longer the *only* drivers
   buildWindup: number // spring-driven integrated build (was ParamBus.windup)
@@ -46,15 +50,21 @@ export interface SignalBus {
 
   // transient — event-derived, never routable to slow/physical outputs
   dropImpulse: number // 0..1, decays from event.strength at a drop, else decays toward 0
-  onsetImpulse: number // 0..1, decaying pulse per broadband onset
+  // 0..1, decaying pulse per broadband onset. Same caveat as downbeatPulse
+  // above: computed every frame, not currently routed to any screen target.
+  onsetImpulse: number
 
-  // Discrete companion to dropImpulse, kept only because a couple of
-  // screen-specific reactions (the symmetry hold, the flow-field shockwave)
-  // want the exact one-shot strength/age shape rather than re-deriving an
-  // edge from the continuous pulse. SINTEZA_SIGNAL_BUS.md §3.1 explicitly
-  // allows this: "the discrete event may still exist internally for the
-  // symmetry snap." Not a general escape hatch — no new discrete fields
-  // should be added here without the same justification.
+  // Discrete companion to dropImpulse. SINTEZA_SIGNAL_BUS.md §3.1 allows
+  // keeping a discrete event internally ("the discrete event may still
+  // exist internally for the symmetry snap") — this is that allowance.
+  // NOT currently consumed downstream: ScreenParamAssembler re-derives its
+  // own drop-trigger by edge-detecting a rise in the routed `dropImpulse`
+  // target rather than reading this field (see screen-composites.ts's
+  // DROP_EDGE_EPS check), so this sits on the bus unread. Left in place as
+  // the sanctioned escape hatch for the day something genuinely needs the
+  // exact strength/age shape instead of a re-derived edge — not a general
+  // one, no new discrete fields should be added here without the same
+  // justification.
   dropTrigger: DropTrigger | null
 
   // pass-through — not shaped/normalized like the rest, beam-only.

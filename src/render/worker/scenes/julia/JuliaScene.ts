@@ -71,7 +71,8 @@ const ZOOM_START_MAX = 2.1 // randomised per cycle so resets don't all look iden
 // go" — see the blackout-flash reset at the bottom of updateZoom.
 const DIRECT_ZOOM_THRESHOLD = 0.0006
 const ZOOM_MIN = 1e-6
-// Was 0.018 (a full dive took ~9min idle) — reported as basically invisible
+// Was 0.018 (a full dive from ZOOM_START_MAX to ZOOM_MIN takes
+// ln(ZOOM_START_MAX/ZOOM_MIN)/rate =~ 13min idle) — reported as basically invisible
 // in practice: over a normal few-minute listen the view barely moved, so the
 // scene read as "sits in the center changing colors" with the zoom itself
 // unnoticeable under the much more prominent hue/c-position motion.
@@ -89,7 +90,7 @@ const ZOOM_MIN = 1e-6
 // below) — 2x here (not 3x) and putting the seek floor back to its
 // original 0.6 keeps more of navigation's original margin while still
 // roughly doubling how perceptible the creep is.
-const ZOOM_RATE_BASE = 0.036 // ln(zoom)/sec at rest — a full dive takes ~4.5min idle
+const ZOOM_RATE_BASE = 0.036 // ln(zoom)/sec at rest — a full dive takes ~6.4min idle (~4.3min at the first, reverted 3x attempt)
 const ZOOM_RATE_WINDUP_GAIN = 0.2 // builds accelerate the dive, gently — this used to run away
 // Same energy-fills-the-gap rationale as THETA_SPEED_ENERGY_GAIN above — kept
 // small enough that a loud track's average dive still takes well under a
