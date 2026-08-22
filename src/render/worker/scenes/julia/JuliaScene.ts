@@ -71,22 +71,30 @@ const ZOOM_START_MAX = 2.1 // randomised per cycle so resets don't all look iden
 // go" — see the blackout-flash reset at the bottom of updateZoom.
 const DIRECT_ZOOM_THRESHOLD = 0.0006
 const ZOOM_MIN = 1e-6
-const ZOOM_RATE_BASE = 0.018 // ln(zoom)/sec at rest — a full dive takes ~9min idle
-const ZOOM_RATE_WINDUP_GAIN = 0.1 // builds accelerate the dive, gently — this used to run away
+// Was 0.018 (a full dive took ~9min idle) — reported as basically invisible
+// in practice: over a normal few-minute listen the view barely moved, so the
+// scene read as "sits in the center changing colors" with the zoom itself
+// unnoticeable under the much more prominent hue/c-position motion. 3x'd
+// (idle dive now ~3min) so the creep is actually perceptible without making
+// it a sprint. WINDUP/ENERGY gains scaled by the same factor to keep their
+// relative contribution unchanged. This also makes the ZOOM_MIN reset (see
+// POST_FLASH_SEC below) ~3x more frequent — still a few times an hour, not
+// disruptive.
+const ZOOM_RATE_BASE = 0.054 // ln(zoom)/sec at rest — a full dive takes ~3min idle
+const ZOOM_RATE_WINDUP_GAIN = 0.3 // builds accelerate the dive, gently — this used to run away
 // Same energy-fills-the-gap rationale as THETA_SPEED_ENERGY_GAIN above — kept
-// small enough that a loud track's average dive still takes minutes, not
-// seconds (this also feeds the zoom-floor reset's cadence, see JuliaScene's
-// module comment on POST_FLASH_SEC — a much bigger gain here would make that
-// reset noticeably more frequent, not just more responsive).
-const ZOOM_RATE_ENERGY_GAIN = 0.012
+// small enough that a loud track's average dive still takes well under a
+// minute, not seconds (this also feeds the zoom-floor reset's cadence, see
+// JuliaScene's module comment on POST_FLASH_SEC — a much bigger gain here
+// would make that reset noticeably more frequent, not just more responsive).
+const ZOOM_RATE_ENERGY_GAIN = 0.036
 // Zoom runs at this fraction of normal speed until navConfidence (see
 // updateNavigation) confirms real local detail has actually been found,
 // ramping to full speed as it does — gives navigation real wall-clock time
-// to reach good territory before the view scale moves on past it. Kept
-// narrow (was 0.35, a ~2.9x speed swing) and slow to react (was 0.3/tick) —
-// a bigger range and a snappier reaction were exactly what read as "speeds
-// up/slows down instantly" instead of a smooth ramp.
-const ZOOM_SEEK_MIN_FACTOR = 0.6
+// to reach good territory before the view scale moves on past it. Raised
+// from 0.6 alongside the ZOOM_RATE_BASE increase above so the throttled
+// floor still reads as "still creeping," not "stalled," while probing.
+const ZOOM_SEEK_MIN_FACTOR = 0.75
 const NAV_CONFIDENCE_SMOOTH = 0.12 // how fast navConfidence reacts each check tick
 // When local detail genuinely runs out (see updateNavigation's emptiness
 // handling), the dive doesn't cut to a new random spot — it reverses into a
