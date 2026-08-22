@@ -39,7 +39,9 @@ let lastStatsPost = 0
 // means adding another VizOutput here and nothing else in this file.
 const screenOutput = new ScreenOutput()
 const outputs: VizOutput[] = [screenOutput]
-const patchbay = new Patchbay(screenOnlyConfig, outputs.map((o) => o.targets))
+// let, not const: the patchbay editor tool (dev-only, debugSetPatchbayConfig
+// below) hot-swaps this. Every other caller still only ever sets it once.
+let patchbay = new Patchbay(screenOnlyConfig, outputs.map((o) => o.targets))
 
 let currentAccent: [number, number, number] = [1, 0.36, 0.22] // vermilion default (#FF5C38), matches JuliaScene's own default
 
@@ -85,6 +87,15 @@ let pendingHits: SpectralHit[] = []
 // nudge — useful for tuning without a loaded track.
 const debugOverrides: Partial<Pick<StateFrame, 'buildProgress' | 'tension'>> = {}
 let debugDropPending = false
+
+// Dev-only, patchbay editor tool: streams a live SignalBus snapshot back to
+// main, throttled well below render rate (postMessage-cloning a fresh bus
+// every render frame would be wasteful for a meter UI that only needs to
+// look smooth to a human, not sample-accurate). Entirely inert unless a
+// debugSetSignalBusStream(true) message ever arrives.
+const SIGNAL_BUS_STREAM_INTERVAL_MS = 50 // 20Hz
+let streamSignalBus = false
+let lastSignalBusPost = 0
 
 const raf: (cb: (t: number) => void) => number | ReturnType<typeof setTimeout> =
   typeof self.requestAnimationFrame === 'function'
@@ -134,6 +145,11 @@ function loop(t: number) {
   for (const output of outputs) {
     const resolved = patchbay.resolve(bus, dt, output.targets)
     output.update(dt, resolved)
+  }
+
+  if (streamSignalBus && t - lastSignalBusPost > SIGNAL_BUS_STREAM_INTERVAL_MS) {
+    lastSignalBusPost = t
+    post({ kind: 'signalBus', bus })
   }
 
   if (dt > 0) updateAdaptiveQuality(dt * 1000, t)
@@ -274,6 +290,25 @@ self.onmessage = (e: MessageEvent<MainToRenderWorker>) => {
     }
     case 'debugTriggerDrop': {
       debugDropPending = true
+      break
+    }
+    case 'debugSetPatchbayConfig': {
+      try {
+        // Reconstructed, not mutated in place — Patchbay.validate() runs at
+        // construction (SINTEZA_SIGNAL_BUS.md §5.3), so an invalid edit
+        // (typo'd signal name, a tag a target can't accept) is caught here
+        // and rejected without ever touching the live `patchbay` the render
+        // loop reads every frame above.
+        const next = new Patchbay(msg.config, outputs.map((o) => o.targets))
+        patchbay = next
+        post({ kind: 'patchbayConfigResult', ok: true })
+      } catch (err) {
+        post({ kind: 'patchbayConfigResult', ok: false, message: err instanceof Error ? err.message : String(err) })
+      }
+      break
+    }
+    case 'debugSetSignalBusStream': {
+      streamSignalBus = msg.value
       break
     }
   }

@@ -18,41 +18,65 @@ export class Patchbay {
     Patchbay.validate(config, outputsTargets.flat())
   }
 
+  // Throws with the first problem found — the right behavior for
+  // construction-time validation (§5.3), where "no unsafe config ever
+  // runs" matters more than seeing every problem at once.
   static validate(config: PatchbayConfig, targets: TargetDecl[]): void {
     for (const route of config.routes) {
-      const target = targets.find((t) => t.id === route.to)
-      if (!target) {
-        throw new Error(`patchbay "${config.id}": route "${route.from}" -> "${route.to}" targets an unknown target`)
-      }
-      if (target.passThrough || route.passThrough) {
-        if (!target.passThrough || !route.passThrough) {
-          throw new Error(
-            `patchbay "${config.id}": route "${route.from}" -> "${route.to}" passThrough mismatch (both the route and the target must agree)`,
-          )
-        }
-        if (route.from !== 'scope' && route.from !== 'idle') {
-          throw new Error(
-            `patchbay "${config.id}": route "${route.from}" -> "${route.to}" is not a valid pass-through bus field ("scope" or "idle")`,
-          )
-        }
-        continue
-      }
-      // route.from is deliberately typed as a plain string (Route.ts), not
-      // keyof SignalBus, since it also has to admit "scope"/"idle" above —
-      // so a typo here isn't a compile error. Catching it at construction
-      // time (rather than resolve()'s cast to number every frame) turns a
-      // silent NaN-through-the-pipeline bug into a clear, immediate error.
-      if (!(route.from in SIGNAL_TAGS)) {
-        throw new Error(`patchbay "${config.id}": route "${route.from}" -> "${route.to}" is not a known bus signal`)
-      }
-      const tag = SIGNAL_TAGS[route.from as keyof typeof SIGNAL_TAGS]
-      if (tag && !target.acceptsTags.includes(tag)) {
-        throw new Error(
-          `patchbay "${config.id}": route "${route.from}" (${tag}) -> "${route.to}" rejected — ` +
-            `target only accepts [${target.acceptsTags.join(', ')}]`,
-        )
-      }
+      const message = Patchbay.checkRoute(config.id, route, targets)
+      if (message) throw new Error(message)
     }
+  }
+
+  // Same rules as validate(), but collects every problem instead of
+  // throwing on the first — what an editor needs to show every bad row at
+  // once rather than crash on the first one. Shares checkRoute() so the
+  // two never drift apart.
+  static collectIssues(
+    config: PatchbayConfig,
+    targets: TargetDecl[],
+  ): { routeIndex: number; route: Route; message: string }[] {
+    const issues: { routeIndex: number; route: Route; message: string }[] = []
+    config.routes.forEach((route, routeIndex) => {
+      const message = Patchbay.checkRoute(config.id, route, targets)
+      if (message) issues.push({ routeIndex, route, message })
+    })
+    return issues
+  }
+
+  // The one place these rules are written down — validate() and
+  // collectIssues() both call this so "what makes a route valid" only
+  // exists in one form.
+  private static checkRoute(configId: string, route: Route, targets: TargetDecl[]): string | null {
+    const target = targets.find((t) => t.id === route.to)
+    if (!target) {
+      return `patchbay "${configId}": route "${route.from}" -> "${route.to}" targets an unknown target`
+    }
+    if (target.passThrough || route.passThrough) {
+      if (!target.passThrough || !route.passThrough) {
+        return `patchbay "${configId}": route "${route.from}" -> "${route.to}" passThrough mismatch (both the route and the target must agree)`
+      }
+      if (route.from !== 'scope' && route.from !== 'idle') {
+        return `patchbay "${configId}": route "${route.from}" -> "${route.to}" is not a valid pass-through bus field ("scope" or "idle")`
+      }
+      return null
+    }
+    // route.from is deliberately typed as a plain string (Route.ts), not
+    // keyof SignalBus, since it also has to admit "scope"/"idle" above —
+    // so a typo here isn't a compile error. Catching it at construction
+    // time (rather than resolve()'s cast to number every frame) turns a
+    // silent NaN-through-the-pipeline bug into a clear, immediate error.
+    if (!(route.from in SIGNAL_TAGS)) {
+      return `patchbay "${configId}": route "${route.from}" -> "${route.to}" is not a known bus signal`
+    }
+    const tag = SIGNAL_TAGS[route.from as keyof typeof SIGNAL_TAGS]
+    if (tag && !target.acceptsTags.includes(tag)) {
+      return (
+        `patchbay "${configId}": route "${route.from}" (${tag}) -> "${route.to}" rejected — ` +
+        `target only accepts [${target.acceptsTags.join(', ')}]`
+      )
+    }
+    return null
   }
 
   // Resolves this config's routes against `bus` for one output's declared

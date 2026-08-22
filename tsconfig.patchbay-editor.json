@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "strict": true,
+    "noEmit": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "types": ["vite/client"]
+  },
+  "include": ["tools/patchbay-editor/**/*.ts", "tools/patchbay-editor/**/*.tsx", "src/**/*.ts"],
+  // Worker/worklet code needs WebWorker/AudioWorklet globals this config's
+  // plain-DOM lib doesn't have (and is already covered by tsconfig.worker.json
+  // in the full `npm run typecheck` chain) — this tool only ever references
+  // render-worker.ts by URL string (`new Worker(new URL(...))`), never
+  // imports it, so it doesn't need to be typechecked again here.
+  "exclude": ["src/audio/worklet/**", "src/render/worker/**"]
+}

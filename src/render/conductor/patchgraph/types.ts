@@ -1,0 +1,150 @@
+import type { RoutableSignalName, TimescaleTag } from '../types'
+
+// The patch graph: a small, general dataflow model for PHYSICAL outputs
+// (servos, LEDs, lasers, movers, ...) — deliberately separate from the
+// screen's Patchbay/Route (SINTEZA_SIGNAL_BUS.md §5), which stays exactly
+// as-is. That system is a flat 1-signal-in/1-target-out route model by
+// design ("no logic beyond eval", §5) and the live visualizer depends on
+// it working unchanged. Physical fixtures need real composability — "turn
+// this LED on only when energy is high AND the low end is present" is an
+// AND of two thresholded signals, which a flat route can't express at all.
+// Rather than bend Route into something it isn't, this is a second,
+// independent system built for that need from scratch.
+//
+// A graph is nodes + edges: `signal` nodes read the live SignalBus, chains
+// of operator nodes combine/shape/gate values, and `target` nodes write the
+// result to a fixture channel. Every node kind takes 0 or more named inputs
+// (an ordered list of node ids to read from) and produces exactly one
+// scalar output per frame — that's what makes arbitrary chaining possible
+// without a bigger type system: every node is `(inputs: number[]) => number`
+// plus its own params, only `signal`/`const` ignore inputs entirely.
+
+export type NodeId = string
+
+export interface NodeBase {
+  readonly id: NodeId
+  readonly inputs: readonly NodeId[]
+}
+
+export interface SignalNode extends NodeBase {
+  kind: 'signal'
+  inputs: readonly []
+  signal: RoutableSignalName
+}
+
+// A tunable constant — most operator params (a threshold cut, a gain) live
+// inline on the node that uses them (kept as plain numbers, not their own
+// nodes, so a simple threshold stays a single node to place/wire — "minimal
+// patches" from the ask). `const` exists for the rarer case where a bare
+// number needs to flow as a real graph edge (e.g. into a `combine` alongside
+// real signals).
+export interface ConstNode extends NodeBase {
+  kind: 'const'
+  inputs: readonly []
+  value: number
+}
+
+// Outputs 1 when input >= cut, else 0. `hysteresis` (if set) requires the
+// input to fall to `cut - hysteresis` before it releases back to 0 — a
+// dead-band around the cut point, essential for anything physical (an LED
+// or servo chattering right at a threshold looks/sounds broken; a hair of
+// hysteresis fixes it for free). This is real per-node state across frames
+// (see PatchGraphEvaluator), unlike the stateless nodes below.
+export interface ThresholdNode extends NodeBase {
+  kind: 'threshold'
+  inputs: readonly [NodeId]
+  cut: number
+  hysteresis?: number
+}
+
+// Attack/release envelope follower — same shape as the screen side's
+// DtSmoother, reimplemented here rather than shared so this system has zero
+// dependency on conductor-internal helpers (keeps the "separate layer"
+// promise literal, not just organizational).
+export interface EnvelopeNode extends NodeBase {
+  kind: 'envelope'
+  inputs: readonly [NodeId]
+  attackSec: number
+  releaseSec: number
+}
+
+// Fuzzy logic over already-0..1-ish values (thresholded or not — and/or/not
+// work on continuous inputs too, which is the point: "and" of two envelopes
+// is exactly the kind of soft gating a real lighting rig wants, not just
+// hard boolean logic). and = min(inputs), or = max(inputs), not = 1 - input
+// (single input only).
+export interface LogicNode extends NodeBase {
+  kind: 'logic'
+  op: 'and' | 'or' | 'not'
+  inputs: readonly NodeId[]
+}
+
+// General numeric combine over 2+ inputs — separate from LogicNode because
+// "sum these three band energies" and "gate this LED" are different intents
+// even though `max`/`min` overlap; keeping them as distinct node kinds makes
+// a saved graph read as what it means, not just what it computes.
+export interface CombineNode extends NodeBase {
+  kind: 'combine'
+  op: 'add' | 'multiply' | 'max' | 'min'
+  inputs: readonly NodeId[]
+}
+
+export type CurveKind = 'linear' | 'exp' | 'log' | 'smoothstep'
+
+export interface CurveNode extends NodeBase {
+  kind: 'curve'
+  inputs: readonly [NodeId]
+  curve: CurveKind
+}
+
+// General range remap (replaces gain/offset/invert as three separate knobs
+// with one that reads as what it does: "this signal's 0..1 becomes the
+// servo's 40..140 degrees", inversion is just outMin > outMax).
+export interface MapNode extends NodeBase {
+  kind: 'map'
+  inputs: readonly [NodeId]
+  inRange: readonly [number, number]
+  outRange: readonly [number, number]
+  clamp: boolean
+}
+
+// Writes to one fixture channel (SINTEZA_SIGNAL_BUS.md §6.1's TargetDecl,
+// reused as-is — a physical channel is still "an id, accepted tags, a
+// default, a range", the same concept the screen's targets already use).
+export interface TargetNode extends NodeBase {
+  kind: 'target'
+  inputs: readonly [NodeId]
+  targetId: string
+}
+
+export type PatchGraphNode =
+  | SignalNode
+  | ConstNode
+  | ThresholdNode
+  | EnvelopeNode
+  | LogicNode
+  | CombineNode
+  | CurveNode
+  | MapNode
+  | TargetNode
+
+export interface PatchGraph {
+  readonly id: string
+  readonly nodes: readonly PatchGraphNode[]
+}
+
+// A physical fixture's one channel — same shape/intent as the screen side's
+// TargetDecl (SINTEZA_SIGNAL_BUS.md §6.1) so §5.3's servo-safety principle
+// (a target declares which timescale tags it can safely follow) applies
+// here too. `acceptsTags` is advisory in this graph (validated as a
+// warning, not a hard construction-time throw like the screen Patchbay) —
+// there's no real hardware yet to protect against buzzing/overheating, and
+// a simulated preview shouldn't refuse to render just because a signal
+// upstream hasn't been smoothed yet.
+export interface PatchTargetDecl {
+  readonly id: string
+  readonly label: string
+  readonly acceptsTags: readonly TimescaleTag[]
+  readonly defaultValue: number
+  readonly range: readonly [number, number]
+}

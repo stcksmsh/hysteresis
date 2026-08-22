@@ -1,3 +1,9 @@
+// Type-only, so this doesn't create a real runtime import cycle even though
+// render/conductor/types.ts imports DropTrigger from this same file below —
+// both sides are erased at compile time.
+import type { SignalBus } from '../render/conductor/types'
+import type { PatchbayConfig } from '../render/conductor/patchbay/types'
+
 export interface BandEnergies {
   sub: number
   low: number
@@ -126,8 +132,29 @@ export type MainToRenderWorker =
   // loaded track, and force a drop for tuning the release feel.
   | { kind: 'debugSetParam'; key: 'buildProgress' | 'tension'; value: number }
   | { kind: 'debugTriggerDrop' }
+  // Dev-only, for the patchbay editor tool (src/tools/patchbay-editor):
+  // hot-swaps the worker's live Patchbay instance. PatchbayConfig is plain
+  // data (SINTEZA_SIGNAL_BUS.md §5.1), so this is exactly R4's "rerouting =
+  // editing a config, no code path" made interactive. Never sent by the
+  // real package/site.
+  | { kind: 'debugSetPatchbayConfig'; config: PatchbayConfig }
+  // Dev-only: starts/stops posting `signalBus` messages back (see below).
+  // Off by default so the real site never pays the postMessage cost of
+  // cloning a fresh SignalBus every frame just to have somewhere to send it.
+  | { kind: 'debugSetSignalBusStream'; value: boolean }
 
-export type RenderWorkerToMain = { kind: 'error'; message: string } | { kind: 'stats'; fps: number }
+export type RenderWorkerToMain =
+  | { kind: 'error'; message: string }
+  | { kind: 'stats'; fps: number }
+  // Dev-only: a live SignalBus snapshot, throttled (see render-worker.ts),
+  // sent only while debugSetSignalBusStream(true) is active. Feeds the
+  // patchbay editor's live signal meters.
+  | { kind: 'signalBus'; bus: SignalBus }
+  // Dev-only: acks debugSetPatchbayConfig — either it was applied, or (most
+  // usefully) it failed Patchbay's construction-time validation and the
+  // worker kept running the previous config instead of crashing.
+  | { kind: 'patchbayConfigResult'; ok: true }
+  | { kind: 'patchbayConfigResult'; ok: false; message: string }
 
 // Main thread -> live AudioWorklet (a separate execution context from the
 // render worker — AudioEngine.ts owns this channel). Two independent callers
