@@ -10,7 +10,7 @@ import { DropDetector } from './brain/drop-detector'
 import { BreakDetector } from './brain/break-detector'
 import { PlacementBands } from './placement-bands'
 import { FFT_SIZE, HOP_SIZE, SCOPE_SIZE } from '../../shared/constants'
-import type { BandEnergies, SpectralHit, StateFrame, StructuralEvent, WorkletToMain } from '../../shared/types'
+import type { BandEnergies, MainToWorklet, SpectralHit, StateFrame, StructuralEvent, WorkletToMain } from '../../shared/types'
 
 // Centroid is normalized against this practical ceiling (Hz), not Nyquist —
 // most perceptually relevant brightness/build movement happens well below
@@ -66,6 +66,12 @@ class FeatureProcessor extends AudioWorkletProcessor implements AudioWorkletProc
   private dropDetector: DropDetector
   private breakDetector: BreakDetector
 
+  // Debug-only (?debug=1, SINTEZA_SIGNAL_BUS.md §4.1's acceptance test):
+  // when false, the build/drop/break detectors are not called at all this
+  // hop, so buildProgress/tension/drop-events simply rest at 0/empty —
+  // proving the continuous/beat/bar signal groups alone still carry a
+  // visibly reactive screen.
+  private detectorsEnabled = true
   private wasAboveOnsetThreshold = false
   private lastBarPhase = 0
   private leftEnergyAccum = 0
@@ -105,6 +111,10 @@ class FeatureProcessor extends AudioWorkletProcessor implements AudioWorkletProc
     this.buildDetector = new BuildDetector(hopMs)
     this.dropDetector = new DropDetector(hopMs)
     this.breakDetector = new BreakDetector(hopMs)
+
+    this.port.onmessage = (e: MessageEvent<MainToWorklet>) => {
+      if (e.data.kind === 'debugSetDetectorsEnabled') this.detectorsEnabled = e.data.value
+    }
 
     this.port.postMessage({ kind: 'ready' } satisfies WorkletToMain)
   }
@@ -216,26 +226,42 @@ class FeatureProcessor extends AudioWorkletProcessor implements AudioWorkletProc
     }
     this.wasAboveOnsetThreshold = novelty > ONSET_EVENT_THRESHOLD
 
-    const buildProgress = this.buildDetector.update(centroid, bandsRaw.sub)
-
     const broadbandEnergy = (bandsRaw.sub + bandsRaw.low + bandsRaw.mid + bandsRaw.presence + bandsRaw.air) / 5
     const lowEnergy = (bandsRaw.sub + bandsRaw.low) / 2
 
-    // Break/tension is computed first because the drop detector consumes it:
-    // a drop is defined as the *resolution of a thinned section*, so it needs
-    // this hop's tension to decide whether a jump qualifies at all.
-    const { tension, event: breakEvent } = this.breakDetector.update(lowEnergy, novelty, tNow)
-    if (breakEvent) events.push(breakEvent)
+    // SINTEZA_SIGNAL_BUS.md §4.1's acceptance test: with detectors disabled,
+    // skip calling them entirely (cheapest form of "disabled", no state to
+    // leak) so buildProgress/tension rest at 0 and no drop/break events ever
+    // fire — proving the continuous/beat/bar signals alone still drive a
+    // visibly reactive screen.
+    let buildProgress = 0
+    let tension = 0
+    if (this.detectorsEnabled) {
+      buildProgress = this.buildDetector.update(centroid, bandsRaw.sub)
 
-    // The drop's signature is the bass reappearing on the beat, not overall
-    // loudness rising — a buildup/riser is often already loud and bright
-    // (high bands maxed) while sub/low stays suppressed right up to the
-    // drop, so the jump is evaluated on low-band energy.
-    const dropSignal = this.dropEnergyNormalizer.normalize(this.dropEnergyEnvelope.update(rawLowEnergy))
-    const dropEvent = this.dropDetector.update(dropSignal, tension, beatPhase, tempoBpm, tNow)
-    if (dropEvent) {
-      events.push({ type: 'drop', strength: dropEvent.strength, t: dropEvent.t })
-      this.buildDetector.reset()
+      // Break/tension is computed first because the drop detector consumes
+      // it: a drop is defined as the *resolution of a thinned section*, so
+      // it needs this hop's tension to decide whether a jump qualifies at
+      // all.
+      const breakResult = this.breakDetector.update(lowEnergy, novelty, tNow)
+      tension = breakResult.tension
+      if (breakResult.event) events.push(breakResult.event)
+
+      // The drop's signature is the bass reappearing on the beat, not
+      // overall loudness rising — a buildup/riser is often already loud and
+      // bright (high bands maxed) while sub/low stays suppressed right up to
+      // the drop, so the jump is evaluated on low-band energy.
+      const dropSignal = this.dropEnergyNormalizer.normalize(this.dropEnergyEnvelope.update(rawLowEnergy))
+      const dropFeatures = {
+        lowEnergy: dropSignal,
+        onsetActivity: novelty,
+        vec: [bandsRaw.sub, bandsRaw.low, bandsRaw.mid, bandsRaw.presence, bandsRaw.air, centroid, flatness],
+      }
+      const dropEvent = this.dropDetector.update(dropFeatures, beatPhase, tempoBpm, tNow)
+      if (dropEvent) {
+        events.push({ type: 'drop', strength: dropEvent.strength, t: dropEvent.t })
+        this.buildDetector.reset()
+      }
     }
 
     const energy = this.energyTrajectory.update(broadbandEnergy)

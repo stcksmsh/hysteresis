@@ -259,6 +259,14 @@ export function init(canvas: HTMLCanvasElement, opts: VizOpts): VizInstance {
     structureSource.load(json as Sidecar)
     structureSource.resyncTo(positionSec)
     startSynthLoopIfNeeded()
+    // SINTEZA_SIGNAL_BUS.md §4b(1): once a sidecar is active, StructureSource
+    // .fuse() already overwrites buildProgress/tension/structural events from
+    // the sidecar timeline wholesale — the live build/drop/break detectors'
+    // output would just be discarded downstream. Stop running them entirely
+    // rather than computing and throwing it away every hop (also removes the
+    // live DropDetector's known false-positive/miss risk for own tracks,
+    // since the sidecar's offline analysis is authoritative for structure).
+    engine.setDetectorsEnabled(false)
   }
 
   function onTransport(e: Event): void {
@@ -274,6 +282,9 @@ export function init(canvas: HTMLCanvasElement, opts: VizOpts): VizInstance {
       case 'trackchange':
         structureSource.clear()
         positionSec = 0
+        // Re-enabled unconditionally; loadSidecar() below will disable again
+        // if the new track has a sidecar of its own.
+        engine.setDetectorsEnabled(true)
         if (evt.track.envelope) void loadSidecar(evt.track.envelope)
         break
       // 'play'/'pause' need no action here — the worklet keeps analysing

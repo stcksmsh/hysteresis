@@ -212,13 +212,18 @@ export function analyzeMix(wav: DecodedWav): Sidecar {
     }
     finalTempo = tempoSamples > 0 ? tempoSum / tempoSamples : tempoBpm
 
-    const { tension, event: breakEvent } = breakDetector.update(lowEnergy, novelty, tNow)
+    const { event: breakEvent } = breakDetector.update(lowEnergy, novelty, tNow)
     if (breakEvent && (breakEvent.type === 'breakStart' || breakEvent.type === 'breakEnd')) {
       events.push({ type: breakEvent.type, t: breakEvent.t, strength: breakEvent.strength })
     }
 
     const dropSignal = dropEnergyNormalizer.normalize(dropEnergyEnvelope.update(rawLowEnergy))
-    const dropEvent = dropDetector.update(dropSignal, tension, beatPhase, tempoBpm, tNow)
+    const dropFeatures = {
+      lowEnergy: dropSignal,
+      onsetActivity: novelty,
+      vec: [bandsRaw.sub, bandsRaw.low, bandsRaw.mid, bandsRaw.presence, bandsRaw.air, centroid, flatnessRaw[h]],
+    }
+    const dropEvent = dropDetector.update(dropFeatures, beatPhase, tempoBpm, tNow)
     if (dropEvent) {
       events.push({ type: 'drop', t: dropEvent.t, strength: dropEvent.strength })
       dropTimes.push(dropEvent.t)

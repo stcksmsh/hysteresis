@@ -1,27 +1,13 @@
 /// <reference lib="webworker" />
-import type {
-  MainToRenderWorker,
-  PowerTier,
-  RenderWorkerToMain,
-  SpectralHit,
-  StateFrame,
-  StructuralEvent,
-} from '../../shared/types'
+import type { MainToRenderWorker, PowerTier, RenderWorkerToMain, SpectralHit, StateFrame, StructuralEvent } from '../../shared/types'
 import { createGlContext, WebGL2UnavailableError, type GlCapabilities } from './gl/context'
-import { createFbo, deleteFbo, type Fbo } from './gl/fbo'
-import { sceneRegistry, DEFAULT_SCENE_ID } from './scenes/registry'
-import type { Scene, SceneContext } from './scenes/Scene'
-import { Choreographer } from '../choreography/Choreographer'
-import { PersistencePass } from './passes/persistence-pass'
-import { MemoryFieldPass } from './passes/memory-field-pass'
-import { BloomPass } from './passes/bloom-pass'
-import { CompositePass } from './passes/composite-pass'
+import { Conductor } from '../conductor/Conductor'
+import { Patchbay } from '../conductor/patchbay/Patchbay'
+import { screenOnlyConfig } from '../conductor/patchbay/configs/screen-only'
+import { ScreenOutput } from '../conductor/outputs/ScreenOutput'
+import type { VizOutput } from '../conductor/types'
 
 declare const self: DedicatedWorkerGlobalScope
-
-const PERSISTENCE_DECAY = 0.85
-const BLOOM_THRESHOLD = 0.55
-const BLOOM_STRENGTH = 0.45
 
 // Adaptive quality. Substep scaling reacts continuously (free); resolution
 // steps down only after sustained overrun, and only one way, because
@@ -40,7 +26,6 @@ let reducedMotion = false
 let rafHandle: number | ReturnType<typeof setTimeout> | null = null
 let lastLoopTime: number | null = null
 let canvasRef: OffscreenCanvas | null = null
-let scene: Scene | null = null
 let currentDpr = 1
 
 let smoothedFrameMs = 16
@@ -49,14 +34,16 @@ let resolutionStep = 0
 let overrunSinceMs: number | null = null
 let lastStatsPost = 0
 
-let sceneFbo: Fbo | null = null
-let persistencePass: PersistencePass | null = null
-let memoryFieldPass: MemoryFieldPass | null = null
-let bloomPass: BloomPass | null = null
-let compositePass: CompositePass | null = null
+// The output registry R3 requires — a literal array, not a device manager.
+// ScreenOutput is the only entry; adding a second output (later, per §8)
+// means adding another VizOutput here and nothing else in this file.
+const screenOutput = new ScreenOutput()
+const outputs: VizOutput[] = [screenOutput]
+const patchbay = new Patchbay(screenOnlyConfig, outputs.map((o) => o.targets))
+
 let currentAccent: [number, number, number] = [1, 0.36, 0.22] // vermilion default (#FF5C38), matches JuliaScene's own default
 
-const choreographer = new Choreographer()
+const conductor = new Conductor()
 
 // Real audio hasn't necessarily started yet (loading a file is the user
 // gesture that creates the AudioEngine) — this fallback frame keeps the
@@ -93,7 +80,7 @@ let pendingEvents: StructuralEvent[] = []
 let pendingHits: SpectralHit[] = []
 
 // Debug-only overrides (?debug=1 scene-tuning sliders): patched onto
-// whichever StateFrame is active each frame, so the full real choreography
+// whichever StateFrame is active each frame, so the full real conductor
 // pipeline (springs, drop release, etc.) still runs on top of the manual
 // nudge — useful for tuning without a loaded track.
 const debugOverrides: Partial<Pick<StateFrame, 'buildProgress' | 'tension'>> = {}
@@ -114,7 +101,7 @@ function post(msg: RenderWorkerToMain) {
 }
 
 function loop(t: number) {
-  if (!running || !caps || !scene || !sceneFbo || !compositePass) return
+  if (!running || !caps) return
   const dt = lastLoopTime === null ? 0 : Math.min(0.1, (t - lastLoopTime) / 1000)
   lastLoopTime = t
 
@@ -143,40 +130,11 @@ function loop(t: number) {
     events,
   }
 
-  const params = choreographer.update(effectiveFrame, dt)
-  scene.update(dt, params)
-  scene.render(sceneFbo.framebuffer)
-
-  let currentTexture = sceneFbo.texture
-  if (scene.wantsMemoryField && memoryFieldPass && !reducedMotion) {
-    const aspect = sceneFbo.width / Math.max(1, sceneFbo.height)
-    const fieldResult = memoryFieldPass.apply(currentTexture, dt, {
-      decay: params.fieldDecay,
-      flowStrength: params.flowStrength,
-      symmetry: params.symmetry,
-      aspect,
-    })
-    currentTexture = fieldResult.texture
-    // Foreground hero layer (e.g. the beam) — crisp on top of the smeared
-    // substrate, not fed into it (see Scene.renderForeground's doc comment).
-    scene.renderForeground?.(fieldResult.framebuffer)
-  } else if (scene.wantsPersistencePass && persistencePass && !reducedMotion) {
-    currentTexture = persistencePass.apply(currentTexture, PERSISTENCE_DECAY)
+  const bus = conductor.update(effectiveFrame, dt)
+  for (const output of outputs) {
+    const resolved = patchbay.resolve(bus, dt, output.targets)
+    output.update(dt, resolved)
   }
-
-  let bloomTexture: WebGLTexture | null = null
-  if (scene.wantsBloom && bloomPass && !reducedMotion) {
-    bloomTexture = bloomPass.apply(currentTexture, BLOOM_THRESHOLD)
-  }
-
-  compositePass.apply(
-    null,
-    sceneFbo.width,
-    sceneFbo.height,
-    currentTexture,
-    bloomTexture,
-    BLOOM_STRENGTH * BLOOM_STRENGTH_SCALE[currentTier],
-  )
 
   if (dt > 0) updateAdaptiveQuality(dt * 1000, t)
 
@@ -195,7 +153,7 @@ function updateAdaptiveQuality(frameMs: number, t: number) {
     }
     overrunSinceMs = null
   }
-  scene?.setQuality?.(qualityScale)
+  screenOutput.setQuality(qualityScale)
 
   // Substeps are already floored; if we're still over budget after a
   // sustained stretch, the resolution itself is the problem.
@@ -203,7 +161,7 @@ function updateAdaptiveQuality(frameMs: number, t: number) {
   const sustained = overrunSinceMs !== null && t - overrunSinceMs > RESOLUTION_STEP_AFTER_MS
   if (stuckAtMinQuality && sustained && resolutionStep < RESOLUTION_STEPS.length - 1) {
     resolutionStep++
-    scene?.setSimMaxEdge?.(RESOLUTION_STEPS[resolutionStep])
+    screenOutput.setSimMaxEdge(RESOLUTION_STEPS[resolutionStep])
     qualityScale = 1
     overrunSinceMs = null
   }
@@ -229,37 +187,11 @@ function stop() {
   }
 }
 
-// (Re)allocates the offscreen scene target + polish passes at the given
-// resolution. Called on init and on every resize.
-function allocatePipeline(width: number, height: number) {
-  if (!caps) return
-  const gl = caps.gl
-  if (sceneFbo) deleteFbo(gl, sceneFbo)
-  sceneFbo = createFbo(gl, Math.max(1, width), Math.max(1, height), caps.floatFbo)
-
-  if (persistencePass) persistencePass.resize(width, height)
-  else persistencePass = new PersistencePass(gl, width, height, caps.floatFbo)
-
-  if (memoryFieldPass) memoryFieldPass.resize(width, height)
-  else memoryFieldPass = new MemoryFieldPass(gl, width, height, caps.floatFbo)
-
-  if (bloomPass) bloomPass.resize(width, height)
-  else bloomPass = new BloomPass(gl, width, height, caps.floatFbo)
-
-  if (!compositePass) compositePass = new CompositePass(gl)
-}
-
-function sceneContext(width: number, height: number, dpr: number): SceneContext | null {
-  if (!caps) return null
-  return { gl: caps.gl, width, height, dpr, reducedMotion, floatFbo: caps.floatFbo }
-}
-
 // Power tiers (SINTEZA_VIZ.md §8): `full` caps only against melting a 4K/
 // high-DPR display; `cheap`/`idle-only` cap harder since neither needs to
 // look crisp — cheap trades resolution for headroom, idle-only is nearly
 // static content anyway.
 const DPR_CAP: Record<PowerTier, number> = { full: 2, cheap: 1.25, 'idle-only': 1 }
-const BLOOM_STRENGTH_SCALE: Record<PowerTier, number> = { full: 1, cheap: 0.5, 'idle-only': 0.5 }
 
 function resize(canvas: OffscreenCanvas, cssWidth: number, cssHeight: number, dpr: number) {
   // Cap DPR and absolute resolution so a 4K/high-DPR display doesn't melt.
@@ -278,9 +210,7 @@ function resize(canvas: OffscreenCanvas, cssWidth: number, cssHeight: number, dp
   currentDpr = dpr
   if (caps) {
     caps.gl.viewport(0, 0, canvas.width, canvas.height)
-    allocatePipeline(canvas.width, canvas.height)
-    const ctx = sceneContext(canvas.width, canvas.height, dpr)
-    if (ctx) scene?.resize(ctx)
+    screenOutput.resize(canvas.width, canvas.height, dpr)
   }
 }
 
@@ -299,16 +229,7 @@ self.onmessage = (e: MessageEvent<MainToRenderWorker>) => {
         return
       }
       caps.gl.viewport(0, 0, msg.canvas.width, msg.canvas.height)
-      allocatePipeline(msg.canvas.width, msg.canvas.height)
-      scene = sceneRegistry[DEFAULT_SCENE_ID]()
-      scene.init({
-        gl: caps.gl,
-        width: msg.canvas.width,
-        height: msg.canvas.height,
-        dpr: msg.dpr,
-        reducedMotion,
-        floatFbo: caps.floatFbo,
-      })
+      screenOutput.init(caps, msg.canvas.width, msg.canvas.height, msg.dpr, reducedMotion)
       start()
       break
     }
@@ -329,24 +250,22 @@ self.onmessage = (e: MessageEvent<MainToRenderWorker>) => {
     }
     case 'setReducedMotion': {
       reducedMotion = msg.value
-      if (canvasRef) {
-        const ctx = sceneContext(canvasRef.width, canvasRef.height, currentDpr)
-        if (ctx) scene?.resize(ctx)
-      }
+      screenOutput.setReducedMotion(msg.value)
       break
     }
     case 'setAccent': {
       currentAccent = msg.rgb
-      scene?.setAccent?.(msg.rgb)
+      screenOutput.setAccent(msg.rgb)
       break
     }
     case 'setTier': {
       currentTier = msg.tier
+      screenOutput.setTier(msg.tier)
       if (canvasRef) resize(canvasRef, canvasRef.width / currentDpr, canvasRef.height / currentDpr, currentDpr)
       break
     }
     case 'setShowIdleBeam': {
-      scene?.setShowIdleBeam?.(msg.value)
+      screenOutput.setShowIdleBeam(msg.value)
       break
     }
     case 'debugSetParam': {

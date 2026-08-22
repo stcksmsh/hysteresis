@@ -1,66 +1,64 @@
 import { EnvelopeFollower } from '../envelope'
+import { NoveltyRingBuffer } from './novelty'
 
-const FAST_MS = 80
-const SLOW_MS = 2500
-const JUMP_THRESHOLD = 0.22
-const JUMP_STRENGTH_NORMALIZER = 0.6
-
-// A drop is the *resolution of a thinned section*, not just a loud moment.
-// Credit accrues only while the track is genuinely thinned/tense, decays
-// otherwise, and must exceed THINNED_CREDIT_REQUIRED_SEC for a jump to
-// qualify at all. A steady groove never accrues credit, so no kick inside
-// one can ever read as a drop — this is the main false-positive gate.
-const TENSION_FOR_THINNED = 0.2
-const THINNED_CREDIT_REQUIRED_SEC = 0.8
-
-// Second qualifying path. Band energies are adaptively normalised, so a
-// breakdown does not always register as "thinned" in normalised terms and
-// the credit gate alone can reject genuine drops. A jump this large is
-// unambiguous on its own: inside a steady groove the slow envelope is
-// already high, so kicks can never produce a gap of this size.
+// SINTEZA_SIGNAL_BUS.md §4b(2) — a drop is "the mix going from sparse to
+// full", not "the mix getting louder". The old primitive (fast-minus-slow
+// energy jump) can't tell those apart: a pulsing reverb synth over a sparse
+// ambient intro produces the same kind of energy-difference spike a real
+// drop does (false positive), and a drop following an already-loud
+// wall-of-noise build produces *no* jump at all (miss). This replaces it
+// with a conjunction of three signals that each measure something a loud-
+// but-not-full moment can't fake:
 //
-// That reasoning has a hole right at the start of a track (or after any
-// long quiet stretch): the slow envelope reads low there for the mundane
-// reason that nothing has played yet, not because a groove was thinned out.
-// The very first energetic moment — the beat simply starting — then reads
-// as an "unambiguous" jump and fires a false drop. grooveSec below gates
-// this path on a groove having actually, demonstrably existed (slow energy
-// genuinely elevated for real time, tracked cumulatively, never reset) —
-// the bypass is for skipping the *credit* requirement on a real breakdown,
-// not for skipping the requirement that there was something to break down.
-const STRONG_JUMP_THRESHOLD = 0.5
-const MIN_GROOVE_ENERGY = JUMP_THRESHOLD
-const GROOVE_ESTABLISHED_REQUIRED_SEC = 3.0
-const THINNED_CREDIT_MAX_SEC = 6
-const THINNED_CREDIT_DECAY_RATE = 0.5 // credit lost per second while not thinned
+// - fullness: energy sustained *continuously* over a multi-second window,
+//   with a high crest factor (spiky, not sustained — a reverb tail pulsing
+//   between hits) penalized.
+// - onset-density jump: rhythmic events/sec rising — a drop introduces or
+//   intensifies rhythm; a metronomic sparse intro never changes its density.
+// - novelty contrast: the current feature vector reading as dissimilar from
+//   the recent past (the same self-similarity math as `familiarity`,
+//   SINTEZA_SIGNAL_BUS.md §4.2 — see novelty.ts's header for why this is a
+//   second independent instance, not a shared one).
+//
+// Confirmation (sustained occupancy over a window), refractory, startup
+// grace, and beat-snap-lookahead are unchanged from the old detector — only
+// the arming primitive changed.
+const FAST_MS = 80
+const SUSTAIN_MS = 1800 // "much longer than the current 300ms" — this is the actual fix for the miss case
+const SLOW_MS = 3000 // deliberately slower than SUSTAIN_MS — lags behind at arm time, giving the confirmation step a real pre-jump baseline to compare against
+const CREST_FAST_MS = 60
+const CREST_PENALTY_GAIN = 0.6
+const FULLNESS_THRESHOLD = 0.5
 
-// A kick spikes and decays within ~150ms; a drop sustains. Requiring the
-// elevated level to hold for a confirmation window is what separates them.
+const ONSET_RATE_MS = 1500
+const ONSET_BASELINE_MS = 4000
+const ONSET_ACTIVITY_SCALE = 3 // onset activity is normally small/sparse; amplify before comparing (mirrors BreakDetector's own onsetActivitySlow scaling)
+// A jump right after track start (near-zero baseline) reads larger than one
+// a few seconds after a shorter thinned section, where the slower baseline
+// envelope still carries some memory of the section before that — kept
+// modest so both still qualify.
+const ONSET_JUMP_MIN = 0.06
+
+// Independent of familiarity's own ~12s window (§4.2) — a shorter recent-
+// past window on purpose, so a brief thinned section (a few seconds) fully
+// displaces the buffer instead of leaving stale full-mix samples in it that
+// would suppress novelty at the next transition.
+const NOVELTY_WINDOW_SEC = 4
+const NOVELTY_THRESHOLD = 0.3 // 1 - max cosine similarity against the recent buffer
+// Novelty spikes the instant material changes, then decays fast as the
+// buffer re-fills with the new (now-familiar-to-itself) material — but
+// fullness/onset-density take ~1-2s to ramp up and confirm a sustained
+// change. Held for a few seconds so it's still "hot" once they catch up,
+// instead of requiring all three signals to cross their thresholds on the
+// exact same hop.
+const NOVELTY_HOLD_SEC = 3.0
+
 const CONFIRM_WINDOW_SEC = 0.3
-// Confirmation measures *what fraction of the window stays elevated*, not an
-// envelope level. Level-based checks can't separate the two cases: the 80ms
-// envelope collapses between kicks (a 120bpm gap is as long as the window,
-// so real drops get disarmed), while a slow-release envelope props up a lone
-// spike long enough to pass. Occupancy separates them cleanly — a drop holds
-// energy up across most of the window, a percussive hit only briefly.
 const CONFIRM_ELEVATED_FRACTION = 0.5
-const ELEVATED_MARGIN = JUMP_THRESHOLD * 0.5
+const ELEVATED_MARGIN = 0.08
 
-// The confirm window is already ~1 beat, so waiting for the *next* beat
-// boundary would stack latency on top of it. Only wait if one is imminent.
 const BEAT_SNAP_LOOKAHEAD_SEC = 0.15
-
 const REFRACTORY_SEC = 8.0
-
-// Both envelopes seed from the first real input (see EnvelopeFollower), so
-// they don't spuriously "jump" just from climbing off zero — but if that
-// first input happens to be near-silence (a quiet intro, a countoff), the
-// slow (2500ms) envelope still hasn't caught up to the fast (80ms) one by
-// the time the track's actual first hit lands, so that ordinary opening hit
-// reads as a huge fast/slow gap and satisfies STRONG_JUMP_THRESHOLD on its
-// own — an unambiguous-looking "drop" that's really just the track
-// starting. Held for one slow-envelope time constant plus margin before any
-// detection is allowed at all, same mechanism as the post-drop refractory.
 const STARTUP_GRACE_SEC = 4.0
 
 export interface DropEvent {
@@ -68,59 +66,92 @@ export interface DropEvent {
   t: number
 }
 
+// `vec` is a feature vector for the novelty-contrast term — same shape as
+// familiarity's (bands + centroid + flatness), not required to be identical
+// length/order to any other consumer's, just internally consistent frame to
+// frame. `onsetActivity` is the continuous per-hop onset/flux strength
+// (e.g. feature-worklet.ts's `novelty`), not a thresholded boolean — a
+// rate estimate needs real amplitude to track, the same reason
+// BreakDetector smooths continuous novelty rather than a threshold flag.
+export interface DropDetectorFeatures {
+  lowEnergy: number
+  onsetActivity: number
+  vec: readonly number[]
+}
+
 export class DropDetector {
   private fastEnergy: EnvelopeFollower
+  private sustainedEnergy: EnvelopeFollower
   private slowEnergy: EnvelopeFollower
+  private crestPeak: EnvelopeFollower
+  private onsetRate: EnvelopeFollower
+  private onsetBaseline: EnvelopeFollower
+  private novelty: NoveltyRingBuffer
+  private noveltyPeak = 0
+
   private refractoryUntil = 0
-  private thinnedCreditSec = 0
   private armedAt: number | null = null
-  private armedPeakJump = 0
   private armedBaseline = 0
+  private armedPeakFullness = 0
   private elevatedHops = 0
   private windowHops = 0
   private hopSec: number
   private startedAt: number | null = null
-  private grooveSec = 0
 
   constructor(hopMs: number) {
     this.fastEnergy = new EnvelopeFollower(FAST_MS, FAST_MS, hopMs)
+    this.sustainedEnergy = new EnvelopeFollower(SUSTAIN_MS, SUSTAIN_MS, hopMs)
     this.slowEnergy = new EnvelopeFollower(SLOW_MS, SLOW_MS, hopMs)
+    this.crestPeak = new EnvelopeFollower(CREST_FAST_MS, CREST_FAST_MS, hopMs)
+    this.onsetRate = new EnvelopeFollower(ONSET_RATE_MS, ONSET_RATE_MS, hopMs)
+    this.onsetBaseline = new EnvelopeFollower(ONSET_BASELINE_MS, ONSET_BASELINE_MS, hopMs)
+    this.novelty = new NoveltyRingBuffer(Math.max(1, Math.round((NOVELTY_WINDOW_SEC * 1000) / hopMs)))
     this.hopSec = hopMs / 1000
   }
 
-  update(lowEnergy: number, tension: number, beatPhase: number, tempoBpm: number, tNow: number): DropEvent | null {
+  update(features: DropDetectorFeatures, beatPhase: number, tempoBpm: number, tNow: number): DropEvent | null {
     if (this.startedAt === null) this.startedAt = tNow
 
-    const fast = this.fastEnergy.update(lowEnergy)
-    const slow = this.slowEnergy.update(lowEnergy)
-    if (slow > MIN_GROOVE_ENERGY) this.grooveSec += this.hopSec
+    const fast = this.fastEnergy.update(features.lowEnergy)
+    const sustained = this.sustainedEnergy.update(features.lowEnergy)
+    const slow = this.slowEnergy.update(features.lowEnergy)
+    const peak = this.crestPeak.update(fast)
+    // crest ~= 1 when the signal is steady; it strays from 1 right after a
+    // spike (fast momentarily above/below its own recent peak) — a pulsing
+    // source (reverb tail between hits) keeps producing this, a
+    // continuously full signal doesn't.
+    const crest = peak > 1e-6 ? fast / peak : 1
+    const crestPenalty = Math.min(1, Math.abs(crest - 1) * CREST_PENALTY_GAIN)
+    const fullness = Math.max(0, sustained * (1 - crestPenalty))
 
-    this.updateThinnedCredit(tension)
+    const onsetRate = this.onsetRate.update(features.onsetActivity)
+    const onsetBaseline = this.onsetBaseline.update(features.onsetActivity)
+    const onsetJump = onsetRate * ONSET_ACTIVITY_SCALE - onsetBaseline * ONSET_ACTIVITY_SCALE
+
+    const noveltyValue = 1 - this.novelty.maxSimilarity(features.vec)
+    this.novelty.push(features.vec)
+    this.noveltyPeak = Math.max(noveltyValue, this.noveltyPeak * Math.exp(-this.hopSec / NOVELTY_HOLD_SEC))
 
     if (tNow - this.startedAt < STARTUP_GRACE_SEC || tNow < this.refractoryUntil) {
       this.disarm()
       return null
     }
 
-    const jump = fast - slow
-
     if (this.armedAt === null) {
-      const structural = jump > JUMP_THRESHOLD && this.thinnedCreditSec >= THINNED_CREDIT_REQUIRED_SEC
-      const unambiguous = jump > STRONG_JUMP_THRESHOLD && this.grooveSec >= GROOVE_ESTABLISHED_REQUIRED_SEC
-      const qualifies = structural || unambiguous
+      const qualifies = fullness > FULLNESS_THRESHOLD && onsetJump > ONSET_JUMP_MIN && this.noveltyPeak > NOVELTY_THRESHOLD
       if (qualifies) {
         this.armedAt = tNow
-        this.armedPeakJump = jump
         this.armedBaseline = slow
+        this.armedPeakFullness = fullness
         this.elevatedHops = 0
         this.windowHops = 0
       }
       return null
     }
 
-    this.armedPeakJump = Math.max(this.armedPeakJump, jump)
+    this.armedPeakFullness = Math.max(this.armedPeakFullness, fullness)
     this.windowHops++
-    if (lowEnergy > this.armedBaseline + ELEVATED_MARGIN) this.elevatedHops++
+    if (features.lowEnergy > this.armedBaseline + ELEVATED_MARGIN) this.elevatedHops++
 
     if (tNow - this.armedAt < CONFIRM_WINDOW_SEC) return null
 
@@ -138,23 +169,14 @@ export class DropDetector {
       if (secToNextBeat > this.hopSec && secToNextBeat <= BEAT_SNAP_LOOKAHEAD_SEC) return null
     }
 
-    const strength = Math.max(0, Math.min(1, this.armedPeakJump / JUMP_STRENGTH_NORMALIZER))
+    const strength = Math.max(0, Math.min(1, this.armedPeakFullness))
     this.disarm()
-    this.thinnedCreditSec = 0
     this.refractoryUntil = tNow + REFRACTORY_SEC
     return { strength, t: tNow }
   }
 
-  private updateThinnedCredit(tension: number): void {
-    if (tension >= TENSION_FOR_THINNED) {
-      this.thinnedCreditSec = Math.min(THINNED_CREDIT_MAX_SEC, this.thinnedCreditSec + this.hopSec)
-    } else {
-      this.thinnedCreditSec = Math.max(0, this.thinnedCreditSec - this.hopSec * THINNED_CREDIT_DECAY_RATE)
-    }
-  }
-
   private disarm(): void {
     this.armedAt = null
-    this.armedPeakJump = 0
+    this.armedPeakFullness = 0
   }
 }

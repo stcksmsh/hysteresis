@@ -10,6 +10,12 @@ export interface MemoryFieldParams {
   flowStrength: number
   symmetry: number // 0..1 — converted to fold count + mirror strength here
   aspect: number
+  // SINTEZA_SIGNAL_BUS.md §4.1 groove reactivity: bipolar -1..1, biases the
+  // curl-noise drift axis toward one component of the flow so a low-heavy
+  // vs. high-heavy mix visibly flows differently, not just faster/slower.
+  // Optional/defaults to 0 (today's fixed axis) for any caller that doesn't
+  // pass it.
+  flowDirection?: number
 }
 
 const NOISE_SIZE = 128
@@ -106,8 +112,12 @@ export class MemoryFieldPass {
     // without this the curl pattern would be static (same vectors every
     // frame, just decaying), never actually "flowing".
     const drift = FLOW_DRIFT_SPEED * Math.max(0, params.flowStrength)
-    this.flowUvX = (this.flowUvX + drift * dt * 0.7) % 1000
-    this.flowUvY = (this.flowUvY + drift * dt * 0.31) % 1000
+    // flowDirection biases the drift ratio between the two axes rather than
+    // introducing a new uniform/shader change — 0 reproduces today's fixed
+    // 0.7/0.31 ratio exactly.
+    const direction = Math.max(-1, Math.min(1, params.flowDirection ?? 0))
+    this.flowUvX = (this.flowUvX + drift * dt * (0.7 + 0.3 * direction)) % 1000
+    this.flowUvY = (this.flowUvY + drift * dt * (0.31 - 0.15 * direction)) % 1000
 
     const symmetry = clamp01(params.symmetry)
     const mirrorStrength = clamp01((symmetry - MIRROR_ONSET) / (1 - MIRROR_ONSET))

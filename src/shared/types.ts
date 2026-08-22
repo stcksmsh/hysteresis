@@ -60,6 +60,12 @@ export interface DropTrigger {
   age: number
 }
 
+// ScreenOutput's internal struct (SINTEZA_SIGNAL_BUS.md §2, §6.2) — what it
+// hands to `Scene.update()`. No longer the cross-boundary contract: that's
+// the Signal Bus (src/render/conductor/types.ts's `SignalBus`), produced by
+// the Conductor and routed through the Patchbay into this shape by
+// ScreenOutput/ScreenParamAssembler. Kept here since `Scene` (unchanged by
+// the refactor) still imports it.
 export interface ParamBus {
   beatPhase: number
   barPhase: number
@@ -122,3 +128,14 @@ export type MainToRenderWorker =
   | { kind: 'debugTriggerDrop' }
 
 export type RenderWorkerToMain = { kind: 'error'; message: string } | { kind: 'stats'; fps: number }
+
+// Main thread -> live AudioWorklet (a separate execution context from the
+// render worker — AudioEngine.ts owns this channel). Two independent callers
+// use the same message: (1) debug-only (?debug=1), forcing detectors off so
+// SINTEZA_SIGNAL_BUS.md §4.1's acceptance test can be checked by hand — with
+// detectors disabled, the screen must still obviously follow the music via
+// the continuous/beat/bar signal groups alone; (2) src/index.ts disables
+// them automatically whenever a sidecar is active (§4b(1)) — StructureSource
+// .fuse() already overwrites their output from the sidecar timeline, so
+// running them live would just be wasted computation for that track.
+export type MainToWorklet = { kind: 'debugSetDetectorsEnabled'; value: boolean }

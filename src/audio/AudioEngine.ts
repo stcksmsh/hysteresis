@@ -1,4 +1,4 @@
-import type { StateFrame, WorkletToMain } from '../shared/types'
+import type { MainToWorklet, StateFrame, WorkletToMain } from '../shared/types'
 
 export type StateFrameListener = (frame: StateFrame) => void
 
@@ -19,6 +19,13 @@ export class AudioEngine {
 
   get attached(): boolean {
     return this.workletNode !== null
+  }
+
+  // Two callers (SINTEZA_SIGNAL_BUS.md §4.1's debug acceptance test, and
+  // src/index.ts's §4b(1) sidecar-primary gating) share this one toggle —
+  // see MainToWorklet's doc comment. No-op if no worklet is attached yet.
+  setDetectorsEnabled(enabled: boolean): void {
+    this.workletNode?.port.postMessage({ kind: 'debugSetDetectorsEnabled', value: enabled } satisfies MainToWorklet)
   }
 
   // `workletUrl` is host-resolvable-asset-dependent (see src/index.ts) since
