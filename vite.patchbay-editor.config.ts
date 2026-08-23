@@ -9,6 +9,12 @@ import react from '@vitejs/plugin-react'
 // `build:lib` (what actually ships) can't accidentally pull any of this in.
 export default defineConfig({
   root: 'tools/patchbay-editor',
+  // The real project's public/ dir (worklets/feature-worklet.js,
+  // render-worker.js — both built by `npm run build:worklet`/
+  // `build:render-worker`, which `npm run patchbay` runs first) — NOT
+  // tools/patchbay-editor/public/, which doesn't exist. Vite resolves
+  // publicDir relative to `root` above, so this has to walk back out.
+  publicDir: '../../public',
   plugins: [react()],
   worker: {
     format: 'es',

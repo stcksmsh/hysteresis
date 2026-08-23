@@ -24,7 +24,8 @@
     "build": "npm run build:worklet && npm run build:render-worker && vite build",
     "build:lib": "npm run build:worklet && npm run build:render-worker && vite build --config vite.lib.config.ts && tsc -p tsconfig.lib.json",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.worker.json && tsc --noEmit -p tsconfig.tools.json",
+    "patchbay": "npm run build:worklet && npm run build:render-worker && vite --config vite.patchbay-editor.config.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.worker.json && tsc --noEmit -p tsconfig.tools.json && tsc --noEmit -p tsconfig.patchbay-editor.json",
     "test": "vitest run",
     "analyze": "tsx scripts/analyze.ts",
     "prepare": "npm run build:lib"
