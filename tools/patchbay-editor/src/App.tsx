@@ -8,7 +8,8 @@ import { FixtureVisuals } from './FixtureVisuals'
 import { Panel } from './Panel'
 import { usePanelOrder } from './use-panel-order'
 import { serializeScreenConfig, serializeGraphAndFixtures, saveToFile } from './serialize-config'
-import { makeDefaultDraft, makeNodeId, toPatchGraph, type DraftNode } from './graph-draft'
+import { toPatchGraph, type DraftNode } from './graph-draft'
+import { seedNodes } from './seed-graph'
 import { screenOnlyConfig } from '../../../src/render/conductor/patchbay/configs/screen-only'
 import { validatePatchGraph } from '../../../src/render/conductor/patchgraph/validate'
 import { PatchGraphEvaluator } from '../../../src/render/conductor/patchgraph/PatchGraphEvaluator'
@@ -102,18 +103,6 @@ function useDropLog(bus: SignalBus | null) {
   return log
 }
 
-// Seed graph: energy gated through a threshold into the first fixture's
-// first channel — a working starting point to edit from, not a fixed demo.
-function seedNodes(targetId: string): DraftNode[] {
-  const sig = makeDefaultDraft('signal', makeNodeId())
-  const th = makeDefaultDraft('threshold', makeNodeId())
-  th.inputs = [sig.id]
-  const tgt = makeDefaultDraft('target', makeNodeId())
-  tgt.inputs = [th.id]
-  tgt.targetId = targetId
-  return [sig, th, tgt]
-}
-
 export function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [canvasFullscreen, setCanvasFullscreen] = useState(false)
@@ -145,10 +134,7 @@ export function App() {
   })
   const targetCatalog = useMemo(() => fixtureTargetCatalog(fixtureDoc), [fixtureDoc])
 
-  const [graphNodes, setGraphNodes] = useState<DraftNode[]>(() => {
-    const firstTarget = targetCatalog[0]
-    return firstTarget ? seedNodes(firstTarget.id) : []
-  })
+  const [graphNodes, setGraphNodes] = useState<DraftNode[]>(() => seedNodes(targetCatalog))
 
   const graph = useMemo(() => toPatchGraph('editor', graphNodes), [graphNodes])
   const graphErrors = useMemo(() => validatePatchGraph(graph, targetCatalog).filter((i) => i.severity === 'error'), [graph, targetCatalog])
