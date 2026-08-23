@@ -37,8 +37,8 @@ body {
   background: var(--bg-0);
   color: var(--text-0);
   font-family: var(--font-ui);
-  font-size: 13px;
-  line-height: 1.45;
+  font-size: 14px;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -128,19 +128,95 @@ code,
   background: #3a3f47;
 }
 
-/* Sidebar section chrome — every <section> in App.tsx gets this so the
-   sidebar reads as a stack of distinct panels instead of one undifferentiated
-   scroll of headers and controls. */
+/* Top app chrome */
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-1);
+  flex: 0 0 auto;
+}
+
+.banner {
+  padding: 8px 16px;
+  color: #200;
+}
+.banner-error {
+  background: var(--error);
+}
+.banner-warn {
+  background: var(--warn);
+}
+
+/* Body: canvas preview on top, full-width panel grid below — replaces the
+   old narrow-sidebar-beside-canvas layout, which read as cramped and left
+   most controls squeezed into a 520px column regardless of window size. */
+.app-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.canvas-block {
+  position: relative;
+  flex: 0 0 auto;
+  height: min(46vh, 520px);
+  border-bottom: 1px solid var(--border);
+}
+.canvas-block-fullscreen {
+  position: fixed;
+  inset: 0;
+  height: auto;
+  z-index: 1000;
+  border-bottom: none;
+}
+
+.fullscreen-toggle {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  font-size: 12px;
+  padding: 5px 10px;
+  background: rgba(18, 20, 23, 0.82);
+  backdrop-filter: blur(4px);
+}
+.canvas-fps-pill {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: rgba(18, 20, 23, 0.82);
+  backdrop-filter: blur(4px);
+}
+
+.panel-grid {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  gap: 16px;
+  padding: 16px;
+  align-items: start;
+}
+.panel-section-wide {
+  grid-column: 1 / -1;
+}
+
+/* Panel chrome — every <section> in App.tsx gets this so the page reads as
+   a grid of distinct panels instead of one undifferentiated scroll of
+   headers and controls. */
 .panel-section {
   background: var(--bg-2);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-lg);
-  padding: 14px;
+  padding: 16px;
 }
 
 .section-title {
   margin: 0 0 8px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--text-1);
   text-transform: uppercase;
@@ -149,9 +225,17 @@ code,
 
 .section-hint {
   margin: 0 0 10px;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-2);
   line-height: 1.5;
+}
+
+.readout {
+  font-size: 13px;
+  color: var(--text-1);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 /* Small inline status text in the header (fps, save status, ack counts). */
@@ -170,14 +254,14 @@ code,
 .data-table {
   border-collapse: collapse;
   width: 100%;
-  font-size: 12px;
+  font-size: 13px;
 }
 .data-table th {
   text-align: left;
   padding: 6px 8px;
   color: var(--text-2);
   font-weight: 500;
-  font-size: 11px;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.4px;
   border-bottom: 1px solid var(--border-soft);
@@ -213,12 +297,12 @@ code,
   gap: 8px;
 }
 .node-card-id {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-2);
   min-width: 26px;
 }
 .node-card-kind {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   text-transform: capitalize;
 }
@@ -227,15 +311,15 @@ code,
   gap: 8px;
   align-items: center;
   flex-wrap: wrap;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-1);
 }
 .node-fields input,
 .node-fields select {
-  font-size: 11px;
+  font-size: 12px;
 }
 .issue-list {
-  font-size: 11px;
+  font-size: 12px;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -254,12 +338,12 @@ code,
   margin-top: 4px;
 }
 .kind-picker button {
-  font-size: 11px;
+  font-size: 12px;
   padding: 4px 10px;
 }
 
 .empty-hint {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-2);
   font-style: italic;
 }

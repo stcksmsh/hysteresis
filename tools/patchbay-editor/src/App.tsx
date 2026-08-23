@@ -118,6 +118,7 @@ function seedNodes(targetId: string): DraftNode[] {
 
 export function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [canvasFullscreen, setCanvasFullscreen] = useState(false)
   const [bus, setBus] = useState<SignalBus | null>(null)
   const [busMessageCount, setBusMessageCount] = useState(0)
   const [dropDebug, setDropDebug] = useState<DropDetectorDebug | null>(null)
@@ -174,6 +175,15 @@ export function App() {
     if (file) await bridgeRef.current?.loadFile(file)
   }
 
+  useEffect(() => {
+    if (!canvasFullscreen) return
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') setCanvasFullscreen(false)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [canvasFullscreen])
+
   const [saveStatus, setSaveStatus] = useState<string | null>(null)
 
   async function handleSaveScreenConfig() {
@@ -188,50 +198,37 @@ export function App() {
     setSaveStatus(result.ok ? `Saved to ${result.path}` : `Save failed: ${result.message}`)
   }
 
+  const canvasBlock = (
+    <div
+      className={canvasFullscreen ? 'canvas-block canvas-block-fullscreen' : 'canvas-block'}
+      style={{ background: '#000' }}
+    >
+      <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block' }} />
+      <button className="fullscreen-toggle" onClick={() => setCanvasFullscreen((v) => !v)}>
+        {canvasFullscreen ? '✕ Exit fullscreen (Esc)' : '⤢ Fullscreen'}
+      </button>
+      <span className="status-pill canvas-fps-pill">{fps > 0 ? `${fps.toFixed(0)} fps` : '—'}</span>
+    </div>
+  )
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <header
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 16,
-          padding: '10px 16px',
-          borderBottom: '1px solid var(--border)',
-          background: 'var(--bg-1)',
-        }}
-      >
-        <strong style={{ letterSpacing: 0.3 }}>Patchbay</strong>
+      <header className="app-header">
+        <strong style={{ letterSpacing: 0.3, fontSize: 15 }}>Patchbay</strong>
         <input type="file" accept="audio/*" onChange={onFileChosen} />
         {saveStatus && <span className="status-pill">{saveStatus}</span>}
         <span className="status-pill" style={{ marginLeft: 'auto' }}>
-          {fps > 0 ? `${fps.toFixed(0)} fps` : '—'}
+          signalBus msgs: {busMessageCount} · acks: {patchbayAckCount}
         </span>
       </header>
 
-      {error && <div style={{ padding: '6px 16px', background: 'var(--error)', color: '#200' }}>Render worker error: {error}</div>}
-      {patchbayError && (
-        <div style={{ padding: '6px 16px', background: 'var(--warn)', color: '#200' }}>
-          Config rejected (previous config still running): {patchbayError}
-        </div>
-      )}
+      {error && <div className="banner banner-error">Render worker error: {error}</div>}
+      {patchbayError && <div className="banner banner-warn">Config rejected (previous config still running): {patchbayError}</div>}
 
-      <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
-        <div style={{ flex: 1, position: 'relative', background: '#000' }}>
-          <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block' }} />
-        </div>
+      <div className="app-body">
+        {!canvasFullscreen && canvasBlock}
 
-        <aside
-          style={{
-            width: 520,
-            padding: 16,
-            borderLeft: '1px solid var(--border)',
-            background: 'var(--bg-1)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 20,
-            overflowY: 'auto',
-          }}
-        >
+        <div className="panel-grid">
           <section className="panel-section">
             {sectionTitle('Screen routes')}
             <p className="section-hint">
@@ -239,7 +236,7 @@ export function App() {
               screen.hueShift, buildWindup → screen.paletteMix).
             </p>
             <RouteTable doc={screenDoc} onChange={handleScreenDocChange} />
-            <button onClick={handleSaveScreenConfig} style={{ marginTop: 8, fontSize: 12 }}>
+            <button onClick={handleSaveScreenConfig} style={{ marginTop: 8 }}>
               Save screen config to file
             </button>
           </section>
@@ -249,14 +246,14 @@ export function App() {
             <FixtureManager doc={fixtureDoc} onChange={handleFixtureDocChange} />
           </section>
 
-          <section className="panel-section">
+          <section className="panel-section panel-section-wide">
             {sectionTitle('Physical patch graph')}
             <p className="section-hint">
               Signal → operator → target chains, evaluated live against the fixtures above. Structured editor, not a
               canvas — see graph-draft.ts if adding a node-graph view later.
             </p>
             <GraphEditor nodes={graphNodes} onChange={setGraphNodes} targets={targetCatalog} />
-            <button onClick={handleSaveGraph} style={{ marginTop: 8, fontSize: 12 }}>
+            <button onClick={handleSaveGraph} style={{ marginTop: 8 }}>
               Save graph + fixtures to file
             </button>
           </section>
@@ -268,18 +265,16 @@ export function App() {
 
           <section className="panel-section">
             {sectionTitle('Debug readout')}
-            <div className="mono" style={{ fontSize: 12, color: 'var(--text-1)', display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <div className="mono readout">
               <div>bus.energy: {bus ? bus.energy.toFixed(4) : '—'}</div>
               <div>bus.idle: {bus ? String(bus.idle) : '—'}</div>
-              <div>signalBus messages received: {busMessageCount}</div>
-              <div>patchbay edits acknowledged by worker: {patchbayAckCount}</div>
               <div>graph evaluator: {evaluator ? 'valid' : `invalid (${graphErrors.length} error(s) — see graph editor)`}</div>
             </div>
           </section>
 
           <section className="panel-section">
             {sectionTitle('Musical state (Layer 2 → bus)')}
-            <div className="mono" style={{ fontSize: 12, color: 'var(--text-1)', display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <div className="mono readout">
               <div>tension: {bus ? bus.tension.toFixed(4) : '—'}</div>
               <div>buildProgress: {bus ? bus.buildProgress.toFixed(4) : '—'}</div>
               <div>suspension: {bus ? bus.suspension.toFixed(4) : '—'}</div>
@@ -296,7 +291,7 @@ export function App() {
               The detector's own live qualifying values, straight from inside it — not the bus. If dropImpulse never
               fires, this is what tells you WHICH condition is failing against real audio.
             </p>
-            <div className="mono" style={{ fontSize: 12, color: 'var(--text-1)', display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 12 }}>
+            <div className="mono readout">
               <div>fullness: {dropDebug ? dropDebug.fullness.toFixed(4) : '—'} (needs &gt; 0.5)</div>
               <div>onsetJump: {dropDebug ? dropDebug.onsetJump.toFixed(4) : '—'} (needs &gt; 0.06 for the rhythmic path)</div>
               <div>noveltyPeak: {dropDebug ? dropDebug.noveltyPeak.toFixed(4) : '—'} (needs &gt; 0.3)</div>
@@ -319,7 +314,7 @@ export function App() {
             {dropLog.length === 0 ? (
               <div className="empty-hint">No drops observed yet.</div>
             ) : (
-              <div className="mono" style={{ fontSize: 12, color: 'var(--text-1)', display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <div className="mono readout">
                 {dropLog.map((entry, i) => (
                   <div key={i}>
                     +{(entry.atMs / 1000).toFixed(1)}s — strength {entry.strength.toFixed(2)}
@@ -328,8 +323,10 @@ export function App() {
               </div>
             )}
           </section>
-        </aside>
+        </div>
       </div>
+
+      {canvasFullscreen && canvasBlock}
     </div>
   )
 }
