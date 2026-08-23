@@ -38,6 +38,25 @@ const RADIAL_BASE = 1
 const RADIAL_AMPLITUDE = 0.05
 const RADIAL_SPEED = 0.013 // rad/sec, deliberately not a simple ratio of THETA_SPEED_BASE
 
+// `c`'s drift above is a fixed real-time rate, completely independent of how
+// deep the current dive has gotten — but navigation (updateNavigation,
+// below) aims at boundary structure it found for whatever `c` was at the
+// time, and re-probes locally as it goes. At normal zoom depths a real-time
+// drift this size is a gentle morph; deep in a dive (zoom shrunk many
+// orders of magnitude), the visible field is so narrow that even this same
+// small absolute drift in `c` relocates or destroys the fine structure the
+// dive is aimed at — reported back as the dive "missing the fractal
+// completely, going into mostly void" the deeper a zoom got, which local
+// re-probing alone couldn't recover from fast enough. Scaling `c`'s advance
+// by the current zoom (capped at 1, so wide/early views are unaffected)
+// makes it drift proportionally slower the deeper the view gets — nearly
+// frozen once genuinely deep, which is exactly when navigation most needs
+// the structure it's aimed at to actually hold still. THETA_ZOOM_FLOOR
+// keeps a faint residual drift even at the deepest zoom rather than a hard
+// freeze (matches thetaSpeed's own "never fully stalls" floor below); a new
+// dive's zoom resets near 1-2 anyway, so full drift speed resumes there.
+const THETA_ZOOM_FLOOR = 0.03
+
 const C_SPRING_STIFFNESS = 55
 const C_SPRING_DAMPING = 16
 const DROP_IMPULSE = 1.2 // extra velocity kick on top of the drop's theta jump, for snap
@@ -530,8 +549,13 @@ export class JuliaScene implements Scene {
     const energy = clamp(params.energy, 0, 1)
     const thetaSpeed =
       THETA_SPEED_BASE + THETA_SPEED_WINDUP_GAIN * windup + THETA_SPEED_TENSION_GAIN * suspension + THETA_SPEED_ENERGY_GAIN * energy
-    this.thetaSweep += Math.max(0.003, thetaSpeed) * dt // never fully stalls, even under heavy tension
-    this.radialPhase += RADIAL_SPEED * dt
+    // See THETA_ZOOM_FLOOR's comment above `c`'s drift constants: slows both
+    // theta and the radial wobble down together (both move `c`, both need
+    // the same "hold still while genuinely zoomed in" treatment) as the
+    // dive gets deeper, floored rather than let all the way to a hard stop.
+    const zoomExploreScale = Math.max(THETA_ZOOM_FLOOR, Math.min(1, this.zoom))
+    this.thetaSweep += Math.max(0.003, thetaSpeed) * zoomExploreScale * dt // never fully stalls, even under heavy tension
+    this.radialPhase += RADIAL_SPEED * zoomExploreScale * dt
 
     // Deliberately NOT reacting to per-onset spectral hits here — they fire
     // per band per hop (dozens/sec during a dense mix), and kicking theta on
