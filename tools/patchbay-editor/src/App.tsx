@@ -32,6 +32,12 @@ function useRuntimeBridge(canvasRef: React.RefObject<HTMLCanvasElement | null>, 
   const [fps, setFps] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [patchbayError, setPatchbayError] = useState<string | null>(null)
+  // "No error banner" only proves a rejection didn't happen, not that an
+  // edit was actually applied — this makes the round trip itself visible:
+  // every debugSetPatchbayConfig gets an ack either way (see
+  // render-worker.ts's handler), so a counter that keeps incrementing is
+  // direct proof the hot-swap loop is alive end to end.
+  const [patchbayAckCount, setPatchbayAckCount] = useState(0)
 
   useEffect(() => {
     if (!canvasRef.current) return
@@ -39,7 +45,10 @@ function useRuntimeBridge(canvasRef: React.RefObject<HTMLCanvasElement | null>, 
       onStats: (v: number) => setFps(v),
       onError: (m: string) => setError(m),
       onSignalBus,
-      onPatchbayResult: (r: { ok: true } | { ok: false; message: string }) => setPatchbayError(r.ok ? null : r.message),
+      onPatchbayResult: (r: { ok: true } | { ok: false; message: string }) => {
+        setPatchbayError(r.ok ? null : r.message)
+        setPatchbayAckCount((n) => n + 1)
+      },
     }
     let bridge = bridgesByCanvas.get(canvasRef.current)
     if (bridge) {
@@ -53,7 +62,7 @@ function useRuntimeBridge(canvasRef: React.RefObject<HTMLCanvasElement | null>, 
     // eslint-disable-next-line react-hooks/exhaustive-deps -- bridge lifecycle is intentionally tied to mount only
   }, [])
 
-  return { bridgeRef, fps, error, patchbayError }
+  return { bridgeRef, fps, error, patchbayError, patchbayAckCount }
 }
 
 export function App() {
@@ -64,7 +73,7 @@ export function App() {
     setBus(b)
     setBusMessageCount((n) => n + 1)
   }, [])
-  const { bridgeRef, fps, error, patchbayError } = useRuntimeBridge(canvasRef, handleSignalBus)
+  const { bridgeRef, fps, error, patchbayError, patchbayAckCount } = useRuntimeBridge(canvasRef, handleSignalBus)
 
   const [screenDoc, setScreenDoc] = useState<PatchDocument>(() => fromConfig(screenOnlyConfig))
   const energyRoute = screenDoc.routes.find((r) => r.from === 'energy' && r.to === 'screen.energy')
@@ -202,6 +211,7 @@ export function App() {
               <div>energy * gain (pre-clamp): {bus ? (bus.energy * (energyRoute?.gain ?? 1)).toFixed(4) : '—'}</div>
               <div>dimmer threshold output: {dimmerValue.toFixed(0)}</div>
               <div>signalBus messages received: {busMessageCount}</div>
+              <div>patchbay edits acknowledged by worker: {patchbayAckCount}</div>
             </div>
           </section>
         </aside>
