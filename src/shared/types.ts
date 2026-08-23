@@ -2,7 +2,7 @@
 // render/conductor/types.ts imports DropTrigger from this same file below —
 // both sides are erased at compile time.
 import type { SignalBus } from '../render/conductor/types'
-import type { PatchbayConfig } from '../render/conductor/patchbay/types'
+import type { PatchGraph } from '../render/conductor/patchgraph/types'
 import type { DropDetectorDebug } from '../audio/worklet/brain/drop-detector'
 
 export interface BandEnergies {
@@ -139,12 +139,17 @@ export type MainToRenderWorker =
   // loaded track, and force a drop for tuning the release feel.
   | { kind: 'debugSetParam'; key: 'buildProgress' | 'tension'; value: number }
   | { kind: 'debugTriggerDrop' }
-  // Dev-only, for the patchbay editor tool (src/tools/patchbay-editor):
-  // hot-swaps the worker's live Patchbay instance. PatchbayConfig is plain
-  // data (SINTEZA_SIGNAL_BUS.md §5.1), so this is exactly R4's "rerouting =
-  // editing a config, no code path" made interactive. Never sent by the
-  // real package/site.
-  | { kind: 'debugSetPatchbayConfig'; config: PatchbayConfig }
+  // Dev-only, for the patchbay editor tool (tools/patchbay-editor): hot-swaps
+  // the worker's live screen PatchGraph (screen's own node-graph engine, same
+  // one physical fixtures use — see configs/screen-graph.ts and this
+  // session's "unify screen + physical patch graphs" note in AGENTS.md).
+  // PatchGraph is plain data, so this is still R4's "rerouting = editing a
+  // config, no code path" made interactive, just on the unified engine
+  // instead of the old flat Patchbay/Route model. Never sent by the real
+  // package/site. The editor only ever sends the subset of a larger authored
+  // graph that actually targets `screen.*` (see prune.ts's pruneGraphToTargets)
+  // — the worker has no idea a physical-fixture half of the graph exists.
+  | { kind: 'debugSetScreenGraph'; graph: PatchGraph }
   // Dev-only: starts/stops posting `signalBus` messages back (see below).
   // Off by default so the real site never pays the postMessage cost of
   // cloning a fresh SignalBus every frame just to have somewhere to send it.
@@ -161,9 +166,10 @@ export type RenderWorkerToMain =
   // fallback frame and on any sidecar/position-only frame (no live
   // DropDetector instance to read from in either case).
   | { kind: 'signalBus'; bus: SignalBus; dropDebug: DropDetectorDebug | null }
-  // Dev-only: acks debugSetPatchbayConfig — either it was applied, or (most
-  // usefully) it failed Patchbay's construction-time validation and the
-  // worker kept running the previous config instead of crashing.
+  // Dev-only: acks debugSetScreenGraph — either it was applied, or (most
+  // usefully) it failed PatchGraphEvaluator's construction-time validation
+  // (§5.3-equivalent: throws on any error-severity issue) and the worker
+  // kept running the previous graph instead of crashing.
   | { kind: 'patchbayConfigResult'; ok: true }
   | { kind: 'patchbayConfigResult'; ok: false; message: string }
 

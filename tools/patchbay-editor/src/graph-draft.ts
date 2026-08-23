@@ -17,6 +17,14 @@ export interface DraftNode {
   id: string
   kind: PatchGraphNode['kind']
   inputs: string[]
+  // UI-only placement for the node-graph canvas — never part of the real
+  // PatchGraph (toPatchGraphNode ignores these), so a saved/loaded graph
+  // always needs computeAutoLayout() to re-derive a starting position.
+  x?: number
+  y?: number
+  // Human name, editable; distinct from `id` (the stable wiring key) — see
+  // PatchGraphNode.label's own comment for why they're kept separate.
+  label?: string
   signal?: string
   value?: number
   cut?: number
@@ -62,23 +70,24 @@ export function makeDefaultDraft(kind: PatchGraphNode['kind'], id: string = make
 
 export function toPatchGraphNode(d: DraftNode): PatchGraphNode {
   const inputs = d.inputs
+  const label = d.label
   switch (d.kind) {
     case 'signal':
-      return { id: d.id, kind: 'signal', inputs: [], signal: (d.signal ?? 'energy') as RoutableSignalName }
+      return { id: d.id, kind: 'signal', inputs: [], signal: (d.signal ?? 'energy') as RoutableSignalName, label }
     case 'const':
-      return { id: d.id, kind: 'const', inputs: [], value: d.value ?? 0 }
+      return { id: d.id, kind: 'const', inputs: [], value: d.value ?? 0, label }
     case 'threshold':
-      return { id: d.id, kind: 'threshold', inputs: [inputs[0] ?? ''], cut: d.cut ?? 0.5, hysteresis: d.hysteresis }
+      return { id: d.id, kind: 'threshold', inputs: [inputs[0] ?? ''], cut: d.cut ?? 0.5, hysteresis: d.hysteresis, label }
     case 'envelope':
-      return { id: d.id, kind: 'envelope', inputs: [inputs[0] ?? ''], attackSec: d.attackSec ?? 0.1, releaseSec: d.releaseSec ?? 0.5 }
+      return { id: d.id, kind: 'envelope', inputs: [inputs[0] ?? ''], attackSec: d.attackSec ?? 0.1, releaseSec: d.releaseSec ?? 0.5, label }
     case 'logic':
       return d.logicOp === 'not'
-        ? { id: d.id, kind: 'logic', op: 'not', inputs: [inputs[0] ?? ''] }
-        : { id: d.id, kind: 'logic', op: d.logicOp ?? 'and', inputs }
+        ? { id: d.id, kind: 'logic', op: 'not', inputs: [inputs[0] ?? ''], label }
+        : { id: d.id, kind: 'logic', op: d.logicOp ?? 'and', inputs, label }
     case 'combine':
-      return { id: d.id, kind: 'combine', op: d.combineOp ?? 'add', inputs }
+      return { id: d.id, kind: 'combine', op: d.combineOp ?? 'add', inputs, label }
     case 'curve':
-      return { id: d.id, kind: 'curve', inputs: [inputs[0] ?? ''], curve: d.curve ?? 'linear' }
+      return { id: d.id, kind: 'curve', inputs: [inputs[0] ?? ''], curve: d.curve ?? 'linear', label }
     case 'map':
       return {
         id: d.id,
@@ -87,9 +96,10 @@ export function toPatchGraphNode(d: DraftNode): PatchGraphNode {
         inRange: d.inRange ?? [0, 1],
         outRange: d.outRange ?? [0, 1],
         clamp: d.clamp ?? true,
+        label,
       }
     case 'target':
-      return { id: d.id, kind: 'target', inputs: [inputs[0] ?? ''], targetId: d.targetId ?? '' }
+      return { id: d.id, kind: 'target', inputs: [inputs[0] ?? ''], targetId: d.targetId ?? '', label }
   }
 }
 
@@ -98,7 +108,7 @@ export function toPatchGraph(id: string, drafts: DraftNode[]): PatchGraph {
 }
 
 export function fromPatchGraphNode(n: PatchGraphNode): DraftNode {
-  const base = { id: n.id, kind: n.kind, inputs: [...n.inputs] }
+  const base = { id: n.id, kind: n.kind, inputs: [...n.inputs], label: n.label }
   switch (n.kind) {
     case 'signal':
       return { ...base, signal: n.signal }

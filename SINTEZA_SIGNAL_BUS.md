@@ -374,6 +374,83 @@ Documented now so the boundary is proven against a second consumer's shape, per 
 
 ---
 
+## 6.4 v5 addendum: the flat Patchbay/Route model (§5) is retired — one PatchGraph engine now
+
+A later session ("do the whole thing" — unify screen and physical-fixture routing so they can
+share signals/behavior, plus a real visual node-graph editor) replaced §5's flat
+1-signal-in/1-target-out Route model with the node-graph engine originally built for physical
+fixtures only (`src/render/conductor/patchgraph/` — `PatchGraph`/`PatchGraphEvaluator`, a small
+operator graph: signal/const/threshold-with-hysteresis/envelope/logic/combine/curve/map/target
+nodes, topologically evaluated with per-node persistent state). **Left in place, not rewritten,
+here in §5/§6.1/§6.2** as the historical record of the original design — this addendum
+documents what actually changed and why, rather than editing the sections above out from under
+that record.
+
+- **`ScreenOutput` now consumes a `PatchGraph`, not a `PatchbayConfig`.** `Patchbay`/`Route`
+  (§5.1) still exist in the tree, still fully tested (`tests/unit/patchbay.spec.ts`) — kept as a
+  working reference implementation, not wired into the live render path anymore.
+  `screen-only.ts`'s `Route[]` config is likewise kept as the one hand-authored source of truth
+  it always was, but now only as *input* to `migrateRouteConfigToGraph()` (new,
+  `patchgraph/migrate-route-config.ts`), which produces the actual default screen graph
+  (`patchgraph/configs/screen-graph.ts`) that ships. **This migration is not just asserted
+  correct — `tests/unit/migrate-route-config.spec.ts` numerically compares
+  `PatchGraphEvaluator.evaluate()` against `Patchbay.resolve()` across 200 random synthetic bus
+  states (plus dedicated cases for gain/offset, invert, invert+gain/offset, a non-linear curve,
+  and multi-route summing) before this was trusted for production.**
+- **§5.3's "reject unsafe at load time" guarantee is preserved, just on the new engine**:
+  `PatchGraphEvaluator`'s constructor throws on any error-severity `validatePatchGraph` issue,
+  same as `Patchbay`'s constructor always did — `render-worker.ts`'s hot-swap handler
+  (`debugSetScreenGraph`, replacing `debugSetPatchbayConfig`) still rejects a bad edit and keeps
+  the previous, still-valid graph running instead of crashing.
+- **What §5.1's Route model could do that a bare node graph couldn't** (gain/offset/invert as
+  three separate route knobs, `passThrough` fields, per-route smoothing keyed by `from->to`) is
+  now expressed as node chains (a `map` node generalizes gain/offset/invert — see
+  `migrate-route-config.ts`'s header comment for the exact affine-reflection proof) — except
+  `passThrough` (`screen.idle`/`screen.scope`), which **cannot** become a graph node at all: a
+  `signal` node's type is scalar-only (`RoutableSignalName`, which deliberately excludes
+  `idle`/`scope` — see `SIGNAL_TAGS`), and their values (a boolean, a `Float32Array`) aren't
+  scalars. These two still get resolved straight from the bus, exactly like `Patchbay.resolve()`
+  always did it — now living in `outputs/resolve-screen-targets.ts`, the direct successor to
+  `Patchbay.resolve()`'s contract (default-fills every declared target, including the two
+  pass-throughs, before overlaying whatever the graph actually routes).
+- **The three genuinely nonlinear screen composites (`flowStrength`/`symmetry`/`fieldDecay`,
+  §6.2's own note, `patchbay/screen-composites.ts`) were deliberately left exactly as they were
+  — hand-written formulas reading `resolved[...]` values.** They still work unmodified: nothing
+  about what produces `resolved` changed their contract. Reimplementing their spring/damper +
+  edge-triggered-impulse dynamics as generic graph nodes was considered and explicitly **not**
+  done — no browser access this session to visually re-verify a from-scratch reimplementation of
+  load-bearing, hand-tuned-over-many-sessions motion math, and the equivalence-test approach
+  above only proves numeric parity for the graph-expressible routing portion, not for a rewrite
+  of stateful spring/impulse code with no existing test oracle to compare against. Revisit if
+  there's ever a concrete reason these three specifically need to be user-routable.
+- **A real target-range-clamping gap was found and fixed as part of this work**:
+  `PatchGraphEvaluator`'s `target` node case had never clamped to the target's declared `range`
+  at all (unlike `Patchbay.resolve()`, which always did) — a latent §5.3-adjacent safety gap for
+  *both* screen and fixture targets, not something introduced by this migration. Fixed in
+  `PatchGraphEvaluator.evaluate()` using the `targets` list already passed to its constructor.
+- **The dev-only patchbay editor tool** (`tools/patchbay-editor/`) now authors ONE unified
+  `DraftNode[]` graph seeded from both `screen-graph.ts`'s default and the fixture demo chains,
+  against a merged target catalog (`SCREEN_TARGETS` ∪ the live fixture catalog) — a target node
+  can point at either domain side by side in the same canvas, which is the concrete form of
+  "shared behavior, one signal driving both a screen effect and a servo." Sent to the live
+  render worker only after pruning to the screen-relevant subgraph
+  (`patchgraph/prune.ts`'s `pruneGraphToTargets`) — the worker still has no idea a fixture half
+  of the authored graph exists, same separation-of-concerns §6.1's `VizOutput` interface always
+  implied. The old flat route-table UI (`RouteTable.tsx`, `patchbay/editor/patch-document.ts`)
+  is deleted, not deprecated — superseded outright by the visual node canvas
+  (`PatchGraphCanvas.tsx`), which also gained descriptive, renameable node labels (separate from
+  each node's stable wiring `id`) and an autocomplete "find a node" search box, addressing the
+  earlier `n1, n2, ...` naming complaint.
+- **Not yet verified in an actual browser** — no browser access this session, same standing
+  caveat as several earlier sessions' GL/layout work in `AGENTS.md`. Everything above is
+  verified by typecheck, the full test suite, and direct HTTP inspection of the dev server's
+  Vite-transformed module output (no compile/transform errors) — not by an eyes-on check that
+  the live screen actually still looks the same. Do that check before treating this migration as
+  fully proven, especially given how much of `AGENTS.md`'s change history is screen-visual
+  tuning that could only ever be validated by looking at it.
+
+---
+
 ## 7. Two run modes (venue requirement, unchanged by this refactor)
 
 Both already fall out of the existing input layer; this refactor must not break them:

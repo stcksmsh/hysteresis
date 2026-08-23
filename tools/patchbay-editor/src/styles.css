@@ -128,15 +128,44 @@ code,
   background: #3a3f47;
 }
 
+/* App root: no longer a flex column wrapping the canvas in-flow — the
+   canvas is `position: fixed` now (see .canvas-block below) so it can be
+   either a full-viewport demo or a small corner preview without ever
+   changing its position in the React tree (transferControlToOffscreen() is
+   one-shot — see App.tsx's canvasBlock comment). What's left here is just
+   the edit-mode chrome (header/banners/panels), which mounts and unmounts
+   whole as a block when switching modes. */
+.app-root {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
 /* Top app chrome */
 .app-header {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 10px;
   padding: 10px 16px;
   border-bottom: 1px solid var(--border);
   background: var(--bg-1);
   flex: 0 0 auto;
+}
+.app-title {
+  letter-spacing: 0.3px;
+  font-size: 15px;
+  margin-right: 4px;
+}
+
+.debug-toggle {
+  font-size: 12px;
+  padding: 5px 10px;
+  color: var(--text-1);
+}
+.debug-toggle.active {
+  color: var(--accent);
+  border-color: var(--accent-dim);
+  background: rgba(94, 230, 200, 0.08);
 }
 
 .banner {
@@ -150,32 +179,35 @@ code,
   background: var(--warn);
 }
 
-/* Body: canvas preview on top, full-width panel grid below — replaces the
-   old narrow-sidebar-beside-canvas layout, which read as cramped and left
-   most controls squeezed into a 520px column regardless of window size. */
-.app-body {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-}
-
+/* The canvas is always position:fixed, one class swap away from either
+   mode — see App.tsx's canvasBlock comment for why it can never move in
+   the tree. Demo mode fills the viewport; edit mode is a small
+   picture-in-picture box pinned to a corner, floating above the panels. */
 .canvas-block {
-  position: relative;
-  flex: 0 0 auto;
-  height: min(72vh, 900px);
-  border-bottom: 1px solid var(--border);
-}
-.canvas-block-fullscreen {
   position: fixed;
+  background: #000;
+  z-index: 500;
+}
+.canvas-block-demo {
   inset: 0;
-  height: auto;
   z-index: 1000;
-  border-bottom: none;
+}
+/* Anchored to the TOP of the right rail, not the bottom — the rail scrolls
+   (Fixtures/Fixture Visuals can grow past one screen), and a fixed overlay
+   pinned to the bottom would drift over whatever card happened to scroll
+   underneath it. .workspace-rail reserves real padding for this (see
+   below) so rail content starts below it instead of being covered. */
+.canvas-block-corner {
+  right: 18px;
+  top: 18px;
+  width: 300px;
+  height: 180px;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-panel), 0 0 0 1px var(--border);
 }
 
-.fullscreen-toggle {
+.canvas-mode-toggle {
   position: absolute;
   top: 10px;
   right: 10px;
@@ -184,6 +216,12 @@ code,
   background: rgba(18, 20, 23, 0.82);
   backdrop-filter: blur(4px);
 }
+.canvas-block-corner .canvas-mode-toggle {
+  top: 6px;
+  right: 6px;
+  font-size: 10px;
+  padding: 2px 6px;
+}
 .canvas-fps-pill {
   position: absolute;
   top: 10px;
@@ -191,75 +229,151 @@ code,
   background: rgba(18, 20, 23, 0.82);
   backdrop-filter: blur(4px);
 }
+.canvas-block-corner .canvas-fps-pill {
+  top: 6px;
+  left: 6px;
+  font-size: 10px;
+  padding: 2px 6px;
+}
 
-/* Flex-wrap, not a uniform grid: panels have different natural sizes (a
-   route table wants to be wide, a debug readout wants to be small), and
-   each is independently resizable/reorderable now — a fixed column grid
-   would fight both of those, leaving dead space or clipping. Panels flow
-   left-to-right, wrap, and pack against whatever width they're given. */
-.panel-flow {
+/* Transport bar: one component, two placements (App.tsx picks the variant).
+   Demo: a full-width translucent strip pinned to the bottom of the
+   viewport. Corner: a compact bar matching the corner preview's width,
+   docked directly beneath it. */
+.transport-bar {
+  position: fixed;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  z-index: 900;
+  background: rgba(18, 20, 23, 0.86);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--border-soft);
+}
+.transport-bar-demo {
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  width: min(640px, calc(100vw - 36px));
+  padding: 10px 16px;
+  border-radius: 999px;
+}
+.transport-bar-corner {
+  right: 18px;
+  top: 206px; /* docked directly beneath .canvas-block-corner */
+  width: 300px;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+}
+.transport-play {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.transport-time {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--text-1);
+  min-width: 34px;
+  text-align: center;
+}
+.transport-seek {
+  flex: 1 1 auto;
+  min-width: 0;
+  accent-color: var(--accent);
+}
+.transport-file-btn {
+  position: relative;
   flex: 0 0 auto;
   display: flex;
-  flex-wrap: wrap;
-  align-content: flex-start;
-  align-items: flex-start;
-  gap: 16px;
-  padding: 16px;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius);
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  font-size: 13px;
+  overflow: hidden;
 }
-.panel-section-wide {
-  flex-basis: 100%;
-  width: 100% !important;
+.transport-file-btn:hover {
+  background: #2c3037;
+}
+.transport-file-btn input[type='file'] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
 }
 
-/* Panel chrome — every <section> rendered via Panel.tsx gets this so the
-   page reads as a workspace of distinct, manipulable panels instead of one
-   undifferentiated scroll of headers and controls. `resize: both` is the
-   browser's own resize handle (bottom-right corner) — deliberately not a
-   JS-driven resize implementation, since the native one is free, familiar,
-   and needs zero extra dependency for a dev-only tool. */
-.panel-section {
+/* Workspace: the graph is the hero (center, dominant), fixtures/visuals are
+   a clearly-secondary rail — different background depth (one step darker
+   than a card, .workspace-main's own canvas draws its own chrome) is what
+   actually reads as "primary vs. supporting" at a glance, not just relative
+   size. */
+.workspace {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 1px; /* the divider — see .workspace-rail's border */
+  background: var(--border);
+}
+.workspace-main {
+  flex: 1;
+  min-width: 0;
+  padding: 16px;
+  background: var(--bg-0);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.workspace-main-header {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  flex: 0 0 auto;
+}
+.workspace-main-header .section-hint {
+  flex: 1 1 320px;
+}
+.workspace-main-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-0);
+}
+.workspace-rail {
+  flex: 0 0 320px;
+  background: var(--bg-1);
+  overflow-y: auto;
+  padding: 16px;
+  /* Reserves room for the fixed corner preview + its transport bar (see
+     .canvas-block-corner/.transport-bar-corner) so scrolled rail content
+     never renders underneath them. */
+  padding-top: 270px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.section-card {
   background: var(--bg-2);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-lg);
   padding: 16px;
-  min-width: 240px;
-  min-height: 120px;
-  max-width: 100%;
-  resize: both;
-  overflow: auto;
-  transition: border-color 0.12s ease, box-shadow 0.12s ease;
-}
-.panel-section-dragging {
-  opacity: 0.4;
-}
-.panel-section-dragover {
-  border-color: var(--accent-dim);
-  box-shadow: 0 0 0 1px var(--accent-dim);
 }
 
-.panel-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: -4px -4px 8px;
-  padding: 4px;
-  border-radius: var(--radius);
-  cursor: grab;
-}
-.panel-header:active {
-  cursor: grabbing;
-}
-.panel-header:hover {
-  background: rgba(255, 255, 255, 0.03);
-}
-.panel-drag-handle {
-  color: var(--text-2);
-  font-size: 14px;
-  line-height: 1;
-}
-
+.section-card-title,
 .section-title {
-  margin: 0;
+  margin: 0 0 8px;
   font-size: 12px;
   font-weight: 600;
   color: var(--text-1);
@@ -272,6 +386,70 @@ code,
   font-size: 13px;
   color: var(--text-2);
   line-height: 1.5;
+}
+
+/* Debug drawer: a real overlay, not more inline panels — diagnostic data is
+   fundamentally "look at this while investigating something," not part of
+   the everyday workspace, so it shouldn't cost the graph any permanent
+   space. Slides in from the right, over the canvas; a backdrop dims/blocks
+   the rest so it reads as a modal-adjacent inspector rather than another
+   docked panel. */
+.debug-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 5, 6, 0.55);
+  z-index: 1400;
+  animation: debug-fade-in 0.15s ease;
+}
+.debug-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(420px, 92vw);
+  z-index: 1401;
+  background: var(--bg-1);
+  border-left: 1px solid var(--border);
+  box-shadow: -8px 0 32px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  animation: debug-slide-in 0.18s ease;
+}
+@keyframes debug-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes debug-slide-in {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+}
+.debug-drawer-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+.debug-drawer-header strong {
+  font-size: 14px;
+}
+.debug-drawer-close {
+  margin-left: auto;
+  padding: 3px 9px;
+  font-size: 12px;
+}
+.debug-drawer-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 
 .readout {
@@ -294,62 +472,6 @@ code,
   white-space: nowrap;
 }
 
-/* Data table (RouteTable) */
-.data-table {
-  border-collapse: collapse;
-  width: 100%;
-  font-size: 13px;
-}
-.data-table th {
-  text-align: left;
-  padding: 6px 8px;
-  color: var(--text-2);
-  font-weight: 500;
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-  border-bottom: 1px solid var(--border-soft);
-}
-.data-table td {
-  padding: 5px 8px;
-  border-top: 1px solid var(--border-soft);
-}
-.data-table tr:hover td {
-  background: rgba(255, 255, 255, 0.02);
-}
-.data-table select,
-.data-table input {
-  width: 100%;
-}
-
-/* Graph node card */
-.node-card {
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius);
-  padding: 10px;
-  background: var(--bg-3);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.node-card.has-error {
-  border-color: var(--error);
-}
-.node-card-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.node-card-id {
-  font-size: 12px;
-  color: var(--text-2);
-  min-width: 26px;
-}
-.node-card-kind {
-  font-size: 13px;
-  font-weight: 600;
-  text-transform: capitalize;
-}
 .node-fields {
   display: flex;
   gap: 8px;
@@ -375,19 +497,198 @@ code,
   color: var(--warn);
 }
 
-.kind-picker {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  margin-top: 4px;
-}
-.kind-picker button {
-  font-size: 12px;
-  padding: 4px 10px;
-}
-
 .empty-hint {
   font-size: 13px;
   color: var(--text-2);
   font-style: italic;
+}
+
+/* Patch-graph node canvas — the workspace's hero element (see App.tsx's
+   workspace-main), so this fills whatever height its container gives it
+   rather than a fixed figure. */
+.graph-canvas-root {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  height: 100%;
+  min-height: 0;
+}
+.graph-toolbar {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+  flex: 0 0 auto;
+}
+.graph-toolbar button {
+  font-size: 12px;
+  padding: 4px 10px;
+}
+.zoom-pill {
+  font-variant-numeric: tabular-nums;
+}
+.graph-canvas-body {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+  flex: 1;
+  min-height: 0;
+}
+/* overflow: hidden, not auto — panning is a CSS transform on
+   .graph-canvas-content now (see PatchGraphCanvas.tsx), not native scroll,
+   so this element never needs its own scrollbars. */
+.graph-canvas-viewport {
+  flex: 1 1 auto;
+  min-width: 0;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--bg-1);
+  background-image: radial-gradient(var(--border-soft) 1px, transparent 1px);
+  background-size: 20px 20px;
+  cursor: grab;
+}
+.graph-canvas-viewport:active {
+  cursor: grabbing;
+}
+.graph-canvas-content {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+}
+.graph-canvas-svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+.graph-edge {
+  fill: none;
+  stroke: var(--accent-dim);
+  stroke-width: 2;
+}
+.graph-edge-error {
+  stroke: var(--error);
+}
+.graph-edge-dragging {
+  stroke: var(--accent);
+  stroke-dasharray: 5 4;
+}
+
+.graph-node {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-panel);
+  cursor: grab;
+  user-select: none;
+}
+.graph-node:active {
+  cursor: grabbing;
+}
+.graph-node.has-error {
+  border-color: var(--error);
+}
+.graph-node.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), var(--shadow-panel);
+}
+.graph-node-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.graph-node-header code {
+  font-size: 11px;
+  color: var(--text-2);
+}
+.graph-node-header strong {
+  font-size: 12px;
+  font-weight: 600;
+}
+.graph-node-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: text;
+}
+.node-rename-input {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  padding: 1px 4px;
+}
+.node-remove-btn {
+  margin-left: auto;
+  padding: 1px 6px;
+  font-size: 10px;
+  line-height: 1.4;
+}
+.graph-node-summary {
+  font-size: 11px;
+  color: var(--text-1);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nub {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  margin-top: -6px;
+  border-radius: 50%;
+  background: var(--bg-1);
+  border: 2px solid var(--text-2);
+  cursor: crosshair;
+}
+.nub-input {
+  left: -7px;
+}
+.nub-output {
+  right: -7px;
+}
+.nub.filled {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+}
+.nub:hover {
+  border-color: var(--accent);
+  transform: scale(1.15);
+}
+
+.graph-inspector {
+  flex: 0 0 260px;
+  height: 460px;
+  overflow-y: auto;
+  padding: 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--bg-2);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.graph-inspector-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.graph-inspector-header code {
+  font-size: 12px;
+  color: var(--text-2);
+}
+.graph-inspector-header strong {
+  font-size: 13px;
+  font-weight: 600;
 }

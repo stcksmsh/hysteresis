@@ -1,5 +1,5 @@
 import type { MainToRenderWorker, RenderWorkerToMain, StateFrame } from '../../../src/shared/types'
-import type { PatchbayConfig } from '../../../src/render/conductor/patchbay/types'
+import type { PatchGraph } from '../../../src/render/conductor/patchgraph/types'
 import type { SignalBus } from '../../../src/render/conductor/types'
 import type { DropDetectorDebug } from '../../../src/audio/worklet/brain/drop-detector'
 import { AudioEngine } from '../../../src/audio/AudioEngine'
@@ -10,7 +10,7 @@ import { AudioEngine } from '../../../src/audio/AudioEngine'
 // visual, not a mock of it. Deliberately bypasses the public init() API
 // (src/index.ts): that's the stable host contract (see its own "don't grow
 // the surface" note) and has no raw message channel to hang the editor's
-// debug-only messages (debugSetPatchbayConfig/debugSetSignalBusStream) off
+// debug-only messages (debugSetScreenGraph/debugSetSignalBusStream) off
 // of. This is dev-tool-only code, never shipped, so a bit of duplicated
 // bootstrap (worker creation, resize wiring, AudioEngine attach) is the
 // right trade against reaching into the public API's internals.
@@ -36,11 +36,18 @@ const WORKLET_URL = new URL('/worklets/feature-worklet.js', window.location.orig
 // This tool skipped that debounce originally — same bug, same fix.
 const RESIZE_DEBOUNCE_MS = 150
 
+export interface PlaybackState {
+  currentTime: number
+  duration: number // NaN until metadata loads — callers should treat that as "unknown", not 0
+  playing: boolean
+}
+
 export interface RuntimeBridgeCallbacks {
   onSignalBus?: (bus: SignalBus, dropDebug: DropDetectorDebug | null) => void
   onStats?: (fps: number) => void
   onError?: (message: string) => void
   onPatchbayResult?: (result: { ok: true } | { ok: false; message: string }) => void
+  onPlayback?: (state: PlaybackState) => void
 }
 
 export class RuntimeBridge {
@@ -69,6 +76,15 @@ export class RuntimeBridge {
 
     this.audioEl = new Audio()
     this.audioEl.crossOrigin = 'anonymous'
+    // One handler for all four — a seek bar needs to reflect position,
+    // duration (unknown until metadata loads), AND play/pause state, and
+    // any of the three can change independently of the others (e.g.
+    // 'seeked' changes currentTime without a play/pause transition).
+    const emitPlayback = () =>
+      this.callbacks.onPlayback?.({ currentTime: this.audioEl.currentTime, duration: this.audioEl.duration, playing: !this.audioEl.paused })
+    for (const evt of ['timeupdate', 'loadedmetadata', 'play', 'pause', 'ended', 'seeked'] as const) {
+      this.audioEl.addEventListener(evt, emitPlayback)
+    }
 
     this.engine.onStateFrame((frame: StateFrame) => this.post({ kind: 'state', frame }))
   }
@@ -117,12 +133,16 @@ export class RuntimeBridge {
     }
   }
 
-  // Live-swaps the screen output's active routing — the whole point of the
+  // Live-swaps the screen output's active graph — the whole point of the
   // editor. Fire-and-forget from the caller's perspective; the result comes
   // back async via onPatchbayResult (rejected edits leave the previous,
-  // still-valid config running, per render-worker.ts's handler).
-  setPatchbayConfig(config: PatchbayConfig): void {
-    this.post({ kind: 'debugSetPatchbayConfig', config })
+  // still-valid graph running, per render-worker.ts's handler). `graph`
+  // should already be pruned to just this output's own targets (see
+  // patchgraph/prune.ts's pruneGraphToTargets) — the worker's screen
+  // PatchGraphEvaluator only knows about `screen.*` targets and would reject
+  // a graph containing, say, a fixture's target node as an unknown target.
+  setScreenGraph(graph: PatchGraph): void {
+    this.post({ kind: 'debugSetScreenGraph', graph })
   }
 
   setSignalBusStream(on: boolean): void {
@@ -154,6 +174,12 @@ export class RuntimeBridge {
   togglePlayback(): void {
     if (this.audioEl.paused) void this.audioEl.play()
     else this.audioEl.pause()
+  }
+
+  // sec is clamped to [0, duration] by the browser itself if out of range —
+  // no need to clamp here too.
+  seek(sec: number): void {
+    this.audioEl.currentTime = sec
   }
 
   dispose(): void {

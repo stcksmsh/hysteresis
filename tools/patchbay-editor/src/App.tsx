@@ -1,18 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { RuntimeBridge } from './runtime-bridge'
-import { fromConfig, toConfig, type PatchDocument } from '../../../src/render/conductor/patchbay/editor/patch-document'
-import { RouteTable } from './RouteTable'
+import { RuntimeBridge, type PlaybackState } from './runtime-bridge'
+import { TransportBar } from './TransportBar'
 import { FixtureManager } from './FixtureManager'
-import { GraphEditor } from './GraphEditor'
+import { PatchGraphCanvas } from './PatchGraphCanvas'
 import { FixtureVisuals } from './FixtureVisuals'
-import { Panel } from './Panel'
-import { usePanelOrder } from './use-panel-order'
-import { serializeScreenConfig, serializeGraphAndFixtures, saveToFile } from './serialize-config'
-import { toPatchGraph, type DraftNode } from './graph-draft'
+import { SectionCard } from './SectionCard'
+import { serializeGraphAndFixtures, saveToFile } from './serialize-config'
+import { toPatchGraph, fromPatchGraphNode, type DraftNode } from './graph-draft'
 import { seedNodes } from './seed-graph'
-import { screenOnlyConfig } from '../../../src/render/conductor/patchbay/configs/screen-only'
+import { screenGraph } from '../../../src/render/conductor/patchgraph/configs/screen-graph'
+import { SCREEN_TARGETS } from '../../../src/render/conductor/outputs/screen-targets'
 import { validatePatchGraph } from '../../../src/render/conductor/patchgraph/validate'
 import { PatchGraphEvaluator } from '../../../src/render/conductor/patchgraph/PatchGraphEvaluator'
+import { pruneGraphToTargets } from '../../../src/render/conductor/patchgraph/prune'
 import { addFixture, fixtureTargetCatalog, emptyFixtureDocument, type FixtureDocument } from '../../../src/render/conductor/patchgraph/fixture-document'
 import { fixtureTargetId } from '../../../src/render/conductor/patchgraph/fixture-types'
 import type { SignalBus } from '../../../src/render/conductor/types'
@@ -41,10 +41,11 @@ function useRuntimeBridge(
   const [patchbayError, setPatchbayError] = useState<string | null>(null)
   // "No error banner" only proves a rejection didn't happen, not that an
   // edit was actually applied — this makes the round trip itself visible:
-  // every debugSetPatchbayConfig gets an ack either way (see
-  // render-worker.ts's handler), so a counter that keeps incrementing is
-  // direct proof the hot-swap loop is alive end to end.
+  // every debugSetScreenGraph gets an ack either way (see render-worker.ts's
+  // handler), so a counter that keeps incrementing is direct proof the
+  // hot-swap loop is alive end to end.
   const [patchbayAckCount, setPatchbayAckCount] = useState(0)
+  const [playback, setPlayback] = useState<PlaybackState>({ currentTime: 0, duration: NaN, playing: false })
 
   useEffect(() => {
     if (!canvasRef.current) return
@@ -56,6 +57,7 @@ function useRuntimeBridge(
         setPatchbayError(r.ok ? null : r.message)
         setPatchbayAckCount((n) => n + 1)
       },
+      onPlayback: (s: PlaybackState) => setPlayback(s),
     }
     let bridge = bridgesByCanvas.get(canvasRef.current)
     if (bridge) {
@@ -69,7 +71,7 @@ function useRuntimeBridge(
     // eslint-disable-next-line react-hooks/exhaustive-deps -- bridge lifecycle is intentionally tied to mount only
   }, [])
 
-  return { bridgeRef, fps, error, patchbayError, patchbayAckCount }
+  return { bridgeRef, fps, error, patchbayError, patchbayAckCount, playback }
 }
 
 // Same rising-edge rule ScreenParamAssembler uses to reconstruct "a drop
@@ -105,7 +107,15 @@ function useDropLog(bus: SignalBus | null) {
 
 export function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const [canvasFullscreen, setCanvasFullscreen] = useState(false)
+  // 'demo' = canvas fills the viewport, no panels — for actually watching
+  // it. 'edit' = canvas shrinks to a small corner preview, panels take the
+  // rest — for wiring the graph. Never both at full size at once (that
+  // squeezed-sidebar layout was the thing an earlier pass already replaced
+  // once, see AGENTS.md's layout-overhaul note — this is the same lesson
+  // applied one level up: a *tool-wide* mode split, not just a canvas-size
+  // knob within one cramped layout).
+  const [viewMode, setViewMode] = useState<'demo' | 'edit'>('edit')
+  const [showDebug, setShowDebug] = useState(false)
   const [bus, setBus] = useState<SignalBus | null>(null)
   const [busMessageCount, setBusMessageCount] = useState(0)
   const [dropDebug, setDropDebug] = useState<DropDetectorDebug | null>(null)
@@ -114,15 +124,8 @@ export function App() {
     setBusMessageCount((n) => n + 1)
     setDropDebug(dbg)
   }, [])
-  const { bridgeRef, fps, error, patchbayError, patchbayAckCount } = useRuntimeBridge(canvasRef, handleSignalBus)
+  const { bridgeRef, fps, error, patchbayError, patchbayAckCount, playback } = useRuntimeBridge(canvasRef, handleSignalBus)
   const dropLog = useDropLog(bus)
-
-  const [screenDoc, setScreenDoc] = useState<PatchDocument>(() => fromConfig(screenOnlyConfig))
-
-  function handleScreenDocChange(next: PatchDocument) {
-    setScreenDoc(next)
-    bridgeRef.current?.setPatchbayConfig(toConfig(next))
-  }
 
   const [fixtureDoc, setFixtureDoc] = useState<FixtureDocument>(() => {
     let doc = emptyFixtureDocument()
@@ -133,25 +136,50 @@ export function App() {
     return doc
   })
   const targetCatalog = useMemo(() => fixtureTargetCatalog(fixtureDoc), [fixtureDoc])
+  // Screen targets + every fixture channel, one list — this is what makes
+  // "one signal drives both a screen effect and a servo" a real option in
+  // the canvas: a target node can point at either, side by side, in the
+  // same graph. See AGENTS.md's "unify screen + physical patch graphs" note.
+  const mergedCatalog = useMemo(() => [...SCREEN_TARGETS, ...targetCatalog], [targetCatalog])
+  const screenTargetIds = useMemo(() => new Set(SCREEN_TARGETS.map((t) => t.id)), [])
+  const fixtureTargetIds = useMemo(() => new Set(targetCatalog.map((t) => t.id)), [targetCatalog])
 
-  const [graphNodes, setGraphNodes] = useState<DraftNode[]>(() => seedNodes(targetCatalog))
+  // Seeded once from two independent sources: the production default screen
+  // graph (screenGraph, converted node-for-node back into drafts) and the
+  // fixture demo chains (seedNodes) — both live in ONE graph from the start,
+  // not stitched together later. `fixtureTargetCatalog(fixtureDoc)` here is
+  // a pure derivation (safe to call again) — unlike `fixtureDoc` itself,
+  // which is already resolved above by the time this initializer runs.
+  const [graphNodes, setGraphNodes] = useState<DraftNode[]>(() => [
+    ...screenGraph.nodes.map(fromPatchGraphNode),
+    ...seedNodes(fixtureTargetCatalog(fixtureDoc)),
+  ])
 
   const graph = useMemo(() => toPatchGraph('editor', graphNodes), [graphNodes])
-  const graphErrors = useMemo(() => validatePatchGraph(graph, targetCatalog).filter((i) => i.severity === 'error'), [graph, targetCatalog])
-  const evaluator = useMemo(() => {
+  const graphErrors = useMemo(() => validatePatchGraph(graph, mergedCatalog).filter((i) => i.severity === 'error'), [graph, mergedCatalog])
+
+  // The worker only ever sees the screen-relevant slice of the unified
+  // graph (see prune.ts) — it has no idea a fixture half exists, exactly
+  // like it never knew about Patchbay's screen-only.ts before this session.
+  useEffect(() => {
+    if (graphErrors.length > 0) return // don't even try — the worker's own construction-time validation would just reject it anyway, and this way patchbayError reflects THIS specific rejection reason if the worker path itself has a narrower issue
+    bridgeRef.current?.setScreenGraph(pruneGraphToTargets(graph, screenTargetIds))
+  }, [graph, graphErrors.length, screenTargetIds, bridgeRef])
+
+  const fixtureEvaluator = useMemo(() => {
     if (graphErrors.length > 0) return null
     try {
-      return new PatchGraphEvaluator(graph, targetCatalog)
+      return new PatchGraphEvaluator(pruneGraphToTargets(graph, fixtureTargetIds), targetCatalog)
     } catch {
       return null
     }
-  }, [graph, targetCatalog, graphErrors.length])
+  }, [graph, targetCatalog, fixtureTargetIds, graphErrors.length])
   const [resolvedValues, setResolvedValues] = useState<Record<string, number>>({})
 
   useEffect(() => {
-    if (!bus || !evaluator) return
-    setResolvedValues(evaluator.evaluate(bus, 1 / 20)) // ~ the signalBus stream's own interval
-  }, [bus, evaluator])
+    if (!bus || !fixtureEvaluator) return
+    setResolvedValues(fixtureEvaluator.evaluate(bus, 1 / 20)) // ~ the signalBus stream's own interval
+  }, [bus, fixtureEvaluator])
 
   // Removing a fixture can leave graph target-nodes pointing at a channel
   // that no longer exists — harmless (validatePatchGraph flags it, the
@@ -167,21 +195,15 @@ export function App() {
   }
 
   useEffect(() => {
-    if (!canvasFullscreen) return
+    if (viewMode !== 'demo') return
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') setCanvasFullscreen(false)
+      if (e.key === 'Escape') setViewMode('edit')
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [canvasFullscreen])
+  }, [viewMode])
 
   const [saveStatus, setSaveStatus] = useState<string | null>(null)
-
-  async function handleSaveScreenConfig() {
-    const source = serializeScreenConfig(toConfig(screenDoc))
-    const result = await saveToFile('screen-config.ts', source)
-    setSaveStatus(result.ok ? `Saved to ${result.path}` : `Save failed: ${result.message}`)
-  }
 
   async function handleSaveGraph() {
     const source = serializeGraphAndFixtures(graph, fixtureDoc)
@@ -189,69 +211,25 @@ export function App() {
     setSaveStatus(result.ok ? `Saved to ${result.path}` : `Save failed: ${result.message}`)
   }
 
-  const panels: { id: string; title: string; hint?: string; wide?: boolean; width?: number; height?: number; content: React.ReactNode }[] = [
-    {
-      id: 'routes',
-      title: 'Screen routes',
-      hint: 'Every route in the live config, editable — including the palette-automation rows (hueDrift/centroid → screen.hueShift, buildWindup → screen.paletteMix).',
-      width: 560,
-      height: 420,
-      content: (
-        <>
-          <RouteTable doc={screenDoc} onChange={handleScreenDocChange} />
-          <button onClick={handleSaveScreenConfig} style={{ marginTop: 8 }}>
-            Save screen config to file
-          </button>
-        </>
-      ),
-    },
-    {
-      id: 'fixtures',
-      title: 'Fixtures',
-      width: 360,
-      height: 260,
-      content: <FixtureManager doc={fixtureDoc} onChange={handleFixtureDocChange} />,
-    },
-    {
-      id: 'graph',
-      title: 'Physical patch graph',
-      hint: 'Signal → operator → target chains, evaluated live against the fixtures above. Structured editor, not a canvas — see graph-draft.ts if adding a node-graph view later.',
-      wide: true,
-      height: 480,
-      content: (
-        <>
-          <GraphEditor nodes={graphNodes} onChange={setGraphNodes} targets={targetCatalog} />
-          <button onClick={handleSaveGraph} style={{ marginTop: 8 }}>
-            Save graph + fixtures to file
-          </button>
-        </>
-      ),
-    },
-    {
-      id: 'visuals',
-      title: 'Fixture visuals',
-      width: 360,
-      height: 260,
-      content: <FixtureVisuals doc={fixtureDoc} resolved={resolvedValues} />,
-    },
+  // Diagnostic-only readouts — never the main workspace, always behind the
+  // 🐞 Debug drawer (see the return statement below). Nothing here shapes
+  // the graph; it's all read-only observation of live state.
+  const debugPanels: { id: string; title: string; hint?: string; content: React.ReactNode }[] = [
     {
       id: 'debug',
       title: 'Debug readout',
-      width: 340,
-      height: 180,
       content: (
         <div className="mono readout">
           <div>bus.energy: {bus ? bus.energy.toFixed(4) : '—'}</div>
           <div>bus.idle: {bus ? String(bus.idle) : '—'}</div>
-          <div>graph evaluator: {evaluator ? 'valid' : `invalid (${graphErrors.length} error(s) — see graph editor)`}</div>
+          <div>graph: {graphErrors.length === 0 ? 'valid' : `invalid (${graphErrors.length} error(s) — see patch graph)`}</div>
+          <div>fixture evaluator: {fixtureEvaluator ? 'valid' : 'invalid/not constructed'}</div>
         </div>
       ),
     },
     {
       id: 'musical',
       title: 'Musical state (Layer 2 → bus)',
-      width: 340,
-      height: 240,
       content: (
         <div className="mono readout">
           <div>tension: {bus ? bus.tension.toFixed(4) : '—'}</div>
@@ -268,8 +246,6 @@ export function App() {
       id: 'dropInternals',
       title: 'Drop detector internals',
       hint: "The detector's own live qualifying values, straight from inside it — not the bus. If dropImpulse never fires, this is what tells you WHICH condition is failing against real audio.",
-      width: 380,
-      height: 240,
       content: (
         <div className="mono readout">
           <div>fullness: {dropDebug ? dropDebug.fullness.toFixed(4) : '—'} (needs &gt; 0.5)</div>
@@ -289,8 +265,6 @@ export function App() {
       id: 'dropLog',
       title: 'Drop detector log',
       hint: `Rising edges of bus.dropImpulse (>${DROP_EDGE_EPS} in one tick), most recent first. Time is seconds since this page loaded, not track position.`,
-      width: 320,
-      height: 240,
       content:
         dropLog.length === 0 ? (
           <div className="empty-hint">No drops observed yet.</div>
@@ -305,66 +279,110 @@ export function App() {
         ),
     },
   ]
-  const panelsById = new Map(panels.map((p) => [p.id, p]))
-  const defaultOrder = panels.map((p) => p.id)
-  const { order, draggingId, dragOverId, onDragStart, onDragEnd, onDragOver, onDrop } = usePanelOrder(defaultOrder)
 
+  const handleTogglePlay = useCallback(() => bridgeRef.current?.togglePlayback(), [bridgeRef])
+  const handleSeek = useCallback((sec: number) => bridgeRef.current?.seek(sec), [bridgeRef])
+
+  // Escape closes the debug drawer when it's open — takes priority over the
+  // demo-mode Escape handler above since the drawer only ever shows in edit
+  // mode (no conflict: at most one of the two effects is listening at a time).
+  useEffect(() => {
+    if (!showDebug) return
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') setShowDebug(false)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [showDebug])
+
+  // Rendered exactly once, at exactly one place in the tree, regardless of
+  // viewMode — canvas.transferControlToOffscreen() is a genuine one-shot
+  // browser API (see the bridgesByCanvas comment above), so this element's
+  // identity must never change. Its size/position is purely a CSS class
+  // swap (fixed-position full-viewport vs. a small fixed corner box) —
+  // exactly the lesson AGENTS.md's "fullscreen toggle unmounting the
+  // canvas" bug already taught once, applied here to a bigger mode switch
+  // instead of a boolean.
   const canvasBlock = (
-    <div
-      className={canvasFullscreen ? 'canvas-block canvas-block-fullscreen' : 'canvas-block'}
-      style={{ background: '#000' }}
-    >
+    <div className={`canvas-block ${viewMode === 'demo' ? 'canvas-block-demo' : 'canvas-block-corner'}`}>
       <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block' }} />
-      <button className="fullscreen-toggle" onClick={() => setCanvasFullscreen((v) => !v)}>
-        {canvasFullscreen ? '✕ Exit fullscreen (Esc)' : '⤢ Fullscreen'}
+      <button className="canvas-mode-toggle" onClick={() => setViewMode(viewMode === 'demo' ? 'edit' : 'demo')} title={viewMode === 'demo' ? 'Back to editing (Esc)' : 'Fullscreen demo'}>
+        {viewMode === 'demo' ? '✕ Edit' : '⤢'}
       </button>
       <span className="status-pill canvas-fps-pill">{fps > 0 ? `${fps.toFixed(0)} fps` : '—'}</span>
     </div>
   )
 
+  const transport = <TransportBar playback={playback} onTogglePlay={handleTogglePlay} onSeek={handleSeek} onFileChosen={onFileChosen} variant={viewMode === 'demo' ? 'demo' : 'corner'} />
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <header className="app-header">
-        <strong style={{ letterSpacing: 0.3, fontSize: 15 }}>Patchbay</strong>
-        <input type="file" accept="audio/*" onChange={onFileChosen} />
-        {saveStatus && <span className="status-pill">{saveStatus}</span>}
-        <span className="status-pill" style={{ marginLeft: 'auto' }}>
-          signalBus msgs: {busMessageCount} · acks: {patchbayAckCount}
-        </span>
-      </header>
+    <div className={`app-root app-root-${viewMode}`}>
+      {canvasBlock}
+      {transport}
 
-      {error && <div className="banner banner-error">Render worker error: {error}</div>}
-      {patchbayError && <div className="banner banner-warn">Config rejected (previous config still running): {patchbayError}</div>}
+      {viewMode === 'edit' && (
+        <>
+          <header className="app-header">
+            <strong className="app-title">Patchbay</strong>
+            {saveStatus && <span className="status-pill">{saveStatus}</span>}
+            <button className={showDebug ? 'debug-toggle active' : 'debug-toggle'} onClick={() => setShowDebug((v) => !v)} title="Show/hide diagnostic panels">
+              🐞 Debug ({debugPanels.length})
+            </button>
+            <span className="status-pill" style={{ marginLeft: 'auto' }}>
+              signalBus msgs: {busMessageCount} · acks: {patchbayAckCount}
+            </span>
+          </header>
 
-      <div className="app-body">
-        {canvasBlock}
+          {error && <div className="banner banner-error">Render worker error: {error}</div>}
+          {patchbayError && <div className="banner banner-warn">Config rejected (previous graph still running): {patchbayError}</div>}
 
-        <div className="panel-flow">
-          {order.map((id) => {
-            const panel = panelsById.get(id)
-            if (!panel) return null
-            return (
-              <Panel
-                key={panel.id}
-                id={panel.id}
-                title={panel.title}
-                hint={panel.hint}
-                wide={panel.wide}
-                defaultWidth={panel.width}
-                defaultHeight={panel.height}
-                dragging={draggingId === panel.id}
-                draggedOver={dragOverId === panel.id && draggingId !== panel.id}
-                onDragStart={onDragStart}
-                onDragEnd={onDragEnd}
-                onDragOver={onDragOver}
-                onDrop={onDrop}
-              >
-                {panel.content}
-              </Panel>
-            )
-          })}
-        </div>
-      </div>
+          <div className="workspace">
+            <div className="workspace-main">
+              <div className="workspace-main-header">
+                <h2 className="workspace-main-title">Patch graph — screen + fixtures</h2>
+                <span className="section-hint" style={{ margin: 0 }}>
+                  One unified graph: signal → operator → target chains, driving both the live screen and the fixtures
+                  on the right from the same wiring.
+                </span>
+                <button onClick={handleSaveGraph} style={{ marginLeft: 'auto' }}>
+                  Save to file
+                </button>
+              </div>
+              <PatchGraphCanvas nodes={graphNodes} onChange={setGraphNodes} targets={mergedCatalog} />
+            </div>
+
+            <aside className="workspace-rail">
+              <SectionCard title="Fixtures">
+                <FixtureManager doc={fixtureDoc} onChange={handleFixtureDocChange} />
+              </SectionCard>
+              <SectionCard title="Fixture visuals">
+                <FixtureVisuals doc={fixtureDoc} resolved={resolvedValues} />
+              </SectionCard>
+            </aside>
+          </div>
+        </>
+      )}
+
+      {showDebug && viewMode === 'edit' && (
+        <>
+          <div className="debug-drawer-backdrop" onClick={() => setShowDebug(false)} />
+          <div className="debug-drawer">
+            <div className="debug-drawer-header">
+              <strong>Debug</strong>
+              <button className="debug-drawer-close" onClick={() => setShowDebug(false)} title="Close (Esc)">
+                ✕
+              </button>
+            </div>
+            <div className="debug-drawer-body">
+              {debugPanels.map((p) => (
+                <SectionCard key={p.id} title={p.title} hint={p.hint}>
+                  {p.content}
+                </SectionCard>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }

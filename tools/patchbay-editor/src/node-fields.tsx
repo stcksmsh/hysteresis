@@ -1,122 +1,15 @@
 import { SIGNAL_CATALOG } from '../../../src/render/conductor/patchbay/editor/catalog'
-import { validatePatchGraph } from '../../../src/render/conductor/patchgraph/validate'
 import type { PatchTargetDecl, CurveKind } from '../../../src/render/conductor/patchgraph/types'
-import { makeDefaultDraft, makeNodeId, toPatchGraph, type DraftNode } from './graph-draft'
+import type { DraftNode } from './graph-draft'
 
-// The physical patch-graph builder (task #4's other half) — a structured
-// (not canvas/drag) editor, per the earlier scoping decision: build the
-// structured version to a high bar first, keep it extensible into a
-// node-graph *view* later by never letting editing logic live in this
-// component. Every button/input here does exactly one thing — replace this
-// node's fields, or the node list — so a future graph canvas can call the
-// same operations from a drag gesture instead of a form control.
-const NODE_KINDS: DraftNode['kind'][] = ['signal', 'const', 'threshold', 'envelope', 'logic', 'combine', 'curve', 'map', 'target']
-const CURVE_KINDS: CurveKind[] = ['linear', 'exp', 'log', 'smoothstep']
+// Shared between the node-graph canvas's per-node inspector and (formerly)
+// the flat form editor — kept as its own module so neither has to duplicate
+// the field set for all 9 node kinds. Pure display/edit of one node's
+// params; wiring (inputs) is the canvas's job now, not this component's.
+export const NODE_KINDS: DraftNode['kind'][] = ['signal', 'const', 'threshold', 'envelope', 'logic', 'combine', 'curve', 'map', 'target']
+export const CURVE_KINDS: CurveKind[] = ['linear', 'exp', 'log', 'smoothstep']
 
-interface GraphEditorProps {
-  nodes: DraftNode[]
-  onChange: (next: DraftNode[]) => void
-  targets: PatchTargetDecl[]
-}
-
-export function GraphEditor({ nodes, onChange, targets }: GraphEditorProps) {
-  const graph = toPatchGraph('editor', nodes)
-  const issues = validatePatchGraph(graph, targets)
-  const issuesByNodeId = new Map<string, { message: string; severity: 'error' | 'warning' }[]>()
-  for (const issue of issues) {
-    const list = issuesByNodeId.get(issue.nodeId) ?? []
-    list.push({ message: issue.message, severity: issue.severity })
-    issuesByNodeId.set(issue.nodeId, list)
-  }
-
-  function patchNode(id: string, fields: Partial<DraftNode>) {
-    onChange(nodes.map((n) => (n.id === id ? { ...n, ...fields } : n)))
-  }
-
-  function removeNode(id: string) {
-    onChange(nodes.filter((n) => n.id !== id).map((n) => ({ ...n, inputs: n.inputs.filter((i) => i !== id) })))
-  }
-
-  function addNode(kind: DraftNode['kind']) {
-    onChange([...nodes, makeDefaultDraft(kind, makeNodeId())])
-  }
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {nodes.length === 0 && <div className="empty-hint">No nodes yet — add one below.</div>}
-      {nodes.map((node) => (
-        <NodeRow key={node.id} node={node} allNodes={nodes} targets={targets} issues={issuesByNodeId.get(node.id)} onPatch={patchNode} onRemove={removeNode} />
-      ))}
-      <div className="kind-picker">
-        {NODE_KINDS.map((kind) => (
-          <button key={kind} onClick={() => addNode(kind)}>
-            + {kind}
-          </button>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-interface NodeRowProps {
-  node: DraftNode
-  allNodes: DraftNode[]
-  targets: PatchTargetDecl[]
-  issues?: { message: string; severity: 'error' | 'warning' }[]
-  onPatch: (id: string, fields: Partial<DraftNode>) => void
-  onRemove: (id: string) => void
-}
-
-function NodeRow({ node, allNodes, targets, issues, onPatch, onRemove }: NodeRowProps) {
-  const otherNodeIds = allNodes.filter((n) => n.id !== node.id).map((n) => n.id)
-  const hasError = issues?.some((i) => i.severity === 'error')
-
-  function setInputsFromText(text: string) {
-    const inputs = text
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean)
-    onPatch(node.id, { inputs })
-  }
-
-  return (
-    <div className={`node-card${hasError ? ' has-error' : ''}`}>
-      <div className="node-card-header">
-        <code className="mono node-card-id">{node.id}</code>
-        <strong className="node-card-kind">{node.kind}</strong>
-        <button onClick={() => onRemove(node.id)} style={{ marginLeft: 'auto', padding: '2px 8px', fontSize: 11 }} title="Remove node">
-          ✕
-        </button>
-      </div>
-
-      <NodeFields node={node} targets={targets} onPatch={onPatch} />
-
-      {node.kind !== 'signal' && node.kind !== 'const' && (
-        <label style={{ fontSize: 11, color: 'var(--text-1)' }}>
-          inputs (node ids, comma-separated — available: {otherNodeIds.join(', ') || 'none yet'})
-          <input
-            type="text"
-            value={node.inputs.join(', ')}
-            onChange={(e) => setInputsFromText(e.target.value)}
-            style={{ display: 'block', width: '100%', marginTop: 2, fontSize: 12 }}
-          />
-        </label>
-      )}
-
-      {issues && issues.length > 0 && (
-        <div className="issue-list">
-          {issues.map((issue, i) => (
-            <div key={i} className={issue.severity === 'error' ? 'issue-error' : 'issue-warning'}>
-              {issue.severity}: {issue.message}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function NodeFields({ node, targets, onPatch }: { node: DraftNode; targets: PatchTargetDecl[]; onPatch: (id: string, fields: Partial<DraftNode>) => void }) {
+export function NodeFields({ node, targets, onPatch }: { node: DraftNode; targets: PatchTargetDecl[]; onPatch: (id: string, fields: Partial<DraftNode>) => void }) {
   switch (node.kind) {
     case 'signal':
       return (
@@ -258,11 +151,100 @@ function NodeFields({ node, targets, onPatch }: { node: DraftNode; targets: Patc
             <option value="">(choose a fixture channel)</option>
             {targets.map((t) => (
               <option key={t.id} value={t.id}>
-                {t.label}
+                {t.label ?? t.id}
               </option>
             ))}
           </select>
         </div>
       )
   }
+}
+
+// One-line compact summary shown inside a node's box on the canvas — the
+// canvas is deliberately small/dense (many nodes on screen at once), full
+// field editing happens in the inspector for whichever node is selected.
+export function nodeSummary(node: DraftNode): string {
+  switch (node.kind) {
+    case 'signal':
+      return node.signal ?? '—'
+    case 'const':
+      return String(node.value ?? 0)
+    case 'threshold':
+      return `cut ${(node.cut ?? 0.5).toFixed(2)}${node.hysteresis ? ` ±${node.hysteresis.toFixed(2)}` : ''}`
+    case 'envelope':
+      return `atk ${(node.attackSec ?? 0.1).toFixed(2)} / rel ${(node.releaseSec ?? 0.5).toFixed(2)}`
+    case 'logic':
+      return node.logicOp ?? 'and'
+    case 'combine':
+      return node.combineOp ?? 'add'
+    case 'curve':
+      return node.curve ?? 'linear'
+    case 'map': {
+      const inR = node.inRange ?? [0, 1]
+      const outR = node.outRange ?? [0, 1]
+      return `${inR[0]}–${inR[1]} → ${outR[0]}–${outR[1]}`
+    }
+    case 'target':
+      return node.targetId || '(unset)'
+  }
+}
+
+// Auto-generated name for a node with no user-set label — kept short (this
+// is what the canvas shows in a node's header when unlabeled), distinct
+// from nodeSummary()'s fuller one-line param dump.
+export function defaultLabel(node: DraftNode): string {
+  switch (node.kind) {
+    case 'signal':
+      return node.signal ?? 'signal'
+    case 'const':
+      return `const ${node.value ?? 0}`
+    case 'threshold':
+      return 'threshold'
+    case 'envelope':
+      return 'envelope'
+    case 'logic':
+      return node.logicOp ?? 'logic'
+    case 'combine':
+      return node.combineOp ?? 'combine'
+    case 'curve':
+      return node.curve ?? 'curve'
+    case 'map':
+      return 'map'
+    case 'target':
+      return node.targetId || 'target'
+  }
+}
+
+export function displayName(node: DraftNode): string {
+  return node.label?.trim() || defaultLabel(node)
+}
+
+export function isVariableArity(kind: DraftNode['kind']): boolean {
+  return kind === 'combine' || kind === 'logic'
+}
+
+// Fixed-arity nodes always want exactly this many input slots shown (even
+// before they're wired, so there's always somewhere to drop a wire); a
+// `logic` node's slot count depends on its op (`not` is unary despite the
+// kind being "variable" in general).
+export function fixedInputSlotCount(node: DraftNode): number | null {
+  switch (node.kind) {
+    case 'signal':
+    case 'const':
+      return 0
+    case 'threshold':
+    case 'envelope':
+    case 'curve':
+    case 'map':
+    case 'target':
+      return 1
+    case 'logic':
+      return node.logicOp === 'not' ? 1 : null
+    case 'combine':
+      return null
+  }
+}
+
+export function hasOutput(node: DraftNode): boolean {
+  return node.kind !== 'target'
 }

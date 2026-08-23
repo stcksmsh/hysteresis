@@ -2,8 +2,9 @@
 import type { MainToRenderWorker, PowerTier, RenderWorkerToMain, SpectralHit, StateFrame, StructuralEvent } from '../../shared/types'
 import { createGlContext, WebGL2UnavailableError, type GlCapabilities } from './gl/context'
 import { Conductor } from '../conductor/Conductor'
-import { Patchbay } from '../conductor/patchbay/Patchbay'
-import { screenOnlyConfig } from '../conductor/patchbay/configs/screen-only'
+import { PatchGraphEvaluator } from '../conductor/patchgraph/PatchGraphEvaluator'
+import { screenGraph } from '../conductor/patchgraph/configs/screen-graph'
+import { resolveScreenTargets } from '../conductor/outputs/resolve-screen-targets'
 import { ScreenOutput } from '../conductor/outputs/ScreenOutput'
 import type { VizOutput } from '../conductor/types'
 
@@ -39,9 +40,9 @@ let lastStatsPost = 0
 // means adding another VizOutput here and nothing else in this file.
 const screenOutput = new ScreenOutput()
 const outputs: VizOutput[] = [screenOutput]
-// let, not const: the patchbay editor tool (dev-only, debugSetPatchbayConfig
+// let, not const: the patchbay editor tool (dev-only, debugSetScreenGraph
 // below) hot-swaps this. Every other caller still only ever sets it once.
-let patchbay = new Patchbay(screenOnlyConfig, outputs.map((o) => o.targets))
+let screenGraphEvaluator = new PatchGraphEvaluator(screenGraph, screenOutput.targets)
 
 let currentAccent: [number, number, number] = [1, 0.36, 0.22] // vermilion default (#FF5C38), matches JuliaScene's own default
 
@@ -166,7 +167,11 @@ function tick(t: number) {
 
   const bus = conductor.update(effectiveFrame, dt)
   for (const output of outputs) {
-    const resolved = patchbay.resolve(bus, dt, output.targets)
+    // Only one output exists today (screenOutput) — resolveScreenTargets is
+    // screen-specific (idle/scope passthrough by name). Adding a second real
+    // output later needs its own PatchGraphEvaluator + a resolver of its
+    // own, same as it would have needed its own Patchbay before.
+    const resolved = resolveScreenTargets(screenGraphEvaluator, output.targets, bus, dt)
     output.update(dt, resolved)
   }
 
@@ -338,15 +343,16 @@ self.onmessage = (e: MessageEvent<MainToRenderWorker>) => {
       debugDropPending = true
       break
     }
-    case 'debugSetPatchbayConfig': {
+    case 'debugSetScreenGraph': {
       try {
-        // Reconstructed, not mutated in place — Patchbay.validate() runs at
-        // construction (SINTEZA_SIGNAL_BUS.md §5.3), so an invalid edit
-        // (typo'd signal name, a tag a target can't accept) is caught here
-        // and rejected without ever touching the live `patchbay` the render
-        // loop reads every frame above.
-        const next = new Patchbay(msg.config, outputs.map((o) => o.targets))
-        patchbay = next
+        // Reconstructed, not mutated in place — PatchGraphEvaluator's
+        // constructor validates (throws on any error-severity issue, the
+        // same §5.3 "reject unsafe at load time" guarantee Patchbay used to
+        // give the screen), so an invalid edit (typo'd signal name, a
+        // dangling wire, a cycle) is caught here and rejected without ever
+        // touching the live evaluator the render loop reads every frame above.
+        const next = new PatchGraphEvaluator(msg.graph, screenOutput.targets)
+        screenGraphEvaluator = next
         post({ kind: 'patchbayConfigResult', ok: true })
       } catch (err) {
         post({ kind: 'patchbayConfigResult', ok: false, message: err instanceof Error ? err.message : String(err) })

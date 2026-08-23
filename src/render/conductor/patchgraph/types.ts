@@ -24,6 +24,13 @@ export type NodeId = string
 export interface NodeBase {
   readonly id: NodeId
   readonly inputs: readonly NodeId[]
+  // Human-readable, freely renameable — `id` is the stable wiring key (an
+  // edge/route persists across a rename since it references `id`, never
+  // `label`) and stays opaque/auto-generated. A saved graph with no labels
+  // (anything from before this field existed) still loads fine; a node
+  // without one just displays its kind/id instead — see node-fields.tsx's
+  // nodeSummary()/displayName() on the editor side.
+  readonly label?: string
 }
 
 export interface SignalNode extends NodeBase {
@@ -143,7 +150,14 @@ export interface PatchGraph {
 // upstream hasn't been smoothed yet.
 export interface PatchTargetDecl {
   readonly id: string
-  readonly label: string
+  // Optional, not required: this same type now also describes the screen's
+  // own targets (SCREEN_TARGETS, conductor/types.ts's plain TargetDecl —
+  // structurally compatible with this interface once `label` can be
+  // absent), which never had a separate display label — screen target ids
+  // already read fine on their own (`screen.hueShift`). Display code should
+  // fall back to `.id` when this is absent (see node-fields.tsx's target
+  // dropdown).
+  readonly label?: string
   readonly acceptsTags: readonly TimescaleTag[]
   readonly defaultValue: number
   readonly range: readonly [number, number]

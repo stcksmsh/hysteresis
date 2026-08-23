@@ -14,6 +14,7 @@ export class PatchGraphEvaluator {
   private thresholdState = new Map<string, ThresholdState>()
   private envelopeState = new Map<string, EnvelopeState>()
   private byId: Map<string, PatchGraph['nodes'][number]>
+  private targetsById: Map<string, PatchTargetDecl>
 
   constructor(
     private graph: PatchGraph,
@@ -25,6 +26,7 @@ export class PatchGraphEvaluator {
     }
     this.order = topoSort(graph)
     this.byId = new Map(graph.nodes.map((n) => [n.id, n]))
+    this.targetsById = new Map(targets.map((t) => [t.id, t]))
   }
 
   // Returns { [targetId]: resolvedValue } for every `target` node in the
@@ -58,7 +60,19 @@ export class PatchGraphEvaluator {
       }
       const value = evaluateNode(node, inputValues, dt, threshold, envelope)
       values.set(id, value)
-      if (node.kind === 'target') resolved[node.targetId] = value
+      if (node.kind === 'target') {
+        // evaluateNode's 'target' case is a pure passthrough (see its own
+        // comment) — nothing upstream guarantees a chain stays inside the
+        // target's declared range (a bare signal node, a `map` with
+        // clamp:false, a `combine` summing several routes...). Patchbay's
+        // resolve() always clamped to target.range as the final step
+        // (SINTEZA_SIGNAL_BUS.md §5.1); this evaluator didn't, which was a
+        // real safety gap for exactly the case §5.3 exists to prevent (a
+        // target physically can't accept out-of-range values) — every
+        // target node's output is clamped here, matching that guarantee.
+        const target = this.targetsById.get(node.targetId)
+        resolved[node.targetId] = target ? Math.min(target.range[1], Math.max(target.range[0], value)) : value
+      }
     }
 
     return resolved
