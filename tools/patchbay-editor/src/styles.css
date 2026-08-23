@@ -164,7 +164,7 @@ code,
 .canvas-block {
   position: relative;
   flex: 0 0 auto;
-  height: min(46vh, 520px);
+  height: min(72vh, 900px);
   border-bottom: 1px solid var(--border);
 }
 .canvas-block-fullscreen {

@@ -226,7 +226,7 @@ export function App() {
       {patchbayError && <div className="banner banner-warn">Config rejected (previous config still running): {patchbayError}</div>}
 
       <div className="app-body">
-        {!canvasFullscreen && canvasBlock}
+        {canvasBlock}
 
         <div className="panel-grid">
           <section className="panel-section">
@@ -325,8 +325,6 @@ export function App() {
           </section>
         </div>
       </div>
-
-      {canvasFullscreen && canvasBlock}
     </div>
   )
 }
