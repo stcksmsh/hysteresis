@@ -59,7 +59,11 @@ function useRuntimeBridge(canvasRef: React.RefObject<HTMLCanvasElement | null>, 
 export function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [bus, setBus] = useState<SignalBus | null>(null)
-  const handleSignalBus = useCallback((b: SignalBus) => setBus(b), [])
+  const [busMessageCount, setBusMessageCount] = useState(0)
+  const handleSignalBus = useCallback((b: SignalBus) => {
+    setBus(b)
+    setBusMessageCount((n) => n + 1)
+  }, [])
   const { bridgeRef, fps, error, patchbayError } = useRuntimeBridge(canvasRef, handleSignalBus)
 
   const [screenDoc, setScreenDoc] = useState<PatchDocument>(() => fromConfig(screenOnlyConfig))
@@ -180,11 +184,25 @@ export function App() {
                 height: 48,
                 borderRadius: 'var(--radius)',
                 border: '1px solid var(--border)',
-                background: `rgba(94, 230, 200, ${0.08 + dimmerValue * 0.72})`,
-                boxShadow: dimmerValue > 0 ? `0 0 ${8 + dimmerValue * 24}px rgba(94,230,200,${dimmerValue * 0.6})` : 'none',
+                background: dimmerValue > 0 ? 'rgba(94, 230, 200, 0.8)' : 'rgba(94, 230, 200, 0.04)',
+                boxShadow: dimmerValue > 0 ? '0 0 32px rgba(94,230,200,0.5)' : 'none',
                 transition: 'background 0.08s linear, box-shadow 0.08s linear',
               }}
             />
+          </section>
+
+          <section>
+            <h3 style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--text-1)', textTransform: 'uppercase', letterSpacing: 0.6 }}>
+              Debug readout
+            </h3>
+            <div className="mono" style={{ fontSize: 12, color: 'var(--text-1)', display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div>bus.energy: {bus ? bus.energy.toFixed(4) : '—'}</div>
+              <div>bus.idle: {bus ? String(bus.idle) : '—'}</div>
+              <div>energy gain (route): {(energyRoute?.gain ?? 1).toFixed(2)}</div>
+              <div>energy * gain (pre-clamp): {bus ? (bus.energy * (energyRoute?.gain ?? 1)).toFixed(4) : '—'}</div>
+              <div>dimmer threshold output: {dimmerValue.toFixed(0)}</div>
+              <div>signalBus messages received: {busMessageCount}</div>
+            </div>
           </section>
         </aside>
       </div>
