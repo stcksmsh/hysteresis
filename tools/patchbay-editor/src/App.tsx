@@ -2,19 +2,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { RuntimeBridge } from './runtime-bridge'
 import { fromConfig, toConfig, type PatchDocument } from '../../../src/render/conductor/patchbay/editor/patch-document'
 import { RouteTable } from './RouteTable'
+import { FixtureManager } from './FixtureManager'
+import { GraphEditor } from './GraphEditor'
+import { FixtureVisuals } from './FixtureVisuals'
+import { serializeScreenConfig, serializeGraphAndFixtures, saveToFile } from './serialize-config'
+import { makeDefaultDraft, makeNodeId, toPatchGraph, type DraftNode } from './graph-draft'
 import { screenOnlyConfig } from '../../../src/render/conductor/patchbay/configs/screen-only'
+import { validatePatchGraph } from '../../../src/render/conductor/patchgraph/validate'
 import { PatchGraphEvaluator } from '../../../src/render/conductor/patchgraph/PatchGraphEvaluator'
 import { addFixture, fixtureTargetCatalog, emptyFixtureDocument, type FixtureDocument } from '../../../src/render/conductor/patchgraph/fixture-document'
 import { fixtureTargetId } from '../../../src/render/conductor/patchgraph/fixture-types'
-import type { PatchGraph } from '../../../src/render/conductor/patchgraph/types'
 import type { SignalBus } from '../../../src/render/conductor/types'
 import type { DropDetectorDebug } from '../../../src/audio/worklet/brain/drop-detector'
-
-// Vertical slice (task 3): proves the whole loop works end to end before
-// the real editor UI (route table, graph canvas, meters) gets built on top
-// — one live screen route (a gain slider on energy -> screen.energy) and
-// one live physical-graph fixture (a simulated dimmer gated by a threshold
-// on energy), both driven by the same real running visualizer.
 
 // Keyed by canvas element, not component instance: canvas.transferControlToOffscreen()
 // is a genuine one-shot browser API (confirmed: attempting it twice on the
@@ -101,6 +100,24 @@ function useDropLog(bus: SignalBus | null) {
   return log
 }
 
+function sectionTitle(text: string) {
+  return (
+    <h3 style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--text-1)', textTransform: 'uppercase', letterSpacing: 0.6 }}>{text}</h3>
+  )
+}
+
+// Seed graph: energy gated through a threshold into the first fixture's
+// first channel — a working starting point to edit from, not a fixed demo.
+function seedNodes(targetId: string): DraftNode[] {
+  const sig = makeDefaultDraft('signal', makeNodeId())
+  const th = makeDefaultDraft('threshold', makeNodeId())
+  th.inputs = [sig.id]
+  const tgt = makeDefaultDraft('target', makeNodeId())
+  tgt.inputs = [th.id]
+  tgt.targetId = targetId
+  return [sig, th, tgt]
+}
+
 export function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [bus, setBus] = useState<SignalBus | null>(null)
@@ -115,7 +132,6 @@ export function App() {
   const dropLog = useDropLog(bus)
 
   const [screenDoc, setScreenDoc] = useState<PatchDocument>(() => fromConfig(screenOnlyConfig))
-  const energyRoute = screenDoc.routes.find((r) => r.from === 'energy' && r.to === 'screen.energy')
 
   function handleScreenDocChange(next: PatchDocument) {
     setScreenDoc(next)
@@ -123,33 +139,55 @@ export function App() {
   }
 
   const [fixtureDoc, setFixtureDoc] = useState<FixtureDocument>(() => addFixture(emptyFixtureDocument(), 'Demo Dimmer', 'dimmer'))
-  const dimmer = fixtureDoc.fixtures[0]
-  const dimmerTargetId = fixtureTargetId(dimmer.id, 'brightness')
-
-  const graph: PatchGraph = useMemo(
-    () => ({
-      id: 'demo',
-      nodes: [
-        { id: 'sig', kind: 'signal', inputs: [], signal: 'energy' },
-        { id: 'th', kind: 'threshold', inputs: ['sig'], cut: 0.4, hysteresis: 0.05 },
-        { id: 'tgt', kind: 'target', inputs: ['th'], targetId: dimmerTargetId },
-      ],
-    }),
-    [dimmerTargetId],
-  )
   const targetCatalog = useMemo(() => fixtureTargetCatalog(fixtureDoc), [fixtureDoc])
-  const evaluator = useMemo(() => new PatchGraphEvaluator(graph, targetCatalog), [graph, targetCatalog])
-  const [dimmerValue, setDimmerValue] = useState(0)
+
+  const [graphNodes, setGraphNodes] = useState<DraftNode[]>(() => {
+    const firstTarget = targetCatalog[0]
+    return firstTarget ? seedNodes(firstTarget.id) : []
+  })
+
+  const graph = useMemo(() => toPatchGraph('editor', graphNodes), [graphNodes])
+  const graphErrors = useMemo(() => validatePatchGraph(graph, targetCatalog).filter((i) => i.severity === 'error'), [graph, targetCatalog])
+  const evaluator = useMemo(() => {
+    if (graphErrors.length > 0) return null
+    try {
+      return new PatchGraphEvaluator(graph, targetCatalog)
+    } catch {
+      return null
+    }
+  }, [graph, targetCatalog, graphErrors.length])
+  const [resolvedValues, setResolvedValues] = useState<Record<string, number>>({})
 
   useEffect(() => {
-    if (!bus) return
-    const resolved = evaluator.evaluate(bus, 1 / 20) // ~ the signalBus stream's own interval
-    setDimmerValue(resolved[dimmerTargetId] ?? 0)
-  }, [bus, evaluator, dimmerTargetId])
+    if (!bus || !evaluator) return
+    setResolvedValues(evaluator.evaluate(bus, 1 / 20)) // ~ the signalBus stream's own interval
+  }, [bus, evaluator])
+
+  // Removing a fixture can leave graph target-nodes pointing at a channel
+  // that no longer exists — harmless (validatePatchGraph flags it, the
+  // evaluator just won't produce a value for it), not auto-cleaned-up here
+  // so a fixture rename/re-add can still reconnect to the same wiring.
+  function handleFixtureDocChange(next: FixtureDocument) {
+    setFixtureDoc(next)
+  }
 
   async function onFileChosen(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (file) await bridgeRef.current?.loadFile(file)
+  }
+
+  const [saveStatus, setSaveStatus] = useState<string | null>(null)
+
+  async function handleSaveScreenConfig() {
+    const source = serializeScreenConfig(toConfig(screenDoc))
+    const result = await saveToFile('screen-config.ts', source)
+    setSaveStatus(result.ok ? `Saved to ${result.path}` : `Save failed: ${result.message}`)
+  }
+
+  async function handleSaveGraph() {
+    const source = serializeGraphAndFixtures(graph, fixtureDoc)
+    const result = await saveToFile('patch-graph.ts', source)
+    setSaveStatus(result.ok ? `Saved to ${result.path}` : `Save failed: ${result.message}`)
   }
 
   return (
@@ -166,16 +204,17 @@ export function App() {
       >
         <strong style={{ letterSpacing: 0.3 }}>Patchbay</strong>
         <input type="file" accept="audio/*" onChange={onFileChosen} />
+        {saveStatus && (
+          <span className="mono" style={{ fontSize: 11, color: 'var(--text-1)' }}>
+            {saveStatus}
+          </span>
+        )}
         <span className="mono" style={{ color: 'var(--text-1)', marginLeft: 'auto' }}>
           {fps > 0 ? `${fps.toFixed(0)} fps` : '—'}
         </span>
       </header>
 
-      {error && (
-        <div style={{ padding: '6px 16px', background: 'var(--error)', color: '#200' }}>
-          Render worker error: {error}
-        </div>
-      )}
+      {error && <div style={{ padding: '6px 16px', background: 'var(--error)', color: '#200' }}>Render worker error: {error}</div>}
       {patchbayError && (
         <div style={{ padding: '6px 16px', background: 'var(--warn)', color: '#200' }}>
           Config rejected (previous config still running): {patchbayError}
@@ -189,65 +228,63 @@ export function App() {
 
         <aside
           style={{
-            width: 460,
+            width: 520,
             padding: 16,
             borderLeft: '1px solid var(--border)',
             background: 'var(--bg-1)',
             display: 'flex',
             flexDirection: 'column',
             gap: 20,
+            overflowY: 'auto',
           }}
         >
           <section>
-            <h3 style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--text-1)', textTransform: 'uppercase', letterSpacing: 0.6 }}>
-              Screen routes
-            </h3>
+            {sectionTitle('Screen routes')}
             <p style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--text-2)' }}>
-              Every route in the live config, editable — this is the actual palette-automation control surface (see the
-              hueDrift/centroid → screen.hueShift and buildWindup → screen.paletteMix rows).
+              Every route in the live config, editable — including the palette-automation rows (hueDrift/centroid →
+              screen.hueShift, buildWindup → screen.paletteMix).
             </p>
             <RouteTable doc={screenDoc} onChange={handleScreenDocChange} />
+            <button onClick={handleSaveScreenConfig} style={{ marginTop: 8, fontSize: 12 }}>
+              Save screen config to file
+            </button>
           </section>
 
           <section>
-            <h3 style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--text-1)', textTransform: 'uppercase', letterSpacing: 0.6 }}>
-              Fixture: {dimmer.name}
-            </h3>
+            {sectionTitle('Fixtures')}
+            <FixtureManager doc={fixtureDoc} onChange={handleFixtureDocChange} />
+          </section>
+
+          <section>
+            {sectionTitle('Physical patch graph')}
             <p style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--text-2)' }}>
-              threshold(energy, cut 0.4, hysteresis 0.05) → brightness
+              Signal → operator → target chains, evaluated live against the fixtures above. Structured editor, not a
+              canvas — see graph-draft.ts if adding a node-graph view later.
             </p>
-            <div
-              style={{
-                width: '100%',
-                height: 48,
-                borderRadius: 'var(--radius)',
-                border: '1px solid var(--border)',
-                background: dimmerValue > 0 ? 'rgba(94, 230, 200, 0.8)' : 'rgba(94, 230, 200, 0.04)',
-                boxShadow: dimmerValue > 0 ? '0 0 32px rgba(94,230,200,0.5)' : 'none',
-                transition: 'background 0.08s linear, box-shadow 0.08s linear',
-              }}
-            />
+            <GraphEditor nodes={graphNodes} onChange={setGraphNodes} targets={targetCatalog} />
+            <button onClick={handleSaveGraph} style={{ marginTop: 8, fontSize: 12 }}>
+              Save graph + fixtures to file
+            </button>
           </section>
 
           <section>
-            <h3 style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--text-1)', textTransform: 'uppercase', letterSpacing: 0.6 }}>
-              Debug readout
-            </h3>
+            {sectionTitle('Fixture visuals')}
+            <FixtureVisuals doc={fixtureDoc} resolved={resolvedValues} />
+          </section>
+
+          <section>
+            {sectionTitle('Debug readout')}
             <div className="mono" style={{ fontSize: 12, color: 'var(--text-1)', display: 'flex', flexDirection: 'column', gap: 4 }}>
               <div>bus.energy: {bus ? bus.energy.toFixed(4) : '—'}</div>
               <div>bus.idle: {bus ? String(bus.idle) : '—'}</div>
-              <div>energy gain (route): {(energyRoute?.gain ?? 1).toFixed(2)}</div>
-              <div>energy * gain (pre-clamp): {bus ? (bus.energy * (energyRoute?.gain ?? 1)).toFixed(4) : '—'}</div>
-              <div>dimmer threshold output: {dimmerValue.toFixed(0)}</div>
               <div>signalBus messages received: {busMessageCount}</div>
               <div>patchbay edits acknowledged by worker: {patchbayAckCount}</div>
+              <div>graph evaluator: {evaluator ? 'valid' : `invalid (${graphErrors.length} error(s) — see graph editor)`}</div>
             </div>
           </section>
 
           <section>
-            <h3 style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--text-1)', textTransform: 'uppercase', letterSpacing: 0.6 }}>
-              Musical state (Layer 2 → bus)
-            </h3>
+            {sectionTitle('Musical state (Layer 2 → bus)')}
             <div className="mono" style={{ fontSize: 12, color: 'var(--text-1)', display: 'flex', flexDirection: 'column', gap: 4 }}>
               <div>tension: {bus ? bus.tension.toFixed(4) : '—'}</div>
               <div>buildProgress: {bus ? bus.buildProgress.toFixed(4) : '—'}</div>
@@ -260,13 +297,10 @@ export function App() {
           </section>
 
           <section>
-            <h3 style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--text-1)', textTransform: 'uppercase', letterSpacing: 0.6 }}>
-              Drop detector internals
-            </h3>
+            {sectionTitle('Drop detector internals')}
             <p style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--text-2)' }}>
               The detector's own live qualifying values, straight from inside it — not the bus. If dropImpulse never
-              fires, this is what tells you WHICH condition is failing against real audio (thresholds below were tuned
-              against synthetic test fixtures, which may not match real value ranges at all).
+              fires, this is what tells you WHICH condition is failing against real audio.
             </p>
             <div className="mono" style={{ fontSize: 12, color: 'var(--text-1)', display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 12 }}>
               <div>fullness: {dropDebug ? dropDebug.fullness.toFixed(4) : '—'} (needs &gt; 0.5)</div>
@@ -283,9 +317,7 @@ export function App() {
           </section>
 
           <section>
-            <h3 style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--text-1)', textTransform: 'uppercase', letterSpacing: 0.6 }}>
-              Drop detector log
-            </h3>
+            {sectionTitle('Drop detector log')}
             <p style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--text-2)' }}>
               Rising edges of bus.dropImpulse (&gt;{DROP_EDGE_EPS} in one tick), most recent first. Time is seconds since this
               page loaded, not track position.
