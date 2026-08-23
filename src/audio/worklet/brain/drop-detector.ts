@@ -53,6 +53,30 @@ const NOVELTY_THRESHOLD = 0.3 // 1 - max cosine similarity against the recent bu
 // exact same hop.
 const NOVELTY_HOLD_SEC = 3.0
 
+// Reported gap: a genuinely ambient "drop" (a pad/drone swelling into a
+// fuller texture, no percussion at all) satisfies fullness (it does
+// sustain, non-spiky) and novelty (it's new material) but can never
+// satisfy onsetJump — there's no rhythm to intensify. Requiring all three
+// unconditionally means this class of material can structurally never
+// qualify, no matter how real the sparse->full transition is. This adds a
+// second, alternative qualifying path that drops the onset requirement —
+// safe against the original false-positive case (a pulsing reverb-tail
+// intro) because that's rejected by fullness's own crest-factor penalty
+// already, independent of onset activity.
+//
+// Deliberately reuses NOVELTY_THRESHOLD rather than a stricter bar: fullness
+// ramps up slowly (SUSTAIN_MS=1800ms envelope) relative to how fast novelty
+// decays post-transition (NOVELTY_HOLD_SEC=3s from its peak at the moment of
+// transition) — by the time fullness actually crosses FULLNESS_THRESHOLD,
+// novelty has typically already decayed most of the way back down. This is
+// true for the *existing* rhythmic path too (measured: novelty is already
+// down to ~0.33 — barely above the 0.3 threshold — by the time fullness
+// clears 0.5 for a representative synthetic transition); a stricter bar
+// for the soft path could never be satisfied given the same timing, so it
+// would silently never fire. The margin has to come from fullness's own
+// specificity, not from asking more of novelty than the rhythmic path
+// already gets away with.
+
 const CONFIRM_WINDOW_SEC = 0.3
 const CONFIRM_ELEVATED_FRACTION = 0.5
 const ELEVATED_MARGIN = 0.08
@@ -138,7 +162,9 @@ export class DropDetector {
     }
 
     if (this.armedAt === null) {
-      const qualifies = fullness > FULLNESS_THRESHOLD && onsetJump > ONSET_JUMP_MIN && this.noveltyPeak > NOVELTY_THRESHOLD
+      const rhythmicDrop = fullness > FULLNESS_THRESHOLD && onsetJump > ONSET_JUMP_MIN && this.noveltyPeak > NOVELTY_THRESHOLD
+      const softDrop = fullness > FULLNESS_THRESHOLD && this.noveltyPeak > NOVELTY_THRESHOLD
+      const qualifies = rhythmicDrop || softDrop
       if (qualifies) {
         this.armedAt = tNow
         this.armedBaseline = slow

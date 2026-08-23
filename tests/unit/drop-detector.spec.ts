@@ -85,6 +85,20 @@ describe('DropDetector (fullness + onset-density jump + novelty contrast)', () =
     expect(drops).toHaveLength(1)
   })
 
+  it('emits a soft/ambient drop with no onset-density jump at all (a pad swelling in, not a rhythmic hit)', () => {
+    // Same sparse -> sustained-full transition as the rhythmic case above,
+    // but onsetActivity stays flat and low throughout — no percussion ever
+    // enters, only the feature vector and energy level change. The old
+    // all-three-required check could never fire for this; the soft path
+    // (fullness + a stricter novelty bar, no onset requirement) should.
+    const drops = run((t): DropDetectorFeatures => {
+      if (t < 4) return { lowEnergy: 0.05, onsetActivity: 0.02, vec: QUIET_VEC }
+      return { lowEnergy: 0.9, onsetActivity: 0.02, vec: LOUD_VEC }
+    }, 20)
+    expect(drops).toHaveLength(1)
+    expect(drops[0]).toBeGreaterThan(4)
+  })
+
   it('emits again after a second genuine thinned section', () => {
     const drops = run((t): DropDetectorFeatures => {
       if (t < 4) return { lowEnergy: 0.05, onsetActivity: 0.02, vec: QUIET_VEC } // thinned
