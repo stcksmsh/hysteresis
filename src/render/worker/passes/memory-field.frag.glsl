@@ -94,5 +94,25 @@ void main() {
   vec3 foldedPrev = texture(uPrev, advect(foldedDomain(vUv))).rgb;
   vec3 prev = mix(rawPrev, foldedPrev, uMirrorStrength) * uDecay;
   vec3 cur = texture(uCurrent, vUv).rgb;
-  fragColor = vec4(prev + cur, 1.0);
+  vec3 result = prev + cur;
+
+  // Defensive, not a fix for a known cause: this buffer is a float FBO (see
+  // MemoryFieldPass's `useFloat`), which — unlike an 8-bit texture — does
+  // NOT clamp on write. If a NaN/Inf value ever enters it (from anywhere
+  // upstream: a spring/uniform gone bad, a degenerate divide, a dropped
+  // frame with a huge dt), it doesn't just sit in one pixel — every
+  // subsequent frame's advection samples nearby/through it, so the bad
+  // value spreads to whichever pixels happen to sample from it next,
+  // reads as corruption visibly growing across the screen over time
+  // (reported: "black shaders growing... heals after a resize", which
+  // reallocates this exact buffer from scratch). Sanitizing here can't fix
+  // whatever produces a bad value in the first place, but stops it from
+  // ever persisting into the one buffer that would otherwise carry and
+  // spread it every frame after.
+  if (any(isnan(result)) || any(isinf(result))) {
+    result = cur;
+  }
+  result = clamp(result, vec3(0.0), vec3(64.0));
+
+  fragColor = vec4(result, 1.0);
 }
