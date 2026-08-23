@@ -26,6 +26,14 @@ const RENDER_WORKER_URL = new URL('../../../src/render/worker/render-worker.ts',
 // points publicDir back out at it) — prebuilt by `npm run build:worklet`,
 // which `npm run patchbay` runs first, same as the main app's dev script.
 const WORKLET_URL = new URL('/worklets/feature-worklet.js', window.location.origin)
+// Same value/reasoning as src/index.ts's RESIZE_DEBOUNCE_MS — a resize
+// reallocates the whole render pipeline including MemoryFieldPass's
+// ping-pong buffers (wiping the accumulated memory-field trail history), so
+// an undebounced ResizeObserver firing on every intermediate size (e.g. a
+// DevTools panel opening/closing, which fires multiple times as it
+// animates open) reads as the view "vanishing"/getting reset repeatedly.
+// This tool skipped that debounce originally — same bug, same fix.
+const RESIZE_DEBOUNCE_MS = 150
 
 export interface RuntimeBridgeCallbacks {
   onSignalBus?: (bus: SignalBus) => void
@@ -40,6 +48,7 @@ export class RuntimeBridge {
   private audioEl: HTMLAudioElement
   private ctx: AudioContext | null = null
   private resizeObserver: ResizeObserver
+  private resizeDebounceHandle: ReturnType<typeof setTimeout> | null = null
   private objectUrl: string | null = null
 
   constructor(
@@ -53,9 +62,9 @@ export class RuntimeBridge {
     const dpr = window.devicePixelRatio || 1
     this.post({ kind: 'init', canvas: offscreen, dpr, reducedMotion: false }, [offscreen])
 
-    this.resizeObserver = new ResizeObserver(() => this.postResize())
+    this.resizeObserver = new ResizeObserver(() => this.postResizeDebounced())
     this.resizeObserver.observe(canvas)
-    this.postResize()
+    this.postResize() // first size is real and immediate — nothing to coalesce against yet
 
     this.audioEl = new Audio()
     this.audioEl.crossOrigin = 'anonymous'
@@ -80,6 +89,14 @@ export class RuntimeBridge {
   private postResize(): void {
     const rect = this.canvas.getBoundingClientRect()
     this.post({ kind: 'resize', cssWidth: rect.width, cssHeight: rect.height, dpr: window.devicePixelRatio || 1 })
+  }
+
+  private postResizeDebounced(): void {
+    if (this.resizeDebounceHandle !== null) clearTimeout(this.resizeDebounceHandle)
+    this.resizeDebounceHandle = setTimeout(() => {
+      this.resizeDebounceHandle = null
+      this.postResize()
+    }, RESIZE_DEBOUNCE_MS)
   }
 
   private handleWorkerMessage(msg: RenderWorkerToMain): void {
@@ -139,6 +156,7 @@ export class RuntimeBridge {
   }
 
   dispose(): void {
+    if (this.resizeDebounceHandle !== null) clearTimeout(this.resizeDebounceHandle)
     this.resizeObserver.disconnect()
     this.engine.detach()
     this.audioEl.pause()
