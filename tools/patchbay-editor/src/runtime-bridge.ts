@@ -63,6 +63,15 @@ export class RuntimeBridge {
     this.engine.onStateFrame((frame: StateFrame) => this.post({ kind: 'state', frame }))
   }
 
+  // Rewires which handlers get called, without touching the worker/canvas
+  // at all. Exists for App.tsx's bridge cache (see its useRuntimeBridge): a
+  // Fast-Refresh remount gets a fresh set of React state setters to call,
+  // but must reuse the SAME RuntimeBridge instance, since its canvas was
+  // already (irreversibly) transferred to the existing worker.
+  setCallbacks(callbacks: RuntimeBridgeCallbacks): void {
+    this.callbacks = callbacks
+  }
+
   private post(msg: MainToRenderWorker, transfer?: Transferable[]): void {
     if (transfer) this.worker.postMessage(msg, transfer)
     else this.worker.postMessage(msg)

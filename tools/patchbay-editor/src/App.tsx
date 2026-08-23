@@ -14,6 +14,19 @@ import type { SignalBus } from '../../../src/render/conductor/types'
 // one live physical-graph fixture (a simulated dimmer gated by a threshold
 // on energy), both driven by the same real running visualizer.
 
+// Keyed by canvas element, not component instance: canvas.transferControlToOffscreen()
+// is a genuine one-shot browser API (confirmed: attempting it twice on the
+// same canvas throws "Cannot transfer control from a canvas for more than
+// one time"), so a Vite Fast-Refresh remount during development — which
+// keeps the same DOM canvas node but re-runs this hook — MUST reuse the
+// existing bridge instead of constructing a new one. Only callbacks get
+// rewired (setCallbacks) so the reused bridge still calls into the current
+// render's state setters. This is a dev tool that lives entirely within
+// one page lifetime, so never disposing here (only the browser tearing
+// down the page ever really ends it) is the right trade against fighting
+// this exact one-shot API on every edit-triggered remount.
+const bridgesByCanvas = new WeakMap<HTMLCanvasElement, RuntimeBridge>()
+
 function useRuntimeBridge(canvasRef: React.RefObject<HTMLCanvasElement | null>, onSignalBus: (bus: SignalBus) => void) {
   const bridgeRef = useRef<RuntimeBridge | null>(null)
   const [fps, setFps] = useState(0)
@@ -22,15 +35,21 @@ function useRuntimeBridge(canvasRef: React.RefObject<HTMLCanvasElement | null>, 
 
   useEffect(() => {
     if (!canvasRef.current) return
-    const bridge = new RuntimeBridge(canvasRef.current, {
-      onStats: (v) => setFps(v),
-      onError: (m) => setError(m),
-      onSignalBus: onSignalBus,
-      onPatchbayResult: (r) => setPatchbayError(r.ok ? null : r.message),
-    })
-    bridge.setSignalBusStream(true)
+    const callbacks = {
+      onStats: (v: number) => setFps(v),
+      onError: (m: string) => setError(m),
+      onSignalBus,
+      onPatchbayResult: (r: { ok: true } | { ok: false; message: string }) => setPatchbayError(r.ok ? null : r.message),
+    }
+    let bridge = bridgesByCanvas.get(canvasRef.current)
+    if (bridge) {
+      bridge.setCallbacks(callbacks)
+    } else {
+      bridge = new RuntimeBridge(canvasRef.current, callbacks)
+      bridge.setSignalBusStream(true)
+      bridgesByCanvas.set(canvasRef.current, bridge)
+    }
     bridgeRef.current = bridge
-    return () => bridge.dispose()
     // eslint-disable-next-line react-hooks/exhaustive-deps -- bridge lifecycle is intentionally tied to mount only
   }, [])
 
