@@ -17,7 +17,20 @@ import { SCOPE_SIZE } from '../../../../shared/constants'
 // on any timescale a session runs for. θ only ever advances; there is no
 // reset.
 const THETA_SPEED_BASE = 0.008 // rad/sec at rest — one full boundary sweep in ~13min idle
-const THETA_SPEED_WINDUP_GAIN = 0.02 // builds gently accelerate how fast the constant morphs
+// Was 0.02/0.012 (windup/energy). Reported as "spins/moves too fast,
+// especially near max zoom" — the actual mechanism: this gain and the zoom
+// rate's own windup/energy gains (ZOOM_RATE_WINDUP_GAIN/ZOOM_RATE_ENERGY_GAIN
+// below) key off the exact same signals, so a build/high-energy moment made
+// the fractal's shape morph fast AND the view zoom fast AND (via
+// screen-composites.ts's own windup/tension gains) the memory field's
+// turbulence and kaleidoscope fold both intensify, all at once — four
+// independent effects compounding on the same trigger, not one bug. The
+// zoom-freeze fix elsewhere in this file only meaningfully damps this once
+// zoom is already fairly deep (see zoomExploreScale), so a build early/mid
+// dive gets the full, unthrottled morph-speed gain regardless. Halved here
+// so a build accelerates the morph noticeably less relative to how much it
+// still accelerates the zoom and the screen's other reactive effects.
+const THETA_SPEED_WINDUP_GAIN = 0.01
 const THETA_SPEED_TENSION_GAIN = -0.006 // a break/suspension slows the morph — "held", not stalled
 // windup/tension only exist inside the sparse build/break spans a track
 // actually has (often a small fraction of its length) — without this, the
@@ -25,8 +38,8 @@ const THETA_SPEED_TENSION_GAIN = -0.006 // a break/suspension slows the morph �
 // energetic it actually was. energy (RMS loudness, continuously available
 // for the whole track) fills that gap; kept modest relative to the other
 // gains so it reads as ambient breathing, not a replacement for the
-// build/drop dynamics.
-const THETA_SPEED_ENERGY_GAIN = 0.012
+// build/drop dynamics. Halved alongside THETA_SPEED_WINDUP_GAIN above.
+const THETA_SPEED_ENERGY_GAIN = 0.006
 const THETA_DROP_JUMP = 0.1 // radians — a drop nudges into fresh boundary territory, not a cut
 
 // Small radial wobble around the boundary itself: r<1 dips just inside the
