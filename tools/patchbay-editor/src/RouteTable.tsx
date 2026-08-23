@@ -41,27 +41,28 @@ export function RouteTable({ doc, onChange }: RouteTableProps) {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 12 }}>
-          <thead>
-            <tr style={{ textAlign: 'left', color: 'var(--text-1)' }}>
-              <th style={thStyle}>From</th>
-              <th style={thStyle}>To</th>
-              <th style={thStyle}>Curve</th>
-              <th style={thStyle}>Gain</th>
-              <th style={thStyle}>Offset</th>
-              <th style={thStyle}>Invert</th>
-              <th style={thStyle}></th>
-            </tr>
-          </thead>
-          <tbody>
-            {editableRoutes.map((route) => {
-              const routeIssues = issuesByRouteId.get(route.id)
-              return (
-                <tr key={route.id} style={{ borderTop: '1px solid var(--border-soft)' }}>
-                  <td style={tdStyle}>
-                    <select value={route.from} onChange={(e) => patch(route.id, { from: e.target.value })} style={selectStyle}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {editableRoutes.length === 0 ? (
+        <div className="empty-hint">No routes yet — add one below.</div>
+      ) : (
+        <div style={{ overflowX: 'auto' }}>
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>From</th>
+                <th>To</th>
+                <th>Curve</th>
+                <th>Gain</th>
+                <th>Offset</th>
+                <th>Invert</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {editableRoutes.map((route) => (
+                <tr key={route.id}>
+                  <td>
+                    <select value={route.from} onChange={(e) => patch(route.id, { from: e.target.value })}>
                       {SIGNAL_CATALOG.map((s) => (
                         <option key={s.name} value={s.name}>
                           {s.name} ({s.tag})
@@ -69,8 +70,8 @@ export function RouteTable({ doc, onChange }: RouteTableProps) {
                       ))}
                     </select>
                   </td>
-                  <td style={tdStyle}>
-                    <select value={route.to} onChange={(e) => patch(route.id, { to: e.target.value })} style={selectStyle}>
+                  <td>
+                    <select value={route.to} onChange={(e) => patch(route.id, { to: e.target.value })}>
                       {TARGET_CATALOG.map((t) => (
                         <option key={t.id} value={t.id}>
                           {t.id}
@@ -78,14 +79,13 @@ export function RouteTable({ doc, onChange }: RouteTableProps) {
                       ))}
                     </select>
                   </td>
-                  <td style={tdStyle}>
+                  <td>
                     <select
                       value={curveKind(route.curve)}
                       onChange={(e) => {
                         const found = CURVE_OPTIONS.find((c) => curveKind(c.value) === e.target.value)
                         patch(route.id, { curve: (found?.value ?? 'linear') as Curve })
                       }}
-                      style={selectStyle}
                     >
                       {CURVE_OPTIONS.map((c) => (
                         <option key={curveKind(c.value)} value={curveKind(c.value)}>
@@ -94,51 +94,43 @@ export function RouteTable({ doc, onChange }: RouteTableProps) {
                       ))}
                     </select>
                   </td>
-                  <td style={tdStyle}>
-                    <input
-                      type="number"
-                      step={0.05}
-                      value={route.gain ?? 1}
-                      onChange={(e) => patch(route.id, { gain: Number(e.target.value) })}
-                      style={numInputStyle}
-                    />
+                  <td>
+                    <input type="number" step={0.05} value={route.gain ?? 1} onChange={(e) => patch(route.id, { gain: Number(e.target.value) })} />
                   </td>
-                  <td style={tdStyle}>
+                  <td>
                     <input
                       type="number"
                       step={0.05}
                       value={route.offset ?? 0}
                       onChange={(e) => patch(route.id, { offset: Number(e.target.value) })}
-                      style={numInputStyle}
                     />
                   </td>
-                  <td style={{ ...tdStyle, textAlign: 'center' }}>
+                  <td style={{ textAlign: 'center' }}>
                     <input type="checkbox" checked={route.invert ?? false} onChange={(e) => patch(route.id, { invert: e.target.checked })} />
                   </td>
-                  <td style={tdStyle}>
+                  <td>
                     <button onClick={() => onChange(removeRoute(doc, route.id))} title="Remove route" style={{ padding: '2px 8px' }}>
                       ✕
                     </button>
                   </td>
                 </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
-      {[...issuesByRouteId.entries()].map(([routeId, messages]) => (
-        <div key={routeId} style={{ fontSize: 11, color: 'var(--error)' }}>
-          {messages.join('; ')}
+              ))}
+            </tbody>
+          </table>
         </div>
-      ))}
-      <button className="primary" onClick={handleAdd} style={{ alignSelf: 'flex-start', marginTop: 4 }}>
+      )}
+      {issuesByRouteId.size > 0 && (
+        <div className="issue-list">
+          {[...issuesByRouteId.entries()].map(([routeId, messages]) => (
+            <div key={routeId} className="issue-error">
+              {messages.join('; ')}
+            </div>
+          ))}
+        </div>
+      )}
+      <button className="primary" onClick={handleAdd} style={{ alignSelf: 'flex-start' }}>
         + Add route
       </button>
     </div>
   )
 }
-
-const thStyle: React.CSSProperties = { padding: '4px 6px', fontWeight: 500 }
-const tdStyle: React.CSSProperties = { padding: '4px 6px' }
-const selectStyle: React.CSSProperties = { width: '100%', fontSize: 12 }
-const numInputStyle: React.CSSProperties = { width: 64, fontSize: 12 }

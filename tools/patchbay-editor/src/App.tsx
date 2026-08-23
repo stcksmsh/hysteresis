@@ -101,9 +101,7 @@ function useDropLog(bus: SignalBus | null) {
 }
 
 function sectionTitle(text: string) {
-  return (
-    <h3 style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--text-1)', textTransform: 'uppercase', letterSpacing: 0.6 }}>{text}</h3>
-  )
+  return <h3 className="section-title">{text}</h3>
 }
 
 // Seed graph: energy gated through a threshold into the first fixture's
@@ -204,12 +202,8 @@ export function App() {
       >
         <strong style={{ letterSpacing: 0.3 }}>Patchbay</strong>
         <input type="file" accept="audio/*" onChange={onFileChosen} />
-        {saveStatus && (
-          <span className="mono" style={{ fontSize: 11, color: 'var(--text-1)' }}>
-            {saveStatus}
-          </span>
-        )}
-        <span className="mono" style={{ color: 'var(--text-1)', marginLeft: 'auto' }}>
+        {saveStatus && <span className="status-pill">{saveStatus}</span>}
+        <span className="status-pill" style={{ marginLeft: 'auto' }}>
           {fps > 0 ? `${fps.toFixed(0)} fps` : '—'}
         </span>
       </header>
@@ -238,9 +232,9 @@ export function App() {
             overflowY: 'auto',
           }}
         >
-          <section>
+          <section className="panel-section">
             {sectionTitle('Screen routes')}
-            <p style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--text-2)' }}>
+            <p className="section-hint">
               Every route in the live config, editable — including the palette-automation rows (hueDrift/centroid →
               screen.hueShift, buildWindup → screen.paletteMix).
             </p>
@@ -250,14 +244,14 @@ export function App() {
             </button>
           </section>
 
-          <section>
+          <section className="panel-section">
             {sectionTitle('Fixtures')}
             <FixtureManager doc={fixtureDoc} onChange={handleFixtureDocChange} />
           </section>
 
-          <section>
+          <section className="panel-section">
             {sectionTitle('Physical patch graph')}
-            <p style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--text-2)' }}>
+            <p className="section-hint">
               Signal → operator → target chains, evaluated live against the fixtures above. Structured editor, not a
               canvas — see graph-draft.ts if adding a node-graph view later.
             </p>
@@ -267,12 +261,12 @@ export function App() {
             </button>
           </section>
 
-          <section>
+          <section className="panel-section">
             {sectionTitle('Fixture visuals')}
             <FixtureVisuals doc={fixtureDoc} resolved={resolvedValues} />
           </section>
 
-          <section>
+          <section className="panel-section">
             {sectionTitle('Debug readout')}
             <div className="mono" style={{ fontSize: 12, color: 'var(--text-1)', display: 'flex', flexDirection: 'column', gap: 4 }}>
               <div>bus.energy: {bus ? bus.energy.toFixed(4) : '—'}</div>
@@ -283,7 +277,7 @@ export function App() {
             </div>
           </section>
 
-          <section>
+          <section className="panel-section">
             {sectionTitle('Musical state (Layer 2 → bus)')}
             <div className="mono" style={{ fontSize: 12, color: 'var(--text-1)', display: 'flex', flexDirection: 'column', gap: 4 }}>
               <div>tension: {bus ? bus.tension.toFixed(4) : '—'}</div>
@@ -296,9 +290,9 @@ export function App() {
             </div>
           </section>
 
-          <section>
+          <section className="panel-section">
             {sectionTitle('Drop detector internals')}
-            <p style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--text-2)' }}>
+            <p className="section-hint">
               The detector's own live qualifying values, straight from inside it — not the bus. If dropImpulse never
               fires, this is what tells you WHICH condition is failing against real audio.
             </p>
@@ -316,14 +310,14 @@ export function App() {
             </div>
           </section>
 
-          <section>
+          <section className="panel-section">
             {sectionTitle('Drop detector log')}
-            <p style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--text-2)' }}>
+            <p className="section-hint">
               Rising edges of bus.dropImpulse (&gt;{DROP_EDGE_EPS} in one tick), most recent first. Time is seconds since this
               page loaded, not track position.
             </p>
             {dropLog.length === 0 ? (
-              <div style={{ fontSize: 12, color: 'var(--text-2)' }}>No drops observed yet.</div>
+              <div className="empty-hint">No drops observed yet.</div>
             ) : (
               <div className="mono" style={{ fontSize: 12, color: 'var(--text-1)', display: 'flex', flexDirection: 'column', gap: 2 }}>
                 {dropLog.map((entry, i) => (

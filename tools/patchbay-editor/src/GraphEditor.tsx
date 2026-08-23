@@ -43,12 +43,13 @@ export function GraphEditor({ nodes, onChange, targets }: GraphEditorProps) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {nodes.length === 0 && <div className="empty-hint">No nodes yet — add one below.</div>}
       {nodes.map((node) => (
         <NodeRow key={node.id} node={node} allNodes={nodes} targets={targets} issues={issuesByNodeId.get(node.id)} onPatch={patchNode} onRemove={removeNode} />
       ))}
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+      <div className="kind-picker">
         {NODE_KINDS.map((kind) => (
-          <button key={kind} onClick={() => addNode(kind)} style={{ fontSize: 11, padding: '4px 8px' }}>
+          <button key={kind} onClick={() => addNode(kind)}>
             + {kind}
           </button>
         ))}
@@ -79,22 +80,10 @@ function NodeRow({ node, allNodes, targets, issues, onPatch, onRemove }: NodeRow
   }
 
   return (
-    <div
-      style={{
-        border: `1px solid ${hasError ? 'var(--error)' : 'var(--border)'}`,
-        borderRadius: 'var(--radius)',
-        padding: 8,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 6,
-        background: 'var(--bg-2)',
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <code className="mono" style={{ fontSize: 11, color: 'var(--text-1)', minWidth: 28 }}>
-          {node.id}
-        </code>
-        <strong style={{ fontSize: 12 }}>{node.kind}</strong>
+    <div className={`node-card${hasError ? ' has-error' : ''}`}>
+      <div className="node-card-header">
+        <code className="mono node-card-id">{node.id}</code>
+        <strong className="node-card-kind">{node.kind}</strong>
         <button onClick={() => onRemove(node.id)} style={{ marginLeft: 'auto', padding: '2px 8px', fontSize: 11 }} title="Remove node">
           ✕
         </button>
@@ -115,9 +104,9 @@ function NodeRow({ node, allNodes, targets, issues, onPatch, onRemove }: NodeRow
       )}
 
       {issues && issues.length > 0 && (
-        <div style={{ fontSize: 11 }}>
+        <div className="issue-list">
           {issues.map((issue, i) => (
-            <div key={i} style={{ color: issue.severity === 'error' ? 'var(--error)' : 'var(--warn)' }}>
+            <div key={i} className={issue.severity === 'error' ? 'issue-error' : 'issue-warning'}>
               {issue.severity}: {issue.message}
             </div>
           ))}
@@ -128,11 +117,10 @@ function NodeRow({ node, allNodes, targets, issues, onPatch, onRemove }: NodeRow
 }
 
 function NodeFields({ node, targets, onPatch }: { node: DraftNode; targets: PatchTargetDecl[]; onPatch: (id: string, fields: Partial<DraftNode>) => void }) {
-  const row: React.CSSProperties = { display: 'flex', gap: 8, alignItems: 'center', fontSize: 11 }
   switch (node.kind) {
     case 'signal':
       return (
-        <div style={row}>
+        <div className="node-fields">
           signal:
           <select value={node.signal} onChange={(e) => onPatch(node.id, { signal: e.target.value })} style={{ fontSize: 11 }}>
             {SIGNAL_CATALOG.filter((s) => s.tag !== 'pass-through').map((s) => (
@@ -145,14 +133,14 @@ function NodeFields({ node, targets, onPatch }: { node: DraftNode; targets: Patc
       )
     case 'const':
       return (
-        <div style={row}>
+        <div className="node-fields">
           value:
           <input type="number" step={0.05} value={node.value ?? 0} onChange={(e) => onPatch(node.id, { value: Number(e.target.value) })} style={{ width: 70 }} />
         </div>
       )
     case 'threshold':
       return (
-        <div style={row}>
+        <div className="node-fields">
           cut:
           <input type="number" step={0.05} value={node.cut ?? 0.5} onChange={(e) => onPatch(node.id, { cut: Number(e.target.value) })} style={{ width: 60 }} />
           hysteresis:
@@ -167,7 +155,7 @@ function NodeFields({ node, targets, onPatch }: { node: DraftNode; targets: Patc
       )
     case 'envelope':
       return (
-        <div style={row}>
+        <div className="node-fields">
           attackSec:
           <input
             type="number"
@@ -188,7 +176,7 @@ function NodeFields({ node, targets, onPatch }: { node: DraftNode; targets: Patc
       )
     case 'logic':
       return (
-        <div style={row}>
+        <div className="node-fields">
           op:
           <select value={node.logicOp} onChange={(e) => onPatch(node.id, { logicOp: e.target.value as DraftNode['logicOp'] })} style={{ fontSize: 11 }}>
             <option value="and">and (min)</option>
@@ -199,7 +187,7 @@ function NodeFields({ node, targets, onPatch }: { node: DraftNode; targets: Patc
       )
     case 'combine':
       return (
-        <div style={row}>
+        <div className="node-fields">
           op:
           <select value={node.combineOp} onChange={(e) => onPatch(node.id, { combineOp: e.target.value as DraftNode['combineOp'] })} style={{ fontSize: 11 }}>
             <option value="add">add</option>
@@ -211,7 +199,7 @@ function NodeFields({ node, targets, onPatch }: { node: DraftNode; targets: Patc
       )
     case 'curve':
       return (
-        <div style={row}>
+        <div className="node-fields">
           curve:
           <select value={node.curve} onChange={(e) => onPatch(node.id, { curve: e.target.value as CurveKind })} style={{ fontSize: 11 }}>
             {CURVE_KINDS.map((c) => (
@@ -224,7 +212,7 @@ function NodeFields({ node, targets, onPatch }: { node: DraftNode; targets: Patc
       )
     case 'map':
       return (
-        <div style={{ ...row, flexWrap: 'wrap' }}>
+        <div className="node-fields" style={{ flexWrap: 'wrap' }}>
           in:
           <input
             type="number"
@@ -264,7 +252,7 @@ function NodeFields({ node, targets, onPatch }: { node: DraftNode; targets: Patc
       )
     case 'target':
       return (
-        <div style={row}>
+        <div className="node-fields">
           target:
           <select value={node.targetId} onChange={(e) => onPatch(node.id, { targetId: e.target.value })} style={{ fontSize: 11 }}>
             <option value="">(choose a fixture channel)</option>

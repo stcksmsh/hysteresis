@@ -104,3 +104,162 @@ code,
 .mono {
   font-family: var(--font-mono);
 }
+
+/* Scrollbar for the sidebar (Firefox + WebKit) — thin and dark, matching
+   the rest of the chrome instead of the browser default light scrollbar
+   that would otherwise stand out against this theme. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 8px;
+  border: 2px solid var(--bg-1);
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: #3a3f47;
+}
+
+/* Sidebar section chrome — every <section> in App.tsx gets this so the
+   sidebar reads as a stack of distinct panels instead of one undifferentiated
+   scroll of headers and controls. */
+.panel-section {
+  background: var(--bg-2);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  padding: 14px;
+}
+
+.section-title {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-1);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+.section-hint {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--text-2);
+  line-height: 1.5;
+}
+
+/* Small inline status text in the header (fps, save status, ack counts). */
+.status-pill {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-1);
+  background: var(--bg-2);
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  padding: 3px 10px;
+  white-space: nowrap;
+}
+
+/* Data table (RouteTable) */
+.data-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 12px;
+}
+.data-table th {
+  text-align: left;
+  padding: 6px 8px;
+  color: var(--text-2);
+  font-weight: 500;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.data-table td {
+  padding: 5px 8px;
+  border-top: 1px solid var(--border-soft);
+}
+.data-table tr:hover td {
+  background: rgba(255, 255, 255, 0.02);
+}
+.data-table select,
+.data-table input {
+  width: 100%;
+}
+
+/* Graph node card */
+.node-card {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  padding: 10px;
+  background: var(--bg-3);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.node-card.has-error {
+  border-color: var(--error);
+}
+.node-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.node-card-id {
+  font-size: 11px;
+  color: var(--text-2);
+  min-width: 26px;
+}
+.node-card-kind {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+.node-fields {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: 11px;
+  color: var(--text-1);
+}
+.node-fields input,
+.node-fields select {
+  font-size: 11px;
+}
+.issue-list {
+  font-size: 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.issue-error {
+  color: var(--error);
+}
+.issue-warning {
+  color: var(--warn);
+}
+
+.kind-picker {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+.kind-picker button {
+  font-size: 11px;
+  padding: 4px 10px;
+}
+
+.empty-hint {
+  font-size: 12px;
+  color: var(--text-2);
+  font-style: italic;
+}

@@ -24,7 +24,7 @@ export function FixtureVisuals({ doc, resolved }: FixtureVisualsProps) {
           </div>
         )
       })}
-      {doc.fixtures.length === 0 && <div style={{ fontSize: 12, color: 'var(--text-2)' }}>No fixtures yet.</div>}
+      {doc.fixtures.length === 0 && <div className="empty-hint">No fixtures yet.</div>}
     </div>
   )
 }
