@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { RuntimeBridge } from './runtime-bridge'
-import { fromConfig, toConfig, updateRoute, type PatchDocument } from '../../../src/render/conductor/patchbay/editor/patch-document'
+import { fromConfig, toConfig, type PatchDocument } from '../../../src/render/conductor/patchbay/editor/patch-document'
+import { RouteTable } from './RouteTable'
 import { screenOnlyConfig } from '../../../src/render/conductor/patchbay/configs/screen-only'
 import { PatchGraphEvaluator } from '../../../src/render/conductor/patchgraph/PatchGraphEvaluator'
 import { addFixture, fixtureTargetCatalog, emptyFixtureDocument, type FixtureDocument } from '../../../src/render/conductor/patchgraph/fixture-document'
@@ -116,6 +117,11 @@ export function App() {
   const [screenDoc, setScreenDoc] = useState<PatchDocument>(() => fromConfig(screenOnlyConfig))
   const energyRoute = screenDoc.routes.find((r) => r.from === 'energy' && r.to === 'screen.energy')
 
+  function handleScreenDocChange(next: PatchDocument) {
+    setScreenDoc(next)
+    bridgeRef.current?.setPatchbayConfig(toConfig(next))
+  }
+
   const [fixtureDoc, setFixtureDoc] = useState<FixtureDocument>(() => addFixture(emptyFixtureDocument(), 'Demo Dimmer', 'dimmer'))
   const dimmer = fixtureDoc.fixtures[0]
   const dimmerTargetId = fixtureTargetId(dimmer.id, 'brightness')
@@ -140,13 +146,6 @@ export function App() {
     const resolved = evaluator.evaluate(bus, 1 / 20) // ~ the signalBus stream's own interval
     setDimmerValue(resolved[dimmerTargetId] ?? 0)
   }, [bus, evaluator, dimmerTargetId])
-
-  function setEnergyGain(gain: number) {
-    if (!energyRoute) return
-    const next = updateRoute(screenDoc, energyRoute.id, { gain })
-    setScreenDoc(next)
-    bridgeRef.current?.setPatchbayConfig(toConfig(next))
-  }
 
   async function onFileChosen(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -190,7 +189,7 @@ export function App() {
 
         <aside
           style={{
-            width: 320,
+            width: 460,
             padding: 16,
             borderLeft: '1px solid var(--border)',
             background: 'var(--bg-1)',
@@ -201,21 +200,13 @@ export function App() {
         >
           <section>
             <h3 style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--text-1)', textTransform: 'uppercase', letterSpacing: 0.6 }}>
-              Screen route
+              Screen routes
             </h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <label style={{ fontSize: 12 }}>
-                energy → screen.energy — gain ({(energyRoute?.gain ?? 1).toFixed(2)})
-              </label>
-              <input
-                type="range"
-                min={0}
-                max={3}
-                step={0.05}
-                value={energyRoute?.gain ?? 1}
-                onChange={(e) => setEnergyGain(Number(e.target.value))}
-              />
-            </div>
+            <p style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--text-2)' }}>
+              Every route in the live config, editable — this is the actual palette-automation control surface (see the
+              hueDrift/centroid → screen.hueShift and buildWindup → screen.paletteMix rows).
+            </p>
+            <RouteTable doc={screenDoc} onChange={handleScreenDocChange} />
           </section>
 
           <section>
