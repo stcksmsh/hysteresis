@@ -31,6 +31,21 @@ const FLOW_DRIFT_SPEED = 0.04 // noise-sample drift per second, at flowStrength'
 const FOLD_COUNT = 6
 const MIRROR_ONSET = 0.1 // symmetry has to clear this floor before any fold blends in at all
 
+// This feedback loop's steady-state brightness is cur/(1-decay) — raising
+// decay to hold a build/break longer was ALSO multiplying brightness by the
+// same factor (up to ~67-200x at the highest decay tiers screen-composites.ts
+// uses), well past where the composite pass's Reinhard tonemap crushes all
+// contrast into a washed-out mush. Reported as "too bright/psychedelic
+// sometimes" — worse exactly during builds/breaks, since that's when decay
+// (and separately, symmetry) both rise together off the same signals.
+// DECAY_REFERENCE matches screen-composites.ts's FIELD_DECAY_GROOVE (today's
+// resting decay) so scaling cur's contribution by (1-decay)/(1-REFERENCE)
+// leaves the look at rest completely unchanged, while every higher decay
+// tier now holds the SAME steady-state brightness longer instead of a
+// brighter one — decoupling "how long it persists" from "how bright it
+// gets", which is what was actually wanted.
+const DECAY_REFERENCE = 0.86
+
 function clamp01(v: number): number {
   return Math.max(0, Math.min(1, v))
 }
@@ -65,6 +80,7 @@ export class MemoryFieldPass {
     uFlowStrength: WebGLUniformLocation | null
     uFoldCount: WebGLUniformLocation | null
     uMirrorStrength: WebGLUniformLocation | null
+    uCurGain: WebGLUniformLocation | null
   }
 
   constructor(
@@ -88,6 +104,7 @@ export class MemoryFieldPass {
       uFlowStrength: gl.getUniformLocation(this.program, 'uFlowStrength'),
       uFoldCount: gl.getUniformLocation(this.program, 'uFoldCount'),
       uMirrorStrength: gl.getUniformLocation(this.program, 'uMirrorStrength'),
+      uCurGain: gl.getUniformLocation(this.program, 'uCurGain'),
     }
     this.resize(width, height)
   }
@@ -121,6 +138,11 @@ export class MemoryFieldPass {
 
     const symmetry = clamp01(params.symmetry)
     const mirrorStrength = clamp01((symmetry - MIRROR_ONSET) / (1 - MIRROR_ONSET))
+    // Clamped to >=0 only — deliberately NOT capped at 1, so a decay lower
+    // than DECAY_REFERENCE (none currently exist, but nothing enforces that)
+    // would correctly boost cur's contribution rather than silently doing
+    // nothing; capping would only hide that case, not prevent it.
+    const curGain = Math.max(0, (1 - params.decay) / (1 - DECAY_REFERENCE))
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.back.framebuffer)
     gl.viewport(0, 0, this.back.width, this.back.height)
@@ -147,6 +169,7 @@ export class MemoryFieldPass {
     gl.uniform1f(this.uniforms.uFlowStrength, params.flowStrength * 0.02)
     gl.uniform1f(this.uniforms.uFoldCount, FOLD_COUNT)
     gl.uniform1f(this.uniforms.uMirrorStrength, mirrorStrength)
+    gl.uniform1f(this.uniforms.uCurGain, curGain)
 
     drawFullscreenQuad(gl, this.quad)
 

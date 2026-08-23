@@ -43,6 +43,18 @@ const SYMMETRY_FLOOR = 0.18
 const FLATNESS_BLOOM_THRESHOLD = 0.75
 const FLATNESS_BLOOM_GAIN = 0.6
 const SYMMETRY_DROP_HOLD_SEC = 2.0
+// Reported "too psychedelic": tension/buildProgress/flatness/familiarity
+// could all combine to push ambient symmetry all the way to full mirror —
+// and since decay (persistence/brightness) rises off the same tension/build
+// signals, a build or break got maximally mirrored AND maximally bright at
+// once, for as long as that section lasted (which can be many seconds/tens
+// of seconds — a build isn't a one-shot event). Capped below full so the
+// screen never fully organizes into a pure kaleidoscope from ambient
+// tension/build alone, no matter how long the section runs. The drop's
+// snap-to-1 hold (symmetryHoldSec below) is untouched — that's a brief,
+// deliberate, earned "punch" distinct from ambient organization, not the
+// thing that was reported as overused.
+const SYMMETRY_AMBIENT_CEILING = 0.72
 const FAMILIARITY_SYMMETRY_GAIN = 0.15 // §4.2: familiarity gently blooms organization, distinct from the drop's snap
 
 const HUE_DRIFT_PER_SEC = 0.01
@@ -141,7 +153,7 @@ export class ScreenParamAssembler {
         flatnessBloom +
         familiarity * FAMILIARITY_SYMMETRY_GAIN,
       SYMMETRY_FLOOR,
-      1,
+      SYMMETRY_AMBIENT_CEILING,
     )
     if (this.symmetryHoldSec > 0) symmetryTarget = 1
     const symmetry = clamp(this.symmetrySmooth.update(symmetryTarget, dt), SYMMETRY_FLOOR, 1)

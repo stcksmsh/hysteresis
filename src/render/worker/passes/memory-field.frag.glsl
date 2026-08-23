@@ -9,6 +9,7 @@ uniform sampler2D uPrev;
 uniform sampler2D uNoise;
 uniform vec2 uNoiseTexel;
 uniform float uDecay;
+uniform float uCurGain; // see memory-field-pass.ts's DECAY_REFERENCE comment
 uniform float uAspect;
 uniform vec2 uFlowUv;         // slowly-drifting offset into the noise texture — keeps the field evolving
 uniform float uFlowScale;     // spatial frequency of the curl sample, relative to screen UV
@@ -94,7 +95,14 @@ void main() {
   vec3 foldedPrev = texture(uPrev, advect(foldedDomain(vUv))).rgb;
   vec3 prev = mix(rawPrev, foldedPrev, uMirrorStrength) * uDecay;
   vec3 cur = texture(uCurrent, vUv).rgb;
-  vec3 result = prev + cur;
+  // uCurGain decouples steady-state brightness from persistence length (see
+  // memory-field-pass.ts) — reported "too bright sometimes": this feedback
+  // loop's steady-state brightness is cur/(1-decay), so raising decay to
+  // hold a build/break longer (intentional) was ALSO multiplying brightness
+  // by the same factor (not intentional — up to ~67-200x at the highest
+  // decay tiers, well past where Reinhard tonemapping downstream crushes
+  // all contrast into a washed-out mush). uCurGain cancels that out.
+  vec3 result = prev + cur * uCurGain;
 
   // Defensive, not a fix for a known cause: this buffer is a float FBO (see
   // MemoryFieldPass's `useFloat`), which — unlike an 8-bit texture — does
