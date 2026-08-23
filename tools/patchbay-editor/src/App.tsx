@@ -65,6 +65,37 @@ function useRuntimeBridge(canvasRef: React.RefObject<HTMLCanvasElement | null>, 
   return { bridgeRef, fps, error, patchbayError, patchbayAckCount }
 }
 
+// Same rising-edge rule ScreenParamAssembler uses to reconstruct "a drop
+// just happened" from the continuous dropImpulse pulse (see
+// screen-composites.ts's DROP_EDGE_EPS) — mirrored here, not imported,
+// since this hook's job is independent confirmation: if the real drop
+// detector is firing too eagerly on quiet/ambient material, this needs to
+// show it happening from the bus itself, not trust the same code path
+// that's under suspicion.
+const DROP_EDGE_EPS = 0.05
+const DROP_LOG_MAX = 12
+
+interface DropLogEntry {
+  atMs: number // performance.now() when observed — wall-clock since page load, not track position (this tool doesn't track playback position)
+  strength: number
+}
+
+function useDropLog(bus: SignalBus | null) {
+  const [log, setLog] = useState<DropLogEntry[]>([])
+  const prevImpulse = useRef(0)
+  const startedAt = useRef(performance.now())
+
+  useEffect(() => {
+    if (!bus) return
+    if (bus.dropImpulse > prevImpulse.current + DROP_EDGE_EPS) {
+      setLog((prev) => [{ atMs: performance.now() - startedAt.current, strength: bus.dropImpulse }, ...prev].slice(0, DROP_LOG_MAX))
+    }
+    prevImpulse.current = bus.dropImpulse
+  }, [bus])
+
+  return log
+}
+
 export function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [bus, setBus] = useState<SignalBus | null>(null)
@@ -74,6 +105,7 @@ export function App() {
     setBusMessageCount((n) => n + 1)
   }, [])
   const { bridgeRef, fps, error, patchbayError, patchbayAckCount } = useRuntimeBridge(canvasRef, handleSignalBus)
+  const dropLog = useDropLog(bus)
 
   const [screenDoc, setScreenDoc] = useState<PatchDocument>(() => fromConfig(screenOnlyConfig))
   const energyRoute = screenDoc.routes.find((r) => r.from === 'energy' && r.to === 'screen.energy')
@@ -213,6 +245,42 @@ export function App() {
               <div>signalBus messages received: {busMessageCount}</div>
               <div>patchbay edits acknowledged by worker: {patchbayAckCount}</div>
             </div>
+          </section>
+
+          <section>
+            <h3 style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--text-1)', textTransform: 'uppercase', letterSpacing: 0.6 }}>
+              Musical state (Layer 2 → bus)
+            </h3>
+            <div className="mono" style={{ fontSize: 12, color: 'var(--text-1)', display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div>tension: {bus ? bus.tension.toFixed(4) : '—'}</div>
+              <div>buildProgress: {bus ? bus.buildProgress.toFixed(4) : '—'}</div>
+              <div>suspension: {bus ? bus.suspension.toFixed(4) : '—'}</div>
+              <div>dropImpulse: {bus ? bus.dropImpulse.toFixed(4) : '—'}</div>
+              <div>familiarity: {bus ? bus.familiarity.toFixed(4) : '—'}</div>
+              <div>flatness: {bus ? bus.flatness.toFixed(4) : '—'}</div>
+              <div>tempoBpm / confidence: {bus ? `${bus.tempoBpm.toFixed(1)} / ${bus.tempoConfidence.toFixed(2)}` : '—'}</div>
+            </div>
+          </section>
+
+          <section>
+            <h3 style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--text-1)', textTransform: 'uppercase', letterSpacing: 0.6 }}>
+              Drop detector log
+            </h3>
+            <p style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--text-2)' }}>
+              Rising edges of bus.dropImpulse (&gt;{DROP_EDGE_EPS} in one tick), most recent first. Time is seconds since this
+              page loaded, not track position.
+            </p>
+            {dropLog.length === 0 ? (
+              <div style={{ fontSize: 12, color: 'var(--text-2)' }}>No drops observed yet.</div>
+            ) : (
+              <div className="mono" style={{ fontSize: 12, color: 'var(--text-1)', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                {dropLog.map((entry, i) => (
+                  <div key={i}>
+                    +{(entry.atMs / 1000).toFixed(1)}s — strength {entry.strength.toFixed(2)}
+                  </div>
+                ))}
+              </div>
+            )}
           </section>
         </aside>
       </div>
