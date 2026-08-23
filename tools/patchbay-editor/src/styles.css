@@ -192,30 +192,74 @@ code,
   backdrop-filter: blur(4px);
 }
 
-.panel-grid {
+/* Flex-wrap, not a uniform grid: panels have different natural sizes (a
+   route table wants to be wide, a debug readout wants to be small), and
+   each is independently resizable/reorderable now — a fixed column grid
+   would fight both of those, leaving dead space or clipping. Panels flow
+   left-to-right, wrap, and pack against whatever width they're given. */
+.panel-flow {
   flex: 0 0 auto;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  align-items: flex-start;
   gap: 16px;
   padding: 16px;
-  align-items: start;
 }
 .panel-section-wide {
-  grid-column: 1 / -1;
+  flex-basis: 100%;
+  width: 100% !important;
 }
 
-/* Panel chrome — every <section> in App.tsx gets this so the page reads as
-   a grid of distinct panels instead of one undifferentiated scroll of
-   headers and controls. */
+/* Panel chrome — every <section> rendered via Panel.tsx gets this so the
+   page reads as a workspace of distinct, manipulable panels instead of one
+   undifferentiated scroll of headers and controls. `resize: both` is the
+   browser's own resize handle (bottom-right corner) — deliberately not a
+   JS-driven resize implementation, since the native one is free, familiar,
+   and needs zero extra dependency for a dev-only tool. */
 .panel-section {
   background: var(--bg-2);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-lg);
   padding: 16px;
+  min-width: 240px;
+  min-height: 120px;
+  max-width: 100%;
+  resize: both;
+  overflow: auto;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+.panel-section-dragging {
+  opacity: 0.4;
+}
+.panel-section-dragover {
+  border-color: var(--accent-dim);
+  box-shadow: 0 0 0 1px var(--accent-dim);
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -4px -4px 8px;
+  padding: 4px;
+  border-radius: var(--radius);
+  cursor: grab;
+}
+.panel-header:active {
+  cursor: grabbing;
+}
+.panel-header:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+.panel-drag-handle {
+  color: var(--text-2);
+  font-size: 14px;
+  line-height: 1;
 }
 
 .section-title {
-  margin: 0 0 8px;
+  margin: 0;
   font-size: 12px;
   font-weight: 600;
   color: var(--text-1);

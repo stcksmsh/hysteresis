@@ -5,6 +5,8 @@ import { RouteTable } from './RouteTable'
 import { FixtureManager } from './FixtureManager'
 import { GraphEditor } from './GraphEditor'
 import { FixtureVisuals } from './FixtureVisuals'
+import { Panel } from './Panel'
+import { usePanelOrder } from './use-panel-order'
 import { serializeScreenConfig, serializeGraphAndFixtures, saveToFile } from './serialize-config'
 import { makeDefaultDraft, makeNodeId, toPatchGraph, type DraftNode } from './graph-draft'
 import { screenOnlyConfig } from '../../../src/render/conductor/patchbay/configs/screen-only'
@@ -98,10 +100,6 @@ function useDropLog(bus: SignalBus | null) {
   }, [bus])
 
   return log
-}
-
-function sectionTitle(text: string) {
-  return <h3 className="section-title">{text}</h3>
 }
 
 // Seed graph: energy gated through a threshold into the first fixture's
@@ -198,6 +196,126 @@ export function App() {
     setSaveStatus(result.ok ? `Saved to ${result.path}` : `Save failed: ${result.message}`)
   }
 
+  const panels: { id: string; title: string; hint?: string; wide?: boolean; width?: number; height?: number; content: React.ReactNode }[] = [
+    {
+      id: 'routes',
+      title: 'Screen routes',
+      hint: 'Every route in the live config, editable — including the palette-automation rows (hueDrift/centroid → screen.hueShift, buildWindup → screen.paletteMix).',
+      width: 560,
+      height: 420,
+      content: (
+        <>
+          <RouteTable doc={screenDoc} onChange={handleScreenDocChange} />
+          <button onClick={handleSaveScreenConfig} style={{ marginTop: 8 }}>
+            Save screen config to file
+          </button>
+        </>
+      ),
+    },
+    {
+      id: 'fixtures',
+      title: 'Fixtures',
+      width: 360,
+      height: 260,
+      content: <FixtureManager doc={fixtureDoc} onChange={handleFixtureDocChange} />,
+    },
+    {
+      id: 'graph',
+      title: 'Physical patch graph',
+      hint: 'Signal → operator → target chains, evaluated live against the fixtures above. Structured editor, not a canvas — see graph-draft.ts if adding a node-graph view later.',
+      wide: true,
+      height: 480,
+      content: (
+        <>
+          <GraphEditor nodes={graphNodes} onChange={setGraphNodes} targets={targetCatalog} />
+          <button onClick={handleSaveGraph} style={{ marginTop: 8 }}>
+            Save graph + fixtures to file
+          </button>
+        </>
+      ),
+    },
+    {
+      id: 'visuals',
+      title: 'Fixture visuals',
+      width: 360,
+      height: 260,
+      content: <FixtureVisuals doc={fixtureDoc} resolved={resolvedValues} />,
+    },
+    {
+      id: 'debug',
+      title: 'Debug readout',
+      width: 340,
+      height: 180,
+      content: (
+        <div className="mono readout">
+          <div>bus.energy: {bus ? bus.energy.toFixed(4) : '—'}</div>
+          <div>bus.idle: {bus ? String(bus.idle) : '—'}</div>
+          <div>graph evaluator: {evaluator ? 'valid' : `invalid (${graphErrors.length} error(s) — see graph editor)`}</div>
+        </div>
+      ),
+    },
+    {
+      id: 'musical',
+      title: 'Musical state (Layer 2 → bus)',
+      width: 340,
+      height: 240,
+      content: (
+        <div className="mono readout">
+          <div>tension: {bus ? bus.tension.toFixed(4) : '—'}</div>
+          <div>buildProgress: {bus ? bus.buildProgress.toFixed(4) : '—'}</div>
+          <div>suspension: {bus ? bus.suspension.toFixed(4) : '—'}</div>
+          <div>dropImpulse: {bus ? bus.dropImpulse.toFixed(4) : '—'}</div>
+          <div>familiarity: {bus ? bus.familiarity.toFixed(4) : '—'}</div>
+          <div>flatness: {bus ? bus.flatness.toFixed(4) : '—'}</div>
+          <div>tempoBpm / confidence: {bus ? `${bus.tempoBpm.toFixed(1)} / ${bus.tempoConfidence.toFixed(2)}` : '—'}</div>
+        </div>
+      ),
+    },
+    {
+      id: 'dropInternals',
+      title: 'Drop detector internals',
+      hint: "The detector's own live qualifying values, straight from inside it — not the bus. If dropImpulse never fires, this is what tells you WHICH condition is failing against real audio.",
+      width: 380,
+      height: 240,
+      content: (
+        <div className="mono readout">
+          <div>fullness: {dropDebug ? dropDebug.fullness.toFixed(4) : '—'} (needs &gt; 0.5)</div>
+          <div>onsetJump: {dropDebug ? dropDebug.onsetJump.toFixed(4) : '—'} (needs &gt; 0.06 for the rhythmic path)</div>
+          <div>noveltyPeak: {dropDebug ? dropDebug.noveltyPeak.toFixed(4) : '—'} (needs &gt; 0.3)</div>
+          <div>armed: {dropDebug ? String(dropDebug.armed) : '—'}</div>
+          {dropDebug === null && bus !== null && (
+            <div style={{ color: 'var(--warn)' }}>
+              null — either no track is loaded, or detectors are disabled (sidecar/position-only mode has no live
+              detector to read from at all).
+            </div>
+          )}
+        </div>
+      ),
+    },
+    {
+      id: 'dropLog',
+      title: 'Drop detector log',
+      hint: `Rising edges of bus.dropImpulse (>${DROP_EDGE_EPS} in one tick), most recent first. Time is seconds since this page loaded, not track position.`,
+      width: 320,
+      height: 240,
+      content:
+        dropLog.length === 0 ? (
+          <div className="empty-hint">No drops observed yet.</div>
+        ) : (
+          <div className="mono readout">
+            {dropLog.map((entry, i) => (
+              <div key={i}>
+                +{(entry.atMs / 1000).toFixed(1)}s — strength {entry.strength.toFixed(2)}
+              </div>
+            ))}
+          </div>
+        ),
+    },
+  ]
+  const panelsById = new Map(panels.map((p) => [p.id, p]))
+  const defaultOrder = panels.map((p) => p.id)
+  const { order, draggingId, dragOverId, onDragStart, onDragEnd, onDragOver, onDrop } = usePanelOrder(defaultOrder)
+
   const canvasBlock = (
     <div
       className={canvasFullscreen ? 'canvas-block canvas-block-fullscreen' : 'canvas-block'}
@@ -228,101 +346,30 @@ export function App() {
       <div className="app-body">
         {canvasBlock}
 
-        <div className="panel-grid">
-          <section className="panel-section">
-            {sectionTitle('Screen routes')}
-            <p className="section-hint">
-              Every route in the live config, editable — including the palette-automation rows (hueDrift/centroid →
-              screen.hueShift, buildWindup → screen.paletteMix).
-            </p>
-            <RouteTable doc={screenDoc} onChange={handleScreenDocChange} />
-            <button onClick={handleSaveScreenConfig} style={{ marginTop: 8 }}>
-              Save screen config to file
-            </button>
-          </section>
-
-          <section className="panel-section">
-            {sectionTitle('Fixtures')}
-            <FixtureManager doc={fixtureDoc} onChange={handleFixtureDocChange} />
-          </section>
-
-          <section className="panel-section panel-section-wide">
-            {sectionTitle('Physical patch graph')}
-            <p className="section-hint">
-              Signal → operator → target chains, evaluated live against the fixtures above. Structured editor, not a
-              canvas — see graph-draft.ts if adding a node-graph view later.
-            </p>
-            <GraphEditor nodes={graphNodes} onChange={setGraphNodes} targets={targetCatalog} />
-            <button onClick={handleSaveGraph} style={{ marginTop: 8 }}>
-              Save graph + fixtures to file
-            </button>
-          </section>
-
-          <section className="panel-section">
-            {sectionTitle('Fixture visuals')}
-            <FixtureVisuals doc={fixtureDoc} resolved={resolvedValues} />
-          </section>
-
-          <section className="panel-section">
-            {sectionTitle('Debug readout')}
-            <div className="mono readout">
-              <div>bus.energy: {bus ? bus.energy.toFixed(4) : '—'}</div>
-              <div>bus.idle: {bus ? String(bus.idle) : '—'}</div>
-              <div>graph evaluator: {evaluator ? 'valid' : `invalid (${graphErrors.length} error(s) — see graph editor)`}</div>
-            </div>
-          </section>
-
-          <section className="panel-section">
-            {sectionTitle('Musical state (Layer 2 → bus)')}
-            <div className="mono readout">
-              <div>tension: {bus ? bus.tension.toFixed(4) : '—'}</div>
-              <div>buildProgress: {bus ? bus.buildProgress.toFixed(4) : '—'}</div>
-              <div>suspension: {bus ? bus.suspension.toFixed(4) : '—'}</div>
-              <div>dropImpulse: {bus ? bus.dropImpulse.toFixed(4) : '—'}</div>
-              <div>familiarity: {bus ? bus.familiarity.toFixed(4) : '—'}</div>
-              <div>flatness: {bus ? bus.flatness.toFixed(4) : '—'}</div>
-              <div>tempoBpm / confidence: {bus ? `${bus.tempoBpm.toFixed(1)} / ${bus.tempoConfidence.toFixed(2)}` : '—'}</div>
-            </div>
-          </section>
-
-          <section className="panel-section">
-            {sectionTitle('Drop detector internals')}
-            <p className="section-hint">
-              The detector's own live qualifying values, straight from inside it — not the bus. If dropImpulse never
-              fires, this is what tells you WHICH condition is failing against real audio.
-            </p>
-            <div className="mono readout">
-              <div>fullness: {dropDebug ? dropDebug.fullness.toFixed(4) : '—'} (needs &gt; 0.5)</div>
-              <div>onsetJump: {dropDebug ? dropDebug.onsetJump.toFixed(4) : '—'} (needs &gt; 0.06 for the rhythmic path)</div>
-              <div>noveltyPeak: {dropDebug ? dropDebug.noveltyPeak.toFixed(4) : '—'} (needs &gt; 0.3)</div>
-              <div>armed: {dropDebug ? String(dropDebug.armed) : '—'}</div>
-              {dropDebug === null && bus !== null && (
-                <div style={{ color: 'var(--warn)' }}>
-                  null — either no track is loaded, or detectors are disabled (sidecar/position-only mode has no live
-                  detector to read from at all).
-                </div>
-              )}
-            </div>
-          </section>
-
-          <section className="panel-section">
-            {sectionTitle('Drop detector log')}
-            <p className="section-hint">
-              Rising edges of bus.dropImpulse (&gt;{DROP_EDGE_EPS} in one tick), most recent first. Time is seconds since this
-              page loaded, not track position.
-            </p>
-            {dropLog.length === 0 ? (
-              <div className="empty-hint">No drops observed yet.</div>
-            ) : (
-              <div className="mono readout">
-                {dropLog.map((entry, i) => (
-                  <div key={i}>
-                    +{(entry.atMs / 1000).toFixed(1)}s — strength {entry.strength.toFixed(2)}
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
+        <div className="panel-flow">
+          {order.map((id) => {
+            const panel = panelsById.get(id)
+            if (!panel) return null
+            return (
+              <Panel
+                key={panel.id}
+                id={panel.id}
+                title={panel.title}
+                hint={panel.hint}
+                wide={panel.wide}
+                defaultWidth={panel.width}
+                defaultHeight={panel.height}
+                dragging={draggingId === panel.id}
+                draggedOver={dragOverId === panel.id && draggingId !== panel.id}
+                onDragStart={onDragStart}
+                onDragEnd={onDragEnd}
+                onDragOver={onDragOver}
+                onDrop={onDrop}
+              >
+                {panel.content}
+              </Panel>
+            )
+          })}
         </div>
       </div>
     </div>
