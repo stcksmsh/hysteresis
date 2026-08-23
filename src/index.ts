@@ -136,6 +136,7 @@ export function init(canvas: HTMLCanvasElement, opts: VizOpts): VizInstance {
 
   const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
   const onReducedMotionChange = (e: MediaQueryListEvent) => post({ kind: 'setReducedMotion', value: e.matches })
+  const onVisibilityChange = () => post({ kind: 'visibility', hidden: document.hidden })
 
   function post(msg: MainToRenderWorker, transfer?: Transferable[]): void {
     if (!worker) return
@@ -189,6 +190,16 @@ export function init(canvas: HTMLCanvasElement, opts: VizOpts): VizInstance {
     })
     resizeObserver.observe(canvas)
     reducedMotionQuery.addEventListener('change', onReducedMotionChange)
+
+    // render-worker.ts already handles a 'visibility' message (stop()/start()
+    // the render loop) — nothing ever sent it. This package runs 24/7 as a
+    // site-wide background, so a backgrounded/minimized tab was rendering at
+    // full tilt indefinitely: some browsers throttle rAF in hidden tabs,
+    // some don't reliably, and none of that is something to depend on for
+    // "must be fast, no room for errors" — an unattended tab left open
+    // overnight in the background shouldn't burn GPU/battery the whole time.
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    if (document.hidden) post({ kind: 'visibility', hidden: true }) // page can start out already backgrounded (e.g. opened in a background tab)
   } else {
     console.error('[sinteza-viz] OffscreenCanvas is not supported in this browser; the visual will not render')
   }
@@ -213,12 +224,27 @@ export function init(canvas: HTMLCanvasElement, opts: VizOpts): VizInstance {
     const ctx = opts.getAudioContext?.()
     const analyser = opts.getAnalyser?.()
     if (!ctx || !analyser) return
-    void engine.attach(ctx, workletUrl, analyser)
-    stopSynthLoop() // live audio just proved available — it's richer and takes over for good
-    if (audioPollHandle !== null) {
-      clearInterval(audioPollHandle)
-      audioPollHandle = null
-    }
+    // Was previously fire-and-forget with the poll-clearing/synth-stop code
+    // running unconditionally right after the call, regardless of whether
+    // attach() (async — addModule() fetches+compiles the worklet script)
+    // actually succeeded. A transient failure (script fetch hiccup, ctx
+    // closed mid-attach) meant the poll was already stopped by then, so
+    // there was no live audio for the rest of the session and no fallback
+    // resumed either — permanent, silent, and unattended-24/7-fatal for
+    // that one page load. Only stop polling/fall back once attach()
+    // actually resolves; on failure the still-running poll just retries.
+    void engine
+      .attach(ctx, workletUrl, analyser)
+      .then(() => {
+        stopSynthLoop() // live audio just proved available — it's richer and takes over for good
+        if (audioPollHandle !== null) {
+          clearInterval(audioPollHandle)
+          audioPollHandle = null
+        }
+      })
+      .catch((err: unknown) => {
+        console.error('[sinteza-viz] failed to attach audio worklet, will retry:', err)
+      })
   }
   tryAttachAudio()
   if (!engine.attached && tier !== 'idle-only') {
@@ -250,8 +276,25 @@ export function init(canvas: HTMLCanvasElement, opts: VizOpts): VizInstance {
   }
 
   async function loadSidecar(url: string): Promise<void> {
-    const res = await fetch(url)
-    const json: unknown = await res.json()
+    // Callers do `void loadSidecar(...)` (onTransport can't await a DOM
+    // event handler) — an uncaught rejection here would be a silent,
+    // console-only unhandled-rejection with no visible symptom beyond "this
+    // track just never got sidecar-driven structure". A network blip or a
+    // malformed/missing file on one track must not do anything worse than
+    // that: log and fall back to the live/idle path, never throw past this
+    // function.
+    let json: unknown
+    try {
+      const res = await fetch(url)
+      if (!res.ok) {
+        console.error(`[sinteza-viz] failed to fetch sidecar ${url}: HTTP ${res.status}`)
+        return
+      }
+      json = await res.json()
+    } catch (err) {
+      console.error(`[sinteza-viz] failed to fetch/parse sidecar ${url}:`, err)
+      return
+    }
     if (!isSidecar(json)) {
       console.error(`[sinteza-viz] ${url} is not a recognised sidecar (schema mismatch)`)
       return
@@ -340,6 +383,7 @@ export function init(canvas: HTMLCanvasElement, opts: VizOpts): VizInstance {
       engine.detach()
       resizeObserver?.disconnect()
       reducedMotionQuery.removeEventListener('change', onReducedMotionChange)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
       worker?.terminate()
       worker = null
       postToWorker = null
