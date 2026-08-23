@@ -172,7 +172,7 @@ function tick(t: number) {
 
   if (streamSignalBus && t - lastSignalBusPost > SIGNAL_BUS_STREAM_INTERVAL_MS) {
     lastSignalBusPost = t
-    post({ kind: 'signalBus', bus })
+    post({ kind: 'signalBus', bus, dropDebug: latestStateFrame?.dropDebug ?? null })
   }
 
   if (dt > 0) updateAdaptiveQuality(dt * 1000, t)

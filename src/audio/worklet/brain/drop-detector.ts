@@ -90,6 +90,19 @@ export interface DropEvent {
   t: number
 }
 
+// Live values of the three qualifying signals, for external diagnostics
+// only (SINTEZA_SIGNAL_BUS.md's own synthetic tests never needed this — but
+// "dropImpulse reads a flat 0 on real audio" can't be diagnosed from the
+// outside at all without seeing which of the three conditions is actually
+// failing against real feature statistics, which may look nothing like the
+// hand-picked synthetic fixtures these thresholds were tuned against).
+export interface DropDetectorDebug {
+  fullness: number
+  onsetJump: number
+  noveltyPeak: number
+  armed: boolean
+}
+
 // `vec` is a feature vector for the novelty-contrast term — same shape as
 // familiarity's (bands + centroid + flatness), not required to be identical
 // length/order to any other consumer's, just internally consistent frame to
@@ -121,6 +134,7 @@ export class DropDetector {
   private windowHops = 0
   private hopSec: number
   private startedAt: number | null = null
+  private lastDebug: DropDetectorDebug = { fullness: 0, onsetJump: 0, noveltyPeak: 0, armed: false }
 
   constructor(hopMs: number) {
     this.fastEnergy = new EnvelopeFollower(FAST_MS, FAST_MS, hopMs)
@@ -155,6 +169,8 @@ export class DropDetector {
     const noveltyValue = 1 - this.novelty.maxSimilarity(features.vec)
     this.novelty.push(features.vec)
     this.noveltyPeak = Math.max(noveltyValue, this.noveltyPeak * Math.exp(-this.hopSec / NOVELTY_HOLD_SEC))
+
+    this.lastDebug = { fullness, onsetJump, noveltyPeak: this.noveltyPeak, armed: this.armedAt !== null }
 
     if (tNow - this.startedAt < STARTUP_GRACE_SEC || tNow < this.refractoryUntil) {
       this.disarm()
@@ -204,5 +220,9 @@ export class DropDetector {
   private disarm(): void {
     this.armedAt = null
     this.armedPeakFullness = 0
+  }
+
+  getDebug(): DropDetectorDebug {
+    return this.lastDebug
   }
 }

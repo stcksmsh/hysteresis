@@ -6,7 +6,7 @@ import { SpectralFlux } from './onset'
 import { EnvelopeFollower, AdaptiveNormalizer } from './envelope'
 import { BeatTracker, BarTracker } from './brain/beat-tracker'
 import { BuildDetector } from './brain/build-detector'
-import { DropDetector } from './brain/drop-detector'
+import { DropDetector, type DropDetectorDebug } from './brain/drop-detector'
 import { BreakDetector } from './brain/break-detector'
 import { PlacementBands } from './placement-bands'
 import { FFT_SIZE, HOP_SIZE, SCOPE_SIZE } from '../../shared/constants'
@@ -236,6 +236,7 @@ class FeatureProcessor extends AudioWorkletProcessor implements AudioWorkletProc
     // visibly reactive screen.
     let buildProgress = 0
     let tension = 0
+    let dropDebug: DropDetectorDebug | undefined
     if (this.detectorsEnabled) {
       buildProgress = this.buildDetector.update(centroid, bandsRaw.sub)
 
@@ -262,6 +263,7 @@ class FeatureProcessor extends AudioWorkletProcessor implements AudioWorkletProc
         events.push({ type: 'drop', strength: dropEvent.strength, t: dropEvent.t })
         this.buildDetector.reset()
       }
+      dropDebug = this.dropDetector.getDebug()
     }
 
     const energy = this.energyTrajectory.update(broadbandEnergy)
@@ -283,6 +285,7 @@ class FeatureProcessor extends AudioWorkletProcessor implements AudioWorkletProc
       spectralHits,
       events,
       scope,
+      dropDebug,
     }
     this.port.postMessage({ kind: 'state', frame } satisfies WorkletToMain)
   }

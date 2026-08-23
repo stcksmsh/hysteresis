@@ -3,6 +3,7 @@
 // both sides are erased at compile time.
 import type { SignalBus } from '../render/conductor/types'
 import type { PatchbayConfig } from '../render/conductor/patchbay/types'
+import type { DropDetectorDebug } from '../audio/worklet/brain/drop-detector'
 
 export interface BandEnergies {
   sub: number
@@ -58,6 +59,12 @@ export interface StateFrame {
   // lever that keeps the beam's idle Lissajous animating instead of frozen).
   // Real live worklet/fused frames never set this.
   idle?: boolean
+  // Debug-only, live-worklet-only: the drop detector's own live qualifying
+  // values (see DropDetectorDebug's doc comment) — "dropImpulse reads a flat
+  // 0 on real audio" can't be diagnosed from outside the detector at all
+  // otherwise. Never set by StructureSource's sidecar/position-only path
+  // (there's no live DropDetector instance there to read from).
+  dropDebug?: DropDetectorDebug
 }
 
 export interface DropTrigger {
@@ -148,8 +155,12 @@ export type RenderWorkerToMain =
   | { kind: 'stats'; fps: number }
   // Dev-only: a live SignalBus snapshot, throttled (see render-worker.ts),
   // sent only while debugSetSignalBusStream(true) is active. Feeds the
-  // patchbay editor's live signal meters.
-  | { kind: 'signalBus'; bus: SignalBus }
+  // patchbay editor's live signal meters. dropDebug rides along (from
+  // whatever StateFrame is currently active) purely for diagnosing
+  // "dropImpulse never fires" against real audio — null on the synthetic
+  // fallback frame and on any sidecar/position-only frame (no live
+  // DropDetector instance to read from in either case).
+  | { kind: 'signalBus'; bus: SignalBus; dropDebug: DropDetectorDebug | null }
   // Dev-only: acks debugSetPatchbayConfig — either it was applied, or (most
   // usefully) it failed Patchbay's construction-time validation and the
   // worker kept running the previous config instead of crashing.

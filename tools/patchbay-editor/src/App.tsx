@@ -7,6 +7,7 @@ import { addFixture, fixtureTargetCatalog, emptyFixtureDocument, type FixtureDoc
 import { fixtureTargetId } from '../../../src/render/conductor/patchgraph/fixture-types'
 import type { PatchGraph } from '../../../src/render/conductor/patchgraph/types'
 import type { SignalBus } from '../../../src/render/conductor/types'
+import type { DropDetectorDebug } from '../../../src/audio/worklet/brain/drop-detector'
 
 // Vertical slice (task 3): proves the whole loop works end to end before
 // the real editor UI (route table, graph canvas, meters) gets built on top
@@ -27,7 +28,10 @@ import type { SignalBus } from '../../../src/render/conductor/types'
 // this exact one-shot API on every edit-triggered remount.
 const bridgesByCanvas = new WeakMap<HTMLCanvasElement, RuntimeBridge>()
 
-function useRuntimeBridge(canvasRef: React.RefObject<HTMLCanvasElement | null>, onSignalBus: (bus: SignalBus) => void) {
+function useRuntimeBridge(
+  canvasRef: React.RefObject<HTMLCanvasElement | null>,
+  onSignalBus: (bus: SignalBus, dropDebug: DropDetectorDebug | null) => void,
+) {
   const bridgeRef = useRef<RuntimeBridge | null>(null)
   const [fps, setFps] = useState(0)
   const [error, setError] = useState<string | null>(null)
@@ -100,9 +104,11 @@ export function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [bus, setBus] = useState<SignalBus | null>(null)
   const [busMessageCount, setBusMessageCount] = useState(0)
-  const handleSignalBus = useCallback((b: SignalBus) => {
+  const [dropDebug, setDropDebug] = useState<DropDetectorDebug | null>(null)
+  const handleSignalBus = useCallback((b: SignalBus, dbg: DropDetectorDebug | null) => {
     setBus(b)
     setBusMessageCount((n) => n + 1)
+    setDropDebug(dbg)
   }, [])
   const { bridgeRef, fps, error, patchbayError, patchbayAckCount } = useRuntimeBridge(canvasRef, handleSignalBus)
   const dropLog = useDropLog(bus)
@@ -259,6 +265,29 @@ export function App() {
               <div>familiarity: {bus ? bus.familiarity.toFixed(4) : '—'}</div>
               <div>flatness: {bus ? bus.flatness.toFixed(4) : '—'}</div>
               <div>tempoBpm / confidence: {bus ? `${bus.tempoBpm.toFixed(1)} / ${bus.tempoConfidence.toFixed(2)}` : '—'}</div>
+            </div>
+          </section>
+
+          <section>
+            <h3 style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--text-1)', textTransform: 'uppercase', letterSpacing: 0.6 }}>
+              Drop detector internals
+            </h3>
+            <p style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--text-2)' }}>
+              The detector's own live qualifying values, straight from inside it — not the bus. If dropImpulse never
+              fires, this is what tells you WHICH condition is failing against real audio (thresholds below were tuned
+              against synthetic test fixtures, which may not match real value ranges at all).
+            </p>
+            <div className="mono" style={{ fontSize: 12, color: 'var(--text-1)', display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 12 }}>
+              <div>fullness: {dropDebug ? dropDebug.fullness.toFixed(4) : '—'} (needs &gt; 0.5)</div>
+              <div>onsetJump: {dropDebug ? dropDebug.onsetJump.toFixed(4) : '—'} (needs &gt; 0.06 for the rhythmic path)</div>
+              <div>noveltyPeak: {dropDebug ? dropDebug.noveltyPeak.toFixed(4) : '—'} (needs &gt; 0.3)</div>
+              <div>armed: {dropDebug ? String(dropDebug.armed) : '—'}</div>
+              {dropDebug === null && bus !== null && (
+                <div style={{ color: 'var(--warn)' }}>
+                  null — either no track is loaded, or detectors are disabled (sidecar/position-only mode has no live
+                  detector to read from at all).
+                </div>
+              )}
             </div>
           </section>
 

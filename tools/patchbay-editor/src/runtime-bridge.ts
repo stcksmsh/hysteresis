@@ -1,6 +1,7 @@
 import type { MainToRenderWorker, RenderWorkerToMain, StateFrame } from '../../../src/shared/types'
 import type { PatchbayConfig } from '../../../src/render/conductor/patchbay/types'
 import type { SignalBus } from '../../../src/render/conductor/types'
+import type { DropDetectorDebug } from '../../../src/audio/worklet/brain/drop-detector'
 import { AudioEngine } from '../../../src/audio/AudioEngine'
 
 // Drives a REAL render-worker instance — the exact same worker the shipped
@@ -36,7 +37,7 @@ const WORKLET_URL = new URL('/worklets/feature-worklet.js', window.location.orig
 const RESIZE_DEBOUNCE_MS = 150
 
 export interface RuntimeBridgeCallbacks {
-  onSignalBus?: (bus: SignalBus) => void
+  onSignalBus?: (bus: SignalBus, dropDebug: DropDetectorDebug | null) => void
   onStats?: (fps: number) => void
   onError?: (message: string) => void
   onPatchbayResult?: (result: { ok: true } | { ok: false; message: string }) => void
@@ -108,7 +109,7 @@ export class RuntimeBridge {
         this.callbacks.onStats?.(msg.fps)
         break
       case 'signalBus':
-        this.callbacks.onSignalBus?.(msg.bus)
+        this.callbacks.onSignalBus?.(msg.bus, msg.dropDebug)
         break
       case 'patchbayConfigResult':
         this.callbacks.onPatchbayResult?.(msg.ok ? { ok: true } : { ok: false, message: msg.message })
