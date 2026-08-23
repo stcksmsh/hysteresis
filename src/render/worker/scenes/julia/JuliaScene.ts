@@ -793,6 +793,13 @@ export class JuliaScene implements Scene {
       this.panY = 0
       this.retarget(this.springCx.current, this.springCy.current)
       this.postFlash = 1
+      // Diagnostic (temporary): "went dark and stayed dark" has been
+      // reported twice now with no way to tell whether this is that
+      // designed reset (which should recover in POST_FLASH_SEC=1.6s) firing
+      // unexpectedly often/getting stuck, or something else entirely (GL
+      // context loss, adaptive-quality degradation). Cheap enough to leave
+      // in — remove once the actual cause is confirmed.
+      console.log('[sinteza-viz] JuliaScene zoom-floor reset fired', { t: performance.now() })
     }
     this.postFlash = Math.max(0, this.postFlash - dt / POST_FLASH_SEC)
     this.flash = Math.max(preFlash, this.postFlash)

@@ -111,8 +111,31 @@ function post(msg: RenderWorkerToMain) {
   self.postMessage(msg)
 }
 
+// Never let an uncaught exception anywhere in a frame kill the rAF chain.
+// Before this, any throw inside loop() (Conductor, a Scene, adaptive
+// quality, anything) meant the recursive raf(loop) call at the bottom never
+// ran — the loop just stops forever, silently, freezing the canvas on
+// whatever was last drawn. No error surfaced anywhere. If that last frame
+// happened to be mid-flash (JuliaScene's zoom-floor reset blacks the screen
+// out for its transition — see PRE_FLASH_LOG_WINDOW), the result is a
+// canvas stuck fully black indefinitely with zero indication anything went
+// wrong — plausible root cause for "the view went dark and stayed that
+// way", reported twice now with no exception visible anywhere. Catching
+// here can't fix whatever actually threw, but guarantees a broken frame is
+// a logged, visible, recoverable-next-tick event instead of a silent,
+// permanent freeze.
 function loop(t: number) {
   if (!running || !caps) return
+  try {
+    tick(t)
+  } catch (err) {
+    console.error('[sinteza-viz] render loop threw, continuing:', err)
+    post({ kind: 'error', message: `render loop threw: ${err instanceof Error ? err.message : String(err)}` })
+  }
+  rafHandle = raf(loop)
+}
+
+function tick(t: number) {
   const dt = lastLoopTime === null ? 0 : Math.min(0.1, (t - lastLoopTime) / 1000)
   lastLoopTime = t
 
@@ -153,8 +176,6 @@ function loop(t: number) {
   }
 
   if (dt > 0) updateAdaptiveQuality(dt * 1000, t)
-
-  rafHandle = raf(loop)
 }
 
 function updateAdaptiveQuality(frameMs: number, t: number) {
@@ -267,6 +288,7 @@ self.onmessage = (e: MessageEvent<MainToRenderWorker>) => {
         post({ kind: 'error', message: 'WebGL context lost — attempting to recover' })
       })
       msg.canvas.addEventListener('webglcontextrestored', () => {
+        console.log('[sinteza-viz] WebGL context restored, reinitializing')
         if (!caps || !canvasRef) return
         screenOutput.init(caps, canvasRef.width, canvasRef.height, currentDpr, reducedMotion)
         start()
