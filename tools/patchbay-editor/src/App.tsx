@@ -135,7 +135,14 @@ export function App() {
     bridgeRef.current?.setPatchbayConfig(toConfig(next))
   }
 
-  const [fixtureDoc, setFixtureDoc] = useState<FixtureDocument>(() => addFixture(emptyFixtureDocument(), 'Demo Dimmer', 'dimmer'))
+  const [fixtureDoc, setFixtureDoc] = useState<FixtureDocument>(() => {
+    let doc = emptyFixtureDocument()
+    doc = addFixture(doc, 'Demo Dimmer', 'dimmer')
+    doc = addFixture(doc, 'Demo RGB', 'rgb')
+    doc = addFixture(doc, 'Demo Servo', 'servo')
+    doc = addFixture(doc, 'Demo Laser', 'mover')
+    return doc
+  })
   const targetCatalog = useMemo(() => fixtureTargetCatalog(fixtureDoc), [fixtureDoc])
 
   const [graphNodes, setGraphNodes] = useState<DraftNode[]>(() => {
