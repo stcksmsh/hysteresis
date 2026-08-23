@@ -6,6 +6,7 @@ import beamVertSrc from './shaders/beam.vert.glsl?raw'
 import beamFragSrc from './shaders/beam.frag.glsl?raw'
 import { lissajousPoint } from './lissajous'
 import { cardioidPoint } from './boundary'
+import { clusterScore, findVortexTarget, DIVERSITY_CLUSTER_FRACTION } from './vortex-search'
 import { SpringDamper } from '../../../choreography/spring-damper'
 import type { ParamBus } from '../../../../shared/types'
 import { SCOPE_SIZE } from '../../../../shared/constants'
@@ -172,27 +173,21 @@ const POST_FLASH_SEC = 1.6
 
 // Each dive starts centered on the origin (the critical point z=0 — always
 // structurally relevant at low zoom) and then drifts, gradually, toward
-// whatever detail is nearby as it goes deeper.
-//
-// The earlier version scored a direction by how much its plain iteration
-// count differed from the center's — but that responds to ANY smooth
-// escape-time gradient, including the gentle falloff that exists all the
-// way out in genuinely empty space (points further from the set escape
-// gradually slower as you approach it, with no fractal structure involved
-// at all). That's exactly what was dragging the view off into the void: the
-// metric couldn't tell "smooth boring gradient" from "boundary detail".
-//
-// distanceEstimate() below is the standard escape-time *distance
-// estimator* instead: it tracks dz/dz0 alongside the orbit and derives an
-// actual estimate (in z-plane units) of how far the sample point is from
-// the Julia set's boundary — small near boundary detail, large in a flat
-// interior or exterior region, however smooth its escape-time gradient is.
-// Converted to a score of current-zoom/(zoom+distance), it's ~1 when the
-// boundary passes through the visible frame and ~0 when it doesn't, which
-// is the actually-correct question for "is this worth zooming into".
+// whatever detail is nearby as it goes deeper, using the same
+// clusterScore()/sampleOrbit() heuristic vortex-search.ts's header comment
+// describes in full (local color-diversity, not a continuous distance
+// field — the earlier distance-estimator approach this replaced got fooled
+// by smooth escape-time gradients that exist all the way out in genuinely
+// empty space).
 const NAV_DIRECTIONS = 8
 const NAV_PROBE_FRACTION = 0.5 // probe distance, as a fraction of the navigation scale below
-const NAV_ITER_CAP = 60
+// Was 60 — same parabolic-dynamics-converges-slowly reasoning as
+// vortex-search.ts's VORTEX_SEARCH_ITER_CAP (see its comment), scaled down
+// from that one since this runs continuously (4x/sec) rather than once per
+// dive/re-search — still enough of an increase to stop this specific
+// periodic local search from going blind near real boundary detail the
+// same way the dive-start search could.
+const NAV_ITER_CAP = 200
 const NAV_CHECK_INTERVAL_SEC = 0.25
 const NAV_HEADING_SMOOTH = 0.15 // how much the heading turns toward the new reading each check
 // Drift speed at full heading strength. Two caps, not one: NAV_PAN_SPEED is
@@ -203,24 +198,6 @@ const NAV_HEADING_SMOOTH = 0.15 // how much the heading turns toward the new rea
 // of a dive can't sprint just because the view happens to be wide.
 const NAV_PAN_SPEED = 0.18
 const NAV_PAN_SPEED_ABS_MAX = 0.09
-// Scoring is XaoS's decades-old autopilot heuristic (see clusterScore()
-// below): local color-diversity, not a continuous distance field — a
-// smooth region genuinely samples as monochrome, near OR far from the set,
-// so this has a real, unfakeable zero, unlike the distance-estimator
-// approach tried earlier (which could always find SOME faint signal to
-// chase, including in genuinely empty space, and had no natural stopping
-// point). Vortex bias (see sampleOrbit's winding) is layered on top of
-// diversity, not instead of it: points near a neutral/near-periodic point
-// spiral several full turns before escaping — this converts that winding
-// into a multiplier applied only among ALREADY-diverse candidates, so
-// navigation prefers spiral structure over any other equally-diverse spot,
-// without letting winding alone override the diversity gate.
-// NAV_VORTEX_WINDING_SCALE (radians) is where the bonus is about
-// half-saturated — roughly half a turn, from sampling real orbits;
-// NAV_VORTEX_BOOST caps how much a maximally-spiraling point can outweigh
-// a non-spiraling one at the same diversity.
-const NAV_VORTEX_WINDING_SCALE = 4
-const NAV_VORTEX_BOOST = 2.5
 // How strongly pan is pulled toward the dive's searched-for vortex target
 // (findVortexTarget/retarget) vs. the local probes. Both are blended as
 // independently-weighted UNIT vectors (direction only), not raw scores —
@@ -323,118 +300,6 @@ interface BeamUniforms {
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v))
-}
-
-// Escape iteration count (the same integer XaoS calls a pixel's "color")
-// plus total winding |Δarg(z)| along the same orbit — spiraling near a
-// neutral/near-periodic point before escaping, which is what the "vortex"
-// structures actually are. Both come from one orbit walk, so tracking
-// winding here is free.
-interface OrbitSample {
-  iter: number // 0..cap; cap itself is its own bucket ("never escaped")
-  winding: number
-}
-
-function sampleOrbit(zx0: number, zy0: number, cx: number, cy: number, cap: number): OrbitSample {
-  let zx = zx0
-  let zy = zy0
-  let prevAngle = Math.atan2(zy0, zx0)
-  let winding = 0
-  let iter = 0
-  for (; iter < cap; iter++) {
-    const nzx = zx * zx - zy * zy + cx
-    const nzy = 2 * zx * zy + cy
-    zx = nzx
-    zy = nzy
-    const angle = Math.atan2(zy, zx)
-    let delta = angle - prevAngle
-    if (delta > Math.PI) delta -= 2 * Math.PI
-    else if (delta < -Math.PI) delta += 2 * Math.PI
-    winding += Math.abs(delta)
-    prevAngle = angle
-    if (zx * zx + zy * zy > 4) break
-  }
-  return { iter, winding }
-}
-
-// XaoS's autopilot heuristic (this scene's earlier distance-estimator
-// approach kept getting fooled by smooth gradients that exist all the way
-// out in genuinely empty space, since it measured a continuous analytic
-// field that's technically nonzero almost everywhere — this measures the
-// literal, unfakeable thing instead): sample a small cluster of points
-// around a candidate and count how many DISTINCT escape-iteration values
-// show up. A boundary-adjacent region has several different colors nearby
-// (escape time changes fast); a smooth region — near OR far from the set —
-// has only one (everything nearby escapes alike). "Different colors
-// nearby" can't be faked by a smooth far-field the way a small analytic
-// distance estimate can. Winding is folded in only as a bonus among
-// already-confirmed-diverse candidates, biasing toward spiral structure
-// specifically rather than any boundary-adjacent point equally.
-const DIVERSITY_SAMPLES = 6
-const DIVERSITY_CLUSTER_FRACTION = 0.15 // cluster spread, relative to the candidate's own probe radius
-
-function clusterScore(px: number, py: number, clusterRadius: number, cx: number, cy: number, cap: number): number {
-  const seen = new Set<number>()
-  let windingSum = 0
-  for (let i = 0; i < DIVERSITY_SAMPLES; i++) {
-    const angle = (i / DIVERSITY_SAMPLES) * Math.PI * 2
-    const sx = px + Math.cos(angle) * clusterRadius
-    const sy = py + Math.sin(angle) * clusterRadius
-    const sample = sampleOrbit(sx, sy, cx, cy, cap)
-    seen.add(sample.iter)
-    windingSum += sample.winding
-  }
-  const diversity = seen.size
-  if (diversity <= 1) return 0 // monochrome neighborhood — XaoS's literal "boring" criterion
-  const avgWinding = windingSum / DIVERSITY_SAMPLES
-  const vortex = 1 - Math.exp(-avgWinding / NAV_VORTEX_WINDING_SCALE)
-  return diversity * (1 + NAV_VORTEX_BOOST * vortex)
-}
-
-// Actively searches for a genuine vortex point instead of hoping the local
-// hill-climb in updateNavigation() stumbles onto one by drifting — that
-// local walk is a fine-tuning refinement, not a search. Mirrors XaoS's own
-// "randomly looks around... zooms to the first area containing both inside
-// and outside points" — just more thorough, since this only runs once per
-// dive (cheap enough to be: ~100 candidates × a real iteration cap).
-const VORTEX_SEARCH_RINGS = 6
-const VORTEX_SEARCH_PER_RING = 16
-const VORTEX_SEARCH_ITER_CAP = 90
-
-// `centerX/Y` lets the same search run either globally from the origin (a
-// fresh dive) or locally around the current pan (a nearby re-search when
-// the dive's original target has run dry — see LOCAL_RETARGET_RADIUS_FACTOR).
-// `found` is false when every candidate scored 0 — the caller's signal to
-// escalate rather than aim at the meaningless (centerX, centerY) fallback.
-function findVortexTarget(
-  cx: number,
-  cy: number,
-  maxRadius: number,
-  centerX = 0,
-  centerY = 0,
-): { x: number; y: number; found: boolean } {
-  let bestScore = 0
-  let bestX = centerX
-  let bestY = centerY
-  let found = false
-  for (let r = 1; r <= VORTEX_SEARCH_RINGS; r++) {
-    const radius = (r / VORTEX_SEARCH_RINGS) * maxRadius
-    const stagger = r * 0.37 // offsets each ring's angles so candidates don't line up radially
-    const clusterRadius = radius * DIVERSITY_CLUSTER_FRACTION
-    for (let i = 0; i < VORTEX_SEARCH_PER_RING; i++) {
-      const angle = (i / VORTEX_SEARCH_PER_RING) * Math.PI * 2 + stagger
-      const x = centerX + Math.cos(angle) * radius
-      const y = centerY + Math.sin(angle) * radius
-      const score = clusterScore(x, y, clusterRadius, cx, cy, VORTEX_SEARCH_ITER_CAP)
-      if (score > bestScore) {
-        bestScore = score
-        bestX = x
-        bestY = y
-        found = true
-      }
-    }
-  }
-  return { x: bestX, y: bestY, found }
 }
 
 // The Julia substrate + oscilloscope beam as one visual identity
