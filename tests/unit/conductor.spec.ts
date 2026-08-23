@@ -123,4 +123,26 @@ describe('Conductor -> Patchbay(screen-only) -> screen composites (SINTEZA_VIZ.m
     const { params } = run((t) => makeFrame({ t, tension: 0.8 }), 6)
     expect(params.fieldDecay).toBeGreaterThan(0.95)
   })
+
+  it('hueShift drifts continuously at rest and is nudged by centroid (now real routes, not a hardcoded formula)', () => {
+    // hueDrift -> screen.hueShift (gain 1) + centroid -> screen.hueShift
+    // (gain 0.1), summed by the patchbay — reproducing the old
+    // `(hue + centroid*0.1) % 1` formula as two routes instead of code.
+    const { params: atZero } = run(() => makeFrame({ centroid: 0 }), 0)
+    const { params: afterDrift } = run(() => makeFrame({ centroid: 0 }), 5)
+    expect(afterDrift.hueShift).toBeGreaterThan(atZero.hueShift)
+
+    const { params: withCentroid } = run(() => makeFrame({ centroid: 1 }), 0)
+    const { params: withoutCentroid } = run(() => makeFrame({ centroid: 0 }), 0)
+    expect(withCentroid.hueShift).toBeCloseTo(withoutCentroid.hueShift + 0.1, 5)
+  })
+
+  it('paletteMix tracks buildWindup (now a real route, not a hardcoded formula)', () => {
+    const { params: atRest } = run(() => makeFrame(), 2)
+    expect(atRest.paletteMix).toBeCloseTo(0, 2)
+
+    const { params: duringBuild } = run((t) => makeFrame({ t, buildProgress: 1 }), 3)
+    expect(duringBuild.paletteMix).toBeGreaterThan(0.3)
+    expect(duringBuild.paletteMix).toBeCloseTo(duringBuild.windup, 5)
+  })
 })

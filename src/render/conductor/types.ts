@@ -29,6 +29,14 @@ export interface SignalBus {
   flatness: number
   pan: number // bipolar -1..1, whole-mix stereo balance
   familiarity: number // §4.2 — online self-similarity, added in step 4
+  // 0..1 sawtooth, wraps forever — a slow, constant-rate hue rotation with
+  // no musical input at all. Was screen-composites.ts-internal state
+  // (`this.hue`), never a real bus signal or a routable target — moved here
+  // specifically so palette drift is now just the *default* route to
+  // screen.hueShift (see configs/screen-only.ts), not a hardcoded formula,
+  // so it can be overridden/automated from anything else on the bus via the
+  // patchbay editor instead.
+  hueDrift: number
 
   // beat
   beatPhase: number
@@ -91,6 +99,7 @@ export const SIGNAL_TAGS = {
   flatness: 'continuous',
   pan: 'continuous',
   familiarity: 'continuous',
+  hueDrift: 'continuous',
 
   beatPhase: 'beat',
   beatPulse: 'beat',

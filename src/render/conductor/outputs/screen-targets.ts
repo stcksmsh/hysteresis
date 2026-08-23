@@ -32,6 +32,13 @@ export const SCREEN_TARGETS: TargetDecl[] = [
   { id: 'screen.tempoConfidence', acceptsTags: ALL_TAGS, defaultValue: 0, range: [0, 1] },
   { id: 'screen.dropImpulse', acceptsTags: ALL_TAGS, defaultValue: 0, range: [0, 1] },
   { id: 'screen.familiarity', acceptsTags: ALL_TAGS, defaultValue: 0, range: [0, 1] },
+  // Newly routable (previously hardcoded formulas inside screen-composites.ts,
+  // never a target at all — no way to automate palette from the patchbay).
+  // hueDrift's own default 0..1 sawtooth wraps via `% 1` where it's actually
+  // read (screen-composites.ts), so clamping to this target's range only
+  // matters if a route pushes the sum past it, a rare/minor edge case.
+  { id: 'screen.hueShift', acceptsTags: ALL_TAGS, defaultValue: 0, range: [0, 1] },
+  { id: 'screen.paletteMix', acceptsTags: ALL_TAGS, defaultValue: 0, range: [0, 1] },
   { id: 'screen.idle', acceptsTags: ALL_TAGS, defaultValue: 0, range: [0, 1], passThrough: true },
   { id: 'screen.scope', acceptsTags: ALL_TAGS, defaultValue: 0, range: [0, 0], passThrough: true },
 ]

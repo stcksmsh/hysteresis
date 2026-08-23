@@ -57,8 +57,6 @@ const SYMMETRY_DROP_HOLD_SEC = 2.0
 const SYMMETRY_AMBIENT_CEILING = 0.72
 const FAMILIARITY_SYMMETRY_GAIN = 0.15 // §4.2: familiarity gently blooms organization, distinct from the drop's snap
 
-const HUE_DRIFT_PER_SEC = 0.01
-
 const DROP_EDGE_EPS = 0.05 // dropImpulse rising by more than this in one frame reads as "a drop just happened"
 
 const FLOW_DIRECTION_SMOOTH_SEC = 1.5 // step 3: bandTilt -> flow direction, eased so the drift axis doesn't jitter
@@ -83,7 +81,6 @@ export class ScreenParamAssembler {
   private symmetrySmooth = new DtSmoother(SYMMETRY_ATTACK_SEC, SYMMETRY_RELEASE_SEC)
   private flowDirectionSmooth = new DtSmoother(FLOW_DIRECTION_SMOOTH_SEC, FLOW_DIRECTION_SMOOTH_SEC)
   private symmetryHoldSec = 0
-  private hue = 0
   private prevDropImpulse = 0
 
   update(dt: number, resolved: ResolvedTargets): AssembledScreenParams {
@@ -120,9 +117,12 @@ export class ScreenParamAssembler {
     }
     this.prevDropImpulse = dropImpulse
 
-    this.hue = (this.hue + dt * HUE_DRIFT_PER_SEC) % 1
-    const hueShift = (this.hue + centroid * 0.1) % 1
-    const paletteMix = buildWindup
+    // Both were hardcoded formulas computed here before — now real routes
+    // (screen-only.ts's paletteRoutes), so this just reads the resolved
+    // result. `% 1` preserves hueShift's wrap even though the target's own
+    // range clamps rather than wraps (see screen-targets.ts's comment).
+    const hueShift = num(resolved['screen.hueShift']) % 1
+    const paletteMix = num(resolved['screen.paletteMix'])
 
     const barBreath = Math.sin(barPhase * 2 * Math.PI) * BAR_BREATH_AMPLITUDE
     const fieldDecay = clamp(

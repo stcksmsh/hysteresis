@@ -18,6 +18,7 @@ function makeBus(overrides: Partial<SignalBus> = {}): SignalBus {
     flatness: 0,
     pan: 0,
     familiarity: 0,
+    hueDrift: 0,
     beatPhase: 0,
     beatPulse: 0,
     barPhase: 0,

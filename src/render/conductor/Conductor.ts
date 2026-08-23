@@ -19,6 +19,7 @@ const TENSION_SMOOTH_SEC = 0.3
 const SUSPENSION_ATTACK_SEC = 2.0 // slower than tension — "have we been held for a while", not "is it true right now"
 const SUSPENSION_RELEASE_SEC = 3.0
 const ENERGY_SMOOTH_SEC = 0.25
+const HUE_DRIFT_PER_SEC = 0.01 // was screen-composites.ts-internal — see SignalBus.hueDrift's doc comment
 
 // dropImpulse (SINTEZA_SIGNAL_BUS.md §3.1): a continuous, decaying view of
 // the discrete drop event, alive on the bus every frame (0 most of the
@@ -63,6 +64,7 @@ export class Conductor {
   private lastBeatPhase = 0
 
   private familiarityTracker = new FamiliarityTracker()
+  private hueDrift = 0
 
   update(frame: StateFrame, dt: number): SignalBus {
     let dropTrigger: DropTrigger | null = null
@@ -103,6 +105,8 @@ export class Conductor {
 
     const familiarity = computeFamiliarity(this.familiarityTracker, frame, dt)
 
+    this.hueDrift = (this.hueDrift + dt * HUE_DRIFT_PER_SEC) % 1
+
     return {
       energy,
       sub,
@@ -115,6 +119,7 @@ export class Conductor {
       flatness: frame.flatness,
       pan: frame.pan,
       familiarity,
+      hueDrift: this.hueDrift,
 
       beatPhase: frame.beatPhase,
       beatPulse: this.beatPulseValue,

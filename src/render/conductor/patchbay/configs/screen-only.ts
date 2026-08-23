@@ -37,6 +37,22 @@ const identityRoutes: Route[] = IDENTITY_SIGNALS.map((signal) => ({
   curve: 'linear',
 }))
 
+// Reproduces the previously-hardcoded palette formulas exactly (moved out of
+// screen-composites.ts so they're real routes instead — see
+// screen-targets.ts's comment on why): hueShift was `hueDrift + centroid*0.1`
+// — two routes summing into the same target (the patchbay's documented
+// default combine mode, §5.1) does the same arithmetic. paletteMix was a
+// straight passthrough of buildWindup. Editing/replacing any of these three
+// routes is now the actual palette-automation control surface — swap
+// `centroid` for a different signal's gain, or route something else into
+// `screen.paletteMix` entirely, all without touching this file by hand
+// (that's the whole point of the patchbay editor).
+const paletteRoutes: Route[] = [
+  { from: 'hueDrift', to: 'screen.hueShift', curve: 'linear' },
+  { from: 'centroid', to: 'screen.hueShift', curve: 'linear', gain: 0.1 },
+  { from: 'buildWindup', to: 'screen.paletteMix', curve: 'linear' },
+]
+
 const passThroughRoutes: Route[] = [
   { from: 'idle', to: 'screen.idle', passThrough: true },
   { from: 'scope', to: 'screen.scope', passThrough: true },
@@ -44,5 +60,5 @@ const passThroughRoutes: Route[] = [
 
 export const screenOnlyConfig: PatchbayConfig = {
   id: 'screen-only',
-  routes: [...identityRoutes, ...passThroughRoutes],
+  routes: [...identityRoutes, ...paletteRoutes, ...passThroughRoutes],
 }
