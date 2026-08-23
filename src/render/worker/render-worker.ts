@@ -247,6 +247,30 @@ self.onmessage = (e: MessageEvent<MainToRenderWorker>) => {
       caps.gl.viewport(0, 0, msg.canvas.width, msg.canvas.height)
       screenOutput.init(caps, msg.canvas.width, msg.canvas.height, msg.dpr, reducedMotion)
       start()
+
+      // No listener anywhere in this codebase previously handled WebGL
+      // context loss at all — without calling preventDefault() on
+      // 'webglcontextlost', the spec says the browser will NOT even attempt
+      // to restore the context; the canvas just stays permanently dead
+      // until something recreates a context on it, which nothing here ever
+      // did. `powerPreference: 'high-performance'` (context.ts) makes this
+      // a real, not just theoretical, risk on hybrid-graphics laptops,
+      // where the OS/driver can force a GPU switch and take the context
+      // down at any time — reads exactly like "the view vanished on its
+      // own for no reason". The context object itself survives loss/restore
+      // (the browser resets its resources, not the reference), so recovery
+      // is just: stop rendering, then on restoration re-run the same
+      // init() this case already does, reusing the still-valid `caps.gl`.
+      msg.canvas.addEventListener('webglcontextlost', (ev) => {
+        ev.preventDefault()
+        stop()
+        post({ kind: 'error', message: 'WebGL context lost — attempting to recover' })
+      })
+      msg.canvas.addEventListener('webglcontextrestored', () => {
+        if (!caps || !canvasRef) return
+        screenOutput.init(caps, canvasRef.width, canvasRef.height, currentDpr, reducedMotion)
+        start()
+      })
       break
     }
     case 'resize': {
