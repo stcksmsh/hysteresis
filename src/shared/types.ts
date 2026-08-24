@@ -47,6 +47,32 @@ export interface StateFrame {
   centroid: number
   flatness: number
   pan: number // -1 (left) .. 1 (right), whole-mix balance
+  // AGENTS.md §4.2 — drum-onset density & fullness, exposed as real,
+  // generally-routable continuous signals (previously only ever computed
+  // inside DropDetector's own internals, per-instance, unexposed). Optional
+  // because StructureSource's sidecar/position-only path has no live
+  // energy/onset stream to derive them from yet (§4.6's known limitation,
+  // same category as `pan: 0` there) — Conductor defaults to 0 when absent.
+  fullness?: number // 0..1, sustained low-band energy, crest-penalized
+  onsetDensity?: number // rhythmic events/sec, scaled — same units DropDetector's onsetJump reads
+  // AGENTS.md §4.2/§4.5 step 4 — 12-bin pitch-class energy (see
+  // src/audio/worklet/chroma.ts), raw pass-through like `scope` (not a
+  // scalar signal — SIGNAL_TAGS excludes it the same way). Optional/null
+  // for the same reason as `fullness`/`onsetDensity`: no live spectrum
+  // exists on the sidecar/position-only path.
+  chroma?: Float32Array | null
+  // AGENTS.md §4.3/§4.5 step 5 — sidecar-only (schema-3 `stemPresence`),
+  // populated by StructureSource.fuse()/synthesize() when a schema-3
+  // sidecar with stem data is loaded; absent/0 otherwise (the same
+  // sidecar-only precedent `buildProgress`/`tension` already set for a
+  // schema-2-only or no-sidecar track — see AGENTS.md's known-limitations
+  // note). No live equivalent exists or is planned (§4.3: "do not attempt
+  // live stem separation").
+  vocalPresence?: number
+  drumsPresence?: number
+  bassPresence?: number
+  otherPresence?: number
+  leadPresence?: number // approximate — see SidecarStemPresence's doc comment
   // Per-band hits for this hop. Transient like `events` — the render worker
   // accumulates them across hops so none are lost between frames.
   spectralHits: SpectralHit[]

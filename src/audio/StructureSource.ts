@@ -45,6 +45,23 @@ function buildProgressAt(sidecar: Sidecar, t: number): number {
   return 0
 }
 
+// AGENTS.md §4.3 — sidecar-only stem presence, when a schema-3 sidecar with
+// `stemPresence` is loaded. `undefined` fields (not 0) when absent so the
+// caller (fuse()/synthesize()) can spread them in conditionally without
+// clobbering a live frame's own fields with zeros for a schema-2 sidecar —
+// Conductor.ts is what actually defaults the bus signal to 0.
+function stemPresenceFieldsAt(sidecar: Sidecar, t: number): Partial<StateFrame> {
+  const sp = sidecar.stemPresence
+  if (!sp) return {}
+  return {
+    vocalPresence: sampleEnvelope(sp.vocals, sidecar.envelopeRate, t),
+    drumsPresence: sampleEnvelope(sp.drums, sidecar.envelopeRate, t),
+    bassPresence: sampleEnvelope(sp.bass, sidecar.envelopeRate, t),
+    otherPresence: sampleEnvelope(sp.other, sidecar.envelopeRate, t),
+    leadPresence: sampleEnvelope(sp.leadPresence, sidecar.envelopeRate, t),
+  }
+}
+
 const BREAK_TENSION_RAMP_SEC = 2
 
 function tensionAt(sidecar: Sidecar, t: number): number {
@@ -133,6 +150,7 @@ export class StructureSource {
       buildProgress: buildProgressAt(sidecar, positionSec),
       tension: tensionAt(sidecar, positionSec),
       events: [...liveDetailEvents, ...structuralEvents],
+      ...stemPresenceFieldsAt(sidecar, positionSec),
     }
   }
 
@@ -178,6 +196,7 @@ export class StructureSource {
       events,
       scope: null,
       idle: true,
+      ...stemPresenceFieldsAt(sidecar, positionSec),
     }
   }
 

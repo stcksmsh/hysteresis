@@ -2,12 +2,14 @@
 import { WindowedFFT } from './fft'
 import { computeBandRanges, bandEnergiesFromMagnitudes, dominantBandTone, BAND_NAMES, type BandName, type BandRanges } from './bands'
 import { spectralCentroidHz, spectralFlatness } from './spectral'
+import { computeChroma, CHROMA_BINS } from './chroma'
 import { SpectralFlux } from './onset'
 import { EnvelopeFollower, AdaptiveNormalizer } from './envelope'
 import { BeatTracker, BarTracker } from './brain/beat-tracker'
 import { BuildDetector } from './brain/build-detector'
 import { DropDetector, type DropDetectorDebug } from './brain/drop-detector'
 import { BreakDetector } from './brain/break-detector'
+import { FullnessTracker, OnsetDensityTracker } from './brain/activity'
 import { PlacementBands } from './placement-bands'
 import { FFT_SIZE, HOP_SIZE, SCOPE_SIZE } from '../../shared/constants'
 import type { BandEnergies, MainToWorklet, SpectralHit, StateFrame, StructuralEvent, WorkletToMain } from '../../shared/types'
@@ -50,6 +52,7 @@ class FeatureProcessor extends AudioWorkletProcessor implements AudioWorkletProc
   private orderedL = new Float32Array(FFT_SIZE)
   private orderedR = new Float32Array(FFT_SIZE)
   private scopeBuffer = new Float32Array(SCOPE_SIZE)
+  private chromaBuffer = new Float32Array(CHROMA_BINS)
   private placementBands: PlacementBands
 
   private bandRanges: BandRanges
@@ -65,6 +68,13 @@ class FeatureProcessor extends AudioWorkletProcessor implements AudioWorkletProc
   private buildDetector: BuildDetector
   private dropDetector: DropDetector
   private breakDetector: BreakDetector
+  // AGENTS.md §4.2/§4.5 step 3 — own instances, separate from DropDetector's
+  // internal ones (same "separate instance per consumer" precedent
+  // novelty.ts documents), computed unconditionally every hop regardless of
+  // `detectorsEnabled` so fullness/onsetDensity are always-alive bus
+  // signals, not gated behind the same toggle the sparse section detectors are.
+  private fullnessTracker: FullnessTracker
+  private onsetDensityTracker: OnsetDensityTracker
 
   // Debug-only (?debug=1, SINTEZA_SIGNAL_BUS.md §4.1's acceptance test):
   // when false, the build/drop/break detectors are not called at all this
@@ -111,6 +121,8 @@ class FeatureProcessor extends AudioWorkletProcessor implements AudioWorkletProc
     this.buildDetector = new BuildDetector(hopMs)
     this.dropDetector = new DropDetector(hopMs)
     this.breakDetector = new BreakDetector(hopMs)
+    this.fullnessTracker = new FullnessTracker(hopMs)
+    this.onsetDensityTracker = new OnsetDensityTracker(hopMs)
 
     this.port.onmessage = (e: MessageEvent<MainToWorklet>) => {
       if (e.data.kind === 'debugSetDetectorsEnabled') this.detectorsEnabled = e.data.value
@@ -202,6 +214,7 @@ class FeatureProcessor extends AudioWorkletProcessor implements AudioWorkletProc
     const centroidHz = spectralCentroidHz(this.mags, sampleRate, FFT_SIZE)
     const centroid = Math.min(1, centroidHz / CENTROID_NORMALIZATION_CEILING_HZ)
     const flatness = spectralFlatness(this.mags)
+    computeChroma(this.mags, sampleRate, FFT_SIZE, this.chromaBuffer)
 
     const rawFlux = this.flux.update(this.mags)
     const novelty = this.fluxNormalizer.normalize(rawFlux)
@@ -229,6 +242,15 @@ class FeatureProcessor extends AudioWorkletProcessor implements AudioWorkletProc
     const broadbandEnergy = (bandsRaw.sub + bandsRaw.low + bandsRaw.mid + bandsRaw.presence + bandsRaw.air) / 5
     const lowEnergy = (bandsRaw.sub + bandsRaw.low) / 2
 
+    // Same contrast-preserving (non-display-normalized) low-band signal
+    // DropDetector always needed — computed unconditionally now (not just
+    // when detectorsEnabled) since AGENTS.md §4.2's fullness/onsetDensity
+    // must be always-alive bus signals, not gated behind the same toggle
+    // the sparse section detectors are.
+    const dropSignal = this.dropEnergyNormalizer.normalize(this.dropEnergyEnvelope.update(rawLowEnergy))
+    const { fullness } = this.fullnessTracker.update(dropSignal)
+    const { rate: onsetDensity } = this.onsetDensityTracker.update(novelty)
+
     // SINTEZA_SIGNAL_BUS.md §4.1's acceptance test: with detectors disabled,
     // skip calling them entirely (cheapest form of "disabled", no state to
     // leak) so buildProgress/tension rest at 0 and no drop/break events ever
@@ -252,7 +274,6 @@ class FeatureProcessor extends AudioWorkletProcessor implements AudioWorkletProc
       // overall loudness rising — a buildup/riser is often already loud and
       // bright (high bands maxed) while sub/low stays suppressed right up to
       // the drop, so the jump is evaluated on low-band energy.
-      const dropSignal = this.dropEnergyNormalizer.normalize(this.dropEnergyEnvelope.update(rawLowEnergy))
       const dropFeatures = {
         lowEnergy: dropSignal,
         onsetActivity: novelty,
@@ -286,6 +307,9 @@ class FeatureProcessor extends AudioWorkletProcessor implements AudioWorkletProc
       events,
       scope,
       dropDebug,
+      fullness,
+      onsetDensity,
+      chroma: this.chromaBuffer,
     }
     this.port.postMessage({ kind: 'state', frame } satisfies WorkletToMain)
   }

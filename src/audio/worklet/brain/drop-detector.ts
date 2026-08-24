@@ -1,5 +1,5 @@
-import { EnvelopeFollower } from '../envelope'
 import { NoveltyRingBuffer } from './novelty'
+import { FullnessTracker, OnsetDensityTracker } from './activity'
 
 // SINTEZA_SIGNAL_BUS.md §4b(2) — a drop is "the mix going from sparse to
 // full", not "the mix getting louder". The old primitive (fast-minus-slow
@@ -23,16 +23,13 @@ import { NoveltyRingBuffer } from './novelty'
 // Confirmation (sustained occupancy over a window), refractory, startup
 // grace, and beat-snap-lookahead are unchanged from the old detector — only
 // the arming primitive changed.
-const FAST_MS = 80
-const SUSTAIN_MS = 1800 // "much longer than the current 300ms" — this is the actual fix for the miss case
-const SLOW_MS = 3000 // deliberately slower than SUSTAIN_MS — lags behind at arm time, giving the confirmation step a real pre-jump baseline to compare against
-const CREST_FAST_MS = 60
-const CREST_PENALTY_GAIN = 0.6
+// Fullness/onset-density arming math itself lives in ./activity.ts now
+// (extracted so feature-worklet.ts can also expose them as always-alive bus
+// signals, not just this detector's private primitive) — this detector owns
+// its own tracker instances, same "separate instance per consumer"
+// precedent as novelty.ts.
 const FULLNESS_THRESHOLD = 0.5
 
-const ONSET_RATE_MS = 1500
-const ONSET_BASELINE_MS = 4000
-const ONSET_ACTIVITY_SCALE = 3 // onset activity is normally small/sparse; amplify before comparing (mirrors BreakDetector's own onsetActivitySlow scaling)
 // A jump right after track start (near-zero baseline) reads larger than one
 // a few seconds after a shorter thinned section, where the slower baseline
 // envelope still carries some memory of the section before that — kept
@@ -117,12 +114,8 @@ export interface DropDetectorFeatures {
 }
 
 export class DropDetector {
-  private fastEnergy: EnvelopeFollower
-  private sustainedEnergy: EnvelopeFollower
-  private slowEnergy: EnvelopeFollower
-  private crestPeak: EnvelopeFollower
-  private onsetRate: EnvelopeFollower
-  private onsetBaseline: EnvelopeFollower
+  private fullnessTracker: FullnessTracker
+  private onsetDensityTracker: OnsetDensityTracker
   private novelty: NoveltyRingBuffer
   private noveltyPeak = 0
 
@@ -137,12 +130,8 @@ export class DropDetector {
   private lastDebug: DropDetectorDebug = { fullness: 0, onsetJump: 0, noveltyPeak: 0, armed: false }
 
   constructor(hopMs: number) {
-    this.fastEnergy = new EnvelopeFollower(FAST_MS, FAST_MS, hopMs)
-    this.sustainedEnergy = new EnvelopeFollower(SUSTAIN_MS, SUSTAIN_MS, hopMs)
-    this.slowEnergy = new EnvelopeFollower(SLOW_MS, SLOW_MS, hopMs)
-    this.crestPeak = new EnvelopeFollower(CREST_FAST_MS, CREST_FAST_MS, hopMs)
-    this.onsetRate = new EnvelopeFollower(ONSET_RATE_MS, ONSET_RATE_MS, hopMs)
-    this.onsetBaseline = new EnvelopeFollower(ONSET_BASELINE_MS, ONSET_BASELINE_MS, hopMs)
+    this.fullnessTracker = new FullnessTracker(hopMs)
+    this.onsetDensityTracker = new OnsetDensityTracker(hopMs)
     this.novelty = new NoveltyRingBuffer(Math.max(1, Math.round((NOVELTY_WINDOW_SEC * 1000) / hopMs)))
     this.hopSec = hopMs / 1000
   }
@@ -150,21 +139,8 @@ export class DropDetector {
   update(features: DropDetectorFeatures, beatPhase: number, tempoBpm: number, tNow: number): DropEvent | null {
     if (this.startedAt === null) this.startedAt = tNow
 
-    const fast = this.fastEnergy.update(features.lowEnergy)
-    const sustained = this.sustainedEnergy.update(features.lowEnergy)
-    const slow = this.slowEnergy.update(features.lowEnergy)
-    const peak = this.crestPeak.update(fast)
-    // crest ~= 1 when the signal is steady; it strays from 1 right after a
-    // spike (fast momentarily above/below its own recent peak) — a pulsing
-    // source (reverb tail between hits) keeps producing this, a
-    // continuously full signal doesn't.
-    const crest = peak > 1e-6 ? fast / peak : 1
-    const crestPenalty = Math.min(1, Math.abs(crest - 1) * CREST_PENALTY_GAIN)
-    const fullness = Math.max(0, sustained * (1 - crestPenalty))
-
-    const onsetRate = this.onsetRate.update(features.onsetActivity)
-    const onsetBaseline = this.onsetBaseline.update(features.onsetActivity)
-    const onsetJump = onsetRate * ONSET_ACTIVITY_SCALE - onsetBaseline * ONSET_ACTIVITY_SCALE
+    const { fullness, slow } = this.fullnessTracker.update(features.lowEnergy)
+    const { jump: onsetJump } = this.onsetDensityTracker.update(features.onsetActivity)
 
     const noveltyValue = 1 - this.novelty.maxSimilarity(features.vec)
     this.novelty.push(features.vec)

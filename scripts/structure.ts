@@ -16,7 +16,7 @@ import { DropDetector } from '../src/audio/worklet/brain/drop-detector'
 import { BreakDetector } from '../src/audio/worklet/brain/break-detector'
 import { FFT_SIZE, HOP_SIZE } from '../src/shared/constants'
 import type { BandEnergies } from '../src/shared/types'
-import type { Sidecar, SidecarBandEnvelope, SidecarEvent, SidecarOnset, SidecarSection } from '../src/shared/sidecar'
+import type { Sidecar, SidecarBandEnvelope, SidecarEvent, SidecarOnset, SidecarSection, SidecarStemPresence } from '../src/shared/sidecar'
 import { SIDECAR_SCHEMA_VERSION } from '../src/shared/sidecar'
 import type { DecodedWav } from './wav'
 
@@ -90,6 +90,66 @@ function breakSectionsFromEvents(events: SidecarEvent[]): SidecarSection[] {
     }
   }
   return sections
+}
+
+// AGENTS.md §4.3/§4.5 step 6 — deterministic heuristic labeling, not ML/LLM
+// (the design doc itself flags learned zero-shot labeling as an optional,
+// heavy "ceiling" — no such infra exists in this repo). Two parts:
+// (1) the sections this pipeline already detects (build/break) get a plain
+// human label matching their kind; (2) genuinely new "intro"/"outro" spans
+// are synthesized from whatever's *not* covered by a detected
+// section/event — the track's start-to-first-structure and
+// last-structure-to-end gaps — since those are otherwise silently unlabeled
+// even though they're real, common structure (per §4.1: this project's
+// sidecars are already section-sparse). Confidence is raised, not required,
+// by stem presence when available: an intro/outro candidate that turns out
+// to be LOUD across the board isn't a real intro/outro (e.g. a wall-of-noise
+// track with no detected build/break at all) and is skipped rather than
+// mislabeled — but the positional heuristic alone still applies without it,
+// since analyzeMix() itself has no stem data (§4.5 step 5 is a separate,
+// --stems-only pass) and needs to label sections before that ever runs.
+const MIN_INTRO_OUTRO_SEC = 2
+const LOW_PRESENCE_THRESHOLD = 0.3
+
+function averageStemPresence(stemPresence: SidecarStemPresence, envelopeRate: number, start: number, end: number): number {
+  const i0 = Math.max(0, Math.floor(start * envelopeRate))
+  const i1 = Math.min(stemPresence.vocals.length, Math.ceil(end * envelopeRate))
+  if (i1 <= i0) return 0
+  let sum = 0
+  let n = 0
+  for (let i = i0; i < i1; i++) {
+    sum += (stemPresence.vocals[i] ?? 0) + (stemPresence.drums[i] ?? 0) + (stemPresence.bass[i] ?? 0) + (stemPresence.other[i] ?? 0)
+    n += 4
+  }
+  return n > 0 ? sum / n : 0
+}
+
+export function labelSections(
+  sections: SidecarSection[],
+  events: SidecarEvent[],
+  duration: number,
+  envelopeRate: number,
+  stemPresence?: SidecarStemPresence,
+): SidecarSection[] {
+  const labeled: SidecarSection[] = sections.map((s) => ({
+    ...s,
+    label: s.kind === 'build' ? 'build' : s.kind === 'break' ? 'breakdown' : s.label,
+  }))
+
+  const boundaryTimes = [duration, ...sections.map((s) => s.start), ...events.map((e) => e.t)]
+  const earliestBoundary = Math.min(...boundaryTimes)
+  if (earliestBoundary >= MIN_INTRO_OUTRO_SEC) {
+    const qualifies = !stemPresence || averageStemPresence(stemPresence, envelopeRate, 0, earliestBoundary) < LOW_PRESENCE_THRESHOLD
+    if (qualifies) labeled.push({ start: 0, end: earliestBoundary, kind: 'other', label: 'intro' })
+  }
+
+  const latestBoundary = Math.max(0, ...sections.map((s) => s.end), ...events.map((e) => e.t))
+  if (duration - latestBoundary >= MIN_INTRO_OUTRO_SEC) {
+    const qualifies = !stemPresence || averageStemPresence(stemPresence, envelopeRate, latestBoundary, duration) < LOW_PRESENCE_THRESHOLD
+    if (qualifies) labeled.push({ start: latestBoundary, end: duration, kind: 'other', label: 'outro' })
+  }
+
+  return labeled.sort((a, b) => a.start - b.start)
 }
 
 // Runs the same causal Layer 1/2 primitives the realtime worklet uses, but
@@ -235,7 +295,8 @@ export function analyzeMix(wav: DecodedWav): Sidecar {
 
   const buildSections = buildWindowsFromDrops(dropTimes, finalTempo, duration)
   const breakSections = breakSectionsFromEvents(events.filter((e) => e.type === 'breakStart' || e.type === 'breakEnd'))
-  const sections = [...buildSections, ...breakSections].sort((a, b) => a.start - b.start)
+  const unlabeledSections = [...buildSections, ...breakSections].sort((a, b) => a.start - b.start)
+  const sections = labelSections(unlabeledSections, events, duration, ENVELOPE_RATE_HZ)
 
   const hopsPerEnvelopeSample = Math.max(1, Math.round(1 / ENVELOPE_RATE_HZ / hopSec))
   const envelopeLength = Math.max(1, Math.ceil(totalHops / hopsPerEnvelopeSample))
@@ -266,5 +327,95 @@ export function analyzeMix(wav: DecodedWav): Sidecar {
     centroidEnvelope,
     flatnessEnvelope,
     envelopeRate: ENVELOPE_RATE_HZ,
+  }
+}
+
+// AGENTS.md §4.3/§4.5 step 5 — offline per-stem presence from Demucs
+// separation (`scripts/demucs.ts`), `analyze.ts --stems` only. "Presence",
+// not "what note": a stem's own normalized loudness over time — the
+// reliable, cheap-post-separation signal that's exactly what "track the
+// vocal" visually needs (§4.3: "is it present, and how prominent, right
+// now"). Same envelopeRate/downsample machinery as the main mix's
+// envelopes, just applied per-stem, so `StructureSource.sampleEnvelope()`
+// needs no special-casing.
+export interface StemInputs {
+  vocals: DecodedWav
+  drums: DecodedWav
+  bass: DecodedWav
+  other: DecodedWav
+}
+
+function mixDownMono(wav: DecodedWav): Float32Array {
+  const frameCount = wav.channels[0]?.length ?? 0
+  const mono = new Float32Array(frameCount)
+  for (let i = 0; i < frameCount; i++) {
+    let sum = 0
+    for (const c of wav.channels) sum += c[i]
+    mono[i] = sum / wav.channels.length
+  }
+  return mono
+}
+
+// RMS-per-hop, envelope-followed and adaptively normalized against this
+// stem's own dynamic range — deliberately simpler than the main mix's full
+// band/FFT pipeline (bands.ts) since "is this stem present" only needs
+// broadband loudness, not spectral shape.
+function computePresenceEnvelope(mono: Float32Array, sampleRate: number): number[] {
+  const hopSec = HOP_SIZE / sampleRate
+  const hopMs = hopSec * 1000
+  const totalHops = Math.max(0, Math.floor(mono.length / HOP_SIZE))
+  const envelope = new EnvelopeFollower(15, 200, hopMs)
+  const normalizer = new AdaptiveNormalizer(NORMALIZER_DECAY_MS, hopMs)
+  const raw = new Float32Array(totalHops)
+  for (let h = 0; h < totalHops; h++) {
+    const start = h * HOP_SIZE
+    const end = Math.min(mono.length, start + HOP_SIZE)
+    let sumSq = 0
+    for (let i = start; i < end; i++) sumSq += mono[i] * mono[i]
+    raw[h] = normalizer.normalize(envelope.update(end > start ? Math.sqrt(sumSq / (end - start)) : 0))
+  }
+  const hopsPerEnvelopeSample = Math.max(1, Math.round(1 / ENVELOPE_RATE_HZ / hopSec))
+  const envelopeLength = Math.max(1, Math.ceil(totalHops / hopsPerEnvelopeSample))
+  return downsample(raw, hopsPerEnvelopeSample, envelopeLength)
+}
+
+// AGENTS.md §4.5 step 7 — lead salience within `other` (approximate, per the
+// design doc's own simpler suggested approach: "the loudest *sustained*
+// band-limited component" per hop, not a real isolated-instrument signal).
+// A slower release than computePresenceEnvelope's (400ms vs 200ms) is the
+// actual "sustained, not instantaneous peak" distinction — a single loud
+// transient bin decays back out quickly; a real held lead tone doesn't.
+function computeLeadPresenceEnvelope(mono: Float32Array, sampleRate: number): number[] {
+  const hopSec = HOP_SIZE / sampleRate
+  const hopMs = hopSec * 1000
+  const totalHops = Math.max(0, Math.floor((mono.length - FFT_SIZE) / HOP_SIZE) + 1)
+  const fft = new WindowedFFT(FFT_SIZE)
+  const mags = new Float32Array(fft.bins)
+  const window = new Float32Array(FFT_SIZE)
+  const envelope = new EnvelopeFollower(30, 400, hopMs)
+  const normalizer = new AdaptiveNormalizer(NORMALIZER_DECAY_MS, hopMs)
+  const raw = new Float32Array(totalHops)
+  for (let h = 0; h < totalHops; h++) {
+    const start = h * HOP_SIZE
+    window.fill(0)
+    window.set(mono.subarray(start, Math.min(mono.length, start + FFT_SIZE)))
+    fft.transform(window, mags)
+    let peak = 0
+    for (let i = 1; i < mags.length; i++) if (mags[i] > peak) peak = mags[i]
+    raw[h] = normalizer.normalize(envelope.update(peak))
+  }
+  const hopsPerEnvelopeSample = Math.max(1, Math.round(1 / ENVELOPE_RATE_HZ / hopSec))
+  const envelopeLength = Math.max(1, Math.ceil(totalHops / hopsPerEnvelopeSample))
+  return downsample(raw, hopsPerEnvelopeSample, envelopeLength)
+}
+
+export function computeStemPresence(stems: StemInputs): SidecarStemPresence {
+  const otherMono = mixDownMono(stems.other)
+  return {
+    vocals: computePresenceEnvelope(mixDownMono(stems.vocals), stems.vocals.sampleRate),
+    drums: computePresenceEnvelope(mixDownMono(stems.drums), stems.drums.sampleRate),
+    bass: computePresenceEnvelope(mixDownMono(stems.bass), stems.bass.sampleRate),
+    other: computePresenceEnvelope(otherMono, stems.other.sampleRate),
+    leadPresence: computeLeadPresenceEnvelope(otherMono, stems.other.sampleRate),
   }
 }

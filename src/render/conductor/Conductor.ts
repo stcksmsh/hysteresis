@@ -5,7 +5,8 @@
 // SignalBus out — never what consumes the bus.
 import { SpringDamper } from '../choreography/spring-damper'
 import { DtSmoother } from './dt-smoother'
-import { computeFamiliarity, FamiliarityTracker } from './familiarity'
+import { buildSimilarityVector, FamiliarityTracker, SimilarityTracker } from './familiarity'
+import { dominantPitchClassHue } from '../../audio/worklet/chroma'
 import type { DropTrigger, StateFrame } from '../../shared/types'
 import type { SignalBus } from './types'
 
@@ -31,6 +32,18 @@ const DROP_IMPULSE_DECAY_SEC = 0.4
 const ONSET_IMPULSE_DECAY_SEC = 0.15
 const BEAT_PULSE_DECAY_SEC = 0.18
 const DOWNBEAT_PULSE_DECAY_SEC = 0.25
+
+// noveltyLocal's short window (AGENTS.md §4.2: "small kernel, phrase-scale
+// change" — a fill, a new element entering), vs. familiarity/noveltySection's
+// existing ~12s "section-scale" window.
+const LOCAL_NOVELTY_WINDOW_SEC = 5
+
+// harmonicNovelty's own window — a separate SimilarityTracker instance
+// (same "separate instance per consumer" precedent as familiarity's own
+// novelty.ts primitives), independent of the band/centroid/flatness
+// trackers above since a chroma vector measures something categorically
+// different (pitch-class balance, not loudness/brightness).
+const CHROMA_NOVELTY_WINDOW_SEC = 6
 
 // bandTilt: cheap derived spectral-balance signal (SINTEZA_SIGNAL_BUS.md
 // §3.1) — how much of the mix's energy sits in the high bands (presence air)
@@ -64,6 +77,17 @@ export class Conductor {
   private lastBeatPhase = 0
 
   private familiarityTracker = new FamiliarityTracker()
+  private localNoveltyTracker = new SimilarityTracker(LOCAL_NOVELTY_WINDOW_SEC)
+  private chromaNoveltyTracker = new SimilarityTracker(CHROMA_NOVELTY_WINDOW_SEC)
+  // Cached, not recomputed every frame: all three trackers are only sampled
+  // on a beat-boundary edge (beat-synchronous aggregation, AGENTS.md
+  // §4.2/§4.5 step 4) — between beats these hold their last computed value
+  // rather than reading as flat 0.
+  private familiarityValue = 0
+  // Novelty, not similarity — "nothing to compare against yet" means
+  // maximally novel (1), the mirror of familiarityValue's 0 default.
+  private noveltyLocalValue = 1
+  private harmonicNoveltyValue = 1
   private hueDrift = 0
 
   update(frame: StateFrame, dt: number): SignalBus {
@@ -72,8 +96,9 @@ export class Conductor {
     // Beat/downbeat pulses: a decaying pulse re-triggered on each boundary
     // crossing — survives silence because beatPhase/barPhase free-run off
     // the PLL/BarTracker regardless of section detection (§4.1's "carriers").
+    const beatBoundary = frame.beatPhase < this.lastBeatPhase - 0.5
     this.beatPulseValue *= Math.exp(-dt / BEAT_PULSE_DECAY_SEC)
-    if (frame.beatPhase < this.lastBeatPhase - 0.5) this.beatPulseValue = 1
+    if (beatBoundary) this.beatPulseValue = 1
     this.lastBeatPhase = frame.beatPhase
     this.downbeatPulseValue *= Math.exp(-dt / DOWNBEAT_PULSE_DECAY_SEC)
 
@@ -103,7 +128,32 @@ export class Conductor {
     const { sub, low, mid, presence, air } = frame.bandsRaw
     const bandTilt = computeBandTilt(sub, low, presence, air)
 
-    const familiarity = computeFamiliarity(this.familiarityTracker, frame, dt)
+    // Beat-synchronous aggregation: only push a new sample into either
+    // tracker on a beat-boundary edge, not every render frame — denoises
+    // the underlying SSM the way beat-grid-aggregated features always do,
+    // and bounds cost to once/beat regardless of frame rate.
+    if (beatBoundary) {
+      const vec = buildSimilarityVector(frame)
+      this.familiarityValue = this.familiarityTracker.sample(frame.t, vec)
+      this.noveltyLocalValue = 1 - this.localNoveltyTracker.sample(frame.t, vec)
+      if (frame.chroma) {
+        this.harmonicNoveltyValue = 1 - this.chromaNoveltyTracker.sample(frame.t, Array.from(frame.chroma))
+      }
+    }
+    const familiarity = this.familiarityValue
+    const noveltyLocal = this.noveltyLocalValue
+    const noveltySection = 1 - familiarity
+    const harmonicNovelty = this.harmonicNoveltyValue
+    const chromaRootHue = frame.chroma ? dominantPitchClassHue(frame.chroma) : 0
+
+    const fullness = clamp(frame.fullness ?? 0, 0, 1)
+    const onsetDensity = clamp(frame.onsetDensity ?? 0, 0, 1)
+
+    const vocalPresence = clamp(frame.vocalPresence ?? 0, 0, 1)
+    const drumsPresence = clamp(frame.drumsPresence ?? 0, 0, 1)
+    const bassPresence = clamp(frame.bassPresence ?? 0, 0, 1)
+    const otherPresence = clamp(frame.otherPresence ?? 0, 0, 1)
+    const leadPresence = clamp(frame.leadPresence ?? 0, 0, 1)
 
     this.hueDrift = (this.hueDrift + dt * HUE_DRIFT_PER_SEC) % 1
 
@@ -119,6 +169,17 @@ export class Conductor {
       flatness: frame.flatness,
       pan: frame.pan,
       familiarity,
+      noveltyLocal,
+      noveltySection,
+      fullness,
+      onsetDensity,
+      harmonicNovelty,
+      chromaRootHue,
+      vocalPresence,
+      drumsPresence,
+      bassPresence,
+      otherPresence,
+      leadPresence,
       hueDrift: this.hueDrift,
 
       beatPhase: frame.beatPhase,
@@ -137,6 +198,7 @@ export class Conductor {
       dropTrigger,
 
       scope: frame.scope,
+      chroma: frame.chroma ?? null,
 
       idle: frame.idle ?? false,
       tempoBpm: frame.tempo,

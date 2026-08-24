@@ -206,5 +206,53 @@ describe('StructureSource', () => {
       source.resyncTo(6) // seek past the onset at t=5
       expect(source.synthesize(6).spectralHits).toHaveLength(0)
     })
+
+    it('leaves stem-presence fields undefined for a schema-2/no-stemPresence sidecar', () => {
+      const source = new StructureSource()
+      source.load(makeSidecar())
+      const frame = source.synthesize(3)
+      expect(frame.vocalPresence).toBeUndefined()
+      expect(frame.leadPresence).toBeUndefined()
+    })
+
+    it('interpolates stem-presence envelopes at the given position when a schema-3 sidecar has them', () => {
+      const source = new StructureSource()
+      source.load(
+        makeSidecar({
+          schema: 3,
+          stemPresence: {
+            vocals: flatEnvelope(0.6),
+            drums: flatEnvelope(0.7),
+            bass: flatEnvelope(0.8),
+            other: flatEnvelope(0.2),
+            leadPresence: flatEnvelope(0.15),
+          },
+        }),
+      )
+      const frame = source.synthesize(3)
+      expect(frame.vocalPresence).toBeCloseTo(0.6, 5)
+      expect(frame.drumsPresence).toBeCloseTo(0.7, 5)
+      expect(frame.bassPresence).toBeCloseTo(0.8, 5)
+      expect(frame.otherPresence).toBeCloseTo(0.2, 5)
+      expect(frame.leadPresence).toBeCloseTo(0.15, 5)
+    })
+  })
+
+  it('fuse() also carries stem-presence fields onto an otherwise-live frame when present', () => {
+    const source = new StructureSource()
+    source.load(
+      makeSidecar({
+        schema: 3,
+        stemPresence: {
+          vocals: flatEnvelope(0.9),
+          drums: flatEnvelope(0),
+          bass: flatEnvelope(0),
+          other: flatEnvelope(0),
+          leadPresence: flatEnvelope(0),
+        },
+      }),
+    )
+    const fused = source.fuse(liveFrame(1), 1)
+    expect(fused.vocalPresence).toBeCloseTo(0.9, 5)
   })
 })

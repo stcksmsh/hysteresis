@@ -63,4 +63,35 @@ describe('familiarity (SINTEZA_SIGNAL_BUS.md §4.2)', () => {
     // to roughly the window size, not kept everything.
     expect(tracker.size).toBeLessThan(600)
   })
+
+  // Regression: a real multi-day-unattended-runtime bug found by a code
+  // audit after a real-track headless run, before it ever shipped. The
+  // Conductor is one long-lived instance for the life of the render worker
+  // (never reconstructed on trackchange/seek) and StructureSource.synthesize()
+  // — the site's actual production integration — feeds `t: positionSec`
+  // straight from the host's position feed, which genuinely moves backward
+  // on every loop repeat or seek. Without a self-heal, eviction's
+  // `buffer[0].t < cutoff` check goes permanently false the instant `t`
+  // moves backward even once, and the buffer grows one entry per beat
+  // forever across every loop cycle of a multi-day run.
+  it('self-heals a backward time jump (a loop repeat/seek) instead of leaking the buffer forever', () => {
+    const tracker = new FamiliarityTracker()
+    for (let t = 0; t < 20; t += 1 / 30) {
+      computeFamiliarity(tracker, makeFrame(t, { bandsRaw: { sub: 0.5, low: 0.5, mid: 0.5, presence: 0.5, air: 0.5 } }), 1 / 30)
+    }
+    const sizeBeforeJump = tracker.size
+
+    // Simulate many loop cycles: a real multi-day unattended run would do
+    // this thousands of times. If eviction silently broke after the first
+    // backward jump, the buffer would grow without bound across these.
+    for (let cycle = 0; cycle < 50; cycle++) {
+      for (let t = 0; t < 20; t += 1 / 30) {
+        computeFamiliarity(tracker, makeFrame(t, { bandsRaw: { sub: 0.5, low: 0.5, mid: 0.5, presence: 0.5, air: 0.5 } }), 1 / 30)
+      }
+    }
+
+    // The buffer must still be bounded to roughly one window's worth of
+    // samples, not ~51 loops' worth (a real leak would be ~30600 entries).
+    expect(tracker.size).toBeLessThan(sizeBeforeJump * 2)
+  })
 })

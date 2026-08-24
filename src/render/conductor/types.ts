@@ -28,7 +28,30 @@ export interface SignalBus {
   centroid: number
   flatness: number
   pan: number // bipolar -1..1, whole-mix stereo balance
-  familiarity: number // §4.2 — online self-similarity, added in step 4
+  familiarity: number // online self-similarity (long/"section" window)
+  // AGENTS.md §4.2/§4.4 — two-timescale novelty, the same similarity
+  // computation as `familiarity` read the other way (novelty = 1 -
+  // similarity) at two different window sizes. Both pushed on beat-boundary
+  // edges only (beat-synchronous aggregation), not every render frame.
+  noveltyLocal: number // short window (~5s) — phrase-scale: a fill, a new element entering
+  noveltySection: number // long window (~12s) — section-scale: breakdown->drop, verse->chorus; = 1 - familiarity
+  // AGENTS.md §4.2 — always-alive (not detector-gated) rhythmic-activity
+  // signals, extracted from what used to be DropDetector-only internals
+  // (src/audio/worklet/brain/activity.ts).
+  fullness: number // 0..1, sustained low-band energy, crest-penalized ("is the mix full or sparse")
+  onsetDensity: number // 0..1ish, rhythmic events/sec, scaled — "how busy is the rhythm right now"
+  // AGENTS.md §4.2/§4.4 — the harmonic sense, previously entirely missing.
+  harmonicNovelty: number // 0..1, novelty of the chroma vector against the recent past (key/chord change cue)
+  chromaRootHue: number // 0..1, the dominant pitch class mapped to a hue-ready value — "map pitch-class to hue"
+  // AGENTS.md §4.3/§4.5 step 5 — sidecar-only (schema-3 stemPresence),
+  // defaults to 0 with no sidecar or a schema-2-only one — same accepted
+  // precedent as buildProgress/tension outside a detected section. No live
+  // equivalent exists (§4.3: source separation is sidecar-only, by design).
+  vocalPresence: number
+  drumsPresence: number
+  bassPresence: number
+  otherPresence: number
+  leadPresence: number // approximate — see SidecarStemPresence's doc comment
   // 0..1 sawtooth, wraps forever — a slow, constant-rate hue rotation with
   // no musical input at all. Was screen-composites.ts-internal state
   // (`this.hue`), never a real bus signal or a routable target — moved here
@@ -77,6 +100,10 @@ export interface SignalBus {
 
   // pass-through — not shaped/normalized like the rest, beam-only.
   scope: Float32Array | null
+  // pass-through — 12-bin pitch-class energy (AGENTS.md §4.2/§4.4), raw
+  // like `scope`; a shader/output wanting the whole vector (not just the
+  // derived `harmonicNovelty`/`chromaRootHue` scalars) reads this directly.
+  chroma: Float32Array | null
 
   // meta
   idle: boolean
@@ -99,6 +126,17 @@ export const SIGNAL_TAGS = {
   flatness: 'continuous',
   pan: 'continuous',
   familiarity: 'continuous',
+  noveltyLocal: 'continuous',
+  noveltySection: 'continuous',
+  fullness: 'continuous',
+  onsetDensity: 'continuous',
+  harmonicNovelty: 'continuous',
+  chromaRootHue: 'continuous',
+  vocalPresence: 'continuous',
+  drumsPresence: 'continuous',
+  bassPresence: 'continuous',
+  otherPresence: 'continuous',
+  leadPresence: 'continuous',
   hueDrift: 'continuous',
 
   beatPhase: 'beat',
