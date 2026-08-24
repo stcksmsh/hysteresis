@@ -1177,9 +1177,12 @@ lands.
 **The roadmap, for whoever picks this up next:**
 0. Spec the extension mechanism — done this session.
 1. Build it — done this session.
-2. Prove it standalone: real demo `.fs` shaders using `hysteresisSignal`, loaded through the
-   editor, confirmed visibly reactive. **Not done** — no browser access this session, same
-   standing caveat as every other GL/visual slice in this file.
+2. Prove it standalone. **Headless half done, same session, immediate follow-up** — see that
+   session's own entry below: a real downloaded ISF ecosystem shader (not a self-authored
+   fixture) parses/translates cleanly, and an augmented copy with a `hysteresisSignal` input
+   proved end-to-end against real analyzed audio. **Still not done**: loading it through the
+   editor and confirming it's visibly reactive in a real browser — no browser access in either
+   session, same standing caveat as every other GL/visual slice in this file.
 3. Design the compact signal set for Julia specifically — a real design conversation with the
    user once this mechanism exists to design against, not mechanical work. **Not done.**
 4. The actual port + the state-script execution engine, designed against Julia's autopilot as
@@ -1228,3 +1231,46 @@ lands.
   added — `tsc` itself caught both, not manual review), `npm test` (292, up from 282), `npm run
   build`, `npm run build:lib` all green. No browser verification needed or attempted — this slice
   never touches GL/render-path files at all.
+
+## Real-ecosystem-shader verification of `hysteresisSignal` (same session, immediate follow-up)
+
+User pointed at a real `.fs` file already sitting in `~/Downloads` (`InnerDimensionalMatrix.fs`,
+by mojovideotech, CC BY-NC-SA 3.0, based on Martijn Steinrucken's "The Universe Within") and asked
+to use it — this is genuinely valuable: every existing ISF test fixture in this repo (parse-isf/
+isf-targets/translate-isf-glsl specs) is self-authored, so this closes a real, previously-flagged
+gap (`docs/isf-shaders.md`/AGENTS.md's own standing note: *"test against a handful of real
+downloaded `.fs` files from the ISF ecosystem before trusting this beyond the fixture shapes
+here"* — never actually done until now).
+
+- **The unmodified real shader, run through the real importer** (a throwaway script, deleted
+  after use — not committed): `parseIsf()` succeeds on it (10 real inputs, all `float`/`bool`,
+  real min/max/default values with irregular tab-indented JSON formatting — a real-world
+  formatting quirk no self-authored fixture had). `translateIsfFragmentShader()` produces
+  structurally sound GLSL ES 300: `#version 300 es` correctly first, no `gl_FragColor`/
+  `texture2D` survive, and — genuinely new territory versus the existing test suite — the real
+  shader's `#ifdef GL_ES`/`#define S(a,b,t) ...` preprocessor macros, nested nine-sample nested
+  loops, and a `for(float i=...)` float-typed loop counter all pass through the purely textual
+  translation untouched and correctly. (No GL context in this sandbox — this confirms the
+  translation is textually sound, not that it compiles on a real GPU; that's still a real-browser
+  check, same standing caveat as everything else visual in this file.)
+- **The actual `hysteresisSignal` proof**: made a local, uncommitted, attribution-preserving
+  derivative (`InnerDimensionalMatrix.hysteresis.fs`, kept in this session's job-scratch
+  directory only — deliberately not added to the repo given the shader's non-commercial license,
+  same judgment call as not baking third-party ISF content into committed test fixtures) adding
+  one real input — `{ "NAME": "drive", "TYPE": "hysteresisSignal", "SIGNAL": "energy" }` — wired
+  into the shader's own output (`col *= 1.0 + drive * 1.5`, brightening the whole field on top of
+  its existing procedural pulsing). Then ran the **entire real pipeline** end to end, no
+  synthetic data anywhere: the real Instant Crush sidecar from this session's earlier real-audio
+  verification → `StructureSource.synthesize()` → a real `Conductor` → a real one-node
+  `PatchGraphEvaluator` graph (`signal:energy → target:isf.drive`, the exact wiring a user would
+  make in the editor) → `resolvedTargetsToIsfUniforms()`. Sampled at 6 real timestamps across the
+  track (5s/60s/120s/180s/240s/300s): the shader's `drive` uniform tracked `bus.energy` exactly
+  at every point (0.5723, 0.5550, 0.5767, 0.5747, 0.5738, 0.5508) — the full chain from real
+  analyzed audio to a real downloaded shader's own declared uniform genuinely works.
+- **Not done**: no browser click-through (loading either shader through the patchbay editor,
+  confirming actual GL compilation and visible reactivity) — no browser access this session,
+  same standing caveat. The derivative `.fs` file lives only in this session's scratch directory,
+  not the repo — if this augmented demo is wanted as a committed fixture later, its license needs
+  a real decision first (§3.8's open licensing question), not an assumption.
+- **Verified**: the two throwaway verification scripts were deleted after use; `git status`
+  confirmed a clean tree (nothing added to the repo by this pass) before and after.
