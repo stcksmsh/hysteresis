@@ -4,6 +4,18 @@ import { validatePatchGraph } from './validate'
 import { topoSort } from './topo-sort'
 import { evaluateNode, type EnvelopeState, type ThresholdState } from './evaluate-node'
 
+// Live non-bus inputs a graph can route from (midiCc/oscIn node kinds) —
+// bundled into one optional object rather than growing evaluate()'s own
+// positional parameter list per new external source. Both maps are keyed
+// by each node kind's own address format (MidiCcInput's "channel:controller"
+// string, an OSC address string) and omitted entirely (or empty) when that
+// source was never opted into — a graph with no midiCc/oscIn nodes never
+// needs to pass this at all.
+export interface ExternalInputs {
+  midiCc?: Map<string, number>
+  oscIn?: Map<string, number>
+}
+
 // Runs one PatchGraph against a live SignalBus every frame, producing a
 // value per `target` node. Construction validates (throws on any `error`-
 // severity issue — warnings don't block, per validate.ts's reasoning) and
@@ -36,7 +48,7 @@ export class PatchGraphEvaluator {
   // so callers (a fixture renderer, a future real output) decide what an
   // absent target means for their own device (hold last value, go dark,
   // whatever's safe for that hardware).
-  evaluate(bus: SignalBus, dt: number): Record<string, number> {
+  evaluate(bus: SignalBus, dt: number, external?: ExternalInputs): Record<string, number> {
     const values = new Map<string, number>()
     const busRecord = bus as unknown as Record<string, unknown>
     const resolved: Record<string, number> = {}
@@ -45,6 +57,14 @@ export class PatchGraphEvaluator {
       const node = this.byId.get(id)!
       if (node.kind === 'signal') {
         values.set(id, typeof busRecord[node.signal] === 'number' ? (busRecord[node.signal] as number) : 0)
+        continue
+      }
+      if (node.kind === 'midiCc') {
+        values.set(id, external?.midiCc?.get(node.ccKey) ?? 0)
+        continue
+      }
+      if (node.kind === 'oscIn') {
+        values.set(id, external?.oscIn?.get(node.address) ?? 0)
         continue
       }
       const inputValues = node.inputs.map((inputId) => values.get(inputId) ?? 0)

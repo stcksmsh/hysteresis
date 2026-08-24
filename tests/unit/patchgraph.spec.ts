@@ -101,6 +101,41 @@ describe('validatePatchGraph', () => {
     expect(issues.some((i) => i.severity === 'error' && i.message.includes('unknown node'))).toBe(true)
   })
 
+  it('flags a midiCc node with an empty CC key', () => {
+    const graph: PatchGraph = {
+      id: 'g',
+      nodes: [
+        { id: 'a', kind: 'midiCc', inputs: [], ccKey: '' },
+        { id: 't', kind: 'target', inputs: ['a'], targetId: LED_TARGET.id },
+      ],
+    }
+    const issues = validatePatchGraph(graph, [LED_TARGET])
+    expect(issues.some((i) => i.severity === 'error' && i.nodeId === 'a' && i.message.includes('CC key'))).toBe(true)
+  })
+
+  it('flags an oscIn node with an empty address', () => {
+    const graph: PatchGraph = {
+      id: 'g',
+      nodes: [
+        { id: 'a', kind: 'oscIn', inputs: [], address: '' },
+        { id: 't', kind: 'target', inputs: ['a'], targetId: LED_TARGET.id },
+      ],
+    }
+    const issues = validatePatchGraph(graph, [LED_TARGET])
+    expect(issues.some((i) => i.severity === 'error' && i.nodeId === 'a' && i.message.includes('OSC address'))).toBe(true)
+  })
+
+  it('does not warn a midiCc/oscIn-fed target about unsmoothed transient signals (no timescale tag concept for external inputs)', () => {
+    const graph: PatchGraph = {
+      id: 'g',
+      nodes: [
+        { id: 'a', kind: 'midiCc', inputs: [], ccKey: '0:1' },
+        { id: 't', kind: 'target', inputs: ['a'], targetId: SERVO_TARGET.id },
+      ],
+    }
+    expect(validatePatchGraph(graph, [SERVO_TARGET])).toEqual([])
+  })
+
   it('flags a target node pointing at an unknown fixture channel', () => {
     const graph: PatchGraph = {
       id: 'g',
@@ -171,6 +206,45 @@ describe('PatchGraphEvaluator', () => {
     const evalr = new PatchGraphEvaluator(graph, [LED_TARGET])
     const result = evalr.evaluate(makeBus({ energy: 0.7 }), 1 / 60)
     expect(result[LED_TARGET.id]).toBeCloseTo(0.7)
+  })
+
+  it('evaluates a midiCc -> target passthrough from the external inputs map', () => {
+    const graph: PatchGraph = {
+      id: 'g',
+      nodes: [
+        { id: 'a', kind: 'midiCc', inputs: [], ccKey: '0:1' },
+        { id: 't', kind: 'target', inputs: ['a'], targetId: LED_TARGET.id },
+      ],
+    }
+    const evalr = new PatchGraphEvaluator(graph, [LED_TARGET])
+    const result = evalr.evaluate(makeBus(), 1 / 60, { midiCc: new Map([['0:1', 0.42]]) })
+    expect(result[LED_TARGET.id]).toBeCloseTo(0.42)
+  })
+
+  it('a midiCc node with no matching entry in the external map reads 0, not undefined/NaN', () => {
+    const graph: PatchGraph = {
+      id: 'g',
+      nodes: [
+        { id: 'a', kind: 'midiCc', inputs: [], ccKey: '0:1' },
+        { id: 't', kind: 'target', inputs: ['a'], targetId: LED_TARGET.id },
+      ],
+    }
+    const evalr = new PatchGraphEvaluator(graph, [LED_TARGET])
+    expect(evalr.evaluate(makeBus(), 1 / 60)[LED_TARGET.id]).toBe(0)
+    expect(evalr.evaluate(makeBus(), 1 / 60, { midiCc: new Map([['0:99', 0.9]]) })[LED_TARGET.id]).toBe(0)
+  })
+
+  it('evaluates an oscIn -> target passthrough from the external inputs map', () => {
+    const graph: PatchGraph = {
+      id: 'g',
+      nodes: [
+        { id: 'a', kind: 'oscIn', inputs: [], address: '/1/fader1' },
+        { id: 't', kind: 'target', inputs: ['a'], targetId: LED_TARGET.id },
+      ],
+    }
+    const evalr = new PatchGraphEvaluator(graph, [LED_TARGET])
+    const result = evalr.evaluate(makeBus(), 1 / 60, { oscIn: new Map([['/1/fader1', 0.65]]) })
+    expect(result[LED_TARGET.id]).toBeCloseTo(0.65)
   })
 
   it('constructor throws on a graph with error-severity issues', () => {

@@ -50,10 +50,13 @@ export function evaluateNode(
 ): number {
   switch (node.kind) {
     case 'signal':
-      // The evaluator resolves signal nodes directly from the bus before
-      // calling this function (see PatchGraphEvaluator.evaluate) — signal
-      // nodes never actually reach here with real inputValues, but a
-      // well-typed switch still needs a case.
+    case 'midiCc':
+    case 'oscIn':
+      // The evaluator resolves signal/midiCc/oscIn nodes directly from
+      // external state before calling this function (see
+      // PatchGraphEvaluator.evaluate) — none of the three ever actually
+      // reach here with real inputValues, but a well-typed switch still
+      // needs a case.
       return inputValues[0] ?? 0
     case 'const':
       return node.value

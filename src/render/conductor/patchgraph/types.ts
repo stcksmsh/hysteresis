@@ -51,6 +51,38 @@ export interface ConstNode extends NodeBase {
   value: number
 }
 
+// A live external MIDI CC value — the "control input: mapping a knob to a
+// patch parameter" half of master-prompt.md §5's MIDI entry, finally
+// routable the same way a bus signal is (see SignalNode above). `ccKey` is
+// MidiCcInput's own "channel:controller" key format (src/midi/midi-cc-
+// input.ts's ccKey()) — already normalized to 0..1, so it flows through the
+// exact same curve/threshold/envelope/map chain a signal node would. Reads
+// external per-frame state (PatchGraphEvaluator.evaluate's midiCc map, kept
+// live by setMidiCc messages — src/index.ts's VizInstance.connectMidiIn and
+// the patchbay editor's own MIDI panel both feed it), so this has zero
+// inputs of its own, same shape as SignalNode.
+export interface MidiCcNode extends NodeBase {
+  kind: 'midiCc'
+  inputs: readonly []
+  ccKey: string
+}
+
+// A live incoming OSC message's value, addressed by its OSC address string
+// (e.g. "/1/fader1") — the "OSC in" half of master-prompt.md §5's OSC
+// entry (out has existed since the ISF/OSC session; in was explicitly
+// deferred). Same external-state shape as MidiCcNode above: zero inputs,
+// resolved from PatchGraphEvaluator.evaluate's oscIn map every frame,
+// fed live by an OscInBridge (src/osc/osc-in-bridge.ts) decoding real OSC
+// packets a relay forwards from the network. Only a message's first
+// numeric-ish argument (float/int/bool) is ever stored — see
+// OscInBridge's own doc comment for why a string-typed argument is
+// dropped rather than coerced.
+export interface OscInNode extends NodeBase {
+  kind: 'oscIn'
+  inputs: readonly []
+  address: string
+}
+
 // Outputs 1 when input >= cut, else 0. `hysteresis` (if set) requires the
 // input to fall to `cut - hysteresis` before it releases back to 0 — a
 // dead-band around the cut point, essential for anything physical (an LED
@@ -127,6 +159,8 @@ export interface TargetNode extends NodeBase {
 export type PatchGraphNode =
   | SignalNode
   | ConstNode
+  | MidiCcNode
+  | OscInNode
   | ThresholdNode
   | EnvelopeNode
   | LogicNode

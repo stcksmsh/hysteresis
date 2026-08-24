@@ -1,4 +1,4 @@
-import type { PatchGraphEvaluator } from '../patchgraph/PatchGraphEvaluator'
+import type { ExternalInputs, PatchGraphEvaluator } from '../patchgraph/PatchGraphEvaluator'
 import type { ResolvedTargets, SignalBus, TargetDecl } from '../types'
 
 // Bridges PatchGraphEvaluator's plain `{ [targetId]: number }` (only ever
@@ -11,13 +11,13 @@ import type { ResolvedTargets, SignalBus, TargetDecl } from '../types'
 // comment for why). This function is what used to be Patchbay.resolve()'s
 // job for the screen; it's the one place that guarantee still lives now
 // that ScreenOutput is driven by a PatchGraph instead.
-export function resolveScreenTargets(evaluator: PatchGraphEvaluator, targets: TargetDecl[], bus: SignalBus, dt: number): ResolvedTargets {
+export function resolveScreenTargets(evaluator: PatchGraphEvaluator, targets: TargetDecl[], bus: SignalBus, dt: number, external?: ExternalInputs): ResolvedTargets {
   const resolved: ResolvedTargets = {}
   for (const target of targets) {
     resolved[target.id] = target.passThrough ? null : target.defaultValue
   }
 
-  const evaluated = evaluator.evaluate(bus, dt)
+  const evaluated = evaluator.evaluate(bus, dt, external)
   for (const target of targets) {
     if (target.passThrough) continue
     if (target.id in evaluated) resolved[target.id] = evaluated[target.id]

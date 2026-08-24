@@ -89,6 +89,36 @@ describe('udp-relay', () => {
     expect(Buffer.from(await receivedB)).toEqual(Buffer.from(packetB))
   })
 
+  it('forwards an inbound UDP datagram to a connected WS client unchanged (OSC in path)', async () => {
+    const wsPort = await findFreePort()
+    const oscInPort = await findFreePort()
+    relay = createUdpRelay({ wsPort, udpHost: '127.0.0.1', udpPort: 1, oscInPort })
+
+    const sentBytes = encodeOscBundle([{ address: '/1/fader1', args: [{ type: 'f', value: 0.65 }] }])
+
+    const received = await new Promise<Buffer>((resolveReceived, reject) => {
+      const ws = new WebSocket(`ws://127.0.0.1:${wsPort}`)
+      ws.binaryType = 'arraybuffer'
+      ws.on('open', () => {
+        const sender = createSocket('udp4')
+        sender.send(Buffer.from(sentBytes), oscInPort, '127.0.0.1', (err) => {
+          if (err) reject(err)
+          sender.close()
+        })
+      })
+      ws.on('message', (data) => resolveReceived(Buffer.from(data as Buffer)))
+      ws.on('error', reject)
+    })
+
+    expect(received).toEqual(Buffer.from(sentBytes))
+  })
+
+  it('never opens an inbound socket when oscInPort is omitted (pre-existing out-only behavior unchanged)', async () => {
+    const wsPort = await findFreePort()
+    relay = createUdpRelay({ wsPort, udpHost: '127.0.0.1', udpPort: 1 })
+    expect(relay.oscInPort).toBeNull()
+  })
+
   it('drops a malformed JSON text frame without crashing the relay', async () => {
     const wsPort = await findFreePort()
     relay = createUdpRelay({ wsPort, udpHost: '127.0.0.1', udpPort: 1 })

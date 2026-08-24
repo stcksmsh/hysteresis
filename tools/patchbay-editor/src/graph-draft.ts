@@ -38,6 +38,8 @@ export interface DraftNode {
   outRange?: [number, number]
   clamp?: boolean
   targetId?: string
+  ccKey?: string
+  address?: string
 }
 
 let nextDraftId = 1
@@ -51,6 +53,10 @@ export function makeDefaultDraft(kind: PatchGraphNode['kind'], id: string = make
       return { id, kind, inputs: [], signal: 'energy' }
     case 'const':
       return { id, kind, inputs: [], value: 0.5 }
+    case 'midiCc':
+      return { id, kind, inputs: [], ccKey: '' }
+    case 'oscIn':
+      return { id, kind, inputs: [], address: '' }
     case 'threshold':
       return { id, kind, inputs: [], cut: 0.5, hysteresis: 0.05 }
     case 'envelope':
@@ -76,6 +82,10 @@ export function toPatchGraphNode(d: DraftNode): PatchGraphNode {
       return { id: d.id, kind: 'signal', inputs: [], signal: (d.signal ?? 'energy') as RoutableSignalName, label }
     case 'const':
       return { id: d.id, kind: 'const', inputs: [], value: d.value ?? 0, label }
+    case 'midiCc':
+      return { id: d.id, kind: 'midiCc', inputs: [], ccKey: d.ccKey ?? '', label }
+    case 'oscIn':
+      return { id: d.id, kind: 'oscIn', inputs: [], address: d.address ?? '', label }
     case 'threshold':
       return { id: d.id, kind: 'threshold', inputs: [inputs[0] ?? ''], cut: d.cut ?? 0.5, hysteresis: d.hysteresis, label }
     case 'envelope':
@@ -114,6 +124,10 @@ export function fromPatchGraphNode(n: PatchGraphNode): DraftNode {
       return { ...base, signal: n.signal }
     case 'const':
       return { ...base, value: n.value }
+    case 'midiCc':
+      return { ...base, ccKey: n.ccKey }
+    case 'oscIn':
+      return { ...base, address: n.address }
     case 'threshold':
       return { ...base, cut: n.cut, hysteresis: n.hysteresis }
     case 'envelope':

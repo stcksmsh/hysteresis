@@ -16,6 +16,8 @@ function expectedInputCount(node: PatchGraphNode): { min: number; max: number } 
   switch (node.kind) {
     case 'signal':
     case 'const':
+    case 'midiCc':
+    case 'oscIn':
       return { min: 0, max: 0 }
     case 'threshold':
     case 'envelope':
@@ -69,6 +71,12 @@ export function validatePatchGraph(graph: PatchGraph, targets: PatchTargetDecl[]
     if (node.kind === 'signal' && !(node.signal in SIGNAL_TAGS)) {
       issues.push({ nodeId: node.id, message: `"${node.signal}" is not a known bus signal`, severity: 'error' })
     }
+    if (node.kind === 'midiCc' && !node.ccKey.trim()) {
+      issues.push({ nodeId: node.id, message: 'midiCc node has no CC key set', severity: 'error' })
+    }
+    if (node.kind === 'oscIn' && !node.address.trim()) {
+      issues.push({ nodeId: node.id, message: 'oscIn node has no OSC address set', severity: 'error' })
+    }
     if (node.kind === 'target') {
       const target = targetsById.get(node.targetId)
       if (!target) {
@@ -118,8 +126,11 @@ function findUnsmoothedTransientSignal(nodeId: string, byId: Map<string, PatchGr
     return SIGNAL_TAGS[node.signal] === 'transient' ? node.signal : null
   }
   // threshold/envelope both smooth or gate a raw signal into something a
-  // physical actuator can reasonably follow — stop walking back through them.
-  if (node.kind === 'threshold' || node.kind === 'envelope' || node.kind === 'const') return null
+  // physical actuator can reasonably follow — stop walking back through
+  // them. midiCc/oscIn are external human/tool-driven inputs with no bus
+  // timescale tag at all (a knob or an external app's own fader, not
+  // audio-domain analysis) — the transient-signal warning doesn't apply.
+  if (node.kind === 'threshold' || node.kind === 'envelope' || node.kind === 'const' || node.kind === 'midiCc' || node.kind === 'oscIn') return null
   for (const inputId of node.inputs) {
     const found = findUnsmoothedTransientSignal(inputId, byId, seen)
     if (found) return found

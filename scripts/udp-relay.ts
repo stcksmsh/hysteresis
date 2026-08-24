@@ -27,10 +27,21 @@ export interface UdpRelayOptions {
   wsPort: number
   udpHost: string
   udpPort: number
+  // Port to listen on for INBOUND UDP datagrams (an external tool sending
+  // OSC to us — master-prompt.md §6's "OSC in" item) — every datagram that
+  // arrives here is forwarded verbatim, as a binary WS frame, to every
+  // currently-connected browser tab (src/osc/osc-in-bridge.ts decodes it
+  // there; this relay does no OSC-specific parsing, same "just move bytes"
+  // posture as the outbound direction). 0 disables inbound listening
+  // entirely (the pre-existing default before this option existed — a
+  // relay only ever used for *-out bridges has nothing to gain from
+  // binding an extra port).
+  oscInPort?: number
 }
 
 export interface UdpRelay {
   wsPort: number
+  oscInPort: number | null
   close(): Promise<void>
 }
 
@@ -55,6 +66,23 @@ export function createUdpRelay(opts: UdpRelayOptions): UdpRelay {
   udpSocket.bind(() => udpSocket.setBroadcast(true))
   const wss = new WebSocketServer({ port: opts.wsPort })
 
+  // Inbound half — a SEPARATE socket from `udpSocket` above (which binds to
+  // an ephemeral port purely to send) because this one needs a fixed,
+  // well-known port an external tool can actually be configured to send
+  // OSC to. Optional: only bound when a caller actually wants inbound
+  // routing (oscInPort > 0), so a relay only ever used for *-out bridges
+  // behaves exactly as it did before this option existed.
+  let oscInSocket: Socket | null = null
+  if (opts.oscInPort) {
+    oscInSocket = createSocket('udp4')
+    oscInSocket.on('message', (msg) => {
+      for (const client of wss.clients) {
+        if (client.readyState === client.OPEN) client.send(msg)
+      }
+    })
+    oscInSocket.bind(opts.oscInPort)
+  }
+
   wss.on('connection', (ws) => {
     ws.on('message', (data: Buffer, isBinary: boolean) => {
       if (!isBinary) {
@@ -77,9 +105,11 @@ export function createUdpRelay(opts: UdpRelayOptions): UdpRelay {
 
   return {
     wsPort: opts.wsPort,
+    oscInPort: opts.oscInPort ?? null,
     close(): Promise<void> {
       return new Promise((resolveClose) => {
         udpSocket.close()
+        oscInSocket?.close()
         wss.close(() => resolveClose())
         for (const client of wss.clients) client.terminate()
       })
@@ -96,10 +126,12 @@ function main(): void {
   const wsPort = Number(flag('ws-port', '9090'))
   const udpHost = flag('udp-host', '127.0.0.1')
   const udpPort = Number(flag('udp-port', '9000'))
+  const oscInPort = Number(flag('osc-in-port', '0')) // 0 = inbound listening disabled
 
-  createUdpRelay({ wsPort, udpHost, udpPort })
+  const relay = createUdpRelay({ wsPort, udpHost, udpPort, oscInPort })
   console.log(`udp-relay: ws://localhost:${wsPort} -> udp://${udpHost}:${udpPort} (default target — OSC binary frames only; DMX JSON envelopes carry their own per-universe destination)`)
-  console.log('usage: npm run udp-relay -- --ws-port 9090 --udp-host 127.0.0.1 --udp-port 9000')
+  if (relay.oscInPort) console.log(`udp-relay: also listening for inbound OSC on udp://0.0.0.0:${relay.oscInPort}, forwarded to every connected browser tab`)
+  console.log('usage: npm run udp-relay -- --ws-port 9090 --udp-host 127.0.0.1 --udp-port 9000 [--osc-in-port 9001]')
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

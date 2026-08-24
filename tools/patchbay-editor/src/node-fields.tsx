@@ -6,7 +6,7 @@ import type { DraftNode } from './graph-draft'
 // the flat form editor — kept as its own module so neither has to duplicate
 // the field set for all 9 node kinds. Pure display/edit of one node's
 // params; wiring (inputs) is the canvas's job now, not this component's.
-export const NODE_KINDS: DraftNode['kind'][] = ['signal', 'const', 'threshold', 'envelope', 'logic', 'combine', 'curve', 'map', 'target']
+export const NODE_KINDS: DraftNode['kind'][] = ['signal', 'const', 'midiCc', 'oscIn', 'threshold', 'envelope', 'logic', 'combine', 'curve', 'map', 'target']
 export const CURVE_KINDS: CurveKind[] = ['linear', 'exp', 'log', 'smoothstep']
 
 export function NodeFields({ node, targets, onPatch }: { node: DraftNode; targets: PatchTargetDecl[]; onPatch: (id: string, fields: Partial<DraftNode>) => void }) {
@@ -29,6 +29,20 @@ export function NodeFields({ node, targets, onPatch }: { node: DraftNode; target
         <div className="node-fields">
           value:
           <input type="number" step={0.05} value={node.value ?? 0} onChange={(e) => onPatch(node.id, { value: Number(e.target.value) })} style={{ width: 70 }} />
+        </div>
+      )
+    case 'midiCc':
+      return (
+        <div className="node-fields">
+          CC key ("channel:controller"):
+          <input type="text" placeholder="0:1" value={node.ccKey ?? ''} onChange={(e) => onPatch(node.id, { ccKey: e.target.value })} style={{ width: 80 }} />
+        </div>
+      )
+    case 'oscIn':
+      return (
+        <div className="node-fields">
+          OSC address:
+          <input type="text" placeholder="/1/fader1" value={node.address ?? ''} onChange={(e) => onPatch(node.id, { address: e.target.value })} style={{ width: 120 }} />
         </div>
       )
     case 'threshold':
@@ -169,6 +183,10 @@ export function nodeSummary(node: DraftNode): string {
       return node.signal ?? '—'
     case 'const':
       return String(node.value ?? 0)
+    case 'midiCc':
+      return node.ccKey || '(unset)'
+    case 'oscIn':
+      return node.address || '(unset)'
     case 'threshold':
       return `cut ${(node.cut ?? 0.5).toFixed(2)}${node.hysteresis ? ` ±${node.hysteresis.toFixed(2)}` : ''}`
     case 'envelope':
@@ -198,6 +216,10 @@ export function defaultLabel(node: DraftNode): string {
       return node.signal ?? 'signal'
     case 'const':
       return `const ${node.value ?? 0}`
+    case 'midiCc':
+      return 'midi cc'
+    case 'oscIn':
+      return 'osc in'
     case 'threshold':
       return 'threshold'
     case 'envelope':
@@ -231,6 +253,8 @@ export function fixedInputSlotCount(node: DraftNode): number | null {
   switch (node.kind) {
     case 'signal':
     case 'const':
+    case 'midiCc':
+    case 'oscIn':
       return 0
     case 'threshold':
     case 'envelope':
