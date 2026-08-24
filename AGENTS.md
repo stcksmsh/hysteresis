@@ -320,10 +320,14 @@ live-reactive playback as two distinct export modes. **Not started.**
       error). Loadable from the editor AND as real public API (`loadIsfShader()`/
       `clearIsfShader()`, `docs/isf-shaders.md`) — opt-in, production still ships Julia by
       default.
-- [~] ISF superset spec (novelty/similarity/section-confidence as shader inputs a script could
-      declare) — **§4 below builds the underlying signals** (`noveltyLocal`, `noveltySection`,
-      `harmonicNovelty`, stem-presence); wiring them as ISF input types is still a separate,
-      not-yet-started step.
+- [~] ISF superset spec ("the Hysteresis format") — the `hysteresisSignal` input type is real and
+      shipped (`src/isf/`, `docs/isf-shaders.md`): a shader can declare it wants any real bus
+      signal by name (`noveltyLocal`, `familiarity`, `harmonicNovelty`, per-band energies, the
+      sidecar-only presence signals, ...), validated at load time. `HYSTERESIS_SCRIPT` (an
+      optional per-file stateful JS companion — needed for anything a single GLSL fragment
+      shader can't express, e.g. Julia's own autopilot navigation) is reserved in the parser
+      (rejected with a clear error) but its execution engine is not built — real, separate,
+      later work, planned as the next phase before porting Julia itself onto this format.
 - [ ] Shadertoy → ISF import helper (mind licensing/attribution on ported shaders).
 - [ ] Live inline node state visualization (waveform/value preview per node).
 - [ ] Macro/sub-patch save-as-reusable-block.
@@ -1147,3 +1151,80 @@ one real, high-priority bug, fixed immediately rather than just reported.
   `requestAnimationFrame` timestamp in `render-worker.ts` (spec-monotonic), so it can't go
   negative and invert `Math.exp(-dt/TAU)` into growth either. **The `SimilarityTracker` fix above
   was the only real gap in the whole pipeline for this bug class — closed.**
+
+## The Hysteresis format, Phase 0/1: `hysteresisSignal` inputs + reserving stateful scripts (same session, immediate follow-up)
+
+User asked for a phased roadmap toward two things: (1) a real "Hysteresis format" — a superset of
+ISF letting a shader declare it wants a live Feature Engine signal, the master-prompt's own
+stated differentiator (§4.5) — built to a genuinely solid state, then (2) eventually porting the
+built-in Julia scene itself onto that format instead of staying hardcoded native TypeScript, per
+the project's own design principle (§3.6: *"if the built-in Julia fractal can't be forked/edited
+the same way a user's custom ISF script can, the extensibility story is fake"*).
+
+Scoped explicitly before writing anything (via a real plan-mode pass, grounded in the actual
+code): `JuliaScene.ts` itself only reads 9 fields directly off `ParamBus` — the other ~13 of the
+full 22-field `ParamBus` drive the surrounding memory-field/composite pipeline, not Julia's own
+navigation. Its autopilot (vortex-search, perturbation orbits, spring-damper `c`-drift) is 1011
+lines of stateful per-frame JS logic, something a single GLSL fragment shader categorically
+cannot express — ISF's own model ("shader + JSON header") has no concept of persistent JS state
+at all. User confirmed directly that an optional, per-file JS state-script companion is a real,
+wanted part of the format's architecture, not just a nice-to-have ("we need state, that's the
+whole idea") — so this pass's scope was widened to include *reserving* that concept at the file-
+format level now (recognized, clearly rejected), even though the actual execution engine is
+later work, so a future Julia-port file's shape doesn't need a breaking change when that engine
+lands.
+
+**The roadmap, for whoever picks this up next:**
+0. Spec the extension mechanism — done this session.
+1. Build it — done this session.
+2. Prove it standalone: real demo `.fs` shaders using `hysteresisSignal`, loaded through the
+   editor, confirmed visibly reactive. **Not done** — no browser access this session, same
+   standing caveat as every other GL/visual slice in this file.
+3. Design the compact signal set for Julia specifically — a real design conversation with the
+   user once this mechanism exists to design against, not mechanical work. **Not done.**
+4. The actual port + the state-script execution engine, designed against Julia's autopilot as
+   the concrete motivating case (not guessed at in the abstract). **Not done**, the big one.
+
+**This session covers Phase 0/1 only:**
+
+- **`hysteresisSignal`** (`src/isf/types.ts`/`parse-isf.ts`/`isf-targets.ts`): a new ISF input
+  `TYPE` alongside the existing `float`/`bool`/`long`/`color`/`point2D`. Declared as `{ "NAME":
+  "novelty", "TYPE": "hysteresisSignal", "SIGNAL": "noveltyLocal" }` — `SIGNAL` validated at parse
+  time against `SIGNAL_TAGS` (`src/render/conductor/types.ts`, the same ~35-name set the patch
+  graph's own `signal` node already reads from), rejected with the full valid-name list in the
+  error message if unknown. **Deliberately minimal new mechanism**: it becomes a perfectly
+  ordinary routable `TargetDecl`, exactly like every other ISF input already is — no implicit
+  auto-wiring, no second reading path that bypasses the patch graph. This keeps R2 (`VizOutput`
+  never sees the raw `SignalBus`, only resolved targets — confirmed still true by reading
+  `ScreenOutput.update()`'s actual signature before designing this) and R4 ("routing is data")
+  intact; the only real difference from a plain `float` input is self-documentation (the shader
+  states which bus signal it's shaped for) and a signal-appropriate default range (`0..1`
+  unipolar, `-1..1` for the known bipolar signals `bandTilt`/`pan` — a small explicit lookup
+  table in `isf-targets.ts`, not a general solve). `translate-isf-glsl.ts`'s `glslType()` maps it
+  to a plain `float` uniform, same as the standard `float` type — the `TYPE` distinction only
+  matters at the routing layer, not to the shader itself.
+- **`HYSTERESIS_SCRIPT` reserved, not executed**: `parseIsf()` now throws
+  `IsfUnsupportedFeatureError` if a shader's header declares a non-empty `HYSTERESIS_SCRIPT`
+  string — same "reject clearly rather than silently mis-render" discipline already applied to
+  multi-pass/`PERSISTENT`/`IMPORTED`/unsupported-input-type shaders. Costs almost nothing to add
+  now and buys real value later: a Julia-port file's shape is stable from day one.
+- **Tests**: `tests/unit/parse-isf.spec.ts` extended (valid `hysteresisSignal` parse, unknown-
+  `SIGNAL` rejection with the full valid list in the message, missing-`SIGNAL` rejection,
+  `HYSTERESIS_SCRIPT` rejection, empty-`HYSTERESIS_SCRIPT` NOT rejected), `tests/unit/isf-targets.spec.ts`
+  extended (target generation for both a unipolar and the bipolar case, uniform round-trip) — a
+  separate small fixture, not the shared one, so the existing suite's exact-target-count
+  assertion stays untouched. 11 new tests; full suite now 292 (was 282).
+- **`docs/isf-shaders.md`**: two new sections — `hysteresisSignal`'s exact JSON shape and the
+  real signal-name list's location, and `HYSTERESIS_SCRIPT`'s reserved-but-not-yet-functional
+  status, framed honestly as "planned," not "coming soon."
+- **Explicitly not done, per the plan's own stated scope**: no demo/test shaders, no editor UI
+  changes, no browser verification (Phase 2); no redesign of Julia's actual signal set (Phase 3);
+  no state-script execution engine, no `ScreenOutput.update()` signature change, no `IsfScene.ts`
+  change (Phase 4) — `HYSTERESIS_SCRIPT` is rejected, not run, on purpose. Zero change to
+  production behavior — `src/index.ts`/`render-worker.ts`'s default path never loads a shader at
+  all, same posture every prior ISF slice shipped with.
+- **Verified**: `npm run typecheck` (all 4 tsconfigs, including catching two exhaustive-switch
+  compile errors in `isf-targets.ts`/`translate-isf-glsl.ts` that needed a `hysteresisSignal` case
+  added — `tsc` itself caught both, not manual review), `npm test` (292, up from 282), `npm run
+  build`, `npm run build:lib` all green. No browser verification needed or attempted — this slice
+  never touches GL/render-path files at all.

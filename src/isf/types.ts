@@ -6,8 +6,13 @@
 // patchbay do the same thing: an ISF input becomes a real PatchTargetDecl a
 // user can route any signal into, the same as a built-in screen/fixture
 // target.
+//
+// `hysteresisSignal` (AGENTS.md's "Hysteresis format" work) is this repo's
+// own real extension beyond standard ISF — a shader can declare it wants a
+// specific live Feature Engine signal by name (see IsfHysteresisSignalInput
+// below) instead of an anonymous float a user has to know to route by hand.
 
-export type IsfSupportedInputType = 'float' | 'bool' | 'long' | 'color' | 'point2D'
+export type IsfSupportedInputType = 'float' | 'bool' | 'long' | 'color' | 'point2D' | 'hysteresisSignal'
 // Real ISF features this subset does not implement yet — detected and
 // rejected at parse time with a clear message rather than silently
 // mis-rendering. `image`/`audio`/`audioFFT` need an import/texture pipeline
@@ -57,7 +62,24 @@ export interface IsfPoint2DInput {
   max: [number, number]
 }
 
-export type IsfInput = IsfFloatInput | IsfBoolInput | IsfLongInput | IsfColorInput | IsfPoint2DInput
+// The Hysteresis format's actual novelty (master-prompt §4.5, AGENTS.md §3.4/§3.7): a shader can
+// declare it wants a specific live Feature Engine signal by name, instead of a generic float a
+// user has to know to route by hand. `signal` is a `RoutableSignalName`
+// (src/render/conductor/types.ts's SIGNAL_TAGS) — validated at parse time in parse-isf.ts, kept
+// as a plain string here (not that type) so this module doesn't need to import render/conductor
+// just for a type alias. Still becomes a perfectly ordinary routable `TargetDecl` like every
+// other ISF input (see isf-targets.ts's header comment) — no bypass of the patch graph, no
+// implicit auto-wiring; the only thing this type adds is self-documentation and a
+// signal-appropriate default range instead of an arbitrary 0..1.
+export interface IsfHysteresisSignalInput {
+  type: 'hysteresisSignal'
+  name: string
+  label?: string
+  signal: string
+  default: number
+}
+
+export type IsfInput = IsfFloatInput | IsfBoolInput | IsfLongInput | IsfColorInput | IsfPoint2DInput | IsfHysteresisSignalInput
 
 export interface IsfDocument {
   description?: string

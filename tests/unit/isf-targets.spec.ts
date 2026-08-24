@@ -78,3 +78,36 @@ describe('resolvedTargetsToIsfUniforms', () => {
     expect(uniforms.tint).toEqual([0, 0, 0, 0])
   })
 })
+
+// AGENTS.md's "Hysteresis format" — separate fixture so the plain-ISF suite
+// above's exact-target-count assertion stays untouched.
+describe('hysteresisSignal targets', () => {
+  const SIGNAL_SRC = `/*{
+    "INPUTS": [
+      { "NAME": "novelty", "TYPE": "hysteresisSignal", "SIGNAL": "noveltyLocal", "DEFAULT": 0.3 },
+      { "NAME": "tilt", "TYPE": "hysteresisSignal", "SIGNAL": "bandTilt" }
+    ]
+  }*/
+  void main() { gl_FragColor = vec4(1.0); }
+  `
+  const doc = parseIsf(SIGNAL_SRC)
+  const targets = isfInputsToTargets(doc)
+  const byId = Object.fromEntries(targets.map((t) => [t.id, t]))
+
+  it('produces one target per input (no component expansion, unlike color/point2D)', () => {
+    expect(targets).toHaveLength(2)
+  })
+
+  it('uses a 0..1 range for a unipolar signal', () => {
+    expect(byId[`${ISF_TARGET_PREFIX}novelty`]).toMatchObject({ defaultValue: 0.3, range: [0, 1] })
+  })
+
+  it('uses a -1..1 range for a known bipolar signal', () => {
+    expect(byId[`${ISF_TARGET_PREFIX}tilt`]).toMatchObject({ defaultValue: 0, range: [-1, 1] })
+  })
+
+  it('round-trips through resolvedTargetsToIsfUniforms as a plain scalar', () => {
+    const uniforms = resolvedTargetsToIsfUniforms(doc, { [`${ISF_TARGET_PREFIX}novelty`]: 0.77 })
+    expect(uniforms.novelty).toBe(0.77)
+  })
+})

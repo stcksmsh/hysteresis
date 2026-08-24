@@ -1,6 +1,12 @@
 import type { IsfDocument, IsfInput } from './types'
 import type { TargetDecl, TimescaleTag } from '../render/conductor/types'
 
+// The few bus signals that are bipolar (-1..1) rather than the common
+// unipolar (0..1) case — see SignalBus's own field comments in
+// render/conductor/types.ts. A small, explicit lookup rather than a general
+// solve: adding a new bipolar signal to the bus means adding it here too.
+const BIPOLAR_SIGNALS = new Set(['bandTilt', 'pan'])
+
 // TargetDecl (mutable acceptsTags/range) rather than PatchTargetDecl
 // (readonly): this is the shape ScreenOutput.targets itself needs
 // (TargetDecl[]) — and per patchgraph/types.ts's own note, a plain
@@ -47,6 +53,10 @@ export function isfInputsToTargets(doc: IsfDocument): IsfTargetDecl[] {
         return (['x', 'y'] as const).map((axis, i) =>
           target(`${input.name}.${axis}`, labelFor(input, axis), input.default[i], [input.min[i], input.max[i]]),
         )
+      case 'hysteresisSignal': {
+        const range: [number, number] = BIPOLAR_SIGNALS.has(input.signal) ? [-1, 1] : [0, 1]
+        return [target(input.name, input.label, input.default, range)]
+      }
     }
   })
 
@@ -87,6 +97,9 @@ export function resolvedTargetsToIsfUniforms(doc: IsfDocument, resolved: Record<
         break
       case 'point2D':
         uniforms[input.name] = [read(`${input.name}.x`), read(`${input.name}.y`)]
+        break
+      case 'hysteresisSignal':
+        uniforms[input.name] = read(input.name)
         break
     }
   }

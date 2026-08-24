@@ -45,7 +45,8 @@ this capability decides on its own.
 A real subset, not a stub — anything accepted here renders for real:
 
 - Single-pass shaders only (`PASSES` with more than one entry is rejected).
-- Input types: `float`, `bool`, `long`, `color`, `point2D`.
+- Input types: `float`, `bool`, `long`, `color`, `point2D`, `hysteresisSignal`
+  (see below — this repo's own real extension beyond standard ISF).
   - `color` and `point2D` inputs expand into separate scalar targets
     (`isf.tint.r`/`.g`/`.b`/`.a`, `isf.center.x`/`.y`) since every patch
     graph node is scalar-in/scalar-out.
@@ -55,6 +56,50 @@ A real subset, not a stub — anything accepted here renders for real:
 - The standard ISF built-ins a single-pass shader can use: `TIME`,
   `TIMEDELTA`, `RENDERSIZE`, `PASSINDEX` (always `0`), `FRAMEINDEX`, `DATE`,
   `isf_FragNormCoord`, `gl_FragColor`, `texture2D`/`textureCube`.
+
+## The Hysteresis format: `hysteresisSignal` inputs
+
+Standard ISF has no concept of "the beat" or "how novel does the mix sound
+right now" — a shader author has to fall back to a generic `float` and hope
+whoever's patching it knows to route the right thing in. `hysteresisSignal`
+is this repo's own real extension: a shader declares it wants a *specific*
+live Feature Engine signal by name, not an anonymous knob.
+
+```json
+{ "NAME": "novelty", "TYPE": "hysteresisSignal", "SIGNAL": "noveltyLocal", "DEFAULT": 0 }
+```
+
+`SIGNAL` must be one of the ~35 real, currently-live bus signal names (see
+`SIGNAL_TAGS` in `src/render/conductor/types.ts` for the exact list — things
+like `noveltyLocal`/`noveltySection`, `familiarity`, `harmonicNovelty`,
+`chromaRootHue`, `fullness`, `onsetDensity`, every per-band energy, and the
+sidecar-only stem-presence signals). An unknown `SIGNAL` name is rejected at
+load time with the full valid list in the error message, same discipline as
+every other rejection this importer does.
+
+It becomes a real, routable target — **exactly the same as every other ISF
+input type**: it shows up as `isf.<name>` in the editor's target catalog and
+graph canvas, with a default range of `0..1` (or `-1..1` for the handful of
+known bipolar signals, e.g. `bandTilt`/`pan`) instead of an arbitrary one.
+There's no implicit auto-wiring — you (or a default config) still route a
+`signal` node into it via the patch graph like anything else. The only real
+difference from a plain `float` input is that it's self-documenting about
+which live signal it's shaped for, and gets a sensible default range for
+free.
+
+## `HYSTERESIS_SCRIPT` — reserved, not executed yet
+
+A shader's header may declare `"HYSTERESIS_SCRIPT": "..."` — a **planned**
+per-frame stateful JS companion (orbit tracking, target-seeking, anything a
+single GLSL fragment shader can't express on its own, since ISF's model has
+no concept of persistent JS-side state at all). This key is currently
+**rejected at load time with a clear error** rather than silently ignored —
+a shader that depends on it for correct rendering should fail loudly, not
+mis-render. The real execution engine (persistent per-frame state, typed bus
+access, producing extra uniforms beyond plain signal routing) is real,
+separate, not-yet-built work — this is deliberately reserved now so a
+future shader authored against it won't need a breaking format change once
+it lands.
 
 ## What's not supported (yet)
 

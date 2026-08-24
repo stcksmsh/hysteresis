@@ -55,5 +55,10 @@ function glslType(input: IsfInput): string {
       return 'vec4'
     case 'point2D':
       return 'vec2'
+    case 'hysteresisSignal':
+      // A bus signal is always a plain scalar uniform in GLSL, same as `float` — the
+      // TYPE distinction only matters at the patch-graph/routing layer (isf-targets.ts),
+      // not to the shader itself.
+      return 'float'
   }
 }

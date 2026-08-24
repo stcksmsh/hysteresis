@@ -91,4 +91,42 @@ describe('parseIsf', () => {
     const doc = parseIsf(src)
     expect(doc.inputs).toEqual([])
   })
+
+  // AGENTS.md's "Hysteresis format" — the real extension beyond standard ISF: a shader
+  // declaring it wants a live Feature Engine signal by name.
+  describe('hysteresisSignal (the Hysteresis-format extension)', () => {
+    it('parses a valid hysteresisSignal input', () => {
+      const src = `/*{ "INPUTS": [ { "NAME": "novelty", "TYPE": "hysteresisSignal", "SIGNAL": "noveltyLocal", "DEFAULT": 0.2 } ] }*/\nvoid main() { gl_FragColor = vec4(1.0); }`
+      const doc = parseIsf(src)
+      expect(doc.inputs).toEqual([{ type: 'hysteresisSignal', name: 'novelty', label: undefined, signal: 'noveltyLocal', default: 0.2 }])
+    })
+
+    it('defaults to 0 when DEFAULT is omitted', () => {
+      const src = `/*{ "INPUTS": [ { "NAME": "fam", "TYPE": "hysteresisSignal", "SIGNAL": "familiarity" } ] }*/\nvoid main() { gl_FragColor = vec4(1.0); }`
+      const doc = parseIsf(src)
+      expect(doc.inputs[0]).toMatchObject({ default: 0 })
+    })
+
+    it('rejects an unknown SIGNAL name with a specific message listing valid ones', () => {
+      const src = `/*{ "INPUTS": [ { "NAME": "bad", "TYPE": "hysteresisSignal", "SIGNAL": "totallyMadeUp" } ] }*/\nvoid main() { gl_FragColor = vec4(1.0); }`
+      expect(() => parseIsf(src)).toThrow(IsfParseError)
+      expect(() => parseIsf(src)).toThrow(/unknown SIGNAL "totallyMadeUp"/)
+    })
+
+    it('rejects a missing SIGNAL', () => {
+      const src = `/*{ "INPUTS": [ { "NAME": "bad", "TYPE": "hysteresisSignal" } ] }*/\nvoid main() { gl_FragColor = vec4(1.0); }`
+      expect(() => parseIsf(src)).toThrow(IsfParseError)
+    })
+  })
+
+  it('rejects a declared HYSTERESIS_SCRIPT with a clear "not executed yet" message', () => {
+    const src = `/*{ "HYSTERESIS_SCRIPT": "export function step() {}", "INPUTS": [] }*/\nvoid main() { gl_FragColor = vec4(1.0); }`
+    expect(() => parseIsf(src)).toThrow(IsfUnsupportedFeatureError)
+    expect(() => parseIsf(src)).toThrow(/not executed yet/)
+  })
+
+  it('does not reject a shader with an empty/absent HYSTERESIS_SCRIPT', () => {
+    const src = `/*{ "HYSTERESIS_SCRIPT": "", "INPUTS": [] }*/\nvoid main() { gl_FragColor = vec4(1.0); }`
+    expect(() => parseIsf(src)).not.toThrow()
+  })
 })

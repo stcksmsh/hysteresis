@@ -5,8 +5,9 @@ import {
   type IsfInput,
   type IsfUnsupportedInputType,
 } from './types'
+import { SIGNAL_TAGS } from '../render/conductor/types'
 
-const SUPPORTED_TYPES = new Set(['float', 'bool', 'long', 'color', 'point2D'])
+const SUPPORTED_TYPES = new Set(['float', 'bool', 'long', 'color', 'point2D', 'hysteresisSignal'])
 const UNSUPPORTED_TYPES: readonly IsfUnsupportedInputType[] = ['image', 'audio', 'audioFFT', 'event']
 
 // Parses the real ISF file format: a `/*{ ... }*/` JSON header immediately
@@ -45,12 +46,24 @@ export function parseIsf(source: string): IsfDocument {
   if (header.IMPORTED && typeof header.IMPORTED === 'object' && Object.keys(header.IMPORTED as object).length > 0) {
     throw new IsfUnsupportedFeatureError('IMPORTED images are not supported yet — this shader needs an asset it can\'t bring with it.')
   }
+  // Reserved, not implemented (AGENTS.md's "Hysteresis format" Phase 1): a shader MAY declare a
+  // HYSTERESIS_SCRIPT (per-frame JS state — orbit tracking, target-seeking, anything a single
+  // GLSL fragment shader can't express, per ISF's own "shader + JSON header" model having no
+  // concept of stateful JS at all). Rejecting it clearly now — rather than silently ignoring a
+  // key the shader may depend on for correct rendering — means a shader authored against it
+  // fails loudly instead of mis-rendering, and the file format's shape is already stable for
+  // when the real execution engine (Phase 4) lands.
+  if (typeof header.HYSTERESIS_SCRIPT === 'string' && header.HYSTERESIS_SCRIPT.length > 0) {
+    throw new IsfUnsupportedFeatureError(
+      'HYSTERESIS_SCRIPT is reserved but not executed yet — stateful per-frame JS scripts are not supported until the state-script engine lands.',
+    )
+  }
 
   const rawInputs = Array.isArray(header.INPUTS) ? (header.INPUTS as Record<string, unknown>[]) : []
   const unsupported = rawInputs.filter((i) => UNSUPPORTED_TYPES.includes(i.TYPE as IsfUnsupportedInputType))
   if (unsupported.length > 0) {
     const names = unsupported.map((i) => `${String(i.NAME)} (${String(i.TYPE)})`).join(', ')
-    throw new IsfUnsupportedFeatureError(`Unsupported ISF input type(s): ${names} — only float/bool/long/color/point2D inputs are supported.`)
+    throw new IsfUnsupportedFeatureError(`Unsupported ISF input type(s): ${names} — only float/bool/long/color/point2D/hysteresisSignal inputs are supported.`)
   }
 
   const inputs: IsfInput[] = rawInputs
@@ -96,6 +109,14 @@ function parseInput(raw: Record<string, unknown>): IsfInput {
         label,
         default: [numberOr(d[0], 1), numberOr(d[1], 1), numberOr(d[2], 1), numberOr(d[3], 1)],
       }
+    }
+    case 'hysteresisSignal': {
+      const signal = String(raw.SIGNAL ?? '')
+      if (!(signal in SIGNAL_TAGS)) {
+        const known = Object.keys(SIGNAL_TAGS).join(', ')
+        throw new IsfParseError(`ISF input "${name}" declares TYPE hysteresisSignal with an unknown SIGNAL "${signal}" — must be one of: ${known}`)
+      }
+      return { type: 'hysteresisSignal', name, label, signal, default: numberOr(raw.DEFAULT, 0) }
     }
     case 'point2D': {
       const d = Array.isArray(raw.DEFAULT) ? (raw.DEFAULT as number[]) : [0, 0]
