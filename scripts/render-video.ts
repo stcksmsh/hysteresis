@@ -178,55 +178,68 @@ async function main(): Promise<void> {
       // every real driver by default.
       args: ['--use-gl=angle', '--use-angle=gl-egl', '--enable-webgl', '--ignore-gpu-blocklist', '--enable-gpu-rasterization', '--no-sandbox'],
     })
-    const page: Page = await browser.newPage()
+    let page: Page = await browser.newPage()
     page.on('console', (msg) => console.log('[page]', msg.text()))
     page.on('pageerror', (err) => console.error('[page error]', err))
 
-    await page.goto(`http://localhost:${port}/`, { waitUntil: 'load' })
-    await page.waitForFunction(() => (window as unknown as { __ready?: boolean }).__ready === true, { timeout: 10000 })
-
     const renderWidth = Math.round(opts.width * 0.64) // center column — see harness.ts's SIDE_FRACTION
     const renderHeight = opts.height
-    await page.evaluate(
-      (rw, rh, ow, oh) => (window as unknown as { __init: (a: number, b: number, c: number, d: number) => Promise<void> }).__init(rw, rh, ow, oh),
-      renderWidth,
-      renderHeight,
-      opts.width,
-      opts.height,
-    )
+    const isfSource = opts.isfPath ? readFileSync(opts.isfPath, 'utf8') : null
 
-    await page.evaluate((s) => (window as unknown as { __loadSidecar: (s: unknown) => Promise<void> }).__loadSidecar(s), sidecar)
+    // Runs the full page-load + init + sidecar + shader + fixtures
+    // sequence against whatever `page` currently is — factored out so a
+    // mid-render page crash/reload (a real, observed failure: frame 6748
+    // of a full-song attempt failed "no sidecar loaded" on every retry,
+    // because Chrome silently reloaded the page and nothing re-ran this
+    // sequence afterward) can be recovered from by just calling this
+    // again, rather than failing the entire multi-hundred-second render
+    // over one bad moment.
+    async function initPageState(p: Page): Promise<void> {
+      await p.goto(`http://localhost:${port}/`, { waitUntil: 'load' })
+      await p.waitForFunction(() => (window as unknown as { __ready?: boolean }).__ready === true, { timeout: 10000 })
 
-    if (opts.isfPath) {
-      const source = readFileSync(opts.isfPath, 'utf8')
-      const result = await page.evaluate(
-        (src) => (window as unknown as { __loadIsfShader: (s: string) => Promise<{ ok: boolean; message?: string }> }).__loadIsfShader(src),
-        source,
+      await p.evaluate(
+        (rw, rh, ow, oh) => (window as unknown as { __init: (a: number, b: number, c: number, d: number) => Promise<void> }).__init(rw, rh, ow, oh),
+        renderWidth,
+        renderHeight,
+        opts.width,
+        opts.height,
       )
-      if (!result.ok) throw new Error(`ISF shader failed to load: ${result.message}`)
-      console.log('[render-video] loaded ISF shader', opts.isfPath)
 
-      // Auto-wire every hysteresisSignal input the shader itself declares
-      // (each one already names its own bus signal via SIGNAL) — a real
-      // production graph still requires the user to author routes by hand
-      // in the editor (docs/isf-shaders.md), but this render tool's whole
-      // job is exercising everything a shader can take, so hand-picking
-      // just one input here (as an earlier version of this tool did) would
-      // silently leave the rest of a richly-driven shader static.
-      const doc = parseIsf(source)
-      const routes = doc.inputs
-        .filter((input): input is Extract<typeof input, { type: 'hysteresisSignal' }> => input.type === 'hysteresisSignal')
-        .map((input) => ({ signal: input.signal, target: `isf.${input.name}` }))
-      console.log(`[render-video] auto-routing ${routes.length} hysteresisSignal input(s):`, routes.map((r) => `${r.signal}->${r.target}`).join(', '))
-      await page.evaluate(
-        (rs) => (window as unknown as { __setScreenGraphWithHysteresisRoutes: (r: { signal: string; target: string }[]) => void }).__setScreenGraphWithHysteresisRoutes(rs),
-        routes,
-      )
+      await p.evaluate((s) => (window as unknown as { __loadSidecar: (s: unknown) => Promise<void> }).__loadSidecar(s), sidecar)
+
+      if (isfSource) {
+        const result = await p.evaluate(
+          (src) => (window as unknown as { __loadIsfShader: (s: string) => Promise<{ ok: boolean; message?: string }> }).__loadIsfShader(src),
+          isfSource,
+        )
+        if (!result.ok) throw new Error(`ISF shader failed to load: ${result.message}`)
+        console.log('[render-video] loaded ISF shader', opts.isfPath)
+
+        // Auto-wire every hysteresisSignal input the shader itself declares
+        // (each one already names its own bus signal via SIGNAL) — a real
+        // production graph still requires the user to author routes by hand
+        // in the editor (docs/isf-shaders.md), but this render tool's whole
+        // job is exercising everything a shader can take, so hand-picking
+        // just one input here (as an earlier version of this tool did) would
+        // silently leave the rest of a richly-driven shader static.
+        const doc = parseIsf(isfSource)
+        const routes = doc.inputs
+          .filter((input): input is Extract<typeof input, { type: 'hysteresisSignal' }> => input.type === 'hysteresisSignal')
+          .map((input) => ({ signal: input.signal, target: `isf.${input.name}` }))
+        console.log(`[render-video] auto-routing ${routes.length} hysteresisSignal input(s):`, routes.map((r) => `${r.signal}->${r.target}`).join(', '))
+        await p.evaluate(
+          (rs) => (window as unknown as { __setScreenGraphWithHysteresisRoutes: (r: { signal: string; target: string }[]) => void }).__setScreenGraphWithHysteresisRoutes(rs),
+          routes,
+        )
+      }
+
+      if (opts.debugOverlay || opts.fixtureOverlay) {
+        await p.evaluate(() => (window as unknown as { __setupDemoFixtures: () => void }).__setupDemoFixtures())
+      }
     }
 
-    if (opts.debugOverlay || opts.fixtureOverlay) {
-      await page.evaluate(() => (window as unknown as { __setupDemoFixtures: () => void }).__setupDemoFixtures())
-    }
+    await initPageState(page)
 
     // 4. Deterministic frame loop — fully offline, no real-time wait.
     const effectiveDuration = opts.duration ? Math.min(opts.duration, sidecar.duration) : sidecar.duration
@@ -239,6 +252,18 @@ async function main(): Promise<void> {
     // Chrome-internal timing issue, not a logic bug (never reproduced in
     // any short smoke test, only surfaced after ~90 frames of continuous
     // load). A few retries clear it every time observed.
+    //
+    // A second, more serious real failure this session's own full-song
+    // attempt hit: Chrome silently reloaded the page mid-render (frame
+    // 6748/12111), wiping every piece of harness state — every retry after
+    // that failed identically ("no sidecar loaded") because nothing ever
+    // re-ran init/loadSidecar/loadIsfShader on the reloaded page. Recovered
+    // here by checking a real readiness signal (`__renderReady` — see
+    // harness.ts's own comment on why this has to be more specific than
+    // `__ready`) before each retry, and re-running the whole
+    // `initPageState` sequence when it's false OR the check itself throws
+    // (a fully detached/crashed page context) — not just retrying the same
+    // doomed `__renderFrame` call again.
     const MAX_FRAME_RETRIES = 5
     for (let i = 0; i < totalFrames; i++) {
       const t = i * dt
@@ -246,6 +271,26 @@ async function main(): Promise<void> {
       let lastErr: unknown = null
       for (let attempt = 0; attempt < MAX_FRAME_RETRIES; attempt++) {
         try {
+          if (attempt > 0) {
+            const ready = await page
+              .evaluate(() => (window as unknown as { __renderReady?: () => boolean }).__renderReady?.() === true)
+              .catch(() => false)
+            if (!ready) {
+              console.warn(`[render-video] frame ${i}: page state lost (crash/reload) — re-initializing before retry`)
+              try {
+                await initPageState(page)
+              } catch (reinitErr) {
+                // The page itself is dead (a real crash, not just a
+                // navigation/reload) — even re-navigating it failed.
+                // Replace it with a fresh page rather than giving up.
+                console.warn(`[render-video] frame ${i}: page re-init failed too (${reinitErr instanceof Error ? reinitErr.message : String(reinitErr)}) — opening a new page`)
+                page = await browser!.newPage()
+                page.on('console', (msg) => console.log('[page]', msg.text()))
+                page.on('pageerror', (err) => console.error('[page error]', err))
+                await initPageState(page)
+              }
+            }
+          }
           result = await page.evaluate(
             (positionSec, frameDt, showDebug, showFixtures) =>
               (window as unknown as { __renderFrame: (t: number, d: number, sd: boolean, sf: boolean) => Promise<{ jpeg: string }> }).__renderFrame(

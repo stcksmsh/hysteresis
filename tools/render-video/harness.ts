@@ -144,6 +144,20 @@ interface RenderedFrameResult {
   jpeg: string // base64 data URL
 }
 
+// Real, precise readiness signal for the render-video driver's crash-
+// recovery path (scripts/render-video.ts): distinct from window.__ready
+// (which only means "this harness script executed at all" — true again
+// moments after ANY page reload, even one that just wiped every other
+// piece of state below). A driver that only checked __ready would see
+// "ready" on a freshly-reloaded, otherwise-uninitialized page and keep
+// calling __renderFrame into a null structureSource — exactly the failure
+// this session's real full-render attempt hit (frame 6748: "no sidecar
+// loaded" on every retry, because nothing re-called __init/__loadSidecar
+// after Chrome silently reloaded the page mid-run).
+function renderReady(): boolean {
+  return structureSource !== null
+}
+
 // JPEG, not PNG: measured directly (AGENTS.md's own note on this) that
 // PNG's DEFLATE compression was the dominant per-frame cost, not the GL
 // rendering itself — live rendering hits 45-60fps with neither an encode
@@ -215,6 +229,7 @@ declare global {
     __setScreenGraphWithHysteresisRoutes: typeof setScreenGraphWithHysteresisRoutes
     __setupDemoFixtures: typeof setupDemoFixtures
     __renderFrame: typeof renderFrame
+    __renderReady: typeof renderReady
     __ready: boolean
   }
 }
@@ -224,5 +239,6 @@ window.__loadSidecar = loadSidecar
 window.__loadIsfShader = loadIsfShader
 window.__setScreenGraphWithHysteresisRoutes = setScreenGraphWithHysteresisRoutes
 window.__setupDemoFixtures = setupDemoFixtures
+window.__renderReady = renderReady
 window.__renderFrame = renderFrame
 window.__ready = true

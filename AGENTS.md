@@ -1617,3 +1617,31 @@ this feature work started and failed mid-render (frame 6748/12111, apparently a 
 tab/page-level reload — `[vite] connecting...` followed by `no sidecar loaded` on every retry,
 not a shader/format bug) — not re-run as part of this slice per explicit instruction to finish
 the code/commit work first rather than wait on/babysit another ~15min render.
+
+## render-video crash/reload recovery (same session, immediate follow-up)
+
+User asked whether headless Chrome was really the right renderer, given the earlier mid-render
+crash. Real answer, not a reflexive defense: `headless-gl` (the standard non-browser WebGL-in-
+Node approach) is WebGL1-only, and this codebase's render pipeline uses WebGL2 throughout
+(instancing, `texelFetch`, `#version 300 es`, float textures) — dropping the browser would mean
+rewriting the whole render stack down to WebGL1, not a quick swap. Chrome+Puppeteer for "real
+WebGL2 offscreen" is the standard approach (the same trick tools like Remotion use), so the fix
+that actually matched the real failure was resilience, not a different architecture.
+
+- **`harness.ts`**: new `__renderReady()` — deliberately more specific than the existing
+  `__ready` (which only means "this harness script executed at all", true again moments after
+  *any* reload even one that wiped every other piece of state). `__renderReady` checks
+  `structureSource !== null`, the exact condition `__renderFrame` itself guards on.
+- **`render-video.ts`**: extracted the whole load/init/sidecar/shader/fixtures sequence into
+  `initPageState(page)` so it can be re-run, not just executed once. Before each retry attempt
+  (not the first), checks `__renderReady()` (itself wrapped in `.catch(() => false)`, since even
+  that call can throw against a truly dead page); if not ready, re-runs `initPageState` before
+  retrying the frame instead of retrying the same doomed `__renderFrame` call. If re-init itself
+  fails (a real crash, not just a reload — the page object itself is dead), opens a fresh page via
+  `browser.newPage()` and re-inits that instead of giving up.
+- Verified: a real short render still completes cleanly with this in place (no regression to the
+  non-crash path), `npm run typecheck`/`npm test` (311, unchanged)/`npm run build` all green. The
+  actual crash-recovery path itself couldn't be verified against a real repro (the original
+  failure never reliably reproduced in a short smoke test either, only after ~6700 frames of a
+  full-song run) — a full re-render was launched in the background to exercise it for real at
+  scale, same as the original failure's conditions.
