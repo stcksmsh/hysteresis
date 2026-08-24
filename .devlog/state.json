@@ -1,0 +1,17 @@
+{
+  "project": "Hysteresis",
+  "last_covered_commit": "8ebe8080f615569a11c1f1c15d7e5e01f5acc11f",
+  "last_covered_date": "2026-08-23T01:11:29.063013",
+  "posts": [
+    {
+      "commit_range": "4b40834..ad2755a5",
+      "path": "devlogs/2026-07-31-where-this-started.md;2026-08-01-baking-a-timeline.md;...(11 posts, see conversation)",
+      "published_at": "2026-08-23T01:11:17.762833"
+    },
+    {
+      "commit_range": "4b40834..8ebe808",
+      "path": "devlogs/2026-*.md (11 posts, backfilling v0.1 through today's conductor refactor + fold/zoom follow-ups; drafted in conversation, awaiting push confirmation)",
+      "published_at": "2026-08-23T01:11:29.084654"
+    }
+  ]
+}

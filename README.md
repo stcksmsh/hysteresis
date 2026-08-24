@@ -118,6 +118,26 @@ Unit tests use deterministic synthetic signals (click trains, synthetic
 spectra) for CI-verifiable regression coverage of the DSP/detector math.
 Perceptual tuning against real audio happens via the dev harness, not in CI.
 
+## Patchbay editor
+
+```sh
+npm run patchbay
+```
+
+A dev-only visual node-graph tool for authoring the patch graph that drives
+the screen (and, in progress, physical fixtures — DMX/LED/servo/laser) —
+runs a real render-worker instance, live-editable. See
+[`docs/patchbay-editor.md`](docs/patchbay-editor.md) for the concepts
+(signal bus / patch graph / targets / fixtures) and
+[`docs/isf-shaders.md`](docs/isf-shaders.md) for loading a real
+[ISF](https://isf.video/) shader as the screen scene, and
+[`docs/osc.md`](docs/osc.md) for streaming the signal bus to external tools
+(TouchDesigner, VCV Rack, Ableton, ...) as real OSC, and
+[`docs/dmx-out.md`](docs/dmx-out.md) for sending patched fixtures to a real
+lighting rig over Art-Net/sACN/USB, [`docs/midi.md`](docs/midi.md) for
+real MIDI CC input and clock/beat sync, and [`docs/ilda.md`](docs/ilda.md)
+for the ILDA file format and the Ether Dream live laser DAC protocol.
+
 ## Notes
 
 - No microphone input — file-load only in the dev harness.
