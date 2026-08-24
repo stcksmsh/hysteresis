@@ -10,7 +10,7 @@
     "isolatedModules": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
-    "types": ["vite/client"]
+    "types": ["vite/client", "w3c-web-serial"]
   },
   "include": ["tools/patchbay-editor/**/*.ts", "tools/patchbay-editor/**/*.tsx", "src/**/*.ts"],
   // Worker/worklet code needs WebWorker/AudioWorklet globals this config's

@@ -91,6 +91,19 @@ input:focus {
   border-color: var(--accent-dim);
 }
 
+/* Keyboard-only focus ring — mouse/touch clicks never trigger
+   :focus-visible, so this doesn't add a ring to every click the way a
+   plain `:focus` rule would, but a Tab-navigating user still gets a clear,
+   high-contrast indicator (removing `outline` above without one at all is
+   a real accessibility regression, not just a style nit). */
+button:focus-visible,
+select:focus-visible,
+input:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 input[type='range'] {
   accent-color: var(--accent);
 }
@@ -501,6 +514,26 @@ code,
   font-size: 13px;
   color: var(--text-2);
   font-style: italic;
+}
+
+.isf-drop-zone {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+}
+.isf-drop-zone-active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.isf-panel-controls {
+  display: flex;
+  gap: 8px;
+}
+.isf-panel-clear {
+  color: var(--text-2);
 }
 
 /* Patch-graph node canvas — the workspace's hero element (see App.tsx's

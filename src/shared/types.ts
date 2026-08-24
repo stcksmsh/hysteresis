@@ -1,7 +1,7 @@
 // Type-only, so this doesn't create a real runtime import cycle even though
 // render/conductor/types.ts imports DropTrigger from this same file below —
 // both sides are erased at compile time.
-import type { SignalBus } from '../render/conductor/types'
+import type { SignalBus, TargetDecl } from '../render/conductor/types'
 import type { PatchGraph } from '../render/conductor/patchgraph/types'
 import type { DropDetectorDebug } from '../audio/worklet/brain/drop-detector'
 
@@ -154,6 +154,21 @@ export type MainToRenderWorker =
   // Off by default so the real site never pays the postMessage cost of
   // cloning a fresh SignalBus every frame just to have somewhere to send it.
   | { kind: 'debugSetSignalBusStream'; value: boolean }
+  // Hot-swaps the active screen scene to a loaded ISF shader (source: null
+  // reverts to the default julia scene). Unlike the debugSet*/dev-only
+  // messages above, this one IS real public API surface — src/index.ts's
+  // VizInstance.loadIsfShader()/clearIsfShader() send it too, not just the
+  // patchbay editor tool — but it's opt-in and additive: a host that never
+  // calls loadIsfShader() never triggers this, so the default julia scene
+  // is unaffected. See ScreenOutput.setIsfScene/resetToDefaultScene and IsfScene.
+  | { kind: 'setIsfShader'; source: string | null }
+  // Real public API (src/index.ts's VizInstance.setOscOut) as well as
+  // usable by the editor tool: starts/stops streaming the signal bus out
+  // as OSC over a WebSocket connection (wsUrl: null disconnects). See
+  // src/osc/osc-out-bridge.ts and docs/osc.md — a browser has no raw UDP
+  // API, so real OSC-over-UDP interop needs a local relay on the other end
+  // (scripts/udp-relay.ts), not a bridge daemon this repo doesn't have yet.
+  | { kind: 'setOscOut'; wsUrl: string | null }
 
 export type RenderWorkerToMain =
   | { kind: 'error'; message: string }
@@ -172,6 +187,17 @@ export type RenderWorkerToMain =
   // kept running the previous graph instead of crashing.
   | { kind: 'patchbayConfigResult'; ok: true }
   | { kind: 'patchbayConfigResult'; ok: false; message: string }
+  // Acks setIsfShader — parse/compile errors (a bad header, an unsupported
+  // input type, a GLSL compile failure) come back here instead of crashing
+  // the worker; `targets` lists the shader's own declared inputs as patch
+  // targets (ISF_TARGET_PREFIX-qualified ids) for a caller (the editor, or
+  // a host via loadIsfShader's callback) to do something with.
+  | { kind: 'isfShaderResult'; ok: true; targets: TargetDecl[] }
+  | { kind: 'isfShaderResult'; ok: false; message: string }
+  // Fires on every connect/disconnect/error of the setOscOut WebSocket —
+  // not one-shot like isfShaderResult, since a long-lived connection can
+  // legitimately change state multiple times over its life.
+  | { kind: 'oscOutStatus'; connected: boolean; message?: string }
 
 // Main thread -> live AudioWorklet (a separate execution context from the
 // render worker — AudioEngine.ts owns this channel). Two independent callers

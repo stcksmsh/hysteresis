@@ -7,6 +7,9 @@ import { screenGraph } from '../conductor/patchgraph/configs/screen-graph'
 import { resolveScreenTargets } from '../conductor/outputs/resolve-screen-targets'
 import { ScreenOutput } from '../conductor/outputs/ScreenOutput'
 import type { VizOutput } from '../conductor/types'
+import { parseIsf } from '../../isf/parse-isf'
+import { isfInputsToTargets } from '../../isf/isf-targets'
+import { OscOutBridge } from '../../osc/osc-out-bridge'
 
 declare const self: DedicatedWorkerGlobalScope
 
@@ -43,6 +46,12 @@ const outputs: VizOutput[] = [screenOutput]
 // let, not const: the patchbay editor tool (dev-only, debugSetScreenGraph
 // below) hot-swaps this. Every other caller still only ever sets it once.
 let screenGraphEvaluator = new PatchGraphEvaluator(screenGraph, screenOutput.targets)
+// The graph screenGraphEvaluator is currently built from — tracked
+// separately so setIsfShader can rebuild the evaluator against the
+// editor's actual authored graph (not the hardcoded default) when the
+// target set changes underneath it (an ISF shader's inputs appearing or
+// disappearing from screenOutput.targets).
+let currentScreenGraph = screenGraph
 
 let currentAccent: [number, number, number] = [1, 0.36, 0.22] // vermilion default (#FF5C38), matches JuliaScene's own default
 
@@ -97,6 +106,14 @@ let debugDropPending = false
 const SIGNAL_BUS_STREAM_INTERVAL_MS = 50 // 20Hz
 let streamSignalBus = false
 let lastSignalBusPost = 0
+
+// Real (non-debug) OSC-out feature — see setOscOut's own doc comment above
+// and src/osc/osc-out-bridge.ts. Same 20Hz throttle as the signalBus debug
+// stream: fast enough to feel live to an external tool, far below
+// per-frame postMessage-clone cost.
+const OSC_OUT_INTERVAL_MS = 50
+let oscOutBridge: OscOutBridge | null = null
+let lastOscOutSend = 0
 
 const raf: (cb: (t: number) => void) => number | ReturnType<typeof setTimeout> =
   typeof self.requestAnimationFrame === 'function'
@@ -180,6 +197,11 @@ function tick(t: number) {
     post({ kind: 'signalBus', bus, dropDebug: latestStateFrame?.dropDebug ?? null })
   }
 
+  if (oscOutBridge && t - lastOscOutSend > OSC_OUT_INTERVAL_MS) {
+    lastOscOutSend = t
+    oscOutBridge.send(bus)
+  }
+
   if (dt > 0) updateAdaptiveQuality(dt * 1000, t)
 }
 
@@ -253,6 +275,24 @@ function resize(canvas: OffscreenCanvas, cssWidth: number, cssHeight: number, dp
   if (caps) {
     caps.gl.viewport(0, 0, canvas.width, canvas.height)
     screenOutput.resize(canvas.width, canvas.height, dpr)
+  }
+}
+
+// Re-validates currentScreenGraph against screenOutput.targets after the
+// target set changes (an ISF shader's inputs appearing/disappearing) — a
+// route into a now-gone target fails construction-time validation, exactly
+// like debugSetScreenGraph's own reject-and-keep-previous handling above.
+// Failure here is left silent (no message posted): the ISF load itself
+// already succeeded and got its own ack; a stale-but-internally-consistent
+// evaluator is safe to keep running (resolveScreenTargets only reads
+// target ids it currently iterates, per its own doc comment) — the visible
+// effect is just that a route into a removed target stops applying until
+// the editor's own graph is edited to drop it.
+function rebuildScreenGraphEvaluator(): void {
+  try {
+    screenGraphEvaluator = new PatchGraphEvaluator(currentScreenGraph, screenOutput.targets)
+  } catch {
+    // keep the previous evaluator — see comment above
   }
 }
 
@@ -353,6 +393,7 @@ self.onmessage = (e: MessageEvent<MainToRenderWorker>) => {
         // touching the live evaluator the render loop reads every frame above.
         const next = new PatchGraphEvaluator(msg.graph, screenOutput.targets)
         screenGraphEvaluator = next
+        currentScreenGraph = msg.graph
         post({ kind: 'patchbayConfigResult', ok: true })
       } catch (err) {
         post({ kind: 'patchbayConfigResult', ok: false, message: err instanceof Error ? err.message : String(err) })
@@ -361,6 +402,33 @@ self.onmessage = (e: MessageEvent<MainToRenderWorker>) => {
     }
     case 'debugSetSignalBusStream': {
       streamSignalBus = msg.value
+      break
+    }
+    case 'setIsfShader': {
+      if (msg.source === null) {
+        screenOutput.resetToDefaultScene()
+        rebuildScreenGraphEvaluator()
+        post({ kind: 'isfShaderResult', ok: true, targets: [] })
+        break
+      }
+      try {
+        const doc = parseIsf(msg.source)
+        screenOutput.setIsfScene(doc)
+        rebuildScreenGraphEvaluator()
+        post({ kind: 'isfShaderResult', ok: true, targets: isfInputsToTargets(doc) })
+      } catch (err) {
+        post({ kind: 'isfShaderResult', ok: false, message: err instanceof Error ? err.message : String(err) })
+      }
+      break
+    }
+    case 'setOscOut': {
+      if (msg.wsUrl === null) {
+        oscOutBridge?.disconnect()
+        oscOutBridge = null
+        break
+      }
+      if (!oscOutBridge) oscOutBridge = new OscOutBridge((status) => post({ kind: 'oscOutStatus', ...status }))
+      oscOutBridge.connect(msg.wsUrl)
       break
     }
   }

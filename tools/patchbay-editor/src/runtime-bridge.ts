@@ -1,5 +1,5 @@
 import type { MainToRenderWorker, RenderWorkerToMain, StateFrame } from '../../../src/shared/types'
-import type { PatchGraph } from '../../../src/render/conductor/patchgraph/types'
+import type { PatchGraph, PatchTargetDecl } from '../../../src/render/conductor/patchgraph/types'
 import type { SignalBus } from '../../../src/render/conductor/types'
 import type { DropDetectorDebug } from '../../../src/audio/worklet/brain/drop-detector'
 import { AudioEngine } from '../../../src/audio/AudioEngine'
@@ -48,6 +48,7 @@ export interface RuntimeBridgeCallbacks {
   onError?: (message: string) => void
   onPatchbayResult?: (result: { ok: true } | { ok: false; message: string }) => void
   onPlayback?: (state: PlaybackState) => void
+  onIsfResult?: (result: { ok: true; targets: PatchTargetDecl[] } | { ok: false; message: string }) => void
 }
 
 export class RuntimeBridge {
@@ -130,6 +131,9 @@ export class RuntimeBridge {
       case 'patchbayConfigResult':
         this.callbacks.onPatchbayResult?.(msg.ok ? { ok: true } : { ok: false, message: msg.message })
         break
+      case 'isfShaderResult':
+        this.callbacks.onIsfResult?.(msg.ok ? { ok: true, targets: msg.targets } : { ok: false, message: msg.message })
+        break
     }
   }
 
@@ -147,6 +151,16 @@ export class RuntimeBridge {
 
   setSignalBusStream(on: boolean): void {
     this.post({ kind: 'debugSetSignalBusStream', value: on })
+  }
+
+  // Hot-swaps the screen's active scene to a loaded ISF shader (null
+  // reverts to the default julia scene). Result (parse/compile success plus
+  // the shader's own declared targets, or a clear error) comes back async
+  // via onIsfResult — see render-worker.ts's setIsfShader handler. Real,
+  // non-debug message (src/index.ts's VizInstance.loadIsfShader() sends the
+  // same one) — this editor is just one caller of it, not the only one.
+  setIsfShader(source: string | null): void {
+    this.post({ kind: 'setIsfShader', source })
   }
 
   async loadFile(file: File): Promise<void> {

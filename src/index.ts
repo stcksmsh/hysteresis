@@ -1,4 +1,5 @@
 import type { MainToRenderWorker, PowerTier, RenderWorkerToMain, StateFrame } from './shared/types'
+import type { TargetDecl } from './render/conductor/types'
 import type { Sidecar } from './shared/sidecar'
 import { isSidecar } from './shared/sidecar'
 import { AudioEngine } from './audio/AudioEngine'
@@ -46,12 +47,40 @@ export interface VizOpts {
   showIdleBeam?: boolean
 }
 
+export type IsfShaderResult = { ok: true; targets: TargetDecl[] } | { ok: false; message: string }
+export interface OscOutStatus {
+  connected: boolean
+  message?: string
+}
+
 export interface VizInstance {
   resize(): void
   destroy(): void
   setAccent(accent: [number, number, number]): void
   setTier(tier: PowerTier): void
   setShowIdleBeam(value: boolean): void
+  // Loads a real single-pass ISF shader (see docs/isf-shaders.md for the
+  // supported subset) as the screen scene, replacing the built-in Julia
+  // substrate. Opt-in and additive — a host that never calls this never
+  // triggers it, so every existing integration (including the IO page's)
+  // is unaffected by this method merely existing. `onResult` (optional,
+  // fire-and-forget if omitted) reports parse/compile success — with the
+  // shader's own declared inputs as patch targets, in case a host wants to
+  // expose them as UI controls itself — or a specific rejection reason
+  // (an unsupported input type, a GLSL compile error) rather than crashing
+  // or silently mis-rendering.
+  loadIsfShader(source: string, onResult?: (result: IsfShaderResult) => void): void
+  // Reverts to the default julia scene.
+  clearIsfShader(): void
+  // Streams the signal bus out as real OSC (see docs/osc.md) over a
+  // WebSocket connection to `wsUrl` (pass null to disconnect) — opt-in and
+  // additive, same as loadIsfShader above. Browsers have no raw UDP API, so
+  // reaching an actual OSC-speaking tool (TouchDesigner, VCV Rack, Ableton)
+  // needs a small local relay on the far end of that WebSocket
+  // (scripts/udp-relay.ts ships one) — this method only owns the
+  // browser-reachable half. `onStatus` (optional) fires on every
+  // connect/disconnect/error over the connection's life, not just once.
+  setOscOut(wsUrl: string | null, onStatus?: (status: OscOutStatus) => void): void
 }
 
 // ---- window CustomEvent bus this listens to (IO_PAGE_CHANGESET.md §6.3) ----
@@ -133,6 +162,16 @@ export function init(canvas: HTMLCanvasElement, opts: VizOpts): VizInstance {
   let worker: Worker | null = null
   let postToWorker: ((msg: MainToRenderWorker, transfer?: Transferable[]) => void) | null = null
   let resizeDebounceHandle: ReturnType<typeof setTimeout> | null = null
+  // At most one loadIsfShader() call is ever "in flight" at a time (a
+  // second call before the first's result arrives just replaces which
+  // callback gets the eventual isfShaderResult — matches how the worker
+  // itself only ever has one active scene, so an interleaved response
+  // couldn't be attributed to the "wrong" call anyway).
+  let pendingIsfResult: ((result: IsfShaderResult) => void) | null = null
+  // Persistent, not one-shot like pendingIsfResult above — a WebSocket
+  // connection legitimately fires status multiple times over its life
+  // (open, later a drop, a reconnect), all of which a host may want to see.
+  let oscOutStatusCallback: ((status: OscOutStatus) => void) | null = null
 
   const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
   const onReducedMotionChange = (e: MediaQueryListEvent) => post({ kind: 'setReducedMotion', value: e.matches })
@@ -157,6 +196,15 @@ export function init(canvas: HTMLCanvasElement, opts: VizOpts): VizInstance {
     postToWorker = post
     worker.onmessage = (e: MessageEvent<RenderWorkerToMain>) => {
       if (e.data.kind === 'error') console.error('[sinteza-viz]', e.data.message)
+      if (e.data.kind === 'isfShaderResult') {
+        const result: IsfShaderResult = e.data.ok ? { ok: true, targets: e.data.targets } : { ok: false, message: e.data.message }
+        if (!result.ok) console.error('[sinteza-viz] loadIsfShader failed:', result.message)
+        pendingIsfResult?.(result)
+        pendingIsfResult = null
+      }
+      if (e.data.kind === 'oscOutStatus') {
+        oscOutStatusCallback?.({ connected: e.data.connected, message: e.data.message })
+      }
     }
 
     const offscreen = canvas.transferControlToOffscreen()
@@ -353,6 +401,21 @@ export function init(canvas: HTMLCanvasElement, opts: VizOpts): VizInstance {
       post({ kind: 'setShowIdleBeam', value })
     },
 
+    loadIsfShader(source, onResult) {
+      pendingIsfResult = onResult ?? null
+      post({ kind: 'setIsfShader', source })
+    },
+
+    clearIsfShader() {
+      pendingIsfResult = null
+      post({ kind: 'setIsfShader', source: null })
+    },
+
+    setOscOut(wsUrl, onStatus) {
+      oscOutStatusCallback = wsUrl === null ? null : (onStatus ?? null)
+      post({ kind: 'setOscOut', wsUrl })
+    },
+
     setTier(next) {
       if (tier === next) return
       tier = next
@@ -387,6 +450,13 @@ export function init(canvas: HTMLCanvasElement, opts: VizOpts): VizInstance {
       worker?.terminate()
       worker = null
       postToWorker = null
+      // Defense-in-depth, not currently load-bearing: terminate() above
+      // already makes it impossible for a late isfShaderResult/oscOutStatus
+      // message to arrive and invoke these, but clearing them anyway means
+      // that stays true even if destroy() is ever changed to something
+      // less final (e.g. a "pause" mode that keeps the worker alive).
+      pendingIsfResult = null
+      oscOutStatusCallback = null
     },
   }
 }

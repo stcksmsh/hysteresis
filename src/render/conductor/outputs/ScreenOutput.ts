@@ -10,6 +10,9 @@ import { CompositePass } from '../../worker/passes/composite-pass'
 import { ScreenParamAssembler } from '../patchbay/screen-composites'
 import { SCREEN_TARGETS } from './screen-targets'
 import type { ResolvedTargets, TargetDecl, VizOutput } from '../types'
+import { IsfScene } from '../../worker/scenes/isf/IsfScene'
+import type { IsfDocument } from '../../../isf/types'
+import { isfInputsToTargets, resolvedTargetsToIsfUniforms } from '../../../isf/isf-targets'
 
 const PERSISTENCE_DECAY = 0.85
 const BLOOM_THRESHOLD = 0.55
@@ -26,11 +29,19 @@ const BLOOM_STRENGTH_SCALE: Record<PowerTier, number> = { full: 1, cheap: 0.5, '
 // GL work, invisible to any other output.
 export class ScreenOutput implements VizOutput {
   readonly id = 'screen'
-  readonly targets: TargetDecl[] = SCREEN_TARGETS
+  // Not `readonly` at the class-field level (the VizOutput interface's own
+  // `readonly` only forbids reassignment through that interface type) —
+  // setIsfScene()/resetToDefaultScene() below widen/restore this to include
+  // a loaded shader's own declared inputs as real routable targets.
+  targets: TargetDecl[] = SCREEN_TARGETS
 
   private assembler = new ScreenParamAssembler()
   private caps: GlCapabilities | null = null
   private scene: Scene | null = null
+  // Set only while an ISF scene is active — this is what tells update()
+  // to reassemble typed uniform values for setInputValues() every frame;
+  // null (the default/production state) means that work never runs at all.
+  private isfDoc: IsfDocument | null = null
   private reducedMotion = false
   private currentTier: PowerTier = 'full'
   private lastWidth = 0
@@ -43,14 +54,43 @@ export class ScreenOutput implements VizOutput {
   private bloomPass: BloomPass | null = null
   private compositePass: CompositePass | null = null
 
+  // Called once at startup, AND again on every WebGL context-loss/restore
+  // cycle (render-worker.ts's `webglcontextrestored` handler re-runs this
+  // exact method against the same ScreenOutput instance, reusing
+  // `caps.gl` — the context object itself survives loss/restore, only its
+  // GL resources do not). That reuse is exactly the bug this method used
+  // to have: `allocatePipeline()` below only calls `new Xxx(...)` for a
+  // pass that's still `null` — on a restore, every pass/compositePass/
+  // sceneFbo field already holds a non-null JS wrapper object from BEFORE
+  // the loss, so allocatePipeline took the "already exists, just resize()"
+  // branch and left every pass's program/VAO/texture (created only in
+  // each pass's constructor, never touched by resize()) pointing at
+  // now-invalid GL objects — and `compositePass` specifically is never
+  // reconstructed at all past the very first init (`if (!this.compositePass)`).
+  // Net effect before this fix: after a real context loss (a real, not
+  // theoretical, risk on hybrid-graphics laptops per the comment on the
+  // restore listener itself), the screen went black/frozen permanently,
+  // silently, on an unattended 24/7 background — the exact failure this
+  // loss/restore handling was built to prevent. Nulling every GL-backed
+  // field here before allocatePipeline() forces it to reconstruct
+  // everything fresh on a restore; on the very first call these are
+  // already null, so this changes nothing about normal startup.
   init(caps: GlCapabilities, width: number, height: number, dpr: number, reducedMotion: boolean): void {
+    this.scene?.dispose()
+    this.scene = null
+    this.sceneFbo = null
+    this.persistencePass = null
+    this.memoryFieldPass = null
+    this.bloomPass = null
+    this.compositePass = null
+
     this.caps = caps
     this.reducedMotion = reducedMotion
     this.lastWidth = width
     this.lastHeight = height
     this.lastDpr = dpr
     this.allocatePipeline(width, height)
-    this.scene = sceneRegistry[DEFAULT_SCENE_ID]()
+    this.scene = this.isfDoc ? new IsfScene(this.isfDoc) : sceneRegistry[DEFAULT_SCENE_ID]()
     this.scene.init({ gl: caps.gl, width, height, dpr, reducedMotion, floatFbo: caps.floatFbo })
   }
 
@@ -96,10 +136,38 @@ export class ScreenOutput implements VizOutput {
     this.currentTier = tier
   }
 
+  // Hot-swaps the active scene to a loaded ISF shader (dev-only today, per
+  // render-worker.ts's debugSetIsfShader — never called in production
+  // unless something explicitly sends that message). Widens `targets` to
+  // include the shader's own declared inputs so they show up as real
+  // routable targets the next time a patch graph is (re)built against
+  // this output — the same shape SCREEN_TARGETS already has.
+  setIsfScene(doc: IsfDocument): void {
+    if (!this.caps) throw new Error('ScreenOutput.setIsfScene called before init()')
+    this.scene?.dispose()
+    const scene = new IsfScene(doc)
+    scene.init({ gl: this.caps.gl, width: this.lastWidth, height: this.lastHeight, dpr: this.lastDpr, reducedMotion: this.reducedMotion, floatFbo: this.caps.floatFbo })
+    this.scene = scene
+    this.isfDoc = doc
+    this.targets = [...SCREEN_TARGETS, ...isfInputsToTargets(doc)]
+  }
+
+  // Reverts to the default registry scene (julia) — the counterpart to
+  // setIsfScene(), used when the editor's ISF panel is cleared/reset.
+  resetToDefaultScene(): void {
+    if (!this.caps) return
+    this.scene?.dispose()
+    this.scene = sceneRegistry[DEFAULT_SCENE_ID]()
+    this.scene.init({ gl: this.caps.gl, width: this.lastWidth, height: this.lastHeight, dpr: this.lastDpr, reducedMotion: this.reducedMotion, floatFbo: this.caps.floatFbo })
+    this.isfDoc = null
+    this.targets = SCREEN_TARGETS
+  }
+
   update(dt: number, resolved: ResolvedTargets): void {
     if (!this.scene || !this.sceneFbo || !this.compositePass) return
 
     const params = this.assembler.update(dt, resolved)
+    if (this.isfDoc) this.scene.setInputValues?.(resolvedTargetsToIsfUniforms(this.isfDoc, resolved))
     this.scene.update(dt, params)
     this.scene.render(this.sceneFbo.framebuffer)
 

@@ -40,7 +40,7 @@ const workletUrl = new URL(`${import.meta.env.BASE_URL}worklets/feature-worklet.
 // it broke for stcksmsh.github.io (see VizOpts.renderWorkerUrl's doc
 // comment). BASE_URL + the known public/ filename sidesteps it entirely.
 const renderWorkerUrl = new URL(`${import.meta.env.BASE_URL}render-worker.js`, window.location.href)
-init(canvas, {
+const instance = init(canvas, {
   accent: [0.68, 0.2, 33], // vermilion, matching SINTEZA_VIZ.md's default
   tier: 'full',
   getAudioContext: () => bus?.ctx ?? null,
@@ -120,5 +120,68 @@ playPause.addEventListener('click', async () => {
   }
 })
 wrap.appendChild(playPause)
+
+// Exercises the real public loadIsfShader()/clearIsfShader() API (not the
+// dev-only patchbay editor tool) — proof this works through the actual
+// shipped package surface, not just the editor's own debug channel.
+const isfInput = document.createElement('input')
+isfInput.type = 'file'
+isfInput.accept = '.fs,.glsl,.txt'
+isfInput.title = 'Load a real single-pass ISF (.fs) shader as the screen scene'
+isfInput.style.color = '#eee'
+isfInput.addEventListener('change', async () => {
+  const file = isfInput.files?.[0]
+  if (!file) return
+  const source = await file.text()
+  instance.loadIsfShader(source, (result) => {
+    isfStatus.textContent = result.ok ? `${file.name}: loaded (${result.targets.length} input target(s))` : `${file.name}: ${result.message}`
+  })
+})
+wrap.appendChild(isfInput)
+
+const isfClear = document.createElement('button')
+isfClear.textContent = 'Clear ISF'
+isfClear.addEventListener('click', () => {
+  instance.clearIsfShader()
+  isfStatus.textContent = ''
+  isfInput.value = ''
+})
+wrap.appendChild(isfClear)
+
+const isfStatus = document.createElement('span')
+isfStatus.style.cssText = 'color:#aaa;font:12px monospace;max-width:320px'
+wrap.appendChild(isfStatus)
+
+// Exercises the real public setOscOut() API — run `npm run udp-relay`
+// first (relays this to real UDP, since browsers can't send it directly),
+// then point this at it (default ws://localhost:9090 matches the relay's
+// own default). See docs/osc.md.
+const oscUrlInput = document.createElement('input')
+oscUrlInput.type = 'text'
+oscUrlInput.placeholder = 'ws://localhost:9090'
+oscUrlInput.style.cssText = 'width:160px;color:#eee;background:#222;border:1px solid #444'
+wrap.appendChild(oscUrlInput)
+
+const oscConnect = document.createElement('button')
+oscConnect.textContent = 'OSC connect'
+oscConnect.addEventListener('click', () => {
+  const url = oscUrlInput.value.trim() || 'ws://localhost:9090'
+  instance.setOscOut(url, (status) => {
+    oscStatus.textContent = status.connected ? `OSC: connected to ${url}` : `OSC: ${status.message ?? 'disconnected'}`
+  })
+})
+wrap.appendChild(oscConnect)
+
+const oscDisconnect = document.createElement('button')
+oscDisconnect.textContent = 'OSC disconnect'
+oscDisconnect.addEventListener('click', () => {
+  instance.setOscOut(null)
+  oscStatus.textContent = ''
+})
+wrap.appendChild(oscDisconnect)
+
+const oscStatus = document.createElement('span')
+oscStatus.style.cssText = 'color:#aaa;font:12px monospace;max-width:280px'
+wrap.appendChild(oscStatus)
 
 ui.appendChild(wrap)

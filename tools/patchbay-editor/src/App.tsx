@@ -17,6 +17,10 @@ import { addFixture, fixtureTargetCatalog, emptyFixtureDocument, type FixtureDoc
 import { fixtureTargetId } from '../../../src/render/conductor/patchgraph/fixture-types'
 import type { SignalBus } from '../../../src/render/conductor/types'
 import type { DropDetectorDebug } from '../../../src/audio/worklet/brain/drop-detector'
+import type { PatchTargetDecl } from '../../../src/render/conductor/patchgraph/types'
+import { IsfPanel } from './IsfPanel'
+import { DmxOutPanel } from './DmxOutPanel'
+import { MidiPanel } from './MidiPanel'
 
 // Keyed by canvas element, not component instance: canvas.transferControlToOffscreen()
 // is a genuine one-shot browser API (confirmed: attempting it twice on the
@@ -34,6 +38,7 @@ const bridgesByCanvas = new WeakMap<HTMLCanvasElement, RuntimeBridge>()
 function useRuntimeBridge(
   canvasRef: React.RefObject<HTMLCanvasElement | null>,
   onSignalBus: (bus: SignalBus, dropDebug: DropDetectorDebug | null) => void,
+  onIsfResult: (result: { ok: true; targets: PatchTargetDecl[] } | { ok: false; message: string }) => void,
 ) {
   const bridgeRef = useRef<RuntimeBridge | null>(null)
   const [fps, setFps] = useState(0)
@@ -58,6 +63,7 @@ function useRuntimeBridge(
         setPatchbayAckCount((n) => n + 1)
       },
       onPlayback: (s: PlaybackState) => setPlayback(s),
+      onIsfResult,
     }
     let bridge = bridgesByCanvas.get(canvasRef.current)
     if (bridge) {
@@ -124,8 +130,31 @@ export function App() {
     setBusMessageCount((n) => n + 1)
     setDropDebug(dbg)
   }, [])
-  const { bridgeRef, fps, error, patchbayError, patchbayAckCount, playback } = useRuntimeBridge(canvasRef, handleSignalBus)
+  // ISF import (master-prompt.md §6): the loaded shader's own declared
+  // inputs, as real patch targets — merged into mergedCatalog below so the
+  // graph canvas's target dropdown offers them exactly like a screen/
+  // fixture target. `pendingIsfFileName` bridges the load call to the
+  // async onIsfResult callback, which carries no filename of its own.
+  const [isfStatus, setIsfStatus] = useState<
+    { state: 'empty' } | { state: 'loaded'; fileName: string; targets: PatchTargetDecl[] } | { state: 'error'; fileName: string; message: string }
+  >({ state: 'empty' })
+  const pendingIsfFileName = useRef('shader.fs')
+  const isfTargets = isfStatus.state === 'loaded' ? isfStatus.targets : []
+  const handleIsfResult = useCallback((r: { ok: true; targets: PatchTargetDecl[] } | { ok: false; message: string }) => {
+    setIsfStatus(r.ok ? { state: 'loaded', fileName: pendingIsfFileName.current, targets: r.targets } : { state: 'error', fileName: pendingIsfFileName.current, message: r.message })
+  }, [])
+
+  const { bridgeRef, fps, error, patchbayError, patchbayAckCount, playback } = useRuntimeBridge(canvasRef, handleSignalBus, handleIsfResult)
   const dropLog = useDropLog(bus)
+
+  function handleIsfLoad(source: string, fileName: string) {
+    pendingIsfFileName.current = fileName
+    bridgeRef.current?.setIsfShader(source)
+  }
+  function handleIsfClear() {
+    setIsfStatus({ state: 'empty' })
+    bridgeRef.current?.setIsfShader(null)
+  }
 
   const [fixtureDoc, setFixtureDoc] = useState<FixtureDocument>(() => {
     let doc = emptyFixtureDocument()
@@ -140,8 +169,12 @@ export function App() {
   // "one signal drives both a screen effect and a servo" a real option in
   // the canvas: a target node can point at either, side by side, in the
   // same graph. See AGENTS.md's "unify screen + physical patch graphs" note.
-  const mergedCatalog = useMemo(() => [...SCREEN_TARGETS, ...targetCatalog], [targetCatalog])
-  const screenTargetIds = useMemo(() => new Set(SCREEN_TARGETS.map((t) => t.id)), [])
+  const mergedCatalog = useMemo(() => [...SCREEN_TARGETS, ...isfTargets, ...targetCatalog], [isfTargets, targetCatalog])
+  // isf.* targets are screen-side (they drive the loaded shader's own
+  // uniforms via ScreenOutput, same as SCREEN_TARGETS) — included here so
+  // pruneGraphToTargets keeps routes into them when carving out the slice
+  // sent to the worker via setScreenGraph below.
+  const screenTargetIds = useMemo(() => new Set([...SCREEN_TARGETS.map((t) => t.id), ...isfTargets.map((t) => t.id)]), [isfTargets])
   const fixtureTargetIds = useMemo(() => new Set(targetCatalog.map((t) => t.id)), [targetCatalog])
 
   // Seeded once from two independent sources: the production default screen
@@ -278,6 +311,12 @@ export function App() {
           </div>
         ),
     },
+    {
+      id: 'midi',
+      title: 'MIDI in',
+      hint: 'Real Web MIDI device input — control-change activity and clock/beat sync, if a device sends it. See docs/midi.md.',
+      content: <MidiPanel />,
+    },
   ]
 
   const handleTogglePlay = useCallback(() => bridgeRef.current?.togglePlayback(), [bridgeRef])
@@ -352,6 +391,12 @@ export function App() {
             </div>
 
             <aside className="workspace-rail">
+              <SectionCard title="ISF shader" hint="Load a real single-pass ISF (.fs) generator/filter as the screen scene — its inputs become routable targets below.">
+                <IsfPanel onLoad={handleIsfLoad} onClear={handleIsfClear} status={isfStatus} />
+              </SectionCard>
+              <SectionCard title="DMX out" hint="Send patched fixtures out over real Art-Net/sACN via a local relay (npm run udp-relay) — see docs/dmx-out.md.">
+                <DmxOutPanel fixtureDoc={fixtureDoc} resolvedValues={resolvedValues} />
+              </SectionCard>
               <SectionCard title="Fixtures">
                 <FixtureManager doc={fixtureDoc} onChange={handleFixtureDocChange} />
               </SectionCard>

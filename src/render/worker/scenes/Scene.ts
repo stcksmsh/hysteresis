@@ -63,4 +63,13 @@ export interface Scene {
   // against the rest of a page when no track is playing. Scenes without an
   // idle beam just omit this.
   setShowIdleBeam?(value: boolean): void
+
+  // Per-frame typed input values for a scene whose parameters aren't a
+  // fixed, hand-designed set (unlike JuliaScene's ParamBus fields) — an
+  // ISF shader's inputs are named by its own JSON header, so ScreenOutput
+  // feeds them in here directly from that frame's resolved patch-graph
+  // targets (see isf-targets.ts's resolvedTargetsToIsfUniforms), bypassing
+  // ParamBus/ScreenParamAssembler entirely for this scene. Scenes with a
+  // fixed param shape just omit this.
+  setInputValues?(values: Record<string, number | boolean | number[]>): void
 }

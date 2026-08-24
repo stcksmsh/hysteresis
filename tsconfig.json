@@ -9,7 +9,7 @@
     "isolatedModules": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
-    "types": ["vite/client"]
+    "types": ["vite/client", "w3c-web-serial"]
   },
   "include": ["src/**/*.ts"],
   "exclude": [
