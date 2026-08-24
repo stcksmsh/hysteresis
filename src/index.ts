@@ -6,6 +6,10 @@ import type { Sidecar } from './shared/sidecar'
 import { isSidecar } from './shared/sidecar'
 import { AudioEngine } from './audio/AudioEngine'
 import { StructureSource } from './audio/StructureSource'
+import { MidiInput, type MidiInputStatus } from './midi/midi-input'
+
+export type { MidiInputStatus } from './midi/midi-input'
+export { isWebMidiSupported } from './midi/midi-input'
 
 export type { PowerTier } from './shared/types'
 export type { Sidecar } from './shared/sidecar'
@@ -62,6 +66,10 @@ export interface FixtureOutStatus {
   connected: boolean
   message?: string
 }
+export interface OscInStatus {
+  connected: boolean
+  message?: string
+}
 
 export interface VizInstance {
   resize(): void
@@ -115,6 +123,23 @@ export interface VizInstance {
   // gesture to requestPort(), which a background render worker can't
   // trigger) — that leg stays editor-tool-only (DmxSerialOutput) for now.
   setFixtureOut(config: FixtureOutConfig | null, onStatus?: (status: FixtureOutStatus) => void): void
+  // Real Web MIDI control input (docs/midi.md) — closes the "not yet
+  // routable" gap flagged in the master prompt backlog: connects to every
+  // currently-plugged-in MIDI input port and forwards each CC message to
+  // the render worker, where a `midiCc` patch graph node (routed the same
+  // way as any bus signal) can read it. Requesting MIDI access can itself
+  // prompt for permission in some browsers — call from a user gesture
+  // handler to be safe. A no-op resolve with `connected: false` if Web
+  // MIDI isn't supported in this browser (see isWebMidiSupported()).
+  connectMidiIn(onStatus?: (status: MidiInputStatus) => void): Promise<void>
+  disconnectMidiIn(): void
+  // Real inbound OSC (docs/osc.md) — connects (or, passing null,
+  // disconnects) to a relay's inbound WebSocket feed (scripts/udp-relay.ts
+  // --osc-in-port) so an `oscIn` patch graph node can route a live message
+  // from an external tool (TouchDesigner, VCV Rack, a lighting console)
+  // the same way a bus signal is routed. Opt-in and additive, same
+  // one-shot-vs-persistent callback split as setOscOut/setFixtureOut.
+  setOscIn(wsUrl: string | null, onStatus?: (status: OscInStatus) => void): void
 }
 
 // ---- window CustomEvent bus this listens to (IO_PAGE_CHANGESET.md §6.3) ----
@@ -210,6 +235,11 @@ export function init(canvas: HTMLCanvasElement, opts: VizOpts): VizInstance {
   let pendingFixtureGraphResult: ((result: FixtureGraphResult) => void) | null = null
   // Same persistent, fires-multiple-times contract as oscOutStatusCallback above.
   let fixtureOutStatusCallback: ((status: FixtureOutStatus) => void) | null = null
+  // Owned lazily (only once connectMidiIn is actually called — most hosts
+  // never touch MIDI at all) rather than eagerly like AudioEngine above,
+  // since unlike audio this is fully opt-in with no default-on behavior.
+  let midiInput: MidiInput | null = null
+  let oscInStatusCallback: ((status: OscInStatus) => void) | null = null
 
   const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
   const onReducedMotionChange = (e: MediaQueryListEvent) => post({ kind: 'setReducedMotion', value: e.matches })
@@ -251,6 +281,9 @@ export function init(canvas: HTMLCanvasElement, opts: VizOpts): VizInstance {
       }
       if (e.data.kind === 'fixtureOutStatus') {
         fixtureOutStatusCallback?.({ connected: e.data.connected, message: e.data.message })
+      }
+      if (e.data.kind === 'oscInStatus') {
+        oscInStatusCallback?.({ connected: e.data.connected, message: e.data.message })
       }
     }
 
@@ -477,6 +510,25 @@ export function init(canvas: HTMLCanvasElement, opts: VizOpts): VizInstance {
       post({ kind: 'setFixtureOut', config })
     },
 
+    async connectMidiIn(onStatus) {
+      if (!midiInput) {
+        midiInput = new MidiInput(
+          (status) => onStatus?.(status),
+          (key, value) => post({ kind: 'midiCc', key, value }),
+        )
+      }
+      await midiInput.connect()
+    },
+
+    disconnectMidiIn() {
+      midiInput?.disconnect()
+    },
+
+    setOscIn(wsUrl, onStatus) {
+      oscInStatusCallback = wsUrl === null ? null : (onStatus ?? null)
+      post({ kind: 'setOscIn', wsUrl })
+    },
+
     setTier(next) {
       if (tier === next) return
       tier = next
@@ -520,6 +572,9 @@ export function init(canvas: HTMLCanvasElement, opts: VizOpts): VizInstance {
       oscOutStatusCallback = null
       pendingFixtureGraphResult = null
       fixtureOutStatusCallback = null
+      midiInput?.disconnect()
+      midiInput = null
+      oscInStatusCallback = null
     },
   }
 }

@@ -185,6 +185,15 @@ export type MainToRenderWorker =
   | { kind: 'setFixtureDocument'; doc: FixtureDocument }
   | { kind: 'setFixtureGraph'; graph: PatchGraph }
   | { kind: 'setFixtureOut'; config: FixtureOutConfig | null }
+  // Real public API (src/index.ts's VizInstance.connectMidiIn/setOscIn) as
+  // well as usable by the editor tool — live external inputs a midiCc/
+  // oscIn patch graph node reads (see patchgraph/types.ts's own doc
+  // comments on those node kinds). `midiCc` fires once per real CC message
+  // (already 0..1 normalized — src/midi/midi-cc-input.ts's own contract);
+  // `oscIn` connects/disconnects (config: null) the WebSocket relay
+  // connection an OscInBridge listens on for inbound OSC.
+  | { kind: 'midiCc'; key: string; value: number }
+  | { kind: 'setOscIn'; wsUrl: string | null }
 
 export type RenderWorkerToMain =
   | { kind: 'error'; message: string }
@@ -195,8 +204,12 @@ export type RenderWorkerToMain =
   // whatever StateFrame is currently active) purely for diagnosing
   // "dropImpulse never fires" against real audio — null on the synthetic
   // fallback frame and on any sidecar/position-only frame (no live
-  // DropDetector instance to read from in either case).
-  | { kind: 'signalBus'; bus: SignalBus; dropDebug: DropDetectorDebug | null }
+  // DropDetector instance to read from in either case). fixtureValues is
+  // the worker-resident fixture graph's latest evaluation (empty until a
+  // host ever calls setFixtureGraph) — the editor's FixtureVisuals/
+  // DmxOutPanel read it here instead of running their own copy of the
+  // evaluator (see AGENTS.md's "dogfood the fixture API" session).
+  | { kind: 'signalBus'; bus: SignalBus; dropDebug: DropDetectorDebug | null; fixtureValues: Record<string, number> }
   // Dev-only: acks debugSetScreenGraph — either it was applied, or (most
   // usefully) it failed PatchGraphEvaluator's construction-time validation
   // (§5.3-equivalent: throws on any error-severity issue) and the worker
@@ -221,6 +234,9 @@ export type RenderWorkerToMain =
   // Fires on every connect/disconnect/error of the setFixtureOut transport
   // — not one-shot, same as oscOutStatus above.
   | { kind: 'fixtureOutStatus'; connected: boolean; message?: string }
+  // Fires on every connect/disconnect/error of the setOscIn WebSocket —
+  // same persistent, fires-multiple-times contract as oscOutStatus above.
+  | { kind: 'oscInStatus'; connected: boolean; message?: string }
 
 // Main thread -> live AudioWorklet (a separate execution context from the
 // render worker — AudioEngine.ts owns this channel). Two independent callers

@@ -12,6 +12,8 @@ import type { PatchGraph } from '../conductor/patchgraph/types'
 import { parseIsf } from '../../isf/parse-isf'
 import { isfInputsToTargets } from '../../isf/isf-targets'
 import { OscOutBridge } from '../../osc/osc-out-bridge'
+import { OscInBridge } from '../../osc/osc-in-bridge'
+import type { ExternalInputs } from '../conductor/patchgraph/PatchGraphEvaluator'
 
 declare const self: DedicatedWorkerGlobalScope
 
@@ -133,6 +135,28 @@ let lastOscOutSend = 0
 // only the actual send over the wire is throttled.
 const FIXTURE_OUT_INTERVAL_MS = 40
 let lastFixtureOutSend = 0
+// Latest fixture-graph evaluation, kept for the dev-only signalBus debug
+// stream below (the patchbay editor's own FixtureVisuals/DmxOutPanel need
+// SOME way to see what the worker-resident evaluator is producing now that
+// they no longer run their own copy — see AGENTS.md's "dogfood the fixture
+// API in the patchbay editor" session). Empty until a fixture graph is
+// ever set; a host that never calls setFixtureGraph never pays for this.
+let lastFixtureResolved: Record<string, number> = {}
+
+// Live external inputs both graphs (screen + fixture) read from — see
+// patchgraph/types.ts's MidiCcNode/OscInNode doc comments. `midiCc` is a
+// plain map updated in place by the 'midiCc' message case below (a real
+// device fires CC messages at its own irregular rate, not once per
+// render frame, so there's nothing to throttle — each message just
+// updates the map immediately). `oscInBridge` owns its own map
+// internally (OscInBridge.values) since it also needs connect/disconnect
+// lifecycle, unlike the plain midiCc map which has no connection of its
+// own to manage.
+const midiCcValues = new Map<string, number>()
+let oscInBridge: OscInBridge | null = null
+function currentExternalInputs(): ExternalInputs {
+  return { midiCc: midiCcValues, oscIn: oscInBridge?.values }
+}
 
 const raf: (cb: (t: number) => void) => number | ReturnType<typeof setTimeout> =
   typeof self.requestAnimationFrame === 'function'
@@ -207,13 +231,13 @@ function tick(t: number) {
     // screen-specific (idle/scope passthrough by name). Adding a second real
     // output later needs its own PatchGraphEvaluator + a resolver of its
     // own, same as it would have needed its own Patchbay before.
-    const resolved = resolveScreenTargets(screenGraphEvaluator, output.targets, bus, dt)
+    const resolved = resolveScreenTargets(screenGraphEvaluator, output.targets, bus, dt, currentExternalInputs())
     output.update(dt, resolved)
   }
 
   if (streamSignalBus && t - lastSignalBusPost > SIGNAL_BUS_STREAM_INTERVAL_MS) {
     lastSignalBusPost = t
-    post({ kind: 'signalBus', bus, dropDebug: latestStateFrame?.dropDebug ?? null })
+    post({ kind: 'signalBus', bus, dropDebug: latestStateFrame?.dropDebug ?? null, fixtureValues: lastFixtureResolved })
   }
 
   if (oscOutBridge && t - lastOscOutSend > OSC_OUT_INTERVAL_MS) {
@@ -222,10 +246,10 @@ function tick(t: number) {
   }
 
   if (fixtureGraphEvaluator) {
-    const resolved = fixtureGraphEvaluator.evaluate(bus, dt)
+    lastFixtureResolved = fixtureGraphEvaluator.evaluate(bus, dt, currentExternalInputs())
     if (t - lastFixtureOutSend > FIXTURE_OUT_INTERVAL_MS) {
       lastFixtureOutSend = t
-      fixtureOutput.send(resolved)
+      fixtureOutput.send(lastFixtureResolved)
     }
   }
 
@@ -499,6 +523,19 @@ self.onmessage = (e: MessageEvent<MainToRenderWorker>) => {
         break
       }
       fixtureOutput.connect(msg.config, (status) => post({ kind: 'fixtureOutStatus', ...status }))
+      break
+    }
+    case 'midiCc': {
+      midiCcValues.set(msg.key, msg.value)
+      break
+    }
+    case 'setOscIn': {
+      if (msg.wsUrl === null) {
+        oscInBridge?.disconnect()
+        break
+      }
+      if (!oscInBridge) oscInBridge = new OscInBridge((status) => post({ kind: 'oscInStatus', ...status }))
+      oscInBridge.connect(msg.wsUrl)
       break
     }
   }
