@@ -162,7 +162,7 @@ This is where ISF adoption matters most.
 ## 5. Protocols to explicitly support (priority order)
 1. **ISF** (visual scripting/prefab compatibility) — highest leverage, do first. ✅ done (§6).
 2. **OSC** (signal bus interop with the wider creative-coding world). ✅ out done, in not started (§6).
-3. **Art-Net / sACN** (network DMX — most common in modern lighting rigs). ✅ done (§6) — editor-tool-only, no production fixture pipeline yet.
+3. **Art-Net / sACN** (network DMX — most common in modern lighting rigs). ✅ done (§6) — now has a real production fixture pipeline (`FixtureOutput` in the render worker); USB/Web Serial stays editor-tool-only (see §6).
 4. **DMX512 via USB-serial** (Bridge-mediated; covers dongle-based setups). ✅ done (§6) — NOT Bridge-mediated after all, turned out to be the one protocol Web Serial reaches directly.
 5. **MIDI** (both control input — mapping a knob to a patch parameter —
    and MIDI clock/beat sync from a DAW). ✅ parsing/clock/CC-input done
@@ -209,17 +209,18 @@ This is where ISF adoption matters most.
       from the browser — see `docs/dmx-out.md`). ILDA still unaddressed.
 - [ ] Fixture profile system for physical devices (QLC+-style reusable definitions).
 - [ ] Presentation/export mode: fixed showfile vs. live-reactive export paths.
-- [~] Art-Net / sACN output. Real spec-shaped packet encoders
+- [x] Art-Net / sACN output. Real spec-shaped packet encoders
       (`src/dmx/artnet.ts`/`sacn.ts`), fixture→universe rendering
       (`src/dmx/render-dmx-universe.ts`), sent via the same relay OSC uses
       (`scripts/udp-relay.ts`, generalized this session to carry a
       per-message JSON envelope alongside OSC's raw passthrough) — see
-      `docs/dmx-out.md`. Patchbay-editor-only: there is still no production
-      fixture patch graph anywhere in the shipped render worker (the
-      editor's fixture-graph evaluation has always been ephemeral,
-      browser-side React state — see AGENTS.md), so this isn't wired into
-      `VizInstance` the way ISF/OSC are. No 16-bit/fine-channel support, no
-      fixture-profile import (GDTF/QLC+).
+      `docs/dmx-out.md`. **Now wired into production**: `FixtureOutput`
+      (`src/render/conductor/outputs/FixtureOutput.ts`) runs a real fixture
+      `PatchGraphEvaluator` inside the shipped render worker, driven by
+      `VizInstance.setFixtureDocument()`/`setFixtureGraph()`/
+      `setFixtureOut()` — a host embedding this package can now drive real
+      Art-Net/sACN/WLED fixtures, not just the patchbay editor. No
+      16-bit/fine-channel support, no fixture-profile import (GDTF/QLC+).
 - [~] DMX512 via USB-serial. Real Enttec DMX USB PRO Widget API framing
       (`src/dmx/enttec-usb-pro.ts`) sent via genuine Web Serial
       (`src/dmx/dmx-serial-output.ts`) — the one §5 protocol that reaches
@@ -228,8 +229,11 @@ This is where ISF adoption matters most.
       signal/break. Chromium-desktop-only (Web Serial isn't implemented
       elsewhere); a raw "Open DMX USB"-style dongle (host generates the
       break itself) isn't reachable this way at all — see `docs/dmx-out.md`.
-      Same editor-tool-only/no-production-pipeline caveat as Art-Net/sACN
-      above.
+      **Still editor-tool-only, deliberately**, unlike Art-Net/sACN/WLED
+      above: Web Serial's `requestPort()` needs a main-thread user gesture,
+      which a background render worker can never trigger — there's no
+      obvious production wiring for this leg without a different mechanism
+      (e.g. the host page obtaining the port and transferring it in).
 - [~] MIDI: control input + clock/beat sync. Real MIDI 1.0 message parsing,
       a clock tracker (24-tick/quarter-note timing → live BPM + beat/bar
       phase, shape-compatible with the live-audio `BeatTracker` for a
@@ -249,8 +253,9 @@ This is where ISF adoption matters most.
       today by just pointing a WLED device at sACN directly (WLED speaks
       it natively) — this mode is specifically for not needing to think
       about sACN/universes at all, which is the actual "friendly on-ramp"
-      ask. See `docs/dmx-out.md`. Same editor-tool-only caveat as
-      Art-Net/sACN/DMX-serial above.
+      ask. See `docs/dmx-out.md`. **Now wired into production** the same
+      way as Art-Net/sACN above — `FixtureOutput`'s `setFixtureOut()`
+      accepts `wled-drgb` as a protocol like any other.
 - [~] ILDA / laser DAC protocol layer. Real ILDA file-format codec
       (`src/ilda/ilda-format.ts`) and real Ether Dream live-DAC protocol
       codec (`src/ilda/ether-dream.ts`) — both researched via WebSearch/

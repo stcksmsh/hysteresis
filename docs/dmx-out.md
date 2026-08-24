@@ -85,10 +85,16 @@ own simulated visuals.
   (fingerprinting concerns), and no mobile browser supports it at all.
   Un-supported browsers get a clear message in the panel rather than a
   silent failure.
-- **This is editor-tool-only today**, unlike ISF/OSC which also ship as
-  real public `VizInstance` API. There's no production fixture graph
-  running anywhere outside the editor yet (see `AGENTS.md` — the editor's
-  fixture-graph evaluation has always been ephemeral, browser-side React
-  state, never wired into the shipped render worker) — extending this to a
-  real `DmxOutput` in the production pipeline is a separate, larger piece
-  of work, not attempted here.
+- **Art-Net/sACN/WLED now have a real production path** (see AGENTS.md's
+  "Wire the fixture patch graph into production" session):
+  `VizInstance.setFixtureDocument()`/`setFixtureGraph()`/`setFixtureOut()`
+  run a real `FixtureOutput` inside the shipped render worker
+  (`src/render/conductor/outputs/FixtureOutput.ts`), evaluating the fixture
+  patch graph every frame and sending real DMX universes out over the same
+  WebSocket relay OSC uses — a host embedding this package (not just the
+  patchbay editor) can now actually drive a lighting rig. **USB (Web
+  Serial) is still editor-tool-only** — `DmxSerialOutput.connect()` needs a
+  main-thread user-gesture `requestPort()` call, which a background render
+  worker can never trigger, so that leg has no production counterpart and
+  isn't expected to get one without a different mechanism (e.g. the host
+  page obtaining the port itself and transferring it in).

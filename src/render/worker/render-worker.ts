@@ -6,7 +6,9 @@ import { PatchGraphEvaluator } from '../conductor/patchgraph/PatchGraphEvaluator
 import { screenGraph } from '../conductor/patchgraph/configs/screen-graph'
 import { resolveScreenTargets } from '../conductor/outputs/resolve-screen-targets'
 import { ScreenOutput } from '../conductor/outputs/ScreenOutput'
+import { FixtureOutput } from '../conductor/outputs/FixtureOutput'
 import type { VizOutput } from '../conductor/types'
+import type { PatchGraph } from '../conductor/patchgraph/types'
 import { parseIsf } from '../../isf/parse-isf'
 import { isfInputsToTargets } from '../../isf/isf-targets'
 import { OscOutBridge } from '../../osc/osc-out-bridge'
@@ -52,6 +54,15 @@ let screenGraphEvaluator = new PatchGraphEvaluator(screenGraph, screenOutput.tar
 // target set changes underneath it (an ISF shader's inputs appearing or
 // disappearing from screenOutput.targets).
 let currentScreenGraph = screenGraph
+
+// Real fixture output (FixtureOutput.ts's own doc comment) — null evaluator
+// until a host ever calls setFixtureGraph, matching oscOutBridge's "entirely
+// inert until opted into" posture below. Unlike screenGraphEvaluator there is
+// no default graph: an unpatched install has zero fixtures and nothing to
+// route, so there's nothing sane to default to.
+const fixtureOutput = new FixtureOutput()
+let fixtureGraphEvaluator: PatchGraphEvaluator | null = null
+let currentFixtureGraph: PatchGraph | null = null
 
 let currentAccent: [number, number, number] = [1, 0.36, 0.22] // vermilion default (#FF5C38), matches JuliaScene's own default
 
@@ -114,6 +125,14 @@ let lastSignalBusPost = 0
 const OSC_OUT_INTERVAL_MS = 50
 let oscOutBridge: OscOutBridge | null = null
 let lastOscOutSend = 0
+
+// Real fixture DMX-out — same throttle rationale as OSC above, matching
+// DmxOutPanel's own DMX_SEND_INTERVAL_MS (~25Hz, plenty for a reactive
+// lighting look). The fixture graph itself is still evaluated every frame
+// (cheap, and keeps envelope/threshold node state advancing on real dt) —
+// only the actual send over the wire is throttled.
+const FIXTURE_OUT_INTERVAL_MS = 40
+let lastFixtureOutSend = 0
 
 const raf: (cb: (t: number) => void) => number | ReturnType<typeof setTimeout> =
   typeof self.requestAnimationFrame === 'function'
@@ -200,6 +219,14 @@ function tick(t: number) {
   if (oscOutBridge && t - lastOscOutSend > OSC_OUT_INTERVAL_MS) {
     lastOscOutSend = t
     oscOutBridge.send(bus)
+  }
+
+  if (fixtureGraphEvaluator) {
+    const resolved = fixtureGraphEvaluator.evaluate(bus, dt)
+    if (t - lastFixtureOutSend > FIXTURE_OUT_INTERVAL_MS) {
+      lastFixtureOutSend = t
+      fixtureOutput.send(resolved)
+    }
   }
 
   if (dt > 0) updateAdaptiveQuality(dt * 1000, t)
@@ -293,6 +320,23 @@ function rebuildScreenGraphEvaluator(): void {
     screenGraphEvaluator = new PatchGraphEvaluator(currentScreenGraph, screenOutput.targets)
   } catch {
     // keep the previous evaluator — see comment above
+  }
+}
+
+// Same rebuild-against-a-changed-target-set pattern as
+// rebuildScreenGraphEvaluator above, triggered by setFixtureDocument
+// (adding/removing/renaming a fixture, or changing its type, changes which
+// fixture:<id>.<channel> targets exist). No-op if no graph has been set
+// yet — a host that only ever calls setFixtureDocument with no graph has
+// nothing to route, same as fixtureGraphEvaluator's initial null state.
+function rebuildFixtureGraphEvaluator(): void {
+  if (!currentFixtureGraph) return
+  try {
+    fixtureGraphEvaluator = new PatchGraphEvaluator(currentFixtureGraph, fixtureOutput.targets())
+  } catch {
+    // keep the previous evaluator — a route into a now-gone fixture channel
+    // just stops applying until the graph is edited to drop it, same as
+    // the screen's own handling above
   }
 }
 
@@ -429,6 +473,32 @@ self.onmessage = (e: MessageEvent<MainToRenderWorker>) => {
       }
       if (!oscOutBridge) oscOutBridge = new OscOutBridge((status) => post({ kind: 'oscOutStatus', ...status }))
       oscOutBridge.connect(msg.wsUrl)
+      break
+    }
+    case 'setFixtureDocument': {
+      fixtureOutput.setDocument(msg.doc)
+      rebuildFixtureGraphEvaluator()
+      break
+    }
+    case 'setFixtureGraph': {
+      try {
+        // Same reconstructed-not-mutated, reject-and-keep-previous
+        // validation guarantee as debugSetScreenGraph above.
+        const next = new PatchGraphEvaluator(msg.graph, fixtureOutput.targets())
+        fixtureGraphEvaluator = next
+        currentFixtureGraph = msg.graph
+        post({ kind: 'fixtureGraphResult', ok: true })
+      } catch (err) {
+        post({ kind: 'fixtureGraphResult', ok: false, message: err instanceof Error ? err.message : String(err) })
+      }
+      break
+    }
+    case 'setFixtureOut': {
+      if (msg.config === null) {
+        fixtureOutput.disconnect()
+        break
+      }
+      fixtureOutput.connect(msg.config, (status) => post({ kind: 'fixtureOutStatus', ...status }))
       break
     }
   }

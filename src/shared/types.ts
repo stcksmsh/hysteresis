@@ -3,7 +3,10 @@
 // both sides are erased at compile time.
 import type { SignalBus, TargetDecl } from '../render/conductor/types'
 import type { PatchGraph } from '../render/conductor/patchgraph/types'
+import type { FixtureDocument } from '../render/conductor/patchgraph/fixture-document'
 import type { DropDetectorDebug } from '../audio/worklet/brain/drop-detector'
+import type { FixtureOutConfig } from '../render/conductor/outputs/FixtureOutput'
+export type { FixtureOutConfig } from '../render/conductor/outputs/FixtureOutput'
 
 export interface BandEnergies {
   sub: number
@@ -169,6 +172,19 @@ export type MainToRenderWorker =
   // API, so real OSC-over-UDP interop needs a local relay on the other end
   // (scripts/udp-relay.ts), not a bridge daemon this repo doesn't have yet.
   | { kind: 'setOscOut'; wsUrl: string | null }
+  // Real public API (src/index.ts's VizInstance.setFixtureDocument/
+  // setFixtureGraph/setFixtureOut), also usable by the editor tool — the
+  // production-side counterpart to fixture-document.ts/DmxOutPanel's
+  // previously editor-only ephemeral evaluation (see FixtureOutput.ts's
+  // own doc comment). setFixtureDocument replaces which fixtures/DMX
+  // patches exist (and rebuilds the fixture graph's target catalog);
+  // setFixtureGraph replaces the routing driving them; setFixtureOut
+  // connects/disconnects (config: null) the real Art-Net/sACN/WLED
+  // transport. USB (Web Serial) is deliberately not covered by this
+  // message — it needs a main-thread user-gesture requestPort() call.
+  | { kind: 'setFixtureDocument'; doc: FixtureDocument }
+  | { kind: 'setFixtureGraph'; graph: PatchGraph }
+  | { kind: 'setFixtureOut'; config: FixtureOutConfig | null }
 
 export type RenderWorkerToMain =
   | { kind: 'error'; message: string }
@@ -198,6 +214,13 @@ export type RenderWorkerToMain =
   // not one-shot like isfShaderResult, since a long-lived connection can
   // legitimately change state multiple times over its life.
   | { kind: 'oscOutStatus'; connected: boolean; message?: string }
+  // Acks setFixtureGraph, same construction-time-validation-rejection
+  // contract as patchbayConfigResult/isfShaderResult above.
+  | { kind: 'fixtureGraphResult'; ok: true }
+  | { kind: 'fixtureGraphResult'; ok: false; message: string }
+  // Fires on every connect/disconnect/error of the setFixtureOut transport
+  // — not one-shot, same as oscOutStatus above.
+  | { kind: 'fixtureOutStatus'; connected: boolean; message?: string }
 
 // Main thread -> live AudioWorklet (a separate execution context from the
 // render worker — AudioEngine.ts owns this channel). Two independent callers

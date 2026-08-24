@@ -1,5 +1,7 @@
-import type { MainToRenderWorker, PowerTier, RenderWorkerToMain, StateFrame } from './shared/types'
+import type { FixtureOutConfig, MainToRenderWorker, PowerTier, RenderWorkerToMain, StateFrame } from './shared/types'
 import type { TargetDecl } from './render/conductor/types'
+import type { PatchGraph } from './render/conductor/patchgraph/types'
+import type { FixtureDocument } from './render/conductor/patchgraph/fixture-document'
 import type { Sidecar } from './shared/sidecar'
 import { isSidecar } from './shared/sidecar'
 import { AudioEngine } from './audio/AudioEngine'
@@ -7,6 +9,9 @@ import { StructureSource } from './audio/StructureSource'
 
 export type { PowerTier } from './shared/types'
 export type { Sidecar } from './shared/sidecar'
+export type { FixtureOutConfig } from './shared/types'
+export type { FixtureDocument, FixtureInstance, DmxPatch } from './render/conductor/patchgraph/fixture-document'
+export type { PatchGraph } from './render/conductor/patchgraph/types'
 
 // Matches the IO page's actual §6 contract (IO_PAGE_CHANGESET.md, and
 // src/lib/{viz-bus,player-bus,audio-bus}.ts in stcksmsh.github.io) — not the
@@ -52,6 +57,11 @@ export interface OscOutStatus {
   connected: boolean
   message?: string
 }
+export type FixtureGraphResult = { ok: true } | { ok: false; message: string }
+export interface FixtureOutStatus {
+  connected: boolean
+  message?: string
+}
 
 export interface VizInstance {
   resize(): void
@@ -81,6 +91,30 @@ export interface VizInstance {
   // browser-reachable half. `onStatus` (optional) fires on every
   // connect/disconnect/error over the connection's life, not just once.
   setOscOut(wsUrl: string | null, onStatus?: (status: OscOutStatus) => void): void
+  // Real production counterpart to the patchbay editor's fixture tooling
+  // (docs/dmx-out.md) — closes the gap noted throughout the master prompt
+  // backlog where DMX/Art-Net/sACN/WLED were editor-tool-only, with no way
+  // for a host embedding this package to actually drive physical fixtures.
+  // Opt-in and additive like loadIsfShader/setOscOut: a host that never
+  // calls these never triggers them. Order doesn't matter — setFixtureGraph
+  // and setFixtureDocument can be called in either order, and the worker
+  // rebuilds its evaluator against whichever target set is currently valid.
+  //
+  // Replaces the full set of fixture instances (and their DMX
+  // universe/address patches, if any) — see fixture-document.ts.
+  setFixtureDocument(doc: FixtureDocument): void
+  // Replaces the patch graph routing the signal bus into fixture channels.
+  // `onResult` reports construction-time validation (a dangling wire, a
+  // cycle, a route into an unknown/removed channel) — same rejection
+  // contract as loadIsfShader, never crashes the worker.
+  setFixtureGraph(graph: PatchGraph, onResult?: (result: FixtureGraphResult) => void): void
+  // Connects (or, passing null, disconnects) the real Art-Net/sACN/WLED
+  // transport patched fixtures are sent out over, via the same WebSocket
+  // relay OSC uses (browsers have no raw UDP — scripts/udp-relay.ts).
+  // NOT covered: DMX-serial/USB (Web Serial needs a main-thread user
+  // gesture to requestPort(), which a background render worker can't
+  // trigger) — that leg stays editor-tool-only (DmxSerialOutput) for now.
+  setFixtureOut(config: FixtureOutConfig | null, onStatus?: (status: FixtureOutStatus) => void): void
 }
 
 // ---- window CustomEvent bus this listens to (IO_PAGE_CHANGESET.md §6.3) ----
@@ -172,6 +206,10 @@ export function init(canvas: HTMLCanvasElement, opts: VizOpts): VizInstance {
   // connection legitimately fires status multiple times over its life
   // (open, later a drop, a reconnect), all of which a host may want to see.
   let oscOutStatusCallback: ((status: OscOutStatus) => void) | null = null
+  // Same one-shot-per-call contract as pendingIsfResult above.
+  let pendingFixtureGraphResult: ((result: FixtureGraphResult) => void) | null = null
+  // Same persistent, fires-multiple-times contract as oscOutStatusCallback above.
+  let fixtureOutStatusCallback: ((status: FixtureOutStatus) => void) | null = null
 
   const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
   const onReducedMotionChange = (e: MediaQueryListEvent) => post({ kind: 'setReducedMotion', value: e.matches })
@@ -204,6 +242,15 @@ export function init(canvas: HTMLCanvasElement, opts: VizOpts): VizInstance {
       }
       if (e.data.kind === 'oscOutStatus') {
         oscOutStatusCallback?.({ connected: e.data.connected, message: e.data.message })
+      }
+      if (e.data.kind === 'fixtureGraphResult') {
+        const result: FixtureGraphResult = e.data.ok ? { ok: true } : { ok: false, message: e.data.message }
+        if (!result.ok) console.error('[sinteza-viz] setFixtureGraph failed:', result.message)
+        pendingFixtureGraphResult?.(result)
+        pendingFixtureGraphResult = null
+      }
+      if (e.data.kind === 'fixtureOutStatus') {
+        fixtureOutStatusCallback?.({ connected: e.data.connected, message: e.data.message })
       }
     }
 
@@ -416,6 +463,20 @@ export function init(canvas: HTMLCanvasElement, opts: VizOpts): VizInstance {
       post({ kind: 'setOscOut', wsUrl })
     },
 
+    setFixtureDocument(doc) {
+      post({ kind: 'setFixtureDocument', doc })
+    },
+
+    setFixtureGraph(graph, onResult) {
+      pendingFixtureGraphResult = onResult ?? null
+      post({ kind: 'setFixtureGraph', graph })
+    },
+
+    setFixtureOut(config, onStatus) {
+      fixtureOutStatusCallback = config === null ? null : (onStatus ?? null)
+      post({ kind: 'setFixtureOut', config })
+    },
+
     setTier(next) {
       if (tier === next) return
       tier = next
@@ -457,6 +518,8 @@ export function init(canvas: HTMLCanvasElement, opts: VizOpts): VizInstance {
       // less final (e.g. a "pause" mode that keeps the worker alive).
       pendingIsfResult = null
       oscOutStatusCallback = null
+      pendingFixtureGraphResult = null
+      fixtureOutStatusCallback = null
     },
   }
 }
