@@ -1,24 +1,597 @@
 # AGENTS.md — sinteza-viz (published as `hysteresis` on GitHub, pending rename)
 
-Working notes for future agent sessions on this repo. See `SINTEZA_VIZ.md` for the full design doc; this file is state/context, not spec.
+The single AI-facing reference for this repo: what it is, how it's built today, where it's
+going, and the full session-by-session history. This file absorbs what used to be five separate
+docs (`SINTEZA_VIZ.md`, `SINTEZA_SIGNAL_BUS.md`, `hysteresis-master-prompt.md`,
+`NEXT_SESSION_PROMPT.md`, and this file's own prior self) — they drifted from each other (most
+visibly: `SINTEZA_SIGNAL_BUS.md`'s original spec described a flat Patchbay/Route model a later
+addendum in the same file said was retired) and are gone now, folded in below. `docs/*.md`
+(`isf-shaders.md`, `dmx-out.md`, `midi.md`, `osc.md`, `ilda.md`, `patchbay-editor.md`) are
+**not** part of this merge — those are real per-protocol reference docs meant for human users
+too, kept separate on purpose.
 
-## What this is
+Read in this order: §1 (what this is) → §2 (current architecture) → §3 (target architecture &
+backlog) → §4 (Layer 2 understanding spec) → §5 (resume / operating mode) → §6 (session history,
+the detailed "how we got here" appendix — long, chronological, trust it over any summary above
+when they conflict).
 
-A WebGL2 music visualizer package (`the СИНТЕЗА visualizer` / "sinteza-viz") consumed by `stcksmsh/stcksmsh.github.io` as a persistent site-wide background. Three layers: Layer 1 (AudioWorklet feature extraction, live-audio only), Layer 2 (musical state — beat/build/drop/break via `StructureSource`/detectors in `src/audio/worklet/brain/`), Layer 3 (`Conductor` → Signal Bus → `Patchbay` → `ScreenOutput`/`Scene` render — see the next section). Signature visuals: curl-noise memory field (ping-pong feedback smear), "earned symmetry" (folds only on drops/builds, never a constant filter), Julia scene (perpetual boundary-sweeping dive + oscilloscope beam foreground). A fourth layer (onset particles) shipped in v3 and was later removed — see "Fixes landed" below and `SINTEZA_VIZ.md` §4's note before re-adding anything like it.
+---
 
-## Signal bus / patchbay / output refactor (this session, per `SINTEZA_SIGNAL_BUS.md`)
+## 1. What this is
+
+A WebGL2 music visualizer package (`the СИНТЕЗА visualizer` / "sinteza-viz") consumed by
+`stcksmsh/stcksmsh.github.io` as a persistent site-wide background, and — per §3's broader
+target — the seed of a general audio-reactive patchbay instrument ("Hysteresis") that can drive
+screen visuals, LEDs, DMX lighting, and lasers from the same signal graph.
+
+**Naming.** *The СИНТЕЗА visualizer* is the signature audio-reactive surface of the СИНТЕЗА
+design system, not a separately-branded product. **HYSTERESIS is the internal technical
+principle** driving the core layer: a system whose visible output depends on its whole history,
+not just the current input — the feedback memory field literally renders this. "Hysteresis" is
+also the working name of the broader patchbay-instrument project this package is growing into
+(§3).
+
+**The thesis (why the memory field is the whole point).** Almost every audio visualizer is
+memoryless: this frame reacts to this instant, then forgets. The СИНТЕЗА visualizer is built on
+the opposite principle — the image itself accumulates history. A feedback field continuously
+smears, flows, and decays past states into the present, so the screen is a slowly-evolving
+record of the last few seconds of the song, not a snapshot. The emotional arc this produces maps
+onto electronic music structure and is the spine of all choreography: **MEMORY → PROCESSING →
+RESOLUTION** — the field accumulates (energy loads into the feedback buffer over a build), the
+flow reorganizes what it holds (domain-warp churns and densifies), an event resolves it into a
+single gesture (the drop discharges the field). Maximalism is on-brand but *earned by the
+memory*, never piled on: if a visual element isn't wired to memory/energy/event state, it doesn't
+ship.
+
+**Also part of the thesis (§4 below): musical *understanding* is the actual moat, not the
+renderer.** Anyone can render a Julia set and send Art-Net. Almost nobody exposes musical
+understanding with memory and structure — beat phase that survives silence, novelty against the
+recent past, section structure, salience of prominent elements. Everything visual is a consumer
+of that understanding, not the product itself.
+
+---
+
+## 2. Current architecture
+
+Framework-agnostic package the host mounts once via `init(canvas, opts)` (`src/index.ts`,
+`VizOpts`/`VizInstance` — see `README.md` for the real call signature). No DOM ownership beyond
+the canvas, no routing, no player, no knowledge of the site.
+
+```
+[Audio Source: live worklet | sidecar]
+        │
+        ▼
+Layer 1 — the ear (src/audio/worklet/)         AudioWorklet, audio thread
+   FFT, perceptual bands, centroid, flatness, spectral flux/onsets, waveform ring buffer
+        │
+        ▼
+Layer 2 — the sense (src/audio/worklet/brain/, src/audio/StructureSource.ts)
+   beat/bar tracking, build/drop/break detectors, sidecar fusion (structure prefers
+   sidecar when loaded; detail is always live)
+        │
+        ▼
+Conductor (src/render/conductor/Conductor.ts)   → produces the Signal Bus, output-blind
+        │
+        ▼
+Signal Bus (src/render/conductor/types.ts)      flat, named, timescale-tagged signals — THE
+        │                                        cross-boundary contract
+        ▼
+PatchGraph (src/render/conductor/patchgraph/)   node-graph engine: signal/const/threshold/
+        │                                        envelope/logic/combine/curve/map/target/
+        │                                        midiCc/oscIn nodes, topologically evaluated
+        ▼
+VizOutput[] (src/render/conductor/outputs/)     peers behind one interface, pull model:
+                                                  ScreenOutput (production), FixtureOutput
+                                                  (Art-Net/sACN/WLED, production)
+```
+
+**Layer 1 — the ear** (`src/audio/worklet/`): `feature-worklet.ts` (`FeatureProcessor extends
+AudioWorkletProcessor`, registered `'feature-processor'`) runs a windowed FFT (`fft.ts`,
+`WindowedFFT`) per hop, perceptual band split sub/low/mid/presence/air (`bands.ts`, each band
+smoothed by an `EnvelopeFollower` + `AdaptiveNormalizer`), spectral centroid/flatness
+(`spectral.ts`), spectral-flux onset novelty (`onset.ts`, `SpectralFlux`), stereo pan, and emits
+a `StateFrame` (`src/shared/types.ts`) every hop via `postMessage`.
+
+**Layer 2 — the sense** (`src/audio/worklet/brain/`): `beat-tracker.ts` (`BeatTracker`/
+`BarTracker` — tempo + a phase-locked oscillator that free-runs through silence/breaks),
+`build-detector.ts`, `break-detector.ts`, `drop-detector.ts` (`DropDetector` — fires on a
+conjunction of **fullness** — multi-second sustained low-band energy, crest-factor-penalized so a
+pulsing reverb tail doesn't read as full — **onset-density jump**, and **novelty contrast**
+against a 4s window, OR the same fullness+novelty pair alone for rhythm-free "soft" drops;
+`getDebug()` exposes the three raw values). `novelty.ts` is the shared primitive
+(`cosineSimilarity`, `NoveltyRingBuffer`) both `DropDetector` and the render-side
+`familiarity.ts` build on, as two separate instances (different threads/cadences). Detectors are
+gated by a runtime `debugSetDetectorsEnabled` toggle for the groove-reactivity acceptance test
+(§3's history has the details).
+
+`src/audio/StructureSource.ts` fuses a precomputed sidecar (`src/shared/sidecar.ts`, schema
+2 today — see §4 for the schema-3 work landing alongside it) with live Layer 1/2 output:
+`fuse(frame, positionSec)` overlays sidecar structure (tempo, beat/bar phase, buildProgress,
+tension, structural events) onto an otherwise-live `StateFrame`; `synthesize(positionSec)` builds
+a **complete** `StateFrame` from the sidecar alone with no live audio at all (the SoundCloud/
+cross-origin-embed case — `idle: true` is set deliberately here so the beam plays its idle
+Lissajous instead of a fake trace, everything else is genuine track structure). Both self-heal a
+backward position jump (`healPositionRegression()`) since an external widget's position feed
+isn't guaranteed monotonic.
+
+**Conductor → Signal Bus** (`src/render/conductor/Conductor.ts`, `types.ts`): the (renamed,
+widened) former `Choreographer`. Output-blind by construction (no WebGL/canvas/Scene/serial
+imports — a grep test). Produces a `SignalBus` every frame: `TimescaleTag = 'transient' | 'beat'
+| 'bar' | 'section' | 'continuous'`, `SIGNAL_TAGS` maps every routable field to its tag.
+Continuous group (alive every frame — the fix for the old "amplitude follower" failure mode):
+`energy, sub, low, mid, presence, air, bandTilt, centroid, flatness, pan, familiarity, hueDrift`.
+Beat: `beatPhase, beatPulse`. Bar: `barPhase, downbeatPulse`. Section (sparse, dramatic):
+`buildWindup, buildProgress, tension, suspension`. Transient: `dropImpulse, onsetImpulse` (+
+internal-only `dropTrigger`). Pass-through (raw, exempt from scalar/tag rules): `scope`. Meta:
+`idle, tempoBpm, tempoConfidence`. `familiarity` (`familiarity.ts`, `FamiliarityTracker`) is a
+time-bucketed ring buffer (~12s window) of `[sub,low,mid,presence,air,centroid,flatness]`
+vectors; each frame, cosine-similarity the current vector against a strided sample of the buffer
+→ 0..1 "how much does now resemble the recent past."
+
+**PatchGraph** (`src/render/conductor/patchgraph/`): the *only* live routing engine —
+`PatchGraph`/`PatchGraphEvaluator`, a small operator graph (`signal`, `const`, `threshold`
+w/hysteresis, `envelope`, `logic` and/or/not, `combine`, `curve`, `map`, `target`, `midiCc`,
+`oscIn` node kinds), topologically evaluated with per-node persistent state, construction-time
+validated (throws on error-severity `validatePatchGraph` issues — a hot-swap handler rejects a
+bad edit and keeps the previous graph running). `ScreenOutput` consumes `configs/screen-graph.ts`
+(migrated from an earlier flat `Patchbay`/`Route` model — that model and its `screen-only.ts`
+config are still in the tree, still tested, kept only as the migration's numerically-verified
+oracle, not live). Three nonlinear screen composites (`flowStrength`, `symmetry`, `fieldDecay` —
+spring/damper + edge-triggered impulse dynamics, `patchbay/screen-composites.ts`) are
+deliberately hand-written outside the graph, not generic nodes — considered and rejected as a
+graph rewrite, no browser access to re-verify hand-tuned motion math from scratch.
+
+**Outputs** (`src/render/conductor/outputs/`): `ScreenOutput` wraps the existing WebGL2 render
+pipeline (Julia substrate, curl-noise memory field, oscilloscope beam, bloom, ISF-shader hot-swap
+support) — unchanged internals, just fed by patch-graph-resolved targets instead of a
+conductor-produced `ParamBus` directly. `FixtureOutput` is the worker-resident production
+counterpart for physical fixtures: renders DMX universes (`src/dmx/render-dmx-universe.ts`) from
+a `FixtureDocument` + its own `PatchGraphEvaluator`, sent over a WebSocket relay
+(`DmxOutBridge`) to Art-Net/sACN/WLED. Real public API on `VizInstance`: `loadIsfShader()`/
+`clearIsfShader()`, `setOscOut()`/`setOscIn()`, `setFixtureDocument()`/`setFixtureGraph()`/
+`setFixtureOut()`, `connectMidiIn()`/`disconnectMidiIn()` — all opt-in/additive, no existing
+integration calls any of them by default.
+
+**Visual composition** (`src/render/worker/scenes/julia/`, `src/render/worker/passes/`): Julia
+substrate (2D escape-time, XaoS-style continuous autopilot — `c` sweeps the Mandelbrot cardioid
+boundary, a distance-estimator autopilot pans/zooms toward genuine detail, `JuliaScene.ts`) +
+oscilloscope beam (Woscope-style glowing vector, trigger-locked when live audio is attached, idle
+Lissajous otherwise) composited into a ping-pong feedback buffer, advected through a shared
+curl-noise flow field, decayed by a factor tied to `tension`/section — **this ping-pong buffer is
+the signature layer**, the hysteresis principle rendered as an image. Earned symmetry (kaleidoscope
+fold-count/mirror-strength) modulates the *sampling coordinate* the memory field reads its own
+previous frame through, never the final composited frame, and is always a response (rises with
+tension/buildProgress, snaps to full symmetry for ~1 bar on a drop) — never a constant filter.
+Bloom + color-grade composite to screen. Onset-particles (a 4th layer) shipped once and was
+removed — see §6 for why; don't re-add something similar without addressing why it read as
+distracting.
+
+**Idle & power tiers**: no audio → the Julia autopilot keeps running, the beam draws idle
+Lissajous, the field keeps flowing/decaying gently — never frozen (except `prefers-reduced-motion`,
+which the host handles by disabling the canvas). Tiers `full`/`cheap`/`idle-only` per
+`setTier()`.
+
+**Two run modes**: live (mic/line-in → worklet → Conductor → bus, the opening-party case) and
+unattended looped playback with precomputed sidecars (best case — look-ahead anticipation via
+`StructureSource`) or ambient mic — most of the exhibition's actual runtime, must auto-start and
+survive a crash with no keyboard (host/IO-page concern, noted here so it isn't forgotten).
+
+**Offline analysis** (`scripts/analyze.ts`/`scripts/structure.ts`, this repo, not the host):
+ingests a WAV master, reuses the *exact* browser worklet modules (FFT/bands/spectral/onset/
+beat-tracker/detectors — no reimplementation, no Python/ONNX dependency for the schema-2 path)
+in a manual hop loop, downsamples envelopes to 20Hz, emits a schema-2 `<slug>.sidecar.json`:
+`{schema:2, tempo, beats[], sections[], events[], onsets[], energyEnvelope[], bandEnvelope,
+centroidEnvelope[], flatnessEnvelope[], envelopeRate}`. Produced here, served by the host as a
+static asset. §4 below adds a schema-3 path (stem presence) that *does* need an external
+dependency (Python + Demucs), scoped narrowly to stay opt-in.
+
+---
+
+## 3. Target architecture & backlog
+
+*(This section is `hysteresis-master-prompt.md` §1–§8, carried over close to verbatim as the spec
+of record — it describes where the whole "Hysteresis" project is going, one level broader than
+just this package's current state in §2 above.)*
+
+### 3.1 Positioning
+
+Hysteresis is a patch-based instrument that turns music into a rich, named stream of signals —
+spectral, structural, and temporal-memory — and lets users wire those signals to *anything*: a
+built-in fractal renderer, a user-written shader, a strip of LEDs, a DMX rig, or a laser. It is
+not trying to out-feature TouchDesigner as a general compositor, and not trying to out-feature
+QLC+ as a lighting console. Its wedge is being the one tool where the *same graph* drives screen
+and physical light together, informed by audio understanding richer than raw FFT bins.
+
+### 3.2 Non-goals (say these out loud so scope doesn't creep)
+
+- Not a general-purpose node-based compositor (not competing with TD/Notch on generality).
+- Not a full lighting console (not replacing GrandMA/Chamsys for complex theatrical rigs).
+- Not a DAW. Audio is input, not something authored inside the tool.
+- Not trying to replace ISF/Shadertoy as shader ecosystems — adopt and extend them, don't reinvent.
+
+### 3.3 Architecture decision: stay web, add a native bridge (do not fully port)
+
+**Verdict: keep the webapp as the core. Ship a small local "Bridge" companion process for
+hardware I/O the browser cannot reach directly.** Rationale:
+
+- WebGPU has broad support across Chrome/Edge/Firefox/Safari, so GPU-bound rendering is not a
+  reason to leave the browser.
+- The real gap is hardware: no browser API for Art-Net/sACN (raw UDP); Web Serial (USB-DMX) and
+  Web MIDI are Chromium-desktop-leaning, Safari opposes Web Serial over fingerprinting, neither
+  has real mobile support. A protocol problem, not a "browser is too weak" problem.
+- Every native lighting tool solves this the same way (an external interface/bridge process) — so
+  the standard-practice answer is a tiny local **Hysteresis Bridge daemon**: speaks Art-Net/sACN/
+  raw DMX (USB-serial)/ILDA on the hardware side, WebSocket+OSC to the webapp on the other.
+  Preserves the whole existing web codebase, isolates the "needs native/OS access" surface to one
+  small, replaceable component.
+- Revisit full native (Tauri-wrapping, not a rewrite) only if the WebGPU ceiling is genuinely hit,
+  or offline/installer distribution + OS-level low-latency audio access become recurring user
+  complaints. Neither is true today.
+- **Status**: `scripts/udp-relay.ts`/`scripts/tcp-relay.ts` are real, working, narrowly-scoped
+  seeds of this (byte-forwarding only, no protocol encoding) — not the full daemon. DMX-serial and
+  MIDI turned out not to need a bridge at all (Web Serial/Web MIDI reach hardware directly).
+
+### 3.4 Core pipeline (target shape)
+
+```
+[Audio Source] → [Feature Engine] → [Signal Bus] → [Patchbay Graph] → [Output Adapters]
+     ↑                  ↓
+  (sidecar          (memory/state:
+   import/export)    novelty, similarity,
+                      section tracking)
+```
+
+**Audio Source**: live input and file playback, at minimum. Sidecar format: portable, versioned
+JSON/binary, per-frame features + detected structure, ideally content-hash-keyed (not filename)
+so it survives renames — **not yet true**, today's schema-2/3 sidecar is filename/URL-keyed via
+a track's `sidecar` content field (§3.7's backlog). Should be tool-agnostic enough someone could
+generate one with Python/librosa and hand it to Hysteresis; diffable/inspectable, not opaque.
+
+**Feature Engine** — two tiers, both first-class and patchable:
+- *Instantaneous* (no memory): RMS/loudness, spectral centroid, N-band split, spectral flux,
+  onset strength, pitch/key estimate, stereo width/pan. — largely built (§2), chroma/harmonic
+  added in §4.
+- *Temporal/structural* (the differentiator, protect it from being an afterthought): novelty
+  curve, self-similarity against a rolling window, section-change/boundary detection, "build"/
+  "drop" as continuous tunable confidence values (not magic booleans), tempo/beat/bar phase. —
+  §4 below is the concrete build-out of this tier.
+- Should be swappable/extensible: a plugin interface so power users can add custom analyzers
+  (TouchDesigner's VST-hosting pattern — an analyzer as a pluggable typed-output unit, not a
+  hardcoded internal). **Not started.**
+
+**Signal Bus**: every feature a named/typed/timestamped stream (float, vector, event/trigger, or
+boolean-with-confidence). Should support recording/scrubbing for offline patch-authoring against
+a fixed sidecar timeline (**not started**). OSC-compatible addressing so external tools
+(Ableton, TouchDesigner, VCV Rack) can send/receive against the same bus with no translation layer
+— **done**, `/hysteresis/bus/<name>`.
+
+**Patchbay Graph**: node-graph UI, live state visible on every node inline (VDMX-style bar —
+**not started**, the editor currently has no per-node live value/waveform preview). Nodes typed
+by signal kind, connections type-check visually — **done** (timescale-tag validation). Macro/
+grouped nodes (save a sub-patch as a reusable block) — **not started**. Undo/redo and versioning
+on the graph itself — **not started**.
+
+**Output Adapters — "drive anything"**: ISF as the primary screen-scripting surface — **done**
+(§3.7). Extend ISF's input types with Feature Engine outputs (novelty/similarity/
+section-confidence as first-class typed shader inputs) — **not started**, the real differentiator
+no existing ISF host has; §4's new signals are what this would expose once built. Physical
+outputs unified under one adapter interface, protocol-specific underneath — **done** for DMX/
+Art-Net/sACN/WLED/USB-serial (§3.7), ILDA protocol-layer-only. Fixture/profile system (QLC+-style
+reusable definitions, not raw channel patching) — **not started**.
+
+**Export/Presentation Mode**: a stripped-down runtime target — fixed showfile playback and
+live-reactive playback as two distinct export modes. **Not started.**
+
+### 3.5 Protocols (priority order — all 7 now have real, tested work landed)
+
+1. **ISF** ✅ done.
+2. **OSC** ✅ done, both directions.
+3. **Art-Net/sACN** ✅ done, real production fixture pipeline (`FixtureOutput`); USB/Web Serial
+   stays editor-tool-only (needs a main-thread user gesture a worker can't trigger).
+4. **DMX512 via USB-serial** ✅ done — turned out reachable directly via Web Serial, no Bridge
+   needed.
+5. **MIDI** ✅ control input done, routable via a `midiCc` patch-graph node; clock/beat sync not
+   wired into the Conductor's own tempo tracking yet.
+6. **ILDA/laser DAC** ✅ protocol layer done (real ILDA file format + Ether Dream codecs,
+   cross-checked against real implementations); no patch-graph laser point source or live client
+   yet.
+7. **WLED/E1.31** ✅ done, reuses the Art-Net/sACN universe rendering.
+
+### 3.6 Design principles to hold onto
+
+- **Signals are typed and named, never magic.** "Drop detected" is a thresholded view of a
+  continuous, inspectable confidence signal, not an opaque boolean the user can't tune or
+  distrust.
+- **Prefabs are real citizens of the scripting layer, not hardcoded exceptions.** If the built-in
+  Julia fractal can't be forked/edited the same way a user's custom ISF script can, the
+  extensibility story is fake.
+- **Don't reinvent formats the ecosystem already agreed on.** ISF for shaders, OSC for signal
+  interop, Art-Net/sACN for networked lighting.
+- **Physical and screen output are peers, not a bolted-on afterthought to a video tool.** Protect
+  this in every architecture decision — don't let the Output Adapter interface silently assume
+  "frame = image".
+
+### 3.7 Concrete feature backlog
+
+- [ ] Sidecar format spec: versioned ✅, content-hash-keyed ❌ (still filename/URL-keyed).
+- [ ] Feature Engine plugin interface (custom analyzer support) — not started.
+- [x] ISF import + auto-generated patchbay node UI — real single-pass subset (float/bool/long/
+      color/point2D inputs; multi-pass/PERSISTENT/image/audio inputs rejected with a clear
+      error). Loadable from the editor AND as real public API (`loadIsfShader()`/
+      `clearIsfShader()`, `docs/isf-shaders.md`) — opt-in, production still ships Julia by
+      default.
+- [~] ISF superset spec (novelty/similarity/section-confidence as shader inputs a script could
+      declare) — **§4 below builds the underlying signals** (`noveltyLocal`, `noveltySection`,
+      `harmonicNovelty`, stem-presence); wiring them as ISF input types is still a separate,
+      not-yet-started step.
+- [ ] Shadertoy → ISF import helper (mind licensing/attribution on ported shaders).
+- [ ] Live inline node state visualization (waveform/value preview per node).
+- [ ] Macro/sub-patch save-as-reusable-block.
+- [~] Hysteresis Bridge daemon — partial (`udp-relay.ts`/`tcp-relay.ts`, byte-forwarding only).
+- [ ] Fixture profile system (QLC+-style reusable definitions).
+- [ ] Presentation/export mode (fixed showfile vs. live-reactive).
+- [x] Art-Net/sACN output — production (`FixtureOutput`), no 16-bit/fine-channel, no
+      fixture-profile import.
+- [~] DMX512 via USB-serial — real, editor-tool-only (Web Serial's `requestPort()` needs a
+      main-thread gesture).
+- [~] MIDI: control input + clock/beat sync — CC input real and routable (`midiCc` node); clock
+      sync into Conductor tempo tracking not wired.
+- [x] WLED/E1.31 on-ramp — production, reuses Art-Net/sACN universe rendering.
+- [~] ILDA/laser DAC protocol layer — real codecs, no live client, no patch-graph laser concept.
+- [x] OSC in/out on the signal bus — both directions real, no address-pattern matching (exact
+      match only) for OSC-in.
+- [x] MIDI CC mapping to patch parameters.
+- [ ] Graph versioning/undo distinct from project-file save.
+- [x] **Online multi-scale novelty (`noveltyLocal`/`noveltySection`) + beat-synchronous feature
+      aggregation** — §4 below. `noveltyLocal`/`noveltySection` real bus signals, both pushed
+      only on beat-boundary edges (`Conductor.ts`).
+- [x] **`onsetDensity`/`fullness` as real, generally-routable bus signals** — extracted from
+      `DropDetector`'s internals into `src/audio/worklet/brain/activity.ts`
+      (`FullnessTracker`/`OnsetDensityTracker`), now always-alive (not detector-gated) and on
+      the bus.
+- [x] **Chromagram + `harmonicNovelty`** — `src/audio/worklet/chroma.ts`, `chromaRootHue`
+      too. First harmonic sense this pipeline has ever had.
+- [x] **Schema-3 sidecar: per-stem presence via offline Demucs separation**
+      (`vocalPresence`/`drumsPresence`/`bassPresence`/`otherPresence`) — `scripts/analyze.ts
+      --stems`, shells out to the real Python Demucs CLI. **Verified end-to-end against a real
+      track** (Daft Punk — Instant Crush, 5:40) in a follow-up session, see its own §6 entry.
+- [x] **Heuristic sidecar section labeling** (intro/build/breakdown/outro — deterministic rules,
+      not ML) — `scripts/structure.ts`'s `labelSections()`.
+- [x] **Lead-salience tracking within the separated `other` stem** (approximate) —
+      `leadPresence`, a per-hop sustained-spectral-peak tracker, part of the same `--stems` pass.
+
+### 3.8 Open questions worth resolving early
+
+- Licensing stance on imported/ported ISF and Shadertoy content (CC variants differ).
+- How much of the Bridge daemon needs code-signing/notarization for smooth install on macOS/
+  Windows given it does raw serial/network I/O.
+- Whether sidecar generation should ever require server-side compute (heavier MIR models) or must
+  remain fully client-side/offline-capable. **§4's Demucs stem-presence step is a real instance
+  of this question**: it requires a local Python + `demucs` install to run `scripts/analyze.ts
+  --stems` — deliberately kept an opt-in, manual, per-track offline step (not a build/CI/hosted
+  dependency), consistent with "must remain offline-capable" until this question gets a real
+  answer.
+
+---
+
+## 4. Layer 2 musical understanding (СИНТЕЗА) — the moat, in detail
+
+*(This section is `SINTEZA_UNDERSTANDING.md`, folded in near-verbatim as the detailed spec behind
+§3.7's new backlog items above. It assumes §2's current architecture — Layer 1 worklet, Layer 2
+brain/`StructureSource` sidecar fusion — already exists; it does not re-describe them.)*
+
+### 4.0 The thesis (why this layer is the whole product)
+
+Anyone can render a Julia set and send Art-Net. Almost nobody exposes *musical understanding*
+with memory and structure — beat phase that survives silence, novelty against the recent past,
+section structure, salience of prominent elements. That understanding is the differentiator (the
+"moat"). So this layer is not plumbing for the renderer; it is the thing worth building, and
+everything visual is a *consumer* of it.
+
+The organizing principle, because it decides what is buildable:
+
+> **Structure & novelty are cheap, robust, and can run live. Source identity ("that's the vocal
+> / the lead synth") is expensive and is only tractable the way this project actually needs it:
+> OFFLINE, in the sidecar, for your own tracks.**
+
+This is the same live-vs-sidecar split already adopted for drops (§2's `DropDetector` vs.
+sidecar-primary drop gating), pushed one level deeper. Every ambition below is sorted into
+**LIVE-CAPABLE** (runs in the worklet, works on unknown audio at the party) or **SIDECAR-ONLY**
+(precomputed, look-ahead, own-tracks, hand-correctable). Do not try to make a sidecar-only
+capability run live.
+
+### 4.1 What the field actually does (grounded)
+
+**Structure = novelty, homogeneity, repetition, read off a Self-Similarity Matrix (SSM)**: a
+feature per time-unit, compared to every other unit (cosine/centered-cosine/RBF) — structure
+appears as blocks (homogeneous sections) and diagonal paths (repetitions). The Foote (2000)
+lineage, still the backbone of state-of-the-art unsupervised methods.
+
+**Boundaries = checkerboard-kernel novelty.** Correlate a checkerboard kernel along the SSM
+diagonal; peaks = section boundaries. Kernel size sets the timescale — small kernel → phrase-
+level ("a fill happened"), large kernel → section-level ("the chorus started"). Expose both
+scales, not one.
+
+**Beat-synchronous features are the pro move.** Aggregate to the beat grid before building the
+SSM — tempo-invariance, denoises everything.
+
+**EDM-specific, a studied problem.** DJ-mix cue-point/switch-point detection research finds the
+most predictive features for a structural transition are: novelty in signal energy, novelty in
+timbre, number of drum onsets, and harmony — drum-onset-density called out explicitly. This
+independently validates §2's fullness/onset-density-jump drop-detector redesign, and that padding
+loudness novelty with zeros at the track start (vs. the no-data value) is what makes intros
+behave.
+
+**Modern (optional, heavy) ceiling.** SOTA MSA uses learned SSM features, demixed-audio structure
+models, LLM/embedding zero-shot labeling. Flagged as the ceiling for the sidecar path, not
+required — none of this repo's ML-free heuristics attempt to reach it.
+
+### 4.2 LIVE-CAPABLE understanding
+
+Everything here is cheap enough for realtime, correct-enough causally. Runs at the party and on
+ambient/line-in input.
+
+- **Already built** (§2): bands, centroid, flatness, spectral-flux novelty, beat/tempo PLL,
+  build/break/tension, `familiarity`.
+- **Online SSM + multi-scale novelty** (new, §3.7): a ring buffer of beat-synchronous feature
+  vectors over the last N beats; each new beat, similarity of the current vector against the
+  buffer → a running novelty curve at **two timescales** — `noveltyLocal` (small kernel,
+  phrase-scale: a fill, a new element entering) and `noveltySection` (large kernel, section-scale:
+  breakdown→drop, verse→chorus). `familiarity` is the same computation read the other way — high
+  familiarity = low novelty = a loop repeating. Cost: a bounded ring buffer, a few dot products
+  per beat — trivially realtime, and the single highest-value live addition.
+- **Drum-onset density & fullness, exposed as real bus signals** (new, §3.7): onset events/sec +
+  a fullness signal (energy sustained continuously over a multi-second window, crest-factor-
+  penalized) — both already computed inside `DropDetector` but never exposed generally. A drop =
+  onset-density AND fullness jump together after a span low on both = a large `noveltySection`
+  spike.
+- **Chroma/harmonic signals** (new, §3.7): a chromagram (12-bin pitch-class energy) — cheap,
+  standard, currently entirely missing from the pipeline. Enables harmonic novelty (key/chord
+  changes as a boundary cue, one of the EDM switch-point predictors), a "harmonic tension" proxy,
+  and a genuinely new visual driver (pitch-class → hue/rotation). Bass-band chroma alone
+  approximates root/bassline movement.
+- **NOT live-capable, don't attempt online**: naming sections (needs the whole track), tracking a
+  *specific* source (needs separation, §4.3), anything needing real look-ahead (a drop is defined
+  by contrast with the build *before* it — live gets a fallback, sidecar gets it right).
+
+### 4.3 "Track prominent elements" — honestly scoped
+
+The want: track the vocal, the main synth, per-section prominent elements. This is source
+separation + salience, heavier than structure.
+
+**Feasibility.** Offline separation (HTDemucs v4, ~9dB SDR on 4 stems: drums/bass/vocals/other) is
+solved and excellent, runs in Python, is a solved dependency, not research. Real-time low-latency
+separation exists but is research-grade and weak (HS-TasNet ~4.6-5.6dB SDR at 23ms — far below
+offline quality, nothing drop-in for a web app today). **Conclusion: do not attempt live stem
+separation.** "other" is a bucket, not an instrument — even offline, "the main synth" specifically
+is approximate (it's whatever's loudest/most sustained inside `other`, alongside pads/FX).
+
+**The design that delivers it: SIDECAR-ONLY, stem-wise structure.** For your own tracks: (1)
+offline, in `scripts/analyze.ts`'s pipeline, run separation once (Demucs, shelled out to the
+Python CLI — see §3.8's open question on this) → stems vocals/drums/bass/other; (2) per stem,
+compute a presence/energy envelope across the whole track — not "what note is the vocal" but "is
+the vocal present, and how prominent, right now," which is exactly what "track the prominent
+element" visually needs; (3) bake it into the sidecar as new signal lanes
+(`vocalPresence`/`drumsPresence`/`bassPresence`/`otherPresence`), schema bump; (4) at playback,
+`StructureSource` exposes these as bus signals exactly like existing structure — "vocal enters →
+this element blooms," "bass drops out → the field thins," without any live separation.
+
+**Salience within a stem** (optional, harder): a per-section peak-tracker on the `other` stem's
+spectrum — the loudest *sustained* band-limited component per section approximates "the lead."
+Approximate, a refinement to attempt after stem-presence works.
+
+**Explicit non-goals**: no live vocal/lead tracking (sidecar-only); no pitch-accurate
+transcription/MIDI extraction (presence/salience envelopes, not notes); no lyric alignment/word
+tracking.
+
+### 4.4 The signal taxonomy this layer adds to the bus
+
+Time/pulse, energy/timbre (LIVE, mostly already have) — unchanged, see §2.
+
+**Rhythmic activity (LIVE, new):** `onsetDensity`, `fullness`.
+
+**Harmony (LIVE, new):** `chroma` (pass-through 12-vector, like `scope`), `harmonicNovelty`,
+`chromaRootHue`.
+
+**Structure/memory:** `noveltyLocal`, `noveltySection` — LIVE, new. Section boundaries (precise),
+labels — SIDECAR (heuristic labeler, new). Repetition map ("this section = that earlier one") —
+SIDECAR, not attempted (needs a full offline SSM this plan doesn't build).
+
+**Source presence (SIDECAR-ONLY, new):** `vocalPresence`, `drumsPresence`, `bassPresence`,
+`otherPresence`, `leadPresence` (approximate, within `other`).
+
+### 4.5 Build order (as actually executed this session)
+
+1. Online SSM + multi-scale novelty + beat-synchronous aggregation (one implementation slice —
+   the beat-sync push is the same call site the multi-scale trackers use).
+2. `onsetDensity`/`fullness` exposed as real, generally-routable bus signals.
+3. Chromagram + harmonic novelty.
+4. Schema-3 sidecar: stem-presence via offline Demucs (Python CLI subprocess).
+5. Heuristic sidecar section labeling (deterministic rules, not ML — no LLM/embedding infra
+   exists in this repo and the doc itself flags learned labeling as an optional heavy ceiling).
+6. Lead salience within `other` (approximate, rides on step 4's separated stems).
+
+### 4.6 Feasibility summary (the one-screen answer to "can we track the vocal")
+
+| Ambition | Live? | Sidecar? | Verdict |
+|---|---|---|---|
+| Beat/tempo, phase through silence | ✅ have | ✅ | done |
+| Novelty / self-similarity / familiarity | ✅ cheap | ✅ better | build first |
+| Section *boundaries* | ⚠️ causal, approx | ✅ precise | live-approx + sidecar-exact |
+| Section *labels* (verse/chorus/drop) | ❌ | ✅ heuristic | sidecar only, deterministic |
+| Drop/build/break | ⚠️ fallback only | ✅ primary | existing §2 design |
+| Harmony/chroma | ✅ cheap | ✅ | build (new sense) |
+| Vocal present & how prominent | ❌ | ✅ Demucs offline | sidecar only, viable |
+| Drums/bass presence | ❌ live | ✅ | sidecar, clean |
+| "The main synth" specifically | ❌ | ⚠️ approx | sidecar, approximate |
+| Note-level transcription | ❌ | ❌ | out of scope |
+| Live stem separation | ❌ research-grade, weak | n/a | do not attempt |
+
+---
+
+## 5. Resume / operating mode
+
+Non-negotiable constraints, in priority order:
+
+1. **Never break the live production path.** The renderer runs 24/7 unattended on a real site.
+   Every commit leaves `npm run typecheck`, `npm test`, `npm run build`, and `npm run build:lib`
+   green. If a feature can't be added without regressing this, stop and say so.
+2. **Legibility over feature count.** Every UI surface touched must be as usable/readable as the
+   patchbay editor's current state — dark theme, clear hierarchy, no dead/hidden controls, real
+   labels not ids.
+3. **Ship working slices, not partial scaffolding.** Definition of done: does the real thing
+   end-to-end, is tested, and is verified (real browser check when visual/interactive — flag
+   clearly when browser access isn't available, per §6's many "not verified in a browser" notes).
+4. **Protect extensibility.** Prefabs/built-ins must be built *through* the same extension
+   mechanism a user would use, never a hardcoded special case beside a thinner "real" API. Ask:
+   could a user replace/extend this the same way I just built it?
+
+**Where things stand**: all 7 §3.5 protocols have real landed work; the two biggest recurring
+gaps (physical fixtures editor-tool-only, MIDI/OSC not routable in the graph) are closed —
+`FixtureOutput` runs in production, `midiCc`/`oscIn` are real graph node kinds, the editor
+dogfoods the production fixture API. §4's Layer 2 understanding build order (all 6 steps) also
+landed — the Signal Bus now carries `noveltyLocal`/`noveltySection`/`fullness`/`onsetDensity`/
+`harmonicNovelty`/`chromaRootHue`/`chroma`/the 5 sidecar-only presence signals — and every one of
+those (including the `--stems` Demucs path) has now been verified against a real 5:40 track, not
+just synthetic fixtures (see the "headless real-audio test run" §6 entry). **None of these new
+signals are wired into any default screen/fixture route yet**, though — deliberately out of
+scope for both sessions, still real follow-up work. §3.7's checklist is the source of truth for
+what's next — don't assume any older list (§3.5's protocol order) still dictates priority, it's
+exhausted.
+
+**Standing caveat across almost everything in §6**: most of it has never been verified against
+real hardware or a real browser (no MIDI controller, no external OSC sender, no Art-Net/sACN
+receiver, no laser DAC, no browser access in most of these sessions) — typechecked and
+unit-tested at the logic layer only. Closing that loop for any one protocol, when real
+hardware/browser access is available, is higher-value than starting new scope.
+
+**Operating mode**:
+- Gap-analysis first, every time you resume — diff §3.7's checklist against what's actually in
+  the repo, don't assume where the last session left off.
+- One coherent slice per session; update §3.7's checkboxes as items land.
+- Append a dated/titled §6 entry per session — what changed, what's verified vs. not, what's
+  explicitly deferred. This is how continuity survives repeated context clears.
+- Respect §3.2's non-goals as hard scope boundaries.
+- If a decision genuinely needs the user's input (§3.8's open questions, or anything expensive to
+  reverse), ask; don't guess and proceed.
+
+---
+
+## 6. Session history (appendix — chronological, detailed, trust this over any summary above)
+
+## Signal bus / patchbay / output refactor (this session, per the then-separate `SINTEZA_SIGNAL_BUS.md`)
 
 `Choreographer`→`ParamBus`→`Scene` (one hardwired consumer) is now `Conductor`→`SignalBus`→`Patchbay`→`VizOutput[]` (peers behind an interface, pull model). Implemented all 6 build-order steps from the spec in one pass:
 
-- **New layout**: `src/render/conductor/` — `Conductor.ts` (widened Choreographer, output-blind — grep-checkable per R1), `types.ts` (`SignalBus`/`TimescaleTag`/`SIGNAL_TAGS`/`VizOutput`), `familiarity.ts` (§4.2's online self-similarity signal), `patchbay/` (`Patchbay.ts` evaluator + `curves.ts` + `configs/screen-only.ts` default config + `configs/servo-targets.ts` SPEC ONLY, §6.3), `outputs/ScreenOutput.ts` (owns the render pipeline moved in from `render-worker.ts` — Scene, memory field/persistence/bloom/composite passes; `Scene`/`SceneContext` themselves are unchanged). `src/render/choreography/` now holds only `spring-damper.ts` (still used standalone by `JuliaScene` for its own `c`-position spring — untouched).
+- **New layout**: `src/render/conductor/` — `Conductor.ts` (widened Choreographer, output-blind — grep-checkable per R1), `types.ts` (`SignalBus`/`TimescaleTag`/`SIGNAL_TAGS`/`VizOutput`), `familiarity.ts` (the online self-similarity signal), `patchbay/` (`Patchbay.ts` evaluator + `curves.ts` + `configs/screen-only.ts` default config + `configs/servo-targets.ts` SPEC ONLY), `outputs/ScreenOutput.ts` (owns the render pipeline moved in from `render-worker.ts` — Scene, memory field/persistence/bloom/composite passes; `Scene`/`SceneContext` themselves are unchanged). `src/render/choreography/` now holds only `spring-damper.ts` (still used standalone by `JuliaScene` for its own `c`-position spring — untouched).
 - **Nonlinear composites** (`flowStrength`, `symmetry`, `fieldDecay` — each a `max()`/multi-signal formula, not a 1:1 route): deliberately computed in `patchbay/screen-composites.ts`'s `ScreenParamAssembler` (pure, GL-free, unit-tested directly in `tests/unit/conductor.spec.ts`) rather than forced into the patchbay's 1-signal-in/1-target-out route model. Documented as an intentional deviation from "patchbay owns all routing logic," not an oversight — see that file's header comment.
-- **New continuous/beat/bar bus signals** (§3.1): `bandTilt`, `beatPulse`, `downbeatPulse`, `dropImpulse`, `onsetImpulse`, `familiarity` — `dropImpulse` in particular replaces the old one-frame-true `DropTrigger` push for routing purposes (ScreenOutput edge-detects a rise in it to reconstruct the same one-shot spring-impulse/symmetry-hold behavior, staying pull-model/R2-compliant); the discrete `DropTrigger` still exists as Conductor-internal state per the spec's explicit allowance.
-- **Groove reactivity** (§4.1, step 3): bands/`bandTilt` bias the memory field's curl-noise drift axis (`MemoryFieldParams.flowDirection`, new optional field, no shader/GLSL changes needed — just a JS-side drift-ratio bias), `beatPulse` adds a modest throb into `flowStrength`, `barPhase` adds a subtle sinusoidal "breathing" into `fieldDecay`. Detector-disable acceptance test: new `MainToWorklet` message `debugSetDetectorsEnabled` (main thread → live AudioWorklet, a channel that didn't exist before — `AudioEngine.setDetectorsEnabled()`), gates `feature-worklet.ts`'s build/drop/break detector calls. **Not automated** — verify by hand via `npm run dev` + the debug toggle; screen should stay visibly reactive with detectors off.
-- **`familiarity`** (§4.2): time-bucketed (not fixed-count — frame rate varies under adaptive quality) buffer of `[sub,low,mid,presence,air,centroid,flatness]` vectors, cosine similarity against ~16-32 recent samples. Routed into `symmetry`'s composite as a gentle organization gain, distinct from the drop's snap.
-- **Drop detector fix** (§4b(2), `drop-detector.ts`): replaced the fast-minus-slow-energy-jump primitive (conflated "louder" with "sparse→full", false-positived on pulsing reverb-tail sparse intros, missed drops after already-loud builds) with a conjunction of **fullness** (multi-second sustained energy, crest-factor-penalized), **onset-density jump**, and **novelty contrast** (own `src/audio/worklet/brain/novelty.ts` — `cosineSimilarity`/`NoveltyRingBuffer`, the same algorithm `familiarity.ts` reuses, but a *separate instance* since they run on different threads/cadences: audio worklet hop-rate vs. render-frame-rate). Removed the never-resetting cumulative `grooveSec` leak entirely. Confirmation/refractory/startup-grace/beat-snap-lookahead mechanics unchanged. `tests/unit/drop-detector.spec.ts` rewritten for the new primitive (5 tests, same behavioral intents as before — see file for the exact synthetic feature-vector fixtures; tuning these constants (`FULLNESS_THRESHOLD`, `ONSET_JUMP_MIN`, `NOVELTY_WINDOW_SEC`=4 (short, on purpose — independent of familiarity's own ~12s window), `NOVELTY_HOLD_SEC`) against **real audio** hasn't happened yet, only synthetic fixtures — flag as the next thing to sanity-check against real tracks).
-- **Sidecar-primary drop gating** (§4b(1), partial): the "true offline whole-track segmentation" half of this (§4b(1)'s "segment across the entire track" ambition) was **not** built — `scripts/structure.ts` still replays the (now-fixed) causal `DropDetector` hop-by-hop offline rather than doing genuine look-ahead segmentation; that's real remaining work if the fixed causal primitive isn't good enough replayed offline. What *was* wired: `src/index.ts` now calls `engine.setDetectorsEnabled(false)` whenever a sidecar loads (reusing the same toggle §4.1 needed) and `true` on `trackchange`'s clear — since `StructureSource.fuse()` already discards live build/drop/break detector output wholesale whenever a sidecar is active, this stops that output from being computed and thrown away every hop, and removes the live drop detector's false-positive/miss risk for own tracks entirely (sidecar timeline is authoritative).
-- **Patchbay test coverage** (§9 step 6): `tests/unit/patchbay.spec.ts` — curves, gain/offset/invert, sum-then-clamp multi-route combine, passThrough, and the §5.3 timescale-tag rejection path validated against `servo-targets.ts`'s declarations (screen accepts every tag, so rejection can't be exercised against it — this is the concrete proof the interface generalizes to a second, physically-constrained output without building one).
-- **Explicitly not built** (§8, out of scope): no `ServoOutput` runtime code, no serial/GPIO transport, no patchbay editor UI, no device manager beyond the literal `const outputs: VizOutput[] = [screenOutput]` array R3 asks for, no `full-physical`/`calm`/`idle` patchbay config variants (only `screen-only` exists).
+- **New continuous/beat/bar bus signals**: `bandTilt`, `beatPulse`, `downbeatPulse`, `dropImpulse`, `onsetImpulse`, `familiarity` — `dropImpulse` in particular replaces the old one-frame-true `DropTrigger` push for routing purposes (ScreenOutput edge-detects a rise in it to reconstruct the same one-shot spring-impulse/symmetry-hold behavior, staying pull-model/R2-compliant); the discrete `DropTrigger` still exists as Conductor-internal state per the spec's explicit allowance.
+- **Groove reactivity** (step 3): bands/`bandTilt` bias the memory field's curl-noise drift axis (`MemoryFieldParams.flowDirection`, new optional field, no shader/GLSL changes needed — just a JS-side drift-ratio bias), `beatPulse` adds a modest throb into `flowStrength`, `barPhase` adds a subtle sinusoidal "breathing" into `fieldDecay`. Detector-disable acceptance test: new `MainToWorklet` message `debugSetDetectorsEnabled` (main thread → live AudioWorklet, a channel that didn't exist before — `AudioEngine.setDetectorsEnabled()`), gates `feature-worklet.ts`'s build/drop/break detector calls. **Not automated** — verify by hand via `npm run dev` + the debug toggle; screen should stay visibly reactive with detectors off.
+- **`familiarity`**: time-bucketed (not fixed-count — frame rate varies under adaptive quality) buffer of `[sub,low,mid,presence,air,centroid,flatness]` vectors, cosine similarity against ~16-32 recent samples. Routed into `symmetry`'s composite as a gentle organization gain, distinct from the drop's snap.
+- **Drop detector fix** (`drop-detector.ts`): replaced the fast-minus-slow-energy-jump primitive (conflated "louder" with "sparse→full", false-positived on pulsing reverb-tail sparse intros, missed drops after already-loud builds) with a conjunction of **fullness** (multi-second sustained energy, crest-factor-penalized), **onset-density jump**, and **novelty contrast** (own `src/audio/worklet/brain/novelty.ts` — `cosineSimilarity`/`NoveltyRingBuffer`, the same algorithm `familiarity.ts` reuses, but a *separate instance* since they run on different threads/cadences: audio worklet hop-rate vs. render-frame-rate). Removed the never-resetting cumulative `grooveSec` leak entirely. Confirmation/refractory/startup-grace/beat-snap-lookahead mechanics unchanged. `tests/unit/drop-detector.spec.ts` rewritten for the new primitive (5 tests, same behavioral intents as before — see file for the exact synthetic feature-vector fixtures; tuning these constants (`FULLNESS_THRESHOLD`, `ONSET_JUMP_MIN`, `NOVELTY_WINDOW_SEC`=4 (short, on purpose — independent of familiarity's own ~12s window), `NOVELTY_HOLD_SEC`) against **real audio** hasn't happened yet, only synthetic fixtures — flag as the next thing to sanity-check against real tracks).
+- **Sidecar-primary drop gating** (partial): the "true offline whole-track segmentation" half of this was **not** built — `scripts/structure.ts` still replays the (now-fixed) causal `DropDetector` hop-by-hop offline rather than doing genuine look-ahead segmentation; that's real remaining work if the fixed causal primitive isn't good enough replayed offline. What *was* wired: `src/index.ts` now calls `engine.setDetectorsEnabled(false)` whenever a sidecar loads (reusing the same toggle groove-reactivity needed) and `true` on `trackchange`'s clear — since `StructureSource.fuse()` already discards live build/drop/break detector output wholesale whenever a sidecar is active, this stops that output from being computed and thrown away every hop, and removes the live drop detector's false-positive/miss risk for own tracks entirely (sidecar timeline is authoritative).
+- **Patchbay test coverage**: `tests/unit/patchbay.spec.ts` — curves, gain/offset/invert, sum-then-clamp multi-route combine, passThrough, and the timescale-tag rejection path validated against `servo-targets.ts`'s declarations (screen accepts every tag, so rejection can't be exercised against it — this is the concrete proof the interface generalizes to a second, physically-constrained output without building one).
+- **Explicitly not built**: no `ServoOutput` runtime code, no serial/GPIO transport, no patchbay editor UI, no device manager beyond the literal `const outputs: VizOutput[] = [screenOutput]` array, no `full-physical`/`calm`/`idle` patchbay config variants (only `screen-only` exists).
 - **Not covered by a test**: the sidecar→`setDetectorsEnabled(false)` wiring itself lives in `src/index.ts`, which is DOM/Worker-dependent and outside this repo's existing (Node-environment, DOM-free) vitest conventions — no test harness for `index.ts` exists at all, before or after this session. Verify by hand if this specific wiring is ever suspected of a regression.
 
 ## Fold seam / Julia zoom follow-up (this session, after the signal-bus refactor above)
@@ -28,7 +601,7 @@ User feedback on the live render after the refactor, addressed in three iteratio
 - **Kaleidoscope fold seam** (`memory-field.frag.glsl`): reported as a bad-looking horizontal line through the center plus a ~30° wedge that never "smeared." Root cause: the textbook `abs(mod(theta,wedge)-wedge/2)` fold is a 2-to-1 map — exactly half of every wedge sits in the canonical half and maps to itself (`folded(theta) == theta`) *regardless of `uMirrorStrength`*, so that whole half never organizes while its mirrored twin does. First attempt (smoothing the triangle wave into a cosine tent + a quarter-wedge phase offset) only softened the derivative kink; it didn't touch this deeper asymmetry, and the user saw the seam persist (especially on the left, where the wide-aspect canvas stretches that ray across most of the screen). **Actual fix**: sample `uPrev` twice — once raw, once fully folded — and cross-fade the two *colors* by `uMirrorStrength`, uniformly across the whole screen, instead of blending the angle before a single sample. No privileged always-identity region, no seam from the blend itself, and every wedge keeps a real share of its own history even at high symmetry. **Not yet verified in a browser** — reasoned through and typechecked/tested (no GL test coverage exists), but this file has already needed two follow-up passes based on live feedback, so don't assume the third is necessarily right either.
 - **Julia zoom rate** (`JuliaScene.ts`): reported as imperceptible — "just changing colors in the center." First attempt 3x'd `ZOOM_RATE_BASE` (0.018→0.054) and *loosened* `ZOOM_SEEK_MIN_FACTOR` (0.6→0.75); that made the zoom visible but broke the balance between how fast the view narrows and how much real wall-clock time `updateNavigation` gets to steer pan toward genuine boundary detail at its own unchanged speed (`NAV_PAN_SPEED`) — reported back as the dive drifting past/outside the fractal's detail, exactly the "zoom outracing navigation" failure `ZOOM_SEEK_MIN_FACTOR` exists to prevent. **Landed at**: 2x instead of 3x (`ZOOM_RATE_BASE` = 0.036, ~6.4min idle dive vs. the original ~13min) and `ZOOM_SEEK_MIN_FACTOR` restored to its original 0.6. `ZOOM_RATE_WINDUP_GAIN`/`ZOOM_RATE_ENERGY_GAIN` scaled by the same 2x to keep their relative contribution unchanged. This also roughly doubles the `ZOOM_MIN` reset frequency vs. the original estimate below (was ~13-22min idle, now ~6.5-11min idle) — still infrequent, not disruptive. (An independent review of this session's commits caught the comments in `JuliaScene.ts` itself understating these dive-duration figures by ~30% — `ln(ZOOM_START_MAX/ZOOM_MIN)/rate` is the actual formula, fixed in-code; the "13-22min"/"6.5-11min" figures here and below were already right.)
 - **"Not enough variety, just looks psychedelic"** — flagged by the user as a real, unresolved complaint, explicitly *not* something to keep guessing at with more constant tweaks. The color cross-fade above should help some (real per-wedge history now survives even under high symmetry, instead of everything-but-one-wedge becoming a pure copy of its neighbor), but whether that's enough, or whether the actual issue is palette/hue range, the Julia `c`-parameter's motion (dives looking similar to each other), or the symmetry effect being overused generally, is an open design question — ask before further tuning here rather than assuming which one it is.
-- **Julia dive "missing the fractal completely, going into mostly void"** — reported again after the zoom-rate walk-back above, so the zoom-vs-navigation balance wasn't the whole story. Root cause found: `c` (`thetaSweep` via `cardioidPoint`) drifts at a fixed **real-time** rate (`THETA_SPEED_BASE` etc.), completely independent of the current zoom depth — "θ only ever advances, there is no reset" is deliberate (SINTEZA_VIZ.md's "never repeats" guarantee) but means over one ~6.4min dive `c` can traverse ~3 radians of the cardioid boundary, a huge parameter-space move. At normal zoom that's a gentle morph; deep in a dive (zoom shrunk many orders of magnitude), the visible field is so narrow that this same absolute drift relocates or destroys the fine structure navigation is aimed at, faster than local re-probing (`updateNavigation`'s periodic 8-direction check) can recover from — the view ends up staring at now-unrelated/empty structure. Fixed by scaling both `thetaSweep`'s and `radialPhase`'s per-frame advance by `max(THETA_ZOOM_FLOOR=0.03, min(1, zoom))` — full speed at normal/wide zoom, nearly frozen once genuinely deep, back to full speed the instant a new dive resets zoom near 1-2. **Not yet verified in a browser** — same caveat as the fold/zoom items above.
+- **Julia dive "missing the fractal completely, going into mostly void"** — reported again after the zoom-rate walk-back above, so the zoom-vs-navigation balance wasn't the whole story. Root cause found: `c` (`thetaSweep` via `cardioidPoint`) drifts at a fixed **real-time** rate (`THETA_SPEED_BASE` etc.), completely independent of the current zoom depth — "θ only ever advances, there is no reset" is deliberate (the "never repeats" guarantee) but means over one ~6.4min dive `c` can traverse ~3 radians of the cardioid boundary, a huge parameter-space move. At normal zoom that's a gentle morph; deep in a dive (zoom shrunk many orders of magnitude), the visible field is so narrow that this same absolute drift relocates or destroys the fine structure navigation is aimed at, faster than local re-probing (`updateNavigation`'s periodic 8-direction check) can recover from — the view ends up staring at now-unrelated/empty structure. Fixed by scaling both `thetaSweep`'s and `radialPhase`'s per-frame advance by `max(THETA_ZOOM_FLOOR=0.03, min(1, zoom))` — full speed at normal/wide zoom, nearly frozen once genuinely deep, back to full speed the instant a new dive resets zoom near 1-2. **Not yet verified in a browser** — same caveat as the fold/zoom items above.
 
 ## Patchbay/patch-graph editor tool + a real bug-fixing pass (this session, later)
 
@@ -61,10 +634,10 @@ The site embeds SoundCloud via iframe — cross-origin, no AnalyserNode reachabl
 
 ## Known/accepted limitations (don't "fix" these without reason to)
 
-- The beam never shows a real waveform in position-only mode — always the idle Lissajous figure. Sidecar section detection is currently sparse for most tracks (e.g., SIGSEGV: 2 sections across ~6 minutes) — `buildProgress`/`tension` default to 0 for a large majority of most tracks' runtime. `energy` (see below) now fills most of that gap for the continuous/ambient motion; buildProgress/tension are still what drives the big, rare, structural reactions (drops, builds) specifically.
+- The beam never shows a real waveform in position-only mode — always the idle Lissajous figure. Sidecar section detection is currently sparse for most tracks (e.g., SIGSEGV: 2 sections across ~6 minutes) — `buildProgress`/`tension` default to 0 for a large majority of most tracks' runtime. `energy` (see below) now fills most of that gap for the continuous/ambient motion; buildProgress/tension are still what drives the big, rare, structural reactions (drops, builds) specifically. **The new §4 signals (`noveltyLocal`/`noveltySection`/`fullness`/`onsetDensity`/chroma) are the real, live-capable fix for this same gap going forward** — they're alive every frame, not section-gated.
 - `ZOOM_MIN` (JuliaScene) is deliberately capped — going deeper needs actual perturbation-orbit rebasing (not implemented), and past attempts at a lower floor introduced visible blocky artifacts. Don't lower it without implementing rebasing.
 - The Julia scene's perpetual zoom dive periodically resets when it hits `ZOOM_MIN` (a designed, not-a-bug beat, now with a slower/smoother 1.6s reveal — see below). Cadence is now somewhat shorter than the original idle-only ~13-22min estimate since `ZOOM_RATE_ENERGY_GAIN` also feeds it, but was kept conservative specifically to avoid pushing this too far — if it's ever reported as "too frequent" again, check real `energy`/`windup` values before assuming the rate math is wrong.
-- Onset particles were removed (this session, user's explicit call after being asked to choose between toning down / repositioning / removing). Don't re-add a similar effect without addressing *why* it was disliked: it wasn't "a transient/granular layer is bad", it was specifically that particles spawned in a way that visually read as erupting from the fractal shape's own position. See `SINTEZA_VIZ.md` §4's note.
+- Onset particles were removed (this session, user's explicit call after being asked to choose between toning down / repositioning / removing). Don't re-add a similar effect without addressing *why* it was disliked: it wasn't "a transient/granular layer is bad", it was specifically that particles spawned in a way that visually read as erupting from the fractal shape's own position.
 
 ## Fixes landed this session
 
@@ -89,27 +662,27 @@ User feedback after the fixes above: drop detection *still* never fires (`dropIm
 - **Palette is now genuinely routable** — checked, and there was previously no way to control/automate it at all: `hueShift`/`paletteMix` were hardcoded formulas inside `ScreenParamAssembler`, never a bus signal or a target. Moved hue auto-drift onto the bus as `hueDrift` (computed in Conductor.ts), added `screen.hueShift`/`screen.paletteMix` targets, and the default `screen-only.ts` config now reproduces the old formulas as real routes (`hueDrift` + `centroid`\*0.1 summed into `screen.hueShift` — the patchbay's existing sum-then-clamp combine mode, no new mechanism needed; `buildWindup` → `screen.paletteMix` passthrough). New conductor.spec.ts tests cover both (neither had any test before, hardcoded or otherwise).
 - **Built the real route table UI** (`tools/patchbay-editor/src/RouteTable.tsx`) replacing the single hardcoded energy-gain slider — every non-passthrough route in the live screen config is now editable in place (from/to/curve/gain/offset/invert), with add/remove and live inline validation. This is what makes the palette routing above actually *usable* right now, not just wired at the data layer.
 - **Finished in a follow-up pass, same session**: the physical patch-graph builder UI (`GraphEditor.tsx` — structured, every node kind's fields inline, `graph-draft.ts` is the seam that keeps a future node-graph canvas additive rather than a rewrite), fixture instance management (`FixtureManager.tsx`), simulated fixture visuals (`FixtureVisuals.tsx` — dimmer glow/RGB swatch/servo needle/mover crosshair), save-to-file (`serialize-config.ts` + a small Vite dev-middleware in `vite.patchbay-editor.config.ts`, restricted to one directory, filename-validated, live-verified including two rejected path-traversal attempts), and a visual-polish pass (real CSS classes replacing scattered inline styles — see `styles.css`). The patchbay editor's original task list is now fully built.
-- **Still not done, deliberately** — the "follow salient/singled-out elements" responsiveness idea was explicitly flagged back to the user as a hard, real DSP problem needing its own design conversation, not something to build blind.
+- **Still not done, deliberately** — the "follow salient/singled-out elements" responsiveness idea was explicitly flagged back to the user as a hard, real DSP problem needing its own design conversation, not something to build blind. **This is what §4 above is the actual answer to.**
 - **Patchbay editor layout overhaul** (after user feedback: "clunky, difficult (ugly, bad UX, and barely legible, need a fullscreen option or move it below the demo or something)"): the original layout was a fixed 520px sidebar of tiny (11-12px) panels squeezed next to the canvas regardless of window size — that was the actual problem, not colors. Replaced with: canvas as a top preview strip (`min(46vh, 520px)` tall) with a fullscreen toggle button (Escape also exits) that switches it to `position:fixed; inset:0` without recreating the canvas DOM node — important because `transferControlToOffscreen()` is one-shot, so the existing per-canvas `RuntimeBridge` cache in `App.tsx` had to keep working across the fullscreen state change, not just across Fast Refresh; editor panels moved into a full-width responsive grid below (`repeat(auto-fit, minmax(360px, 1fr))`, the patch-graph panel spans full width via `.panel-section-wide`) instead of one narrow vertical stack. Base font bumped 13px→14px, most panel-internal text 11-12px→12-13px. Verified: typecheck clean, dev server serves/transforms all changed modules with no console errors, full test suite (107 tests) passes. Not yet verified in an actual browser click-through — no browser access in this session.
 - **Fixed a real bug from that overhaul**: the fullscreen toggle broke the sim entirely (stayed black forever), and the canvas preview also read as too squeezed. Root cause of the black-screen bug — the JSX rendered `canvasBlock` (the `<canvas>` element) at two DIFFERENT tree positions depending on `canvasFullscreen` (`{!canvasFullscreen && canvasBlock}` inside `.app-body`, `{canvasFullscreen && canvasBlock}` after it). React sees that as a different element identity at each position, so toggling fullscreen unmounted the old canvas and mounted a brand-new one — fatal here because `transferControlToOffscreen()` is one-shot per canvas and the effect that calls it has no unmount cleanup, so the old worker/offscreen-canvas pairing was orphaned mid-render while a new bridge tried to start fresh, leaving it black. Fixed by rendering the canvas block exactly once, at a single fixed JSX position, and doing fullscreen purely via CSS class toggle (`.canvas-block-fullscreen` → `position:fixed;inset:0`) — same DOM node the whole time, no remount. Also bumped the default preview height `min(46vh,520px)` → `min(72vh,900px)` per the "squeezed" complaint. Typecheck + full test suite (107) verified again after this fix; still no real browser click-through.
 - **Panels below the sim are now reorderable and resizable** (user's next ask after the layout overhaul: "the individual windows should take up the space better and fill it up better, many things should be reorderable/resizable"). Switched the panel area from a uniform CSS grid to `display:flex; flex-wrap:wrap` (`.panel-flow`) so panels pack against their own natural sizes instead of forcing every panel into the same column width — a route table and a 3-line debug readout no longer waste the same footprint. Each panel got: (1) a real per-panel resize handle via the browser's native `resize: both` (deliberately not a JS resize library — free, familiar, zero new dependency for a dev-only tool); (2) drag-to-reorder via native HTML5 drag-and-drop (`Panel.tsx`'s draggable header, no library) — order is tracked as a plain id array in `use-panel-order.ts` and persisted to `localStorage` so a customized layout survives a reload, merging in any new panel ids that get added later rather than resetting. `App.tsx`'s 8 panels are now data (`{id, title, hint, wide, width, height, content}`) mapped over the persisted order, instead of hardcoded JSX `<section>`s in a fixed sequence — same content as before, just re-arrangeable. Verified: typecheck clean, dev server transforms the two new modules with no errors, full suite (107) passes. Still not verified in a real browser — in particular the actual drag feel and whether native `resize` interacts oddly with the `RouteTable`'s internal horizontal scroll container need an eyes-on check.
 - **Seeded all 4 fixture types by default**, not just the dimmer: `App.tsx`'s initial `fixtureDoc` now adds "Demo Dimmer" / "Demo RGB" / "Demo Servo" / "Demo Laser" (`mover` type — there's no separate "laser" fixture type, `mover`'s pan/tilt/intensity channels are what a laser/moving-light needs) up front, so opening the editor immediately shows every `FixtureVisuals` widget kind and gives the graph editor's target dropdown a channel from each type to route to, without the user needing to know to add them manually first.
 - **Caught immediately by the user: the new demo fixtures "were not wired up in a working way."** Correct — the original `seedNodes` only ever wired the FIRST target in the catalog (energy→threshold→target), so the 7 other new demo channels sat at their default value with nothing driving them. Fixed properly, not just patched: extracted the seeding logic out of `App.tsx` into its own pure module (`tools/patchbay-editor/src/seed-graph.ts`, no React/RuntimeBridge imports, so it's cheap to unit test) and rewrote it to wire EVERY target in the catalog — the first keeps the original threshold-gated chain (still the clearest single demo of a threshold node), every other channel gets a signal picked from a rotating list of continuous-tagged signals (`energy/low/mid/presence/air/centroid/pan/familiarity` — continuous-only deliberately, since validate.ts's servo-safety warning flags a transient signal fed straight into a servo/mover with no smoothing). Also fixed a second, subtler instance of the SAME bug class the rewrite would otherwise still have: `evaluateNode`'s `target` case is a pure passthrough (nothing auto-scales a 0-1 signal into a target's real range), so a servo (range `[0,180]`) or any non-[0,1]-range target getting a raw signal would visually barely move at all even though it "has wiring" — every chain now inserts a `map` node into the target's real range when it isn't already [0,1], including the first/threshold chain (a servo landing in the "first" slot was still stuck in 0-1 space before this second fix). New tests (`tests/unit/seed-graph.spec.ts`): one builds all 4 demo fixture types and asserts `validatePatchGraph` returns zero issues and every target resolves to a finite value; the other specifically catches the range-mapping regression (a lone servo target must resolve well above 1, not just 0 or 1). Full suite now 109 tests, all passing; dev-server transform check clean.
 
-## Outstanding
+## Outstanding (as of the session before the docs merge)
 
 - **The "too psychedelic/bright/illegible sometimes" fix — implemented, not yet verified in a browser.** User confirmed both complaints were real. Mechanism: the composite pass already Reinhard-tonemaps (`c/(1+c)`), so nothing literally clips to white, but once the memory field's accumulated brightness gets large, Reinhard's compression crushes local contrast so everything reads as a washed-out bright mush — and `symmetry` (kaleidoscope strength) and `decay` (memory-field persistence, hence brightness) both scale up off the *same* `tension`/`buildProgress`/`suspension` signals, so a build/break moment got simultaneously more mirrored and more washed-out at once, for as long as that section ran. Landed: (1) `uCurGain` in `memory-field.frag.glsl`/`memory-field-pass.ts` scales the fresh-frame contribution by `(1-decay)/(1-DECAY_REFERENCE)` so steady-state brightness (`cur/(1-decay)`) stays constant regardless of decay — `DECAY_REFERENCE` matches today's resting decay (`FIELD_DECAY_GROOVE`=0.86) so the look at rest is unchanged, every higher decay tier now holds the same brightness longer instead of a brighter one; (2) `SYMMETRY_AMBIENT_CEILING`=0.72 in `screen-composites.ts` caps ambient (tension/build/flatness/familiarity-driven) symmetry below full mirror — the drop's brief snap-to-1 hold is untouched, since that's a deliberate earned punch, not the thing reported as overused. Did NOT lower `FIELD_DECAY_BREAK_MAX` as a separate backstop — (1) already fully decouples brightness from decay mathematically, so that would only be a persistence-*duration* tuning choice now, not a brightness fix, and wasn't asked for.
 - **Patchbay/patch-graph editor tool is now feature-complete** including a real visual node-graph canvas (see "Visual node-graph canvas + 24/7 reliability audit" below) — the old "vertical slice only" note is stale.
-- Needs a real-browser check still, in priority order: (1) the still-unverified-by-eye items from earlier in this session (the fold cross-fade, zoom-rate change) — GL/shader behavior has zero automated coverage in this repo, though several rounds of real bug reports since then didn't surface anything wrong with these two specifically; (2) the detector-disable acceptance test (§4.1 of `SINTEZA_SIGNAL_BUS.md`) and the drop-detector constants (`FULLNESS_THRESHOLD`/`ONSET_JUMP_MIN`/`NOVELTY_WINDOW_SEC`/`NOVELTY_HOLD_SEC`, now also the soft-drop path) — still only checked against synthetic fixtures + this session's live spot-testing via the patchbay editor, never a systematic pass against multiple real tracks.
+- Needs a real-browser check still, in priority order: (1) the still-unverified-by-eye items from earlier in this session (the fold cross-fade, zoom-rate change) — GL/shader behavior has zero automated coverage in this repo, though several rounds of real bug reports since then didn't surface anything wrong with these two specifically; (2) the detector-disable acceptance test and the drop-detector constants (`FULLNESS_THRESHOLD`/`ONSET_JUMP_MIN`/`NOVELTY_WINDOW_SEC`/`NOVELTY_HOLD_SEC`, now also the soft-drop path) — still only checked against synthetic fixtures + this session's live spot-testing via the patchbay editor, never a systematic pass against multiple real tracks.
 - `tension`/`buildProgress`/`suspension`'s confusing naming (see above) — left alone, revisit if it comes up again.
 - Position-only sync is real end-to-end for all 5 live tracks, flash pacing and resize-triggered stutter/reset are fixed, energy actually drives the visual, onset particles are gone per user request — none of that has regressed across this session's changes (verified by the full test suite passing throughout, and no reports pointing at any of it).
-- Still real remaining work, not urgent: `scripts/structure.ts`'s offline sidecar path still replays the causal drop detector hop-by-hop rather than true look-ahead segmentation (§4b(1)) — only matters if the fixed causal primitive (including tonight's soft-drop path) proves insufficient replayed offline. Also still worth a real mobile-device check of the resize-debounce fix and real SoundCloud playback generally — both were only reasoned/simulated, never literally exercised (sandboxed sessions can't reach `w.soundcloud.com` or trigger a real mobile address-bar collapse — see below).
+- Still real remaining work, not urgent: `scripts/structure.ts`'s offline sidecar path still replays the causal drop detector hop-by-hop rather than true look-ahead segmentation — only matters if the fixed causal primitive (including tonight's soft-drop path) proves insufficient replayed offline. Also still worth a real mobile-device check of the resize-debounce fix and real SoundCloud playback generally — both were only reasoned/simulated, never literally exercised (sandboxed sessions can't reach `w.soundcloud.com` or trigger a real mobile address-bar collapse).
 
 ## Visual node-graph canvas + 24/7 reliability audit (this session)
 
 User asked for a "beautiful and intuitive graph based UI for the patchbay" and for the production visualizer to be crash-proof for unattended 24/7 operation. Scoped via explicit questions first: the graph UI meant a real drag/wire node canvas (not more form polish), and the reliability ask was about the production renderer (the site-wide background), not the dev editor tool.
 
-**Visual node-graph canvas** (`tools/patchbay-editor/src/PatchGraphCanvas.tsx`, replaces the old form-only `GraphEditor.tsx`, which is deleted): drag a node's header to reposition it, drag from a node's output circle to another node's input circle to wire them, click a filled input circle to disconnect (also picks the wire back up for immediate rewiring — same gesture as a fresh connection, just pre-detached), click a node to select it and edit its typed params in a side inspector (`node-fields.tsx`'s `NodeFields`, extracted out of the old `GraphEditor.tsx` so both a future alternate view and this canvas can share it without duplication), Delete/Backspace removes the selected node (guarded against firing while a form field has focus — Backspace while editing a number must edit the number). No pan/zoom yet — the canvas is a large fixed-coordinate-space div inside a scrolling container (plain addition for every position calculation, no transform-matrix math), which trades "scroll to reach far-apart nodes" for real implementation simplicity; add zoom later if graphs outgrow this — `graph-draft.ts`'s `x`/`y` fields don't need to change for that. `layout.ts`'s `computeAutoLayout`/`withAutoLayout` seed positions (topological-depth columns, left-to-right following actual evaluation order) for any node that doesn't have one yet — freshly seeded nodes, a loaded file, or a just-added node — without disturbing nodes the user already dragged. Verified: typecheck clean, full suite (109 tests) still passes, dev server transforms all new/changed modules with no errors (checked via direct HTTP fetch of each module's Vite-transformed output, grepped for real thrown errors vs. React's compiler-inserted exhaustive-switch guards — no real errors). **Not verified in an actual browser** — no browser access this session, so the drag/wire feel itself is unconfirmed, same caveat as several earlier layout passes in this file.
+**Visual node-graph canvas** (`tools/patchbay-editor/src/PatchGraphCanvas.tsx`, replaces the old form-only `GraphEditor.tsx`, which is deleted): drag a node's header to reposition it, drag from a node's output circle to another node's input circle to wire them, click a filled input circle to disconnect (also picks the wire back up for immediate rewiring — same gesture as a fresh connection, just pre-detached), click a node to select it and edit its typed params in a side inspector (`node-fields.tsx`'s `NodeFields`, extracted out of the old `GraphEditor.tsx` so both a future alternate view and this canvas can share it without duplication), Delete/Backspace removes the selected node (guarded against firing while a form field has focus — Backspace while editing a number must edit the number). No pan/zoom yet — the canvas is a large fixed-coordinate-space div inside a scrolling container (plain addition for every position calculation, no transform-matrix math), which trades "scroll to reach far-apart nodes" for real implementation simplicity; add zoom later if graphs outgrow this — `graph-draft.ts`'s `x`/`y` fields don't need to change for that. `layout.ts`'s `computeAutoLayout`/`withAutoLayout` seed positions (topological-depth columns, left-to-right following actual evaluation order) for any node that doesn't have one yet — freshly seeded nodes, a loaded file, or a just-added node — without disturbing nodes the user already dragged. Verified: typecheck clean, full suite (109 tests) still passes, dev server transforms all new/changed modules with no errors (checked via direct HTTP fetch of each module's Vite-transformed output, grepped for real thrown errors vs. React's compiler-inserted exhaustive-switch guards — no real errors). **Not verified in an actual browser** — no browser access this session, so the drag/wire feel itself is unconfirmed, same caveat as several earlier layout passes.
 
 **24/7 reliability audit of the production renderer** (not the editor tool) found and fixed three real gaps, all confirmed by reading the actual code paths rather than guessing:
 
@@ -123,16 +696,16 @@ Verified: typecheck clean, full suite (109 tests, unaffected — `index.ts` has 
 
 ## Unify screen + physical patch graphs (this session, after the canvas above)
 
-User's ask, scoped via a planning pass first (since "the screen is going to be used as a projector too... total control, shared behavior for screen and outside stuff, driven by same signal" plus "elevate to production level" touches the live 24/7 render path, not just the dev tool): replace the screen's flat `Patchbay`/`Route` engine (SINTEZA_SIGNAL_BUS.md §5) with the same `PatchGraph` node-graph engine physical fixtures already use, so one authored graph can drive both — plus give nodes real renameable names instead of `n1, n2, ...`. Full details, including the exact engineering reasoning and what was deliberately NOT touched, are in `SINTEZA_SIGNAL_BUS.md`'s new "§6.4 v5 addendum" section — read that first if resuming this. Summary here:
+User's ask, scoped via a planning pass first (since "the screen is going to be used as a projector too... total control, shared behavior for screen and outside stuff, driven by same signal" plus "elevate to production level" touches the live 24/7 render path, not just the dev tool): replace the screen's flat `Patchbay`/`Route` engine with the same `PatchGraph` node-graph engine physical fixtures already use, so one authored graph can drive both — plus give nodes real renameable names instead of `n1, n2, ...`. Summary:
 
 - **Safety net built before touching production**: `migrateRouteConfigToGraph()` (`patchgraph/migrate-route-config.ts`) converts any `Route[]`-based `PatchbayConfig` into an equivalent `PatchGraph`, and `tests/unit/migrate-route-config.spec.ts` proves it numerically matches `Patchbay.resolve()` across 200 random synthetic bus states/dt values plus dedicated edge-case tests (gain+offset, invert, invert+gain/offset, non-linear curve, multi-route summing, passThrough separation, unknown-signal rejection) — this is what made swapping the live engine defensible without a browser to eyeball the result against.
 - **Production swap**: `render-worker.ts` now runs `PatchGraphEvaluator` against `configs/screen-graph.ts` (the migrated default graph) instead of `Patchbay` against `screen-only.ts`. `resolve-screen-targets.ts` is the direct successor to `Patchbay.resolve()`'s contract (default-fills unrouted targets, copies `idle`/`scope` straight from the bus since those can't be graph nodes at all — scalar-only node type). The hot-swap message is now `debugSetScreenGraph` (was `debugSetPatchbayConfig`), same reject-bad-edit-keep-previous behavior, just on the new engine's construction-time validation.
-- **A real, independent bug found and fixed along the way**: `PatchGraphEvaluator`'s `target` node case never clamped to the target's declared range at all (unlike `Patchbay.resolve()`, which always did) — a genuine §5.3-adjacent safety gap affecting fixture targets too, not something this migration introduced. Fixed in `PatchGraphEvaluator.evaluate()`.
+- **A real, independent bug found and fixed along the way**: `PatchGraphEvaluator`'s `target` node case never clamped to the target's declared range at all (unlike `Patchbay.resolve()`, which always did) — a genuine safety gap affecting fixture targets too, not something this migration introduced. Fixed in `PatchGraphEvaluator.evaluate()`.
 - **Deliberately NOT touched**: the three nonlinear screen composites (`flowStrength`/`symmetry`/`fieldDecay`, spring/damper + edge-triggered impulse dynamics, `patchbay/screen-composites.ts`) stay exactly as hand-written — reimplementing hand-tuned, multi-session-tuned motion math as generic graph nodes with no browser access to re-verify it was judged too risky for this pass. `Patchbay`/`Route`/`screen-only.ts` are kept in the tree (still tested) as the migration's source of truth and reference oracle, just no longer wired into the live render path.
 - **Editor tool**: one unified `DraftNode[]` graph now, seeded from both `screen-graph.ts`'s default and the fixture demo chains, validated against a merged catalog (`SCREEN_TARGETS` ∪ live fixture catalog) — a target node can point at either domain in the same canvas, which is the concrete "one signal drives both a screen effect and a servo" the user asked for. Sent to the live worker only after pruning to the screen-relevant subgraph (new `patchgraph/prune.ts`'s `pruneGraphToTargets`, cycle-safe upstream-closure trim) so the worker never has to know a fixture half exists. `RouteTable.tsx`/`patchbay/editor/patch-document.ts` (the old flat route-table UI) are **deleted**, not deprecated — the node canvas supersedes them outright, and `patch-document.ts` had zero remaining callers once `RouteTable.tsx` was gone.
 - **Node naming**: `label?: string` added to the real `PatchGraphNode` (`patchgraph/types.ts`) and the editor's `DraftNode`, separate from each node's stable wiring `id`. Canvas: double-click a node's header to rename inline; inspector has the same field; a toolbar "find a node" input with a native `<datalist>` autocompletes by label and scrolls/selects on Enter. `PatchTargetDecl.label` had to become optional (was required) so the screen's plain `TargetDecl` — which never had a display label — stays structurally assignable where a `PatchTargetDecl[]` is expected; display code falls back to `.id` when absent.
 - **Verification**: typecheck clean, full suite (112 tests — net down from before this session's earlier work because `patch-document.spec.ts` was deleted along with its now-dead subject, but up overall from the 12 new tests this pass added), `npm run build` and `npm run build:lib` (what the site actually consumes) both succeed, dev server transforms every changed/new module with no errors (checked via direct HTTP fetch + grep, same method as the canvas work earlier this session).
-- **Not done / explicitly out of scope this pass**: no real browser verification that the screen still looks the same post-migration — this is the biggest remaining risk, flagged clearly in both `SINTEZA_SIGNAL_BUS.md`'s addendum and here. The equivalence tests prove the *routing* math is identical; they can't prove a visual regression didn't sneak in through something the tests don't cover (a WebGL-side consumer of a target value behaving unexpectedly, say). **Do a real-browser side-by-side check (or at minimum `npm run patchbay` and eyeball it) before treating this migration as fully proven** — same standing caveat this file has carried for GL/layout changes across several prior sessions.
+- **Not done / explicitly out of scope this pass**: no real browser verification that the screen still looks the same post-migration — this is the biggest remaining risk. The equivalence tests prove the *routing* math is identical; they can't prove a visual regression didn't sneak in through something the tests don't cover. **Do a real-browser side-by-side check (or at minimum `npm run patchbay` and eyeball it) before treating this migration as fully proven** — same standing caveat this file has carried for GL/layout changes across several prior sessions.
 
 ## Patchbay editor UI overhaul, round 2 (this session, after the demo/edit split above)
 
@@ -146,149 +719,431 @@ User feedback on the demo/edit split from the previous pass: the patch graph is 
 - **A real layout bug caught and fixed before it shipped**: the fixed-position corner preview (screen demo PiP, edit mode) was originally still bottom-right, same corner as the new rail — since the rail scrolls and the preview is `position: fixed`, any rail content scrolled up would render *underneath* the preview, permanently obscured. Moved the preview to the *top* of the rail instead and gave `.workspace-rail` real reserved top padding (270px) for it, rather than just visually avoiding the overlap — content can never scroll under a fixed overlay if space for it is reserved in the flow.
 - Verification: typecheck clean, full suite (112 tests, none of this touches production code so the count is unchanged from the previous pass), dev server transforms every new/changed module with no errors (same HTTP-fetch-and-grep method as prior passes). **Not verified in an actual browser** — no browser access this session — same standing caveat as everything else UI-shaped in this file. The pan/zoom feel, the corner-preview reserved-space fix, and the debug drawer's animation are the highest-value things to eyeball first if picking this up.
 
-## ISF import (this session — first slice under `hysteresis-master-prompt.md`)
+## ISF import (this session — first slice under the then-separate `hysteresis-master-prompt.md`)
 
-First session working from the new `hysteresis-master-prompt.md`/`NEXT_SESSION_PROMPT.md` docs (both new, previously untracked) rather than `SINTEZA_SIGNAL_BUS.md`/`SINTEZA_VIZ.md` directly — those two describe a broader "drive anything" instrument the current signal-bus/patchgraph/canvas work is a real foundation for, not yet a superset of. Gap analysis found: the signal bus, unified patchgraph, and node canvas (all prior sessions above) satisfy master-prompt §4.3/§4.4 reasonably well; **zero** protocol work from §5's priority order (ISF, OSC, Art-Net/sACN, DMX-serial, MIDI, ILDA, WLED/E1.31) existed anywhere in the repo. Picked ISF (§5's #1 priority, §6's first unchecked backlog item).
+First session working from the new `hysteresis-master-prompt.md`/`NEXT_SESSION_PROMPT.md` docs (both new at the time, now merged into this file) rather than the (then-separate) signal-bus/viz docs directly — those two describe a broader "drive anything" instrument the current signal-bus/patchgraph/canvas work is a real foundation for, not yet a superset of. Gap analysis found: the signal bus, unified patchgraph, and node canvas (all prior sessions above) satisfy the master-prompt's pipeline-target reasonably well; **zero** protocol work from the priority order (ISF, OSC, Art-Net/sACN, DMX-serial, MIDI, ILDA, WLED/E1.31) existed anywhere in the repo. Picked ISF (priority #1, first unchecked backlog item).
 
-**Real architectural constraint found before writing code**: `SINTEZA_VIZ.md`'s own package-shape section and `scenes/registry.ts`'s own comment both state "one fixed visual identity, no scene picker in the package API" — the production site is deliberately not scene-pluggable. Master-prompt's "wire signals to anything: a built-in fractal renderer, a user-written shader" is a real identity shift from that. Rather than guess which way to resolve this, scoped ISF import to the **patchbay editor tool only** (a sandbox/authoring environment) — a real, working, end-to-end capability that doesn't touch constraint #1 (never break the live production path), while deliberately leaving "should the real site ever be scene-pluggable" as an open decision for the user, not decided unilaterally. Confirmed with the user up front that docs should live in an in-repo `docs/` folder, not a separate GitHub Wiki repo (avoids a second push target this session had no need to touch).
+**Real architectural constraint found before writing code**: the visualizer's own package-shape section and `scenes/registry.ts`'s own comment both state "one fixed visual identity, no scene picker in the package API" — the production site is deliberately not scene-pluggable. The master prompt's "wire signals to anything: a built-in fractal renderer, a user-written shader" is a real identity shift from that. Rather than guess which way to resolve this, scoped ISF import to the **patchbay editor tool only** (a sandbox/authoring environment) — a real, working, end-to-end capability that doesn't touch constraint #1 (never break the live production path), while deliberately leaving "should the real site ever be scene-pluggable" as an open decision for the user, not decided unilaterally. Confirmed with the user up front that docs should live in an in-repo `docs/` folder, not a separate GitHub Wiki repo (avoids a second push target this session had no need to touch).
 
 - **`src/isf/`** (new, framework-agnostic — no render-worker/React imports): `types.ts` (`IsfDocument`/`IsfInput` variants, `IsfParseError`/`IsfUnsupportedFeatureError`), `parse-isf.ts` (real subset parser: float/bool/long/color/point2D inputs; rejects multi-pass, `PERSISTENT` buffers, `IMPORTED` images, and `image`/`audio`/`audioFFT`/`event` inputs with a specific message naming exactly what's unsupported — not a stub, everything accepted renders for real), `translate-isf-glsl.ts` (textual translation from ISF's GLSL ES 1.00-style built-ins to this repo's GLSL ES 300/WebGL2 convention: `gl_FragColor`→a real `out vec4`, `texture2D`/`textureCube`→`texture`, `isf_FragNormCoord` injected as a local inside `main()` since GLSL forbids a non-constant global initializer referencing `gl_FragCoord`), `isf-targets.ts` (`isfInputsToTargets`/`resolvedTargetsToIsfUniforms` — the two-way bridge between a shader's declared inputs and the patch graph's scalar-only node model; color/point2D expand into r/g/b/a or x/y scalar targets, `isf.`-prefixed to avoid catalog collisions).
 - **`IsfScene`** (`src/render/worker/scenes/isf/IsfScene.ts`): implements the existing `Scene` interface (same one `JuliaScene`/`MandelbulbScene` implement — not a special-cased second render path) by compiling the translated shader against the existing `fullscreen.vert.glsl`. Deliberately does NOT read `ParamBus` for its inputs — `ParamBus` is a fixed, Julia-shaped struct (`screen-composites.ts`'s `ScreenParamAssembler`); an arbitrary shader's inputs have arbitrary names, so a new optional `Scene.setInputValues?()` hook (added to `Scene.ts`, harmless no-op for every existing scene) is what `ScreenOutput.update()` calls with typed uniform values reassembled from that frame's raw resolved targets, bypassing the Julia-specific assembler for this scene only.
 - **`ScreenOutput.setIsfScene(doc)`/`resetToDefaultScene()`** (new): hot-swaps the active scene and widens/restores `targets` (now a mutable field, was `readonly` — the `VizOutput` interface's own `readonly` only restricts the *interface* view, so this is safe) to include/exclude the loaded shader's own generated targets. Both are purely additive — production's `init()` path never calls either, so the default-scene behavior byte-for-byte matches before this session.
-- **Wire-up**: new `debugSetIsfShader`/`isfShaderResult` message pair (`shared/types.ts`, mirrors `debugSetScreenGraph`/`patchbayConfigResult`'s existing shape), handled in `render-worker.ts` via a new `rebuildScreenGraphEvaluator()` helper — tracks `currentScreenGraph` separately from the hardcoded default `screenGraph` specifically so loading/clearing a shader reconstructs the evaluator against the editor's *actual* authored graph, not silently resetting it to the default (an early draft of this had that bug — caught before shipping by re-reading render-worker.ts's existing `debugSetScreenGraph` pattern, which already tracks "keep the previous evaluator on any construction-time validation failure" as the correct behavior when a route now points at a since-removed target).
-- **Editor UI**: `IsfPanel.tsx` (load-by-file-picker or drag-and-drop, status readout, "Revert to Julia") in a new rail `SectionCard`; `App.tsx`'s `mergedCatalog`/`screenTargetIds` now include the loaded shader's targets (screen-side, so they must be included in `pruneGraphToTargets`'s screen slice, same as `SCREEN_TARGETS` itself); `runtime-bridge.ts` gets `setIsfShader()`/`onIsfResult`.
-- **Tests**: `tests/unit/parse-isf.spec.ts` (a real-shaped plasma-generator fixture end to end, every supported input type's fields, every rejection path with its specific error), `tests/unit/isf-targets.spec.ts` (target expansion for all 5 input types including the color/point2D component-expansion math, round-trip reassembly back into uniforms, missing-key fallback), `tests/unit/translate-isf-glsl.spec.ts` (string-level assertions on the GLSL transform, including the "no bare `gl_FragColor` survives, `isf_FragColor` does" regex check and the local-vs-global `isf_FragNormCoord` placement). 25 new tests, all passing; full suite now 137.
-- **Verified**: typecheck clean (all 4 tsconfigs), full suite passes, `npm run build`/`build:lib` both succeed unchanged, dev server (`npm run patchbay`) transforms every new/changed module with no errors (same HTTP-fetch-through-`/@fs/`-and-grep method prior sessions used, confirmed the correct dev-server port/root this time — `tools/patchbay-editor` is Vite's `root`, so in-tool files are `/src/*.tsx` and main-package files need `/@fs/<absolute-path>`).
-- **Not verified in a browser**: whether a real ISF file from the wild ecosystem actually loads/renders correctly end-to-end (no browser access this session — same standing caveat as every GL/UI change in this file) — the parser/translator/target-mapping logic is unit-tested against a real-shaped fixture, but GLSL compilation itself has zero automated coverage in this repo (same gap noted for every other shader in the codebase). **Test against a handful of real downloaded `.fs` files from the ISF ecosystem before trusting this beyond the fixture shapes here.**
-- **Explicitly deferred, not started**: the ISF superset (exposing `novelty`/`familiarity`/section-confidence as inputs a shader could declare it wants — master-prompt §4.5's actual novelty claim); making ISF a swappable scene on the live production site (see the architecture-constraint note above — needs an explicit user decision, not a default); Shadertoy→ISF import helper; every other §5 protocol (OSC next per priority order, then Art-Net/sACN, DMX-serial, MIDI, ILDA, WLED/E1.31) — none started.
+- **Wire-up**: new `debugSetIsfShader`/`isfShaderResult` message pair (`shared/types.ts`, mirrors `debugSetScreenGraph`/`patchbayConfigResult`'s existing shape), handled in `render-worker.ts` via a new `rebuildScreenGraphEvaluator()` helper — tracks `currentScreenGraph` separately from the hardcoded default `screenGraph` specifically so loading/clearing a shader reconstructs the evaluator against the editor's *actual* authored graph, not silently resetting it to the default.
+- **Editor UI**: `IsfPanel.tsx` (load-by-file-picker or drag-and-drop, status readout, "Revert to Julia") in a new rail `SectionCard`; `App.tsx`'s `mergedCatalog`/`screenTargetIds` now include the loaded shader's targets; `runtime-bridge.ts` gets `setIsfShader()`/`onIsfResult`.
+- **Tests**: `tests/unit/parse-isf.spec.ts`, `tests/unit/isf-targets.spec.ts`, `tests/unit/translate-isf-glsl.spec.ts`. 25 new tests, all passing; full suite now 137.
+- **Verified**: typecheck clean (all 4 tsconfigs), full suite passes, `npm run build`/`build:lib` both succeed, dev server (`npm run patchbay`) transforms every new/changed module with no errors.
+- **Not verified in a browser**: whether a real ISF file from the wild ecosystem actually loads/renders correctly end-to-end (no browser access this session) — GLSL compilation itself has zero automated coverage in this repo. **Test against a handful of real downloaded `.fs` files from the ISF ecosystem before trusting this beyond the fixture shapes here.**
+- **Explicitly deferred, not started**: the ISF superset (exposing `novelty`/`familiarity`/section-confidence as inputs a shader could declare it wants — see §4 above for the underlying signals this now needs); making ISF a swappable scene on the live production site; Shadertoy→ISF import helper; every other protocol (OSC next per priority order, then Art-Net/sACN, DMX-serial, MIDI, ILDA, WLED/E1.31) — none started.
 
 ## ISF as real public API (same session, immediate follow-up)
 
-User feedback on the slice above: wanted ISF "runnable" beyond the editor tool, and floated (explicitly "perhaps eventually," not now) converting Julia itself to run through the ISF pipeline. Confirmed scope before coding: (1) add a real, opt-in method to the shipped `VizInstance` — not just the editor's dev-only channel — so any embedding host *could* use it; (2) leave the Julia→ISF dogfood conversion for a later, dedicated session (Julia's autopilot — navigation/perturbation/vortex-search — is non-trivial JS logic layered on the shader; converting it safely isn't a bolt-on to an API-surface pass). User also explicitly authorized continuing autonomously through the rest of the master-plan roadmap step by step after this, stopping only when everything's done or the session runs out of budget — so if you're reading this mid-roadmap, that's why work kept going past one slice.
+User feedback on the slice above: wanted ISF "runnable" beyond the editor tool, and floated (explicitly "perhaps eventually," not now) converting Julia itself to run through the ISF pipeline. Confirmed scope before coding: (1) add a real, opt-in method to the shipped `VizInstance` — not just the editor's dev-only channel — so any embedding host *could* use it; (2) leave the Julia→ISF dogfood conversion for a later, dedicated session. User also explicitly authorized continuing autonomously through the rest of the master-plan roadmap step by step after this, stopping only when everything's done or the session runs out of budget — so if you're reading this mid-roadmap, that's why work kept going past one slice.
 
-- **Renamed** the render-worker message from `debugSetIsfShader` to `setIsfShader` (`shared/types.ts`, `render-worker.ts`, `runtime-bridge.ts`) — it's no longer editor-only, so the `debug` prefix (which every other dev-only message in that file still legitimately carries, e.g. `debugSetScreenGraph`) would have been actively misleading.
-- **`src/index.ts`**: new `VizInstance.loadIsfShader(source, onResult?)`/`clearIsfShader()`, plus an exported `IsfShaderResult` type. Purely additive to the "don't grow the surface" API — no existing call site (including the real IO page integration) calls either method, so nothing about current behavior changes; a host has to opt in. `onResult` is a plain callback (matching the rest of this API's fire-and-forget style, no Promises) — `pendingIsfResult` tracks at most one in-flight call, same simplification the worker's own single-active-scene model already implies.
-- **Dev harness** (`src/main.ts`, `npm run dev`): added a file input + "Clear ISF" button that calls the same real `loadIsfShader`/`clearIsfShader` methods — this is what makes the public API path actually exercisable without spinning up the full patchbay editor tool, and proves it end-to-end through `init()` exactly as a real host would call it (not through the editor's separate `RuntimeBridge`, which talks to the worker directly).
-- **Verified**: typecheck (all 4 tsconfigs) clean, full suite (137, unchanged — no test touches `index.ts`'s DOM/Worker-dependent code, same standing gap noted in prior sessions) passes, `npm run build`/`build:lib` both succeed, `dist/index.d.ts` confirmed to actually contain `loadIsfShader`/`clearIsfShader`/`IsfShaderResult` after the lib build.
-- **Not verified in a browser**: same standing caveat as the parent ISF slice — no browser access this session, so `npm run dev`'s new file input hasn't actually been clicked. Try loading a real `.fs` file through it before trusting this beyond typecheck/build.
+- **Renamed** the render-worker message from `debugSetIsfShader` to `setIsfShader` — it's no longer editor-only, so the `debug` prefix would have been actively misleading.
+- **`src/index.ts`**: new `VizInstance.loadIsfShader(source, onResult?)`/`clearIsfShader()`, plus an exported `IsfShaderResult` type. Purely additive — no existing call site calls either method, so nothing about current behavior changes; a host has to opt in.
+- **Dev harness** (`src/main.ts`, `npm run dev`): added a file input + "Clear ISF" button proving the real public API path end-to-end through `init()`, not through the editor's separate `RuntimeBridge`.
+- **Verified**: typecheck clean, full suite (137, unchanged) passes, `npm run build`/`build:lib` both succeed, `dist/index.d.ts` confirmed to actually contain `loadIsfShader`/`clearIsfShader`/`IsfShaderResult` after the lib build.
+- **Not verified in a browser**: no browser access this session, so `npm run dev`'s new file input hasn't actually been clicked.
 
-## OSC out (same session, next §5-priority slice — user authorized continuing through the roadmap autonomously)
+## OSC out (same session, next priority slice — user authorized continuing through the roadmap autonomously)
 
-Second §5 protocol, per priority order (ISF done above, OSC next). Real OSC almost always rides UDP, which browsers categorically cannot do (same gap `SINTEZA_VIZ.md`/master-prompt §3 already documents for Art-Net/DMX/ILDA) — so this is genuinely a two-half feature: a browser-side WebSocket sender (real code, ships today) plus a tiny local relay process that actually reaches UDP (a real, working, narrowly-scoped seed of §3/§8's "Hysteresis Bridge daemon" — OSC only, not DMX/Art-Net/ILDA).
+Second protocol slice, per priority order (ISF done above, OSC next). Real OSC almost always rides UDP, which browsers categorically cannot do — so this is genuinely a two-half feature: a browser-side WebSocket sender (real code, ships today) plus a tiny local relay process that actually reaches UDP (a real, working, narrowly-scoped seed of the Hysteresis Bridge daemon — OSC only).
 
-- **`src/osc/`** (new, framework-agnostic): `osc-codec.ts` — a real OSC 1.0 wire-format codec (address/type-tag/argument encoding per the actual spec, not a JSON-over-the-wire shortcut), supporting float/int/string/bool args and bundles (fixed `1n` "immediate" time tag — no scheduling use case here). `bus-to-osc.ts` — `signalBusToOscMessages()` maps every `SIGNAL_TAGS`-routable bus signal (the same set a patch-graph `signal` node can read) to one `/hysteresis/bus/<name>` float message; `scope`/`idle`/`dropTrigger` excluded, same exclusion `SIGNAL_TAGS` itself already encodes. `osc-out-bridge.ts` — `OscOutBridge`, a thin class wrapping the Worker-global `WebSocket` (confirmed available inside a dedicated Worker, not just `window`) that sends an encoded bundle per call and reports connect/disconnect/error via a status callback.
-- **Wire-up**: new `setIsfShader`-style (i.e. NOT `debug`-prefixed — this is real feature surface) message pair `setOscOut`/`oscOutStatus` (`shared/types.ts`), handled in `render-worker.ts` (throttled to 20Hz, same interval/pattern as the existing `signalBus` debug stream — sends right after `conductor.update()` computes `bus`, before adaptive-quality bookkeeping). `oscOutStatus` is NOT one-shot like `isfShaderResult` — a long-lived WebSocket connection legitimately reports state multiple times over its life (open, later drop, reconnect), so `src/index.ts` keeps a persistent `oscOutStatusCallback` rather than a fire-once one.
-- **Real public API**: `VizInstance.setOscOut(wsUrl, onStatus?)` — same opt-in/additive posture as `loadIsfShader` (no existing integration calls it, so nothing changes unless a host does).
-- **`scripts/osc-relay.ts`** (new, Node-only — added `ws`/`@types/ws` as devDependencies, used only here, never bundled into the browser/lib build): `createOscRelay({wsPort, udpHost, udpPort})` forwards each WebSocket message byte-for-byte to one UDP datagram via `dgram` — no re-encoding, since the browser side already emits complete, valid OSC packets. Exported as a real function (not just a CLI), specifically so it's unit-testable. New `npm run osc-relay` script.
-- **Tests**: `tests/unit/osc-codec.spec.ts` (round-trip every supported arg type, a padding-boundary edge case, a corrupted-type-tag rejection), `tests/unit/bus-to-osc.spec.ts` (exact SIGNAL_TAGS-count message emission, address naming, the scope/idle/dropTrigger exclusion, custom-prefix support), and — the one genuinely new verification category this session — **`tests/unit/osc-relay.spec.ts`: a real integration test**, not mocked: a real `ws` WebSocket client sends real OSC bytes to a real relay instance bound to an ephemeral port, and a real loopback UDP socket asserts the exact same bytes arrive. This is the first thing in this whole ISF/OSC arc that's actually end-to-end verified rather than "typechecks + unit-tested-in-isolation, unverified live" — worth remembering as the higher bar to reach for wherever a slice's core claim (bytes cross a real boundary) can be tested without a browser.
-- **Dev harness** (`src/main.ts`): OSC URL input + connect/disconnect buttons wired to the real `setOscOut` API, mirroring the ISF file-input pattern added earlier this session.
-- **Verified**: typecheck (all 4 tsconfigs) clean, full suite (150, up from 137 — 13 new: 7 codec + 4 bus-mapping + 1 relay-integration... actually the exact per-file count is in the test files themselves, not worth hand-counting here) passes, `npm run build`/`build:lib` both succeed (`ws`/`@types/ws` confirmed NOT pulled into `dist/render-worker.js` — only `scripts/osc-relay.ts` and its own test import them).
-- **Not verified in a browser**: the WebSocket-in-a-Worker path (`OscOutBridge`) itself — typechecks against the Worker lib's `WebSocket` global and the relay integration test proves the *relay* half works for real, but nothing has actually opened a real browser tab, clicked "OSC connect," and watched real UDP packets land in TouchDesigner/VCV Rack. That live end-to-end path (browser → relay → real external tool) is the next thing to click through if picking this up with browser access.
-- **Explicitly deferred, not started**: OSC **in** (routing an incoming OSC message into the patch graph the way a fixture/ISF target is routable — master-prompt §6 lists this alongside "out," only "out" is done); every remaining §5 protocol (Art-Net/sACN next per priority order, then DMX-serial, MIDI, ILDA, WLED/E1.31) — none started. The relay script is a real, working, narrow seed of §3/§8's Bridge daemon concept (OSC-only forwarding) — the Art-Net/sACN/DMX-serial/ILDA slices will each need their own protocol-specific extension to it (or a decision to keep them as separate small relay processes rather than one growing daemon — an open question worth raising with the user before the second protocol needs its own local process, not decided here).
+- **`src/osc/`** (new, framework-agnostic): `osc-codec.ts` — a real OSC 1.0 wire-format codec, supporting float/int/string/bool args and bundles (fixed `1n` "immediate" time tag). `bus-to-osc.ts` — `signalBusToOscMessages()` maps every `SIGNAL_TAGS`-routable bus signal to one `/hysteresis/bus/<name>` float message; `scope`/`idle`/`dropTrigger` excluded. `osc-out-bridge.ts` — `OscOutBridge`, wraps the Worker-global `WebSocket`, sends an encoded bundle per call, reports connect/disconnect/error via a status callback.
+- **Wire-up**: new (real feature, not `debug`-prefixed) message pair `setOscOut`/`oscOutStatus`, handled in `render-worker.ts` (throttled to 20Hz). `oscOutStatus` is NOT one-shot — `src/index.ts` keeps a persistent `oscOutStatusCallback` rather than a fire-once one.
+- **Real public API**: `VizInstance.setOscOut(wsUrl, onStatus?)`.
+- **`scripts/osc-relay.ts`** (new, Node-only, `ws`/`@types/ws` devDependencies): `createOscRelay({wsPort, udpHost, udpPort})` forwards each WebSocket message byte-for-byte to one UDP datagram via `dgram`. New `npm run osc-relay` script.
+- **Tests**: `tests/unit/osc-codec.spec.ts`, `tests/unit/bus-to-osc.spec.ts`, and **`tests/unit/osc-relay.spec.ts`: a real integration test** — a real `ws` WebSocket client sends real OSC bytes to a real relay instance, a real loopback UDP socket asserts the same bytes arrive. First thing in this whole arc that's actually end-to-end verified rather than typechecked+unit-tested-in-isolation-unverified-live.
+- **Dev harness**: OSC URL input + connect/disconnect buttons.
+- **Verified**: typecheck clean, full suite (150, up from 137) passes, `npm run build`/`build:lib` both succeed (`ws`/`@types/ws` confirmed NOT pulled into `dist/render-worker.js`).
+- **Not verified in a browser**: the WebSocket-in-a-Worker path itself — the relay integration test proves the *relay* half works for real, but nothing has actually opened a real browser tab and watched real UDP packets land in TouchDesigner/VCV Rack.
+- **Explicitly deferred, not started**: OSC in; every remaining protocol (Art-Net/sACN next, then DMX-serial, MIDI, ILDA, WLED/E1.31).
 
-## Art-Net / sACN out (same session, third §5-priority slice)
+## Art-Net / sACN out (same session, third priority slice)
 
-Immediately resolved the open question the OSC slice above raised ("one growing relay vs. separate processes per protocol") in favor of one generic relay: `scripts/osc-relay.ts` **renamed to `scripts/udp-relay.ts`** (a plain filesystem rename, the file was never committed yet so no git history to preserve) and generalized to carry two message shapes on the same WebSocket server — binary frames forward verbatim to the relay's fixed default UDP target (OSC's need), text frames are parsed as a `{host,port,bytes}` JSON envelope and forwarded to *that* per-message destination instead (Art-Net/sACN's need, since both address by universe — broadcast/multicast, a different target per universe — not one fixed relay target). `ws`'s `(data, isBinary)` message-event signature is what makes this dispatch free (no protocol-sniffing/guessing needed). `npm run osc-relay` renamed to `npm run udp-relay` to match.
+Immediately resolved the open question the OSC slice raised ("one growing relay vs. separate processes per protocol") in favor of one generic relay: `scripts/osc-relay.ts` **renamed to `scripts/udp-relay.ts`** and generalized to carry two message shapes on the same WebSocket server — binary frames forward verbatim to the relay's fixed default UDP target (OSC's need), text frames are parsed as a `{host,port,bytes}` JSON envelope and forwarded to *that* per-message destination instead (Art-Net/sACN's need, since both address by universe — broadcast/multicast, a different target per universe). `npm run osc-relay` renamed to `npm run udp-relay`.
 
-A real architectural finding drove scope here: **there is no production fixture patch graph anywhere in the shipped render worker.** `fixtureEvaluator.evaluate(bus, dt)` (App.tsx) has always been ephemeral browser-side React state, evaluated only for the editor's own simulated `FixtureVisuals` — `render-worker.ts`'s own `outputs: VizOutput[]` array has literally one entry (`screenOutput`) and always has, per its own long-standing comment anticipating "adding a second output... needs its own PatchGraphEvaluator + resolver, same as it would have needed its own Patchbay before." So unlike ISF/OSC (which got a real, opt-in `VizInstance` public API method because a real thing exists in production to hook it to), Art-Net/sACN output has nothing real to feed it in production yet — building a `VizInstance.setDmxOut()` today would be API surface with no real backing. Scoped this slice to the **patchbay editor tool**, same proportional-scope precedent the ISF slice set, and flagged the production `DmxOutput` VizOutput as real, separate, larger future work (needs its own default fixture-graph config, universe/address declaration story, and a decision on whether physical output should even be exposed through the public package API at all vs. staying tool-only) — not decided here.
+A real architectural finding drove scope here: **there is no production fixture patch graph anywhere in the shipped render worker** — `fixtureEvaluator.evaluate(bus, dt)` (App.tsx) had always been ephemeral browser-side React state, evaluated only for the editor's own simulated `FixtureVisuals`. So unlike ISF/OSC, Art-Net/sACN output had nothing real to feed it in production yet. Scoped this slice to the **patchbay editor tool**, same proportional-scope precedent the ISF slice set, and flagged the production `DmxOutput` VizOutput as real, separate, larger future work — not decided here (closed in a later session, see "Wire the fixture patch graph into production" below).
 
-- **`src/dmx/`** (new, framework-agnostic): `artnet.ts` — real Art-Net 4 ArtDMX packet encoding (8-byte "Art-Net\0" ID, little-endian OpCode per spec's own mixed-endianness, Net/SubUni 15-bit universe split, even-length-padding of odd/short universes). `sacn.ts` — real ANSI E1.31 Data Packet encoding (Root Layer → Framing Layer → DMP Layer, each with its own ACN-standard flags-and-length field; `sacnMulticastAddress()` computes the standard `239.255.<hi>.<lo>` per-universe multicast group). `render-dmx-universe.ts` — `renderDmxUniverses()` scales each DMX-patched fixture's resolved channel value from its declared range onto a real 0..255 DMX byte, written at its patched address into a 512-byte universe buffer; a fixture with no patch contributes nothing (purely additive to the existing simulation-only usage). `dmx-out-bridge.ts` — `DmxOutBridge`, sends one packet per universe over a WebSocket to the relay's JSON-envelope path, defaulting to Art-Net's broadcast address or sACN's multicast group per-universe when no specific node IP is configured.
-- **`fixture-document.ts`**: new optional `FixtureInstance.dmxPatch?: {universe, startAddress}` + `setFixtureDmxPatch()` mutator — additive, unset by default, doesn't touch the existing simulation-only fixture flow at all.
-- **Editor UI**: `FixtureManager.tsx` gained a compact `DMX: [universe] @ [address]` field per fixture row. New `DmxOutPanel.tsx` (rail, above Fixtures) — protocol select (Art-Net/sACN), relay URL, connect/start-sending, reading the editor's already-live `fixtureDoc`/`resolvedValues` through a ref so the ~25Hz send interval doesn't need tearing down and recreating every time either changes (which is constantly, every signalBus tick).
-- **Tests**: `tests/unit/artnet.spec.ts` (every field's byte offset/value, the even-length-padding rule, the Net/SubUni split math), `tests/unit/sacn.spec.ts` (every layer's field offsets computed independently from the encoder's own layout logic and cross-checked — all passed first run, a good sign the byte math is self-consistent — plus the multicast-address formula, default-priority, and 512-channel truncation), `tests/unit/render-dmx-universe.spec.ts` (unpatched-fixture no-op, single/multi-channel addressing, non-[0,1]-range scaling via a servo's [0,180] angle, default-value fallback, multi-fixture same-universe grouping, out-of-range-address graceful drop), and — replacing the old `osc-relay.spec.ts` (deleted, superseded) — **`tests/unit/udp-relay.spec.ts`: real end-to-end integration tests** for BOTH relay paths: a real `ws` client sending a real OSC bundle to the fixed default UDP target, a real `ws` client sending two JSON envelopes to two DIFFERENT real UDP listeners and confirming each byte-for-byte, and a malformed-JSON-frame-doesn't-crash-the-relay check. Full suite now 178 (was 150), all passing.
-- **Verified**: typecheck (all 4 tsconfigs) clean, full suite passes, `npm run build`/`build:lib` both succeed and are byte-identical in size to before this slice (confirming `src/dmx/`/`ws` are genuinely not reachable from the production bundle — only the editor tool and tests import them), dev server transforms every new/changed module (`src/dmx/*`, `FixtureManager.tsx`, `DmxOutPanel.tsx`, `App.tsx`) with no errors (same HTTP-fetch-through-`/@fs/`-and-grep method as prior sessions).
-- **Not verified**: no real Art-Net/sACN receiver (a lighting console, TouchDesigner, QLC+) has actually confirmed these packets — the encoders are checked for internal self-consistency (every field lands where the encoder itself puts it, computed independently in the tests) and spec-shape correctness, but not against a second, independent implementation or real hardware. If this is ever suspected of being subtly wrong, the highest-value check is capturing real packets from a known-good tool (e.g. QLC+'s own Art-Net output) and diffing byte-for-byte against this encoder's output for the same input.
-- **Explicitly deferred, not started**: production `DmxOutput` VizOutput (see the architecture-finding note above); OSC in; 16-bit/fine-channel DMX support; fixture-profile import (GDTF/QLC+); DMX-serial, MIDI, ILDA, WLED/E1.31 (remaining §5 protocols, in priority order — DMX-serial next).
+- **`src/dmx/`** (new, framework-agnostic): `artnet.ts` — real Art-Net 4 ArtDMX packet encoding. `sacn.ts` — real ANSI E1.31 Data Packet encoding. `render-dmx-universe.ts` — `renderDmxUniverses()` scales each DMX-patched fixture's resolved channel value onto a real 0..255 DMX byte at its patched address. `dmx-out-bridge.ts` — `DmxOutBridge`, sends one packet per universe over a WebSocket to the relay's JSON-envelope path.
+- **`fixture-document.ts`**: new optional `FixtureInstance.dmxPatch?: {universe, startAddress}` + `setFixtureDmxPatch()` mutator.
+- **Editor UI**: `FixtureManager.tsx` gained a `DMX: [universe] @ [address]` field per fixture row. New `DmxOutPanel.tsx`.
+- **Tests**: `tests/unit/artnet.spec.ts`, `tests/unit/sacn.spec.ts`, `tests/unit/render-dmx-universe.spec.ts`, and — replacing the deleted `osc-relay.spec.ts` — **`tests/unit/udp-relay.spec.ts`: real end-to-end integration tests** for both relay paths. Full suite now 178 (was 150).
+- **Verified**: typecheck clean, full suite passes, `npm run build`/`build:lib` both succeed and are byte-identical in size to before this slice (confirming `src/dmx/`/`ws` are genuinely not reachable from the production bundle).
+- **Not verified**: no real Art-Net/sACN receiver has actually confirmed these packets — spot-checkable against a known-good tool's own output if this is ever suspected of being subtly wrong.
+- **Explicitly deferred, not started**: production `DmxOutput` VizOutput; OSC in; 16-bit/fine-channel DMX support; fixture-profile import; DMX-serial, MIDI, ILDA, WLED/E1.31.
 
-## DMX512 via USB-serial (same session, fourth §5-priority slice)
+## DMX512 via USB-serial (same session, fourth priority slice)
 
-The one protocol in this whole arc that turned out NOT to need a relay/Bridge daemon at all: Web Serial gives the browser real, direct serial-port access, and Enttec's DMX USB PRO "Widget API" (an openly-published, widely-cloned framing most cheap USB-DMX dongles either speak natively or mimic) puts the actual DMX signal/break generation inside the *dongle's own firmware* — the host only ever sends an ordinary framed serial write at a fixed baud rate. This is specifically why the Enttec-protocol family is reachable from Web Serial at all; a raw "Open DMX USB"-style dongle (host generates the break itself over the UART) is NOT reachable this way — Web Serial's spec has no send-break API, full stop, not a gap that could be worked around.
+The one protocol in this whole arc that turned out NOT to need a relay/Bridge daemon at all: Web Serial gives the browser real, direct serial-port access, and Enttec's DMX USB PRO "Widget API" puts the actual DMX signal/break generation inside the *dongle's own firmware* — the host only ever sends an ordinary framed serial write at a fixed baud rate.
 
-- **`src/dmx/enttec-usb-pro.ts`**: `encodeEnttecDmxPacket()` — real Widget API "Output Only Send DMX Packet" (Label 6) framing: START(0x7E), Label, 16-bit little-endian payload length, DMX start code(0x00) + up to 512 channel bytes, END(0xE7).
-- **`src/dmx/dmx-serial-output.ts`**: `DmxSerialOutput` wraps a real `navigator.serial` `SerialPort` — `connect()` calls `requestPort()` (must run inside a user-gesture handler, the browser's own hard requirement, not something this class can route around) then `open({baudRate: 250000})` and grabs a writer; `send()` writes one encoded Enttec frame; `isWebSerialSupported()` feature-detects so unsupported browsers (everything except Chromium desktop — Safari has an explicit stated anti-Web-Serial position over fingerprinting, no mobile browser implements it at all) get a clear message instead of a silent no-op.
-- **A real type-availability snag, found and fixed properly**: `SerialPort`/`navigator.serial` aren't part of TypeScript's bundled `lib.dom.d.ts` at all. Added `@types/w3c-web-serial` as a devDependency — but this repo's tsconfigs all pin an explicit `"types": [...]` allowlist (`vite/client` only, previously), which TypeScript treats as *disabling* automatic `@types/*` inclusion entirely, not additive — so installing the package alone did nothing until `"w3c-web-serial"` was added to that allowlist in both `tsconfig.json` and `tsconfig.patchbay-editor.json` (the two configs that actually typecheck `src/dmx/dmx-serial-output.ts` — `tsconfig.worker.json`/`tsconfig.tools.json` never touch that file, confirmed by re-running the full typecheck chain before and after). Worth remembering: adding a `@types/*` package to `devDependencies` is NOT sufficient in a repo using an explicit `types` allowlist — the allowlist itself has to be edited too, in every tsconfig that needs it.
-- **Editor UI**: `DmxOutPanel.tsx`'s mode select gained a third option, "USB (Enttec-protocol dongle)" — swaps the relay-URL text input for a universe-select dropdown (a USB dongle drives exactly one universe, unlike Art-Net/sACN's per-universe addressing) and "Select serial port…" (Web Serial's own device picker, triggered by this exact click — the required user gesture), with an inline warning when `isWebSerialSupported()` is false. The shared send-interval effect now branches on whichever of `bridgeRef`/`serialRef` is active rather than assuming Art-Net/sACN's `DmxOutBridge` unconditionally.
-- **Tests**: `tests/unit/enttec-usb-pro.spec.ts` (frame structure, DMX-start-code prepend + verbatim channel data, 16-bit length math for both a small and a full 512-channel universe, truncation past 512). The `DmxSerialOutput`/Web Serial path itself has **zero automated coverage** — there is no fake/mock serial port available in this environment, and `navigator.serial.requestPort()` requires a real user gesture in a real browser by design, so this is the one piece of this entire ISF/OSC/DMX arc that's genuinely *unverifiable* here at any level beyond typecheck, not just "not yet verified in a browser" like everything GL-related in this file. If a real USB-DMX dongle and a Chromium browser are ever available, that's the only way to confirm this actually works.
-- **Verified**: typecheck (all 4 tsconfigs, after the allowlist fix above) clean, full suite (183, up from 178 — 5 new Enttec-encoder tests) passes, `npm run build`/`build:lib` both succeed and remain byte-identical in size (confirming `@types/w3c-web-serial` and the new `src/dmx/*` files stay out of the production bundle — a `@types` package never ships runtime code anyway, but the build-size check still covers the two new `.ts` modules), dev server transforms every new/changed module with no errors (same method as prior sessions).
-- **Explicitly deferred, not started**: MIDI, ILDA, WLED/E1.31 (remaining §5 protocols, in priority order — MIDI next); DMX-serial as a production (non-editor) feature; anything for the raw "Open DMX USB" dongle family (structurally unreachable from Web Serial, not just unbuilt — see above).
+- **`src/dmx/enttec-usb-pro.ts`**: `encodeEnttecDmxPacket()` — real Widget API "Output Only Send DMX Packet" (Label 6) framing.
+- **`src/dmx/dmx-serial-output.ts`**: `DmxSerialOutput` wraps a real `navigator.serial` `SerialPort` — `connect()` calls `requestPort()` (must run inside a user-gesture handler) then `open({baudRate: 250000})`; `isWebSerialSupported()` feature-detects.
+- **A real type-availability snag, found and fixed properly**: `SerialPort`/`navigator.serial` aren't part of TypeScript's bundled `lib.dom.d.ts`. Added `@types/w3c-web-serial` — but this repo's tsconfigs pin an explicit `"types": [...]` allowlist, which disables automatic `@types/*` inclusion entirely, so `"w3c-web-serial"` had to be added to that allowlist too, in both `tsconfig.json` and `tsconfig.patchbay-editor.json`. Worth remembering for any future `@types/*` addition in this repo.
+- **Editor UI**: `DmxOutPanel.tsx`'s mode select gained "USB (Enttec-protocol dongle)".
+- **Tests**: `tests/unit/enttec-usb-pro.spec.ts`. The `DmxSerialOutput`/Web Serial path itself has **zero automated coverage** — no fake/mock serial port available, and `requestPort()` requires a real user gesture by design — genuinely unverifiable here at any level beyond typecheck.
+- **Verified**: typecheck (after the allowlist fix) clean, full suite (183) passes, `npm run build`/`build:lib` both succeed and remain byte-identical in size.
+- **Explicitly deferred, not started**: MIDI, ILDA, WLED/E1.31; DMX-serial as a production feature; anything for the raw "Open DMX USB" dongle family (structurally unreachable from Web Serial).
 
-## MIDI in (same session, fifth §5-priority slice)
+## MIDI in (same session, fifth priority slice)
 
-Another genuinely browser-native leg (Web MIDI), same story as DMX-serial's Web Serial: no relay/Bridge daemon needed, and no new `@types/*` package needed either — Web MIDI's types (`MIDIAccess`, `MIDIMessageEvent`, `navigator.requestMIDIAccess`) are already part of TypeScript's bundled `lib.dom.d.ts`, unlike Web Serial (confirmed by the fact typecheck passed immediately with zero tsconfig changes, in contrast to the DMX-serial slice's `w3c-web-serial` allowlist fix).
+Another genuinely browser-native leg (Web MIDI), same story as DMX-serial's Web Serial: no relay/Bridge daemon needed, and no new `@types/*` package needed either — Web MIDI's types are already part of TypeScript's bundled `lib.dom.d.ts`.
 
-Scoped deliberately narrower than a full "MIDI routes into the patch graph" feature, and said so up front rather than quietly under-delivering: master-prompt §5 lists MIDI's two uses (CC→parameter mapping, clock/beat sync) as the target, but wiring a CC into the patch graph would mean adding a new node kind to `patchgraph/types.ts` — a shared, production-facing type with no real MIDI consumer to justify touching it yet (same "don't grow production surface without a real backing use" judgment call the ISF/DMX slices made, applied here to a type change rather than an API method). Built the real parsing/tracking/mapping logic fully, end-to-end, and proved it via a live diagnostic panel instead of inventing graph plumbing speculatively — the patch-graph integration is real, identifiable future work (a `midiCc` node kind, most likely), not started.
+Scoped deliberately narrower than a full "MIDI routes into the patch graph" feature, said so up front: wiring a CC into the patch graph would mean adding a new node kind to `patchgraph/types.ts` with no real MIDI consumer to justify touching it yet at the time. Built the real parsing/tracking/mapping logic fully, end-to-end, proved it via a live diagnostic panel — the patch-graph integration (`midiCc` node kind) landed in a later session (see "MIDI CC + OSC-in" below).
 
-- **`src/midi/`** (new, framework-agnostic): `midi-messages.ts` — real MIDI 1.0 parsing (controlChange, noteOn/noteOff including the note-on-velocity-0-is-really-note-off running-status convention, and the four system realtime bytes clock sync needs: Clock/Start/Continue/Stop). `midi-clock.ts` — `MidiClockTracker`, tracks real inter-tick wall-clock timing (24 ticks/quarter-note, the MIDI spec's own constant) into a live BPM estimate (fast-converge-then-stabilize smoothing, same shape as the live-audio `BeatTracker`'s own approach) plus beat/bar phase (4/4 assumed, matching every other bar-shaped construct in this codebase); Start resets phase/tempo, Continue resumes without resetting — a real distinction a DAW transport actually draws, tested explicitly. `midi-cc-input.ts` — `MidiCcInput`, normalizes 0..127 to this codebase's universal 0..1 range, plus `learnNext()`/`cancelLearn()` for the standard "click learn, wiggle the knob" UX pattern (untested against a UI here, but the underlying resolve-on-next-CC primitive is). `midi-input.ts` — `MidiInput`, the real Web MIDI wiring: `requestMIDIAccess()`, attaches to every currently-connected input port (not just one named device — "listen to whatever's plugged in" is the right default for this use case), re-attaches on `onstatechange` (hotplug).
-- **Editor UI**: `MidiPanel.tsx`, a new debug-drawer panel (alongside the existing bus/musical-state/drop-internals/drop-log diagnostics) — Connect/Disconnect, live clock BPM/confidence/beat-phase/bar-phase (polled at 10Hz from the tracker, since `onmidimessage` callbacks fire outside React's render cycle), and a rolling log of the last 8 distinct CCs touched. `MidiCcInput`/`MidiInput` both gained an optional `onChange`/`onCcChange` observability callback specifically to feed this log — additive, omitting it behaves exactly as before the parameter existed.
-- **Tests**: `tests/unit/midi-messages.spec.ts` (every parsed message shape, the velocity-0 note-off convention, all four realtime bytes, unknown/empty-input handling), `tests/unit/midi-clock.spec.ts` (locks onto 120 and 90 BPM synthetic tick trains — same style as `beat-tracker.spec.ts`'s click-train tests — beat/bar phase wrap-around at exactly 24/96 ticks, Start resets vs. Stop/Continue preserving phase), `tests/unit/midi-cc-input.spec.ts` (0..127→0..1 normalization, per-channel+controller isolation, learn-resolves-on-next-CC-then-stops, cancelLearn). 18 new tests, all passing first run (same good sign as the DMX layer math); full suite now 201 (was 183).
-- **Verified**: typecheck (all 4 tsconfigs, no config changes needed this time) clean, full suite passes, `npm run build`/`build:lib` both succeed and remain byte-identical in size (MIDI code stays out of the production bundle — only the editor tool and tests import `src/midi/*`), dev server transforms every new/changed module with no errors (same method as every prior slice this session).
-- **Not verified**: the real `MidiInput`/Web MIDI wiring itself — no real browser + real MIDI device available in this sandbox, so `requestMIDIAccess()`/`onmidimessage`/hotplug re-attachment are exercised by nothing but a type-checker. Same category of gap as DMX-serial's Web Serial path, though Web MIDI's broader real-world browser support (desktop + Android Chrome/Edge, Safari 17+) makes this more likely to just work than the Web-Serial leg once someone actually clicks "Connect MIDI" with a device plugged in.
-- **Explicitly deferred, not started**: a `midiCc` (or similar) patch-graph node kind — real, scoped future work, not attempted here (see the scoping note above); wiring `MidiClockState` into the Conductor's own tempo tracking as an alternative/override to the live-audio `BeatTracker` (the shape was chosen to make this possible later, nothing consumes it that way yet); SysEx; MIDI output (sending clock/CC back out); ILDA, WLED/E1.31 (remaining §5 protocols — ILDA next).
+- **`src/midi/`** (new, framework-agnostic): `midi-messages.ts` — real MIDI 1.0 parsing. `midi-clock.ts` — `MidiClockTracker`, 24-tick/quarter-note timing → live BPM + beat/bar phase; Start resets phase/tempo, Continue resumes without resetting. `midi-cc-input.ts` — `MidiCcInput`, normalizes 0..127 to 0..1, plus `learnNext()`/`cancelLearn()`. `midi-input.ts` — `MidiInput`, real Web MIDI wiring, attaches to every connected input port, re-attaches on hotplug.
+- **Editor UI**: `MidiPanel.tsx` — Connect/Disconnect, live clock readout, a rolling log of the last 8 distinct CCs touched.
+- **Tests**: `tests/unit/midi-messages.spec.ts`, `tests/unit/midi-clock.spec.ts`, `tests/unit/midi-cc-input.spec.ts`. 18 new tests; full suite now 201.
+- **Verified**: typecheck clean, full suite passes, `npm run build`/`build:lib` both succeed and remain byte-identical in size.
+- **Not verified**: the real `MidiInput`/Web MIDI wiring itself — no real browser + real MIDI device available.
+- **Explicitly deferred, not started** (at the time): a `midiCc` patch-graph node kind; wiring `MidiClockState` into the Conductor's own tempo tracking; SysEx; MIDI output; ILDA, WLED/E1.31.
 
-## WLED/E1.31 on-ramp (same session, sixth §5-priority slice)
+## WLED/E1.31 on-ramp (same session, sixth priority slice)
 
-The fastest slice of this whole arc, precisely because master-prompt §5's own framing ("it rides on sACN") pointed at real reuse rather than a new subsystem: WLED devices already speak real sACN/Art-Net natively, so the Art-Net/sACN work earlier this session already reaches them. What was actually missing was the "friendly" half of "friendly on-ramp" — a hobbyist point at their WLED device without thinking about universes/sACN at all. WLED's own native realtime UDP protocol (a plain sequential-RGB-bytes packet, no DMX concepts whatsoever) is that on-ramp, so that's what got built, not a duplicate sACN path.
+The fastest slice of this whole arc: WLED devices already speak real sACN/Art-Net natively, so the Art-Net/sACN work earlier this session already reaches them. What was actually missing was the "friendly" half — a hobbyist point at their WLED device without thinking about universes/sACN at all. WLED's own native realtime UDP protocol is that on-ramp.
 
-- **`src/dmx/wled.ts`** (new): `encodeWledDrgb()` — WLED's "DRGB" protocol (2-byte header: protocol id + timeout, then raw sequential RGB triplets, LED 0/1/2/... in order). `encodeWledWarls()` — the "WARLS" variant (explicit per-LED index+RGB quads, for sparse/reordered updates) — implemented for spec-completeness even though nothing in this codebase currently produces sparse LED data; documented as such rather than silently unused.
-- **The actual reuse, not just "another encoder"**: `DmxOutBridge.send()` (`src/dmx/dmx-out-bridge.ts`) gained a `'wled-drgb'` protocol option that takes the SAME per-universe `Uint8Array(512)` buffer `render-dmx-universe.ts` already produces from DMX-patched `rgb`-type fixtures and feeds it straight into `encodeWledDrgb()` — no new fixture/pixel model needed at all, since a contiguous run of `rgb` fixtures patched starting at address 1 already IS a valid sequential RGB pixel stream. WLED has no broadcast/multicast convention (always one device's own IP), so `universeHost` is required for this protocol — a universe with none given is silently skipped rather than guessing a destination.
-- **Editor UI**: `DmxOutPanel.tsx`'s mode select gained "WLED (UDP realtime)" — a device-IP text field (not the relay-URL field Art-Net/sACN use) plus the same single-universe selector USB introduced, generalized into a shared `SINGLE_UNIVERSE_MODES` list rather than a `mode === 'usb'` special case, since WLED and USB share the exact same "one universe, one physical destination" shape.
-- **Tests**: `tests/unit/wled.spec.ts` (DRGB header + verbatim RGB passthrough + default timeout, WARLS per-pixel quad layout). 3 new tests; full suite now 204 (was 201).
-- **Verified**: typecheck (all 4 tsconfigs) clean, full suite passes, `npm run build`/`build:lib` both succeed and remain byte-identical in size, dev server transforms every new/changed module with no errors (same method as every prior slice).
-- **Master-prompt §5 status after this slice**: 6 of 7 protocols now real (ISF, OSC-out, Art-Net/sACN, DMX-serial, MIDI-diagnostic, WLED) — only **ILDA** remains unstarted, and it's explicitly flagged in master-prompt §3 as needing real laser-DAC protocol research (Bridge-mediated, no browser-native path the way DMX-serial/MIDI turned out to have) — the next slice to scope carefully, not a quick add.
+- **`src/dmx/wled.ts`** (new): `encodeWledDrgb()` — WLED's "DRGB" protocol. `encodeWledWarls()` — the "WARLS" variant, spec-completeness even though nothing currently produces sparse LED data.
+- **The actual reuse, not just "another encoder"**: `DmxOutBridge.send()` gained a `'wled-drgb'` protocol option that takes the SAME per-universe `Uint8Array(512)` buffer `render-dmx-universe.ts` already produces from DMX-patched `rgb`-type fixtures and feeds it straight into `encodeWledDrgb()` — no new fixture/pixel model needed.
+- **Editor UI**: `DmxOutPanel.tsx` mode select gained "WLED (UDP realtime)".
+- **Tests**: `tests/unit/wled.spec.ts`. 3 new tests; full suite now 204.
+- **Verified**: typecheck clean, full suite passes, `npm run build`/`build:lib` both succeed and remain byte-identical in size.
+- **Status after this slice**: 6 of 7 protocols real — only **ILDA** remained, flagged as needing real laser-DAC protocol research.
 
-## ILDA / laser DAC protocol layer (same session, seventh and final §5-priority slice this pass)
+## ILDA / laser DAC protocol layer (same session, seventh and final priority slice this pass)
 
-Explicitly the one protocol flagged to the user as needing real research rather than a from-memory guess, since a wrong binary laser format looks done but silently fails to load — the user confirmed: research it properly, then implement. Used WebSearch + direct `raw.githubusercontent.com` fetches of real reference implementations (not just a spec page in isolation) — this caught a real error before it shipped, worth remembering as the actual justification for that extra step: an AI-summarized read of the official Ether Dream protocol page said the `DacStatus` struct was 18 bytes; cross-checking against two independent real implementations (`tgreiser/etherdream` in Go, `echelon/etherdream.rs` in Rust) showed it's actually 20 bytes (making the response/broadcast packet sizes 22/36 bytes, not 20/34) — both agreed with each other and disagreed with the summarized page text. Ships as two related but distinct capabilities, both real and tested, matching `docs/ilda.md`'s framing:
+Explicitly the one protocol flagged to the user as needing real research rather than a from-memory guess, since a wrong binary laser format looks done but silently fails to load — the user confirmed: research it properly, then implement. Used WebSearch + direct `raw.githubusercontent.com` fetches of real reference implementations — this caught a real error before it shipped: an AI-summarized read of the official Ether Dream protocol page said the `DacStatus` struct was 18 bytes; cross-checking against two independent real implementations (`tgreiser/etherdream` Go, `echelon/etherdream.rs` Rust) showed it's actually 20 bytes (response/broadcast packets 22/36 bytes, not 20/34) — both agreed with each other and disagreed with the summarized page text.
 
-- **`src/ilda/ilda-format.ts`**: the real ILDA Image Data Transfer Format (`.ild` files) — sourced from the ILDA Technical Committee's own IDTF spec (Rev 011) cross-checked against `nannou-org/ilda-idtf` (a real, maintained Rust implementation whose `#[repr(C)]` struct layout gave exact byte offsets independent of the spec-text summary). `encodeIldaHeader`/`decodeIldaHeader` (the real 32-byte section header), `encodeIldaPoints`/`decodeIldaPoints` for all defined point formats (0/1/4/5 — 3D/2D × indexed/true color) plus format 2's color palette, and `encodeIldaFile`/`decodeIldaFile` for a complete real multi-frame file (mandatory end-of-file marker at `numRecords === 0`, automatic `LAST_POINT` status-bit placement on each frame's final point). **A real bug caught by the tests, not shipped**: format 5 (2D true color)'s point-record size was written as 7 bytes; the actual layout (x,y = 4 bytes + status = 1 + RGB = 3) is 8 — the round-trip test's `.b` field decoding as garbage (128 instead of the encoded 0) is exactly the kind of silent corruption a size-off-by-one produces, and is precisely why round-trip tests (not just "does it typecheck") were written for every format before trusting any of them.
-- **`src/ilda/ether-dream.ts`**: the real Ether Dream live-streaming DAC protocol — sourced from the official protocol page, cross-checked against the two implementations above (see the DacStatus-size catch). `DacStatus`/`DacBroadcast`/`DacResponse` decoders, `DacPoint` encode/decode (18 bytes, little-endian — a real, confirmed difference from the ILDA file format's big-endian), and command encoders for Prepare/Begin/Data/Stop/EmergencyStop(0xFF, not 0x00 — also corrected via the cross-check)/ClearEStop/Ping. One command (`encodeQueueRateChangeCommand`, the 'q' byte) is explicitly flagged in its own doc comment as lower-confidence: neither reference implementation actually implements it — the Go library has an `Update` method using byte 'u' instead, with its own author admitting uncertainty ("Maybe this is the 'q' command now") — a real, honestly-reported gap rather than false confidence.
-- **`scripts/tcp-relay.ts`** (new, Node-only, `npm run tcp-relay`): Ether Dream's TCP session (port 7765, one persistent bidirectional connection per DAC with real ACK responses) needs a genuinely different relay shape than `udp-relay.ts`'s per-message UDP forwarding — this duplexes one WebSocket connection with one TCP connection, forwarding bytes both directions, doing zero protocol interpretation (same "dumb forwarder" philosophy). **Real, end-to-end tested** exactly like `udp-relay.spec.ts`'s precedent: `tests/unit/tcp-relay.spec.ts` uses a real `net.createServer()` standing in for the DAC and a real `ws` client, confirming bytes cross correctly in both directions and that the WebSocket closes when the TCP side does.
-- **Tests**: `tests/unit/ilda-format.spec.ts` (12, including the format-5 size bug catch above), `tests/unit/ether-dream.spec.ts` (7, DacStatus/Broadcast/Response/DacPoint/every command's real byte layout), `tests/unit/tcp-relay.spec.ts` (2, real bidirectional TCP↔WS integration). 21 new tests; full suite now 225 (was 204).
-- **Verified**: typecheck (all 4 tsconfigs) clean, full suite passes, `npm run build`/`build:lib` both succeed and remain byte-identical in size (ILDA/Ether Dream code stays out of the production bundle — nothing in `src/render`/`src/index.ts` imports `src/ilda/*`).
-- **Explicitly deferred, not started** (see `docs/ilda.md`'s own "what's not built yet"): a browser-side `EtherDreamClient` driving the actual prepare→data→begin command sequence and ACK-tracking state machine over the relay (the protocol byte layer is real and tested; nothing yet drives it end-to-end); a patch-graph concept of "a stream of laser points" at all — no fixture/target exists for this the way DMX has dimmer/RGB/servo types, and deciding what should drive a beam path (an ISF-shader-like scripted path? signal-bus-modulated geometric shapes?) is real, separate design work; real-hardware verification (no Ether Dream DAC or ILDA-reading software available in this environment — the cross-implementation check is a meaningfully higher bar than typecheck alone, but isn't the same as a real device confirming it).
+- **`src/ilda/ilda-format.ts`**: the real ILDA Image Data Transfer Format (`.ild` files) — sourced from the ILDA Technical Committee's own IDTF spec, cross-checked against `nannou-org/ilda-idtf`. `encodeIldaHeader`/`decodeIldaHeader`, `encodeIldaPoints`/`decodeIldaPoints` for all defined point formats (0/1/4/5) plus format 2's palette, `encodeIldaFile`/`decodeIldaFile` for a complete multi-frame file. **A real bug caught by the tests, not shipped**: format 5's point-record size was written as 7 bytes; the actual layout is 8 — a round-trip test caught the silent corruption.
+- **`src/ilda/ether-dream.ts`**: the real Ether Dream live-streaming DAC protocol. `DacStatus`/`DacBroadcast`/`DacResponse` decoders, `DacPoint` encode/decode (18 bytes, little-endian — confirmed different from the ILDA file format's big-endian), command encoders for Prepare/Begin/Data/Stop/EmergencyStop(0xFF, not 0x00 — also corrected via the cross-check)/ClearEStop/Ping. One command (`encodeQueueRateChangeCommand`) is explicitly flagged lower-confidence — neither reference implementation actually implements it.
+- **`scripts/tcp-relay.ts`** (new, Node-only, `npm run tcp-relay`): duplexes one WebSocket connection with one TCP connection, zero protocol interpretation. **Real, end-to-end tested**: `tests/unit/tcp-relay.spec.ts` uses a real `net.createServer()` standing in for the DAC and a real `ws` client.
+- **Tests**: `tests/unit/ilda-format.spec.ts` (12), `tests/unit/ether-dream.spec.ts` (7), `tests/unit/tcp-relay.spec.ts` (2). 21 new tests; full suite now 225.
+- **Verified**: typecheck clean, full suite passes, `npm run build`/`build:lib` both succeed and remain byte-identical in size.
+- **Explicitly deferred, not started**: a browser-side `EtherDreamClient` driving the actual prepare→data→begin command sequence; a patch-graph concept of "a stream of laser points" at all; real-hardware verification.
 
 ## Full production reliability audit + fixes (same session, user-requested "/ultrareview"-style pass)
 
-`/ultrareview` itself couldn't run (the uncommitted diff — this whole session's 7-protocol arc plus prior sessions' history — exceeded its size limit: 75 files/8,888 lines vs. its 500-file/8,000-line ceiling). Substituted two sequential read-only audit forks instead, scoped explicitly to what the user asked for: the production 24/7 render path first and foremost (not the dev-only patchbay editor), plus a lighter UI/UX pass on the editor. Every finding below was verified against the actual code before fixing (not applied blind) and every fix is covered by the existing or a new test.
+`/ultrareview` itself couldn't run (the uncommitted diff — this whole session's 7-protocol arc plus prior sessions' history — exceeded its size limit: 75 files/8,888 lines vs. its 500-file/8,000-line ceiling). Substituted two sequential read-only audit forks instead, scoped explicitly to the production 24/7 render path first, plus a lighter UI/UX pass on the editor. Every finding below was verified against the actual code before fixing and every fix is covered by the existing or a new test.
 
 **Critical (fixed):**
-- **WebGL context-loss recovery reused dead GL objects — the single most important finding.** `ScreenOutput.init()` is re-run on every `webglcontextrestored` event (`render-worker.ts`), reusing the same `ScreenOutput` instance. Its `allocatePipeline()` only calls `new Xxx(...)` for a pass whose field is still `null` — after a restore, every pass field already holds a pre-loss JS wrapper object, so `allocatePipeline()` took the "already exists, just `resize()`" branch, and `resize()` on every pass only recreates FBOs, never the program/VAO/texture created solely in each pass's constructor; `compositePass` specifically was never reconstructed past the very first init at all (`if (!this.compositePass)`). Net effect: a real context loss (documented elsewhere in this file as a genuine, not theoretical, risk on hybrid-graphics laptops with `powerPreference: 'high-performance'`) left the screen black/frozen **permanently** on an unattended 24/7 background — the exact failure the loss/restore listeners were built to prevent, silently defeated by the pass-reuse logic underneath them. **Fixed**: `ScreenOutput.init()` now disposes the current scene and nulls `scene`/`sceneFbo`/`persistencePass`/`memoryFieldPass`/`bloomPass`/`compositePass` before calling `allocatePipeline()`, forcing full reconstruction on every call — a no-op change for the very first init (everything's already null then). Also preserves an active ISF scene across a restore (`this.isfDoc ? new IsfScene(this.isfDoc) : sceneRegistry[DEFAULT_SCENE_ID]()`) rather than silently reverting to Julia. **Not covered by an automated test** — GL object lifecycle across a real context-loss event has zero test coverage in this repo (same standing gap as everything else GL-shaped here); the fix is verified by code inspection + typecheck/build only.
-- **`AudioEngine.attach()` had a real re-entrancy race that could leave two live AudioWorklet pipelines running forever.** `index.ts`'s `tryAttachAudio()` polls every 300ms, guarded only by `engine.attached` — which stays `false` until `attach()` fully resolves, including `await ctx.audioWorklet.addModule(workletUrl)`. On a slow first load (slow network, first-time worklet compile, a throttled/backgrounded tab), that await can outlast 300ms, letting a second `attach()` start before the first finishes; each creates and wires its own `AudioWorkletNode` into the same shared `listeners` Set, so both stay alive indefinitely, doubling CPU/memory and delivering interleaved/duplicated frames for the rest of the session. **Fixed**: `AudioEngine` now tracks its own in-flight `attachPromise` and returns it to a concurrent caller instead of starting a second attach — `attach()` is now safe to call concurrently regardless of caller discipline, not just reliant on the caller's own guard.
+- **WebGL context-loss recovery reused dead GL objects — the single most important finding.** `ScreenOutput.init()` is re-run on every `webglcontextrestored` event, reusing the same `ScreenOutput` instance. Its `allocatePipeline()` only calls `new Xxx(...)` for a pass whose field is still `null` — after a restore, every pass field already holds a pre-loss JS wrapper object, so it took the "already exists, just `resize()`" branch, and `resize()` on every pass only recreates FBOs, never the program/VAO/texture created solely in each pass's constructor; `compositePass` specifically was never reconstructed past the very first init at all. Net effect: a real context loss left the screen black/frozen **permanently** on an unattended 24/7 background — the exact failure the loss/restore listeners were built to prevent, silently defeated by the pass-reuse logic underneath them. **Fixed**: `ScreenOutput.init()` now disposes the current scene and nulls every pass field before calling `allocatePipeline()`, forcing full reconstruction on every call. Also preserves an active ISF scene across a restore. **Not covered by an automated test** — GL object lifecycle across a real context-loss event has zero test coverage in this repo; the fix is verified by code inspection + typecheck/build only.
+- **`AudioEngine.attach()` had a real re-entrancy race that could leave two live AudioWorklet pipelines running forever.** `index.ts`'s `tryAttachAudio()` polls every 300ms, guarded only by `engine.attached` — which stays `false` until `attach()` fully resolves, including `await ctx.audioWorklet.addModule(workletUrl)`. On a slow first load, that await can outlast 300ms, letting a second `attach()` start before the first finishes; each creates and wires its own `AudioWorkletNode` into the same shared `listeners` Set, so both stay alive indefinitely. **Fixed**: `AudioEngine` now tracks its own in-flight `attachPromise` and returns it to a concurrent caller instead of starting a second attach.
 
 **Moderate (fixed):**
-- **`OscOutBridge` never reconnected after a drop.** Opt-in/off-by-default so not a 24/7-production risk, but a real gap given the feature is documented as "real." Fixed: auto-reconnects after 2s unless `disconnect()` was called explicitly (tracked via an `explicitlyDisconnected` flag), mirroring `index.ts`'s own "keep retrying indefinitely" philosophy for `tryAttachAudio`'s poll rather than giving up after N attempts.
-- **`StructureSource`'s event/onset cursors could permanently skip a sidecar event if `positionSec` ever briefly regressed without going through `resyncTo()`.** `index.ts`'s `'position'` transport case updates `positionSec` directly with no resync — fine as long as a host's position feed is monotonic, which isn't actually guaranteed for the SoundCloud/position-only path this class exists for (an external widget's own reporting, not a locally-owned clock; network jitter or a loop-repeat is plausible). A brief dip past an event, then forward again, would silently never re-emit it. Fixed: both `fuse()` and `synthesize()` now call a new `healPositionRegression()` internally at entry, self-rewinding the cursors via `resyncTo()` whenever `t` moves backward past `lastPosition` — a class invariant now, not something every call site has to remember. New test: `tests/unit/structure-source.spec.ts`'s "self-heals a brief backward position jitter" case.
-- **`evaluate-node.ts`'s `smoothstep` curve silently clamped bipolar signals' entire negative half to zero**, inconsistent with `exp`/`log` (both explicitly `Math.sign(v) * ...`) — routing `bandTilt`/`pan` through a `smoothstep` curve node discarded the low-heavy/left-panned half of the signal's real range and reported it as flat zero. Fixed to be sign-preserving like its siblings (`Math.sign(v) * clamp01(Math.abs(v))² * (3-2·that)`). **Had to fix the legacy `patchbay/curves.ts` identically in the same pass** — `migrate-route-config.spec.ts` numerically cross-checks `PatchGraphEvaluator` against `Patchbay.resolve()` for exactly this curve against the bipolar `bandTilt` signal (one of its dedicated edge-case tests), so fixing only one side would have broken that parity guarantee rather than kept it. New test: `tests/unit/evaluate-node.spec.ts` (sign-preservation, unchanged positive-domain behavior, `f(-x) === -f(x)` symmetry).
-- **A diverging Julia perturbation reference orbit was unguarded at the source**, relying entirely on downstream luck (a NaN comparison in the shader's escape check happens to be `false`, and the memory-field pass's own NaN sanitizer — fixed in an earlier session — catches anything that leaks through). `updateReferenceOrbit()` now checks `Number.isFinite` each iteration and, on divergence, holds the last finite point for the remainder of the texture instead of uploading `Infinity`/`NaN` — provably harmless now, not accidentally harmless.
+- **`OscOutBridge` never reconnected after a drop.** Fixed: auto-reconnects after 2s unless `disconnect()` was called explicitly.
+- **`StructureSource`'s event/onset cursors could permanently skip a sidecar event if `positionSec` ever briefly regressed without going through `resyncTo()`.** Fixed: both `fuse()` and `synthesize()` now call a new `healPositionRegression()` internally at entry. New test: `tests/unit/structure-source.spec.ts`'s "self-heals a brief backward position jitter" case.
+- **`evaluate-node.ts`'s `smoothstep` curve silently clamped bipolar signals' entire negative half to zero**, inconsistent with `exp`/`log`. Fixed to be sign-preserving. Had to fix the legacy `patchbay/curves.ts` identically in the same pass (the migration equivalence test cross-checks exactly this curve against the bipolar `bandTilt` signal). New test: `tests/unit/evaluate-node.spec.ts`.
+- **A diverging Julia perturbation reference orbit was unguarded at the source.** `updateReferenceOrbit()` now checks `Number.isFinite` each iteration and, on divergence, holds the last finite point for the remainder of the texture instead of uploading `Infinity`/`NaN`.
 
 **Polish:**
-- Removed a "temporary… remove once confirmed" diagnostic `console.log` in `JuliaScene.ts`'s zoom-floor reset path (fired every ~6.5–11min during playback) — the cause it was added to help diagnose (the context-loss bug above) is now found and fixed.
-- Added a `:focus-visible` outline rule to the patchbay editor's global styles (`button`/`select`/`input`/`[tabindex]`) — the existing `select:focus, input:focus { outline: none; }` rule removed the default focus ring without a strong enough replacement for keyboard users, a real (if minor, dev-tool-only) accessibility regression.
-- Considered but declined: extracting `DmxOutPanel.tsx`/`MidiPanel.tsx`/`IsfPanel.tsx`'s inline `style={{}}` usage into named CSS classes for consistency with the rest of the editor. Checked first — `FixtureManager.tsx`/`FixtureVisuals.tsx` (pre-existing, established files) use inline styles MORE, not less, than these three new files, so inline one-off layout styles are already this editor's actual convention, not something this session introduced inconsistently. Doing the extraction for only the 3 new files would have made things less consistent, not more.
+- Removed a "temporary… remove once confirmed" diagnostic `console.log` in `JuliaScene.ts`'s zoom-floor reset path.
+- Added a `:focus-visible` outline rule to the patchbay editor's global styles.
+- Considered but declined: extracting three panels' inline `style={{}}` usage into named CSS classes — checked first, established files use inline styles MORE, not less, so this is already the editor's actual convention.
 
-**Verified overall**: typecheck (all 4 tsconfigs) clean, full suite (229, up from 225 — 4 new: 1 structure-source regression test, 3 evaluate-node smoothstep tests) passes, `npm run build`/`build:lib` both succeed (small, expected size increases from the real new logic — reconnect/re-entrancy/orbit-guard code — not a regression).
+**Verified overall**: typecheck clean, full suite (229, up from 225) passes, `npm run build`/`build:lib` both succeed.
 
-**Explicitly not covered by this audit pass** (the second fork's own report, not re-litigated here): a full read of `render-worker.ts`'s adaptive-quality heuristics, the GL passes' shader math beyond the memory-field NaN guard already covered by a prior session, and the DMX/MIDI/ILDA modules' own internal correctness beyond the spot-checks already covered in each protocol's own session entry above.
+**Explicitly not covered by this audit pass**: a full read of `render-worker.ts`'s adaptive-quality heuristics, the GL passes' shader math beyond the memory-field NaN guard already covered by a prior session, and the DMX/MIDI/ILDA modules' own internal correctness beyond the spot-checks already covered in each protocol's own session entry above.
 
-**Master-prompt §5 status after this pass: all 7 protocols have real, tested work landed** (ISF, OSC-out, Art-Net/sACN, DMX-serial, MIDI-diagnostic, WLED, ILDA/Ether Dream protocol layer) — though several stay intentionally scoped to editor-tool/protocol-layer-only rather than full production pipelines (see each protocol's own AGENTS.md entry above for exactly what's deferred). The natural next arc, if resumed, is either: (a) closing specific gaps flagged above (OSC in, a `midiCc` patch-graph node, a production `DmxOutput`/`EtherDreamClient`, a laser point-source concept), or (b) moving on to master-prompt's other backlog areas entirely (§4.1's content-hash-keyed sidecar, §4.2's Feature Engine plugin interface, §4.4's macro/sub-patch blocks, §4.6's presentation/export mode) — a fresh gap-analysis pass against the full master prompt is the right way to pick, not assuming §5's order continues to dictate priority now that it's fully covered.
+**Status after this pass: all 7 protocols have real, tested work landed** — though several stay intentionally scoped to editor-tool/protocol-layer-only rather than full production pipelines. The natural next arc: either closing specific gaps (OSC in, a `midiCc` patch-graph node, a production `DmxOutput`/`EtherDreamClient`, a laser point-source concept), or moving on to other backlog areas entirely — a fresh gap-analysis pass against the full backlog is the right way to pick, not assuming protocol order continues to dictate priority now that it's fully covered.
 
 ## Wire the fixture patch graph into production (this session)
 
-Closed the recurring gap flagged across the previous session's Art-Net/sACN/DMX-serial/WLED entries: every DMX-shaped protocol was editor-tool-only, with fixture-graph evaluation living entirely as ephemeral React state in the patchbay editor (`tools/patchbay-editor/src/App.tsx`'s `fixtureEvaluator`), never reaching the shipped render worker. A host embedding this package had no way to actually drive physical fixtures — only the dev tool could.
+Closed the recurring gap flagged across the previous session's Art-Net/sACN/DMX-serial/WLED entries: every DMX-shaped protocol was editor-tool-only, with fixture-graph evaluation living entirely as ephemeral React state in the patchbay editor. A host embedding this package had no way to actually drive physical fixtures — only the dev tool could.
 
-- **New `FixtureOutput`** (`src/render/conductor/outputs/FixtureOutput.ts`) — a worker-resident counterpart to `DmxOutPanel`'s browser-side logic: holds the current `FixtureDocument`, derives its target catalog (`fixtureTargetCatalog`), and owns a `DmxOutBridge` connection. `send(resolved)` renders DMX universes (`renderDmxUniverses`) and forwards them over the same WebSocket relay OSC uses. Deliberately does NOT cover USB/Web Serial — `DmxSerialOutput.connect()` needs a main-thread user-gesture `requestPort()` call a background worker can never trigger, so that leg stays editor-tool-only with no obvious production path.
-- **`render-worker.ts` wiring**: a `fixtureGraphEvaluator` (nullable — no sane default graph exists for an unpatched install, unlike the screen's default `screenGraph`) evaluates every frame (so envelope/threshold node state advances on real dt), throttled to ~25Hz (`FIXTURE_OUT_INTERVAL_MS`, matching `DmxOutPanel`'s own send rate) for the actual wire send — same two-tier throttle shape `oscOutBridge` already used, just split into "evaluate every frame, send less often" since fixture output needs both. Three new message kinds: `setFixtureDocument` (rebuilds the target catalog + evaluator), `setFixtureGraph` (construction-time-validated like `debugSetScreenGraph`/`setIsfShader` — rejects and keeps the previous evaluator running rather than crashing), `setFixtureOut` (connect/disconnect the real transport).
-- **Real public API** on `VizInstance` (`src/index.ts`): `setFixtureDocument()`, `setFixtureGraph()`, `setFixtureOut()` — opt-in/additive like `loadIsfShader`/`setOscOut`, same one-shot-result vs. persistent-status callback split those two established. Re-exports `FixtureDocument`/`FixtureInstance`/`DmxPatch`/`PatchGraph`/`FixtureOutConfig` so a host can build a document/graph without reaching into internal module paths.
-- **Not done this session**: the patchbay editor itself still runs its own separate ephemeral evaluation/DmxOutPanel rather than dogfooding the new production API — that's a legitimate follow-up (would mean replacing the editor's live React-side fixture evaluator with worker messages + a resolved-values readback path) but out of scope for "make the production path real," which was the actual gap. Also unchanged: 16-bit/fine-channel support, fixture-profile import (GDTF/QLC+), USB production wiring (see above).
-- Verification: typecheck (all 4 tsconfigs) clean, full suite (229, unchanged — this session is pure wiring/glue, no new pure-logic surface worth a dedicated unit test beyond what `renderDmxUniverses`/`DmxOutBridge`'s own encoders already cover), `npm run build`/`build:lib` both succeed, dev server transforms every changed/new module with no errors (same HTTP-fetch-and-grep method as prior sessions). **Not verified against a real Art-Net/sACN receiver or in a browser** — no browser/hardware access this session; the message contract and evaluator wiring are typechecked and structurally identical to the already-shipped-and-working ISF/OSC pattern, but an actual end-to-end "call `setFixtureGraph`, see real DMX bytes arrive at a receiver" run hasn't happened. Highest-value thing to verify first if picking this up.
+- **New `FixtureOutput`** (`src/render/conductor/outputs/FixtureOutput.ts`) — a worker-resident counterpart to `DmxOutPanel`'s browser-side logic: holds the current `FixtureDocument`, derives its target catalog, owns a `DmxOutBridge` connection. `send(resolved)` renders DMX universes and forwards them over the same WebSocket relay OSC uses. Deliberately does NOT cover USB/Web Serial — `DmxSerialOutput.connect()` needs a main-thread user-gesture `requestPort()` call a background worker can never trigger, so that leg stays editor-tool-only with no obvious production path.
+- **`render-worker.ts` wiring**: a `fixtureGraphEvaluator` (nullable — no sane default graph exists for an unpatched install) evaluates every frame, throttled to ~25Hz for the actual wire send. Three new message kinds: `setFixtureDocument`, `setFixtureGraph` (construction-time-validated), `setFixtureOut`.
+- **Real public API** on `VizInstance`: `setFixtureDocument()`, `setFixtureGraph()`, `setFixtureOut()` — opt-in/additive. Re-exports `FixtureDocument`/`FixtureInstance`/`DmxPatch`/`PatchGraph`/`FixtureOutConfig`.
+- **Not done this session**: the patchbay editor itself still ran its own separate ephemeral evaluation rather than dogfooding the new production API (closed in the next session below). Also unchanged: 16-bit/fine-channel support, fixture-profile import, USB production wiring.
+- Verification: typecheck clean, full suite (229, unchanged — pure wiring/glue), `npm run build`/`build:lib` both succeed. **Not verified against a real Art-Net/sACN receiver or in a browser.**
 
 ## MIDI CC + OSC-in patch graph routing, and dogfooding the fixture API in the patchbay editor (this session)
 
 Continuation of the previous session's "wire the fixture patch graph into production" work — user asked to do all three of the natural-next-slices flagged there in one pass: OSC-in routing, a `midiCc` patch-graph node, and dogfooding the new fixture production API inside the patchbay editor itself.
 
-- **Two new patch-graph node kinds** (`patchgraph/types.ts`): `MidiCcNode` (`ccKey`) and `OscInNode` (`address`) — both zero-input, external-state-reading nodes shaped exactly like `SignalNode`. `PatchGraphEvaluator.evaluate()` gained an optional third `external: { midiCc?, oscIn? }` parameter (bundled into one object rather than growing the positional param list further) — both `resolveScreenTargets` and the fixture evaluator now thread it through. `validate.ts`/`evaluate-node.ts`/`node-fields.tsx`/`graph-draft.ts` all extended to cover the two new kinds (every exhaustive switch caught by `tsc` itself, not guesswork — see the commit for the exact spots). A `midiCc`/`oscIn`-fed target is exempt from the servo-safety "unsmoothed transient" warning, since neither has a bus timescale tag at all (a knob/external app value, not audio-domain analysis).
-- **`OscInBridge`** (`src/osc/osc-in-bridge.ts`) — the "OSC in" half OSC out never got: decodes real inbound OSC packets (bundles flattened, only a message's first float/int/bool argument stored — a string argument is dropped, not coerced) into a `Map<address, number>` a patch graph reads from. `scripts/udp-relay.ts` gained an optional `--osc-in-port` (a second UDP socket, since the existing one binds ephemeral purely to send) that forwards every inbound datagram to every connected browser tab as a binary WS frame — opt-in, so a relay only ever used for `*-out` bridges behaves exactly as before. Both new (real, non-mocked-WebSocket-relay end-to-end for the relay path; a small fake-WebSocket unit test for `OscInBridge`'s own decode/store logic, matching the level `OscOutBridge`/`DmxOutBridge` were already left at).
-- **Production API**: `VizInstance.connectMidiIn()`/`disconnectMidiIn()` (owns a `MidiInput`, forwards CC to the worker via a `midiCc` message) and `setOscIn()` (owns an `OscInBridge` inside the worker, same connect/disconnect/status shape as `setOscOut`/`setFixtureOut`) — both opt-in/additive, same pattern as every other public method here.
-- **Fixture API dogfooded in the editor** (closes the gap flagged at the end of the previous session): `App.tsx` no longer runs its own `PatchGraphEvaluator` copy for fixtures — it now calls `bridgeRef.current?.setFixtureDocument()`/`setFixtureGraph()`, the exact same messages `VizInstance` sends, and reads the worker's own evaluation back via a new `fixtureValues` field on the dev-only `signalBus` debug-stream message (worker keeps `lastFixtureResolved` for this). `DmxOutPanel` now delegates Art-Net/sACN/WLED to `setFixtureOut()`/`onDisconnect` instead of owning a `DmxOutBridge` + its own send-loop — it kept its own send loop **only** for USB (Web Serial genuinely can't run inside a worker: `requestPort()` needs a main-thread user gesture). A new `OscInPanel` (status + connect/disconnect only, no live-value log yet) exposes OSC-in the same way. `MidiPanel` gained an `onCcChange` prop so its already-real device connection ALSO forwards to `bridge.setMidiCc()`, not just its own diagnostic log.
-- **Not done this session**: no address-pattern matching for `oscIn` (exact address match only), no live-value-log UI for OSC-in (unlike MIDI's CC activity list), MIDI clock sync is still not wired into the Conductor's tempo tracking, no macro/sub-patch blocks, graph versioning/undo.
-- Verification: typecheck (all 4 tsconfigs) clean throughout, full suite grew from 229 → 242 (13 new: 6 PatchGraphEvaluator/validate midiCc+oscIn tests, 2 udp-relay inbound tests, 5 OscInBridge tests), `npm run build`/`build:lib` both succeed, and BOTH dev servers (`npm run dev` for the main app, `npm run patchbay` for the editor) transform every new/changed module with no errors (same HTTP-fetch-and-grep method as prior sessions, this time checked against the editor's own dev server too since that's most of what changed). **Not verified**: no real MIDI device, no real external OSC sender, no real Art-Net/sACN receiver, no browser at all — the message contracts, evaluator wiring, and editor refactor are typechecked and unit-tested at the logic layer, but an actual "wiggle a physical knob, see the graph react" or "send OSC from TouchDesigner, see it arrive" run hasn't happened. Top thing to verify first if picking this up.
+- **Two new patch-graph node kinds** (`patchgraph/types.ts`): `MidiCcNode` (`ccKey`) and `OscInNode` (`address`) — both zero-input, external-state-reading nodes shaped exactly like `SignalNode`. `PatchGraphEvaluator.evaluate()` gained an optional third `external: { midiCc?, oscIn? }` parameter. A `midiCc`/`oscIn`-fed target is exempt from the servo-safety "unsmoothed transient" warning, since neither has a bus timescale tag at all.
+- **`OscInBridge`** (`src/osc/osc-in-bridge.ts`) — the "OSC in" half OSC out never got: decodes real inbound OSC packets into a `Map<address, number>` a patch graph reads from. `scripts/udp-relay.ts` gained an optional `--osc-in-port` (forwards every inbound datagram to every connected browser tab as a binary WS frame — opt-in).
+- **Production API**: `VizInstance.connectMidiIn()`/`disconnectMidiIn()` and `setOscIn()` — both opt-in/additive.
+- **Fixture API dogfooded in the editor**: `App.tsx` no longer runs its own `PatchGraphEvaluator` copy for fixtures — it now calls `bridgeRef.current?.setFixtureDocument()`/`setFixtureGraph()`, the exact same messages `VizInstance` sends, and reads the worker's own evaluation back via a new `fixtureValues` field on the dev-only `signalBus` debug-stream message. `DmxOutPanel` now delegates Art-Net/sACN/WLED to `setFixtureOut()` — kept its own send loop **only** for USB (Web Serial genuinely can't run inside a worker).
+- **Not done this session**: no address-pattern matching for `oscIn` (exact address match only), no live-value-log UI for OSC-in, MIDI clock sync is still not wired into the Conductor's tempo tracking, no macro/sub-patch blocks, graph versioning/undo.
+- Verification: typecheck clean throughout, full suite grew from 229 → 242, `npm run build`/`build:lib` both succeed, both dev servers transform every new/changed module with no errors. **Not verified**: no real MIDI device, no real external OSC sender, no real Art-Net/sACN receiver, no browser at all.
+
+## Layer 2 musical understanding + docs consolidation (this session)
+
+User uploaded `SINTEZA_UNDERSTANDING.md` (a research-grounded design doc for the Feature Engine's
+temporal/structural features — multi-scale novelty, harmony, "track prominent elements") and
+asked for two things: implement its full 7-step build order, and first consolidate the scattered
+AI-facing docs (this file + `SINTEZA_VIZ.md` + `SINTEZA_SIGNAL_BUS.md` +
+`hysteresis-master-prompt.md` + `NEXT_SESSION_PROMPT.md`) into one file, keeping `docs/*.md`
+separate since those are real per-protocol references for human users too.
+
+**Docs consolidation**: done first, this file is the result — §1-§3 synthesize what those five
+docs said (resolving real drift, e.g. `SINTEZA_SIGNAL_BUS.md`'s retired flat Patchbay/Route
+model vs. its own addendum), §4 is `SINTEZA_UNDERSTANDING.md` folded in close to verbatim, §5 is
+`NEXT_SESSION_PROMPT.md` trimmed, and this §6 is the untouched chronological history all five
+docs used to disagree around. `SINTEZA_VIZ.md`, `SINTEZA_SIGNAL_BUS.md`,
+`hysteresis-master-prompt.md`, `NEXT_SESSION_PROMPT.md` are deleted — fully absorbed.
+`README.md`'s two references to `SINTEZA_VIZ.md` now point here instead.
+
+## Layer 2 musical understanding — implementation (same session, immediate follow-up)
+
+All 6 of §4.5's build-order steps landed (the doc's 7 numbered ambitions collapse to 6
+implementation slices — beat-synchronous aggregation shares a call site with multi-scale
+novelty, so it isn't a separate slice). Grounded in the real current code first (novelty.ts's
+`cosineSimilarity`/`NoveltyRingBuffer`, familiarity.ts's tracker, Conductor.ts's beat-boundary
+edge-detection pattern already used for `downbeatPulse`, `drop-detector.ts`'s internal
+fullness/onset-jump math, `scripts/structure.ts`'s direct reuse of the browser worklet modules)
+before writing anything.
+
+- **Multi-scale novelty + beat-sync aggregation** (`src/render/conductor/familiarity.ts`,
+  `Conductor.ts`): generalized `FamiliarityTracker` into `SimilarityTracker` (window size now a
+  constructor param; `FamiliarityTracker` kept as an alias at the original ~12s default — zero
+  behavior change for `familiarity` itself). Conductor now runs two instances — the existing one
+  (`noveltySection = 1 - familiarity`) and a new short (~5s) one (`noveltyLocal`) — both pushed
+  only on a beat-boundary edge (the same `beatPhase < lastBeatPhase - 0.5` wraparound check
+  `beatPulse`/`downbeatPulse` already used), not every render frame, per the doc's "beat-
+  synchronous features are the pro move" §4.1. **A real bug caught by a new test, not shipped**:
+  `noveltyLocalValue`'s pre-first-sample default was initially 0 (copy-pasted from
+  `familiarityValue`'s default) — wrong, since it stores novelty directly (1 - similarity), not
+  similarity; "nothing to compare against yet" should read as maximally novel (1), not 0. Fixed
+  before commit. New `tests/unit/novelty-multiscale.spec.ts` (4 tests) drives a Conductor through
+  a real click-train of beat-boundary crossings (a naive fixed-`beatPhase` test never triggers a
+  push at all — worth remembering, a second self-caught test bug: an early draft's A/B/A motif
+  test called the beat-driving helper three separate times, each resetting its own local `t=0`,
+  silently breaking every window-eviction time calculation across phases — fixed by driving the
+  whole multi-phase sequence through one continuous call).
+- **`onsetDensity`/`fullness` as real bus signals** (new `src/audio/worklet/brain/activity.ts`):
+  extracted `FullnessTracker`/`OnsetDensityTracker` out of `DropDetector`'s inline envelope
+  followers — same math, delegated, `tests/unit/drop-detector.spec.ts`'s existing 6 tests confirm
+  zero behavioral drift from the extraction. `feature-worklet.ts` now owns its own separate
+  instances (same "separate instance per consumer" precedent `novelty.ts`'s header already
+  documents), computed **unconditionally every hop** — moved the contrast-preserving
+  `dropEnergyEnvelope`/`dropEnergyNormalizer` calculation outside the `detectorsEnabled` gate so
+  these two are genuinely always-alive, not gated behind the same toggle the sparse section
+  detectors are. New `tests/unit/activity.spec.ts` (7 tests: the trackers in isolation, plus
+  Conductor pass-through/clamping/defaulting).
+- **Chromagram + harmonic novelty** (new `src/audio/worklet/chroma.ts`): a 12-bin pitch-class
+  energy vector (MIDI-mod-12 convention, bins outside C1-C8 skipped), computed every hop from the
+  same mono magnitude spectrum `feature-worklet.ts` already has. Exposed on the bus as a raw
+  pass-through (`chroma`, same treatment as `scope`) plus two derived scalars: `harmonicNovelty`
+  (a *third* `SimilarityTracker` instance, own ~6s window, same beat-boundary gating) and
+  `chromaRootHue` (argmax pitch class → 0..1, recomputed every frame, not beat-gated — cheap, no
+  tracker needed). New `tests/unit/chroma.spec.ts` (8 tests): synthetic pure-tone spectra
+  (A4=440Hz → pitch class 9, C4 → pitch class 0) prove the bin-folding math directly, plus
+  Conductor-level tests proving `harmonicNovelty` spikes on a real key change after settling low.
+- **Schema-3 sidecar + Demucs stem-presence** (`src/shared/sidecar.ts`, new `scripts/demucs.ts`,
+  `scripts/structure.ts`, `scripts/analyze.ts --stems`): **deliberately deviated from the design
+  doc's own stated versioning convention** ("bump the literal + guard + every consumer together,
+  no migration path") — that would make `isSidecar()` reject the 5 real schema-2 sidecars already
+  published to the live site, a direct violation of this file's own §5 rule #1 ("never break the
+  live production path"), which overrides a doc's stated convention when they conflict. Landed
+  instead as a **backward-compatible** bump: `SIDECAR_SCHEMA_VERSION = 3` is what `analyze.ts`
+  writes for any newly-generated sidecar, but `isSidecar()` accepts `schema === 2 || schema ===
+  3`, and the new `stemPresence`/`SidecarSection.label` fields are optional — a schema-2 sidecar
+  keeps validating and working exactly as before, zero risk to the deployed tracks. User's
+  explicit choice for the separation runtime: shell out to the real Python Demucs CLI (not an
+  ONNX bundle) — `runDemucsSeparation()` spawns `python3 -m demucs -n htdemucs -o <tmpdir>
+  <input.wav>`, reads back the 4 stem WAVs Demucs' own fixed output layout produces, fails loudly
+  with a clear "pip install demucs" message if the subprocess isn't found (correct here — this is
+  a manual, per-track, offline tool, never part of CI/the shipped browser bundle: confirmed
+  `npm run build`/`build:lib` stay byte-for-byte on the render-worker/lib output size, i.e.
+  `scripts/demucs.ts`/`scripts/structure.ts`'s stem code is genuinely unreachable from either).
+  `computeStemPresence()` computes vocals/drums/bass/other as RMS-per-hop envelopes
+  (envelope-followed + adaptively normalized against each stem's own dynamic range — deliberately
+  simpler than the main mix's full FFT/band pipeline, since "is this stem present" only needs
+  broadband loudness) at the exact same `envelopeRate`/hop-grid the rest of the sidecar's
+  envelopes use, so `StructureSource.sampleEnvelope()` needed zero changes to consume them.
+  `StructureSource.fuse()`/`synthesize()` expose `vocalPresence`/`drumsPresence`/`bassPresence`/
+  `otherPresence`/`leadPresence` on `StateFrame` when a sidecar has `stemPresence`, `undefined`
+  otherwise (Conductor is what actually defaults the bus signal to 0) — the same accepted
+  sidecar-only-signal precedent `buildProgress`/`tension` already set. New
+  `tests/unit/sidecar.spec.ts` (7 tests, including the explicit "still accepts an already-
+  published schema-2 sidecar" regression guard), extended `tests/unit/structure-source.spec.ts`
+  (4 new tests), extended `tests/unit/analyze.spec.ts` with `computeStemPresence` tests against
+  synthetic per-stem audio (a loud/sustained stem reads high, a silent one low; a sustained tone
+  outlasts a louder-but-transient competitor in `leadPresence`'s envelope-followed reading). **The
+  Demucs subprocess call itself is not exercised by any automated test** — genuinely can't be
+  without a real Python + `demucs` environment, absent in this session's own sandbox — but it
+  *was* verified by hand, once real Python access became available, in an immediate follow-up
+  session; see that session's own §6 entry below for the real-track run.
+- **Heuristic sidecar section labeling** (`scripts/structure.ts`'s `labelSections()`,
+  deterministic — no LLM/embedding infra exists in this repo, and the design doc itself flags
+  learned zero-shot labeling as an optional, heavy "ceiling"): existing `build`/`break`-kind
+  sections get a plain label (`'build'`/`'breakdown'`); genuinely new value is synthesizing
+  `'intro'`/`'outro'` spans from whatever's *not* covered by any detected section/event — the
+  track's start-to-first-structure and last-structure-to-end gaps, otherwise silently unlabeled
+  even though they're real, common structure for this project's typically section-sparse
+  sidecars. Takes an optional `stemPresence` parameter to raise confidence (skips a positionally-
+  plausible intro/outro if the mix is actually loud throughout that span — not a real intro then)
+  — used by `analyzeMix()` itself without presence data (called before `--stems` ever runs, so
+  every schema-3 sidecar gets best-effort positional labels regardless), available for a caller
+  to re-invoke with real presence data but **not currently re-invoked that way** — `analyze.ts`
+  does not call it a second time after computing `stemPresence`, so real presence data doesn't
+  actually refine an already-decided label in the current wiring; flagged here rather than left
+  as a silent gap between the doc comment's intent and the actual call graph. New
+  `tests/unit/section-labels.spec.ts` (7 tests).
+- **Lead salience within `other`** (`scripts/structure.ts`'s `computeLeadPresenceEnvelope()`,
+  part of the same `--stems` pass as stem presence above, per the design doc's own simpler
+  suggested approach §3.3): a per-hop FFT on the separated `other` stem, tracking the *sustained*
+  peak-bin magnitude (a slower 400ms release than presence's 200ms is the actual "sustained, not
+  instantaneous" distinction) rather than a real isolated-lead-instrument signal — approximate,
+  documented as such everywhere it's surfaced (`SidecarStemPresence`'s doc comment,
+  `StateFrame.leadPresence`'s doc comment, `SignalBus.leadPresence`'s doc comment).
+- **Deliberately not done, explicitly out of scope for this pass**: none of the 12 new bus
+  signals (`noveltyLocal`/`noveltySection`/`fullness`/`onsetDensity`/`harmonicNovelty`/
+  `chromaRootHue`/`chroma`/the 5 presence signals) are wired into any default screen or fixture
+  patch-graph route — this pass's definition of done was "the signal exists, is correct, is
+  tested," not "the screen visibly reacts to it," per the plan's own stated scope (Part B's
+  context note). Wiring them into `configs/screen-graph.ts`'s default routes is real, natural
+  follow-up work, not started. Also not done: no repetition map ("this section = that earlier
+  one," needs a full offline SSM the design doc itself calls out as not attempted here); no ISF-
+  superset input types exposing these new signals to a loaded shader (§3.7's own note already
+  flagged this as a separate step); the `labelSections()`/`stemPresence` re-invocation gap noted
+  above.
+- **Verified**: `npm run typecheck` (all 4 tsconfigs), `npm test` (281 tests, up from 242 at the
+  start of this session — 39 new across 6 new test files plus extensions to 3 existing ones),
+  `npm run build`, and `npm run build:lib` all green throughout, checked after every one of the 6
+  steps above, not just at the end. **Not verified this session**: no real browser (none of this
+  touches the GL/render path at all, so lower-risk than this file's usual GL caveats, but still
+  genuinely unclicked), and the Demucs `--stems` path had never actually separated a real track —
+  **both the live-signal pipeline and the Demucs path were verified against a real track in an
+  immediate follow-up session**, see its own §6 entry below.
+
+## Headless real-audio verification of the whole Layer 2 arc (immediate follow-up session)
+
+User asked for the previous session's whole build order to be run headlessly against a real
+track — a Daft Punk "Instant Crush" MP4 already sitting in `~/Downloads`. Closes the two
+"not verified" gaps flagged at the end of the previous entry.
+
+- **Audio extraction**: `ffmpeg -i <mp4> -ac 2 -ar 48000 -sample_fmt s16 <wav>` — a real 5:40
+  (339.8s) 48kHz stereo WAV, `scripts/wav.ts`'s hand-rolled RIFF reader (16-bit PCM) confirmed to
+  decode it with no changes needed.
+- **Core pipeline (no `--stems`)**: `npm run analyze` produced a real schema-3 sidecar — 110.3bpm
+  (Instant Crush's actual tempo is ~117bpm; a live PLL locking onto a plausible harmonic/
+  neighboring tempo on a synth-heavy track is a known, acceptable category of drift, not a bug),
+  615 beats, 155 events, 917 onsets, all envelopes genuinely varying (6367/6371 energy samples
+  nonzero) — confirms `scripts/structure.ts`'s existing pipeline still works end-to-end on a real
+  MP4-sourced WAV, unaffected by this arc's changes.
+- **The actual new-signal verification**: a throwaway diagnostic script (written directly in
+  `scripts/`, deleted immediately after use — never committed) replayed the same real audio
+  through the exact hop-by-hop primitives `feature-worklet.ts` uses live (`WindowedFFT`,
+  `computeChroma`, `FullnessTracker`/`OnsetDensityTracker`, `BeatTracker`/`BarTracker`) plus a
+  real `Conductor` instance, logging min/max/mean for every one of this arc's new bus signals
+  across all ~31,855 real hops. **Zero non-finite (NaN/Infinity) values across the entire real
+  track** — the concrete thing synthetic fixtures can't prove (real audio has far messier
+  transients/silence/clipping than hand-picked test vectors). Every signal showed genuine
+  variation, not a flat/degenerate reading: `fullness` 0–0.72 (mean 0.56), `onsetDensity` 0–1
+  (mean 0.48), `chromaRootHue` spanning 0–0.92 (real harmonic movement, not stuck on one pitch
+  class), `noveltyLocal`/`noveltySection` mostly low with real spikes to 1 (a heavily
+  loop-based track reading as mostly-familiar, exactly as expected, with real novelty at genuine
+  transitions), `harmonicNovelty` similarly low-mean/real-spikes, `familiarity` mean 0.98 (a
+  Daft Punk track being extremely repetitive is a real, correct reading, not a bug).
+- **Demucs**: installed for real in an isolated venv (`python3 -m venv` + `pip install demucs` —
+  pulled in a full CUDA-enabled PyTorch stack despite CPU-only execution, ~4.8GB; `torch.cuda.is_available()`
+  confirmed `False`, ran on CPU throughout). **A real, previously-undiscovered gap found and
+  fixed on the spot**: `demucs`'s own declared dependencies didn't pull in `numpy`/`soundfile` in
+  this environment — `python3 -m demucs --help` failed with `ModuleNotFoundError: No module named
+  'numpy'` before either could be installed; fixed by `pip install numpy soundfile` alongside
+  `demucs` itself. Worth remembering for `docs/`-level guidance if this ever gets written up for
+  end users: `pip install demucs` alone was not sufficient in this environment.
+  `scripts/analyze.ts --stems` (unmodified from the previous session — no code changes were
+  needed) then ran the real thing: `python3 -m demucs -n htdemucs` separated the full 5:40 track
+  in ~1:45 wall-clock on CPU, all 4 stem WAVs written to Demucs' own fixed output layout exactly
+  as `scripts/demucs.ts` expected, `computeStemPresence()` consumed them with zero errors,
+  producing a real schema-3 sidecar with `stemPresence` populated: `vocals` mean 0.674, `drums`
+  mean 0.481, `bass` mean 0.685, `other` mean 0.785, `leadPresence` mean 0.803 — all spanning
+  close to the full 0..1 range, not degenerate. **Confirmed through the real production consumer
+  path, not just raw JSON inspection**: `isSidecar()` accepted the real output, and
+  `StructureSource.synthesize()` at six sampled positions across the track (t=10s..300s) returned
+  distinct, real, time-varying `vocalPresence`/`drumsPresence`/`bassPresence`/`otherPresence`/
+  `leadPresence` values at each — including `drumsPresence` dropping to 0.016 by t=300s, which
+  lines up with this track's real stripped-down/vocal-heavy ending.
+- **Section labeling on this real track**: only one section detected/labeled (`{start:0, end:2.592,
+  kind:'break', label:'breakdown'}`) — consistent with this file's long-standing "sidecar section
+  detection is currently sparse" known limitation, not a regression from this arc's changes; the
+  heuristic intro/outro synthesis in `labelSections()` didn't fire here because the earliest
+  structural boundary (a `breakStart` event at t=0) already sits at the very start, leaving no
+  gap for an intro span to occupy.
+- **Not done**: no code changes were needed or made this session — this was purely a
+  verification run. The venv and downloaded model weights live in this session's job-scratch
+  directory (cleaned up automatically when the job is deleted), not committed anywhere.
+- **Verified**: `npm run typecheck`/`npm test` (281, unchanged) still pass after this session's
+  activity (git status showed nothing unexpected touched in the repo — only tmp/scratch
+  directories were used for the audio/venv/sidecar files), confirming the whole Layer 2 arc from
+  the previous session is real and correct against genuine audio, not just synthetic fixtures.
+  **Still not done**: none of the new signals are wired into any default screen/fixture route
+  (unchanged from the previous session — still real, separate follow-up work); no browser
+  verification (this arc never touched the GL/render path, so this is a pre-existing, not new,
+  gap).
+
+## Real bug found and fixed: SimilarityTracker leaked forever across a position loop/seek (same session, immediate follow-up)
+
+User reframed the priority explicitly: the deployed background **must play for days unattended
+without breaking** — non-negotiable. Before proposing next steps, ran a read-only, code-level
+audit of this whole session's arc specifically for multi-day-runtime risk (unbounded growth,
+NaN propagation, interaction with the earlier "24/7 reliability audit" session's fixes). Found
+one real, high-priority bug, fixed immediately rather than just reported.
+
+- **The bug**: `SimilarityTracker.sample()` (`src/render/conductor/familiarity.ts`) evicts its
+  `{t, vec}` buffer with `while (buffer[0].t < cutoff) buffer.shift()`, which silently assumes
+  `t` only ever increases. It doesn't — `StructureSource.synthesize()` feeds `t: positionSec`
+  straight from the host's own position feed, and **position-only sync is this package's actual
+  production integration** (this file's own "Position-only sync mode" section), where `t`
+  genuinely moves backward on every loop repeat or seek. The instant that happens, `buffer[0].t
+  < cutoff` can go permanently false (`cutoff` shrinks below the stale entries' `t`), eviction
+  silently stops working, and the buffer grows roughly one entry per beat, forever, across every
+  subsequent loop cycle. `Conductor` is one long-lived instance for the life of the render worker
+  — never reconstructed on trackchange/seek — so this compounds without bound across days of
+  unattended looped playback, hitting all three `SimilarityTracker` instances this session added
+  (`familiarityTracker`/`localNoveltyTracker`/`chromaNoveltyTracker`). **This is the exact bug
+  class `StructureSource`'s own `healPositionRegression()` already exists to fix** (a prior
+  session's own regression test literally proved the same failure mode for event/onset cursors)
+  — it was just never applied to this newer tracker.
+- **The fix**: `sample()` now detects a backward jump (`t < lastEntry.t - 1e-6`, the same epsilon
+  `healPositionRegression()` uses) and clears the buffer entirely rather than resyncing a cursor
+  — a similarity window has no sane partial recovery from a jump (the "recent past" it held is
+  genuinely gone), so a full reset is the correct self-heal, not a resync. New regression test in
+  `tests/unit/familiarity.spec.ts`: drives the tracker through 20s of playback, records the buffer
+  size, then simulates 50 loop cycles (a real multi-day run would do this thousands of times) and
+  asserts the buffer stays bounded to roughly one window's worth of entries instead of growing to
+  ~51 loops' worth (~30,600 entries, what the unfixed version would have leaked).
+- **Audit also confirmed safe** (no changes needed): `FullnessTracker`/`OnsetDensityTracker` are
+  pure fixed-size scalar state, no arrays. `chroma.ts`'s buffer is pre-allocated once and reused
+  every hop (no per-hop GC pressure) — only the beat-gated `Array.from(frame.chroma)` push into
+  `chromaNoveltyTracker` allocates, and that's the same low-frequency, bounded pattern the fix
+  above now also covers. `NoveltyRingBuffer` (`DropDetector`'s own primitive) is genuinely
+  fixed-capacity/count-indexed, immune to this bug class entirely. `chroma.ts`'s `Math.log2` is
+  guarded by the `MIN_HZ`/`MAX_HZ` range filter before it ever runs — no unguarded log/division
+  found anywhere in this session's new code. This session's changed files have zero overlap with
+  the files the earlier "24/7 reliability audit" session fixed (`render-worker.ts`/
+  `ScreenOutput.ts`/`AudioEngine.ts`/`src/index.ts` — confirmed via `git diff --stat`, all
+  untouched). Moving `dropEnergyEnvelope`/`dropEnergyNormalizer` outside the `detectorsEnabled`
+  gate (an earlier step this session) is just the same "always compute" pattern
+  bands/centroid/flatness already used unconditionally — no new risk class. No new
+  timers/listeners/subscriptions were added anywhere in this session's code (grepped for
+  `setInterval`/`setTimeout`/`addEventListener` across every changed/new file — zero matches).
+- **Verified**: `npm run typecheck`, `npm test` (282, up from 281 — the one new regression test),
+  `npm run build`, `npm run build:lib` all green.
+- **Not done / explicitly deferred**: no broader sweep of the *pre-existing* Conductor/detector
+  state for the same backward-`t` bug class beyond what this audit specifically checked (the
+  audit was scoped to this session's new code, per the actual ask) — `BeatTracker`/`BarTracker`/
+  `BuildDetector`/`BreakDetector`/`DropDetector` all predate this session and were not
+  re-audited for the same failure mode here; worth a dedicated pass if "days without breaking" is
+  being taken further. Also still not done: the signal-routing/screen-wiring and browser
+  verification gaps noted in every entry above.
+- **The dedicated pass above happened immediately, same session**: checked every pre-existing
+  Layer 1/2 class (`BeatTracker`/`BarTracker`/`BuildDetector`/`BreakDetector`/`DropDetector`) for
+  the identical bug class. **All immune, most by construction, one structurally unreachable
+  reason common to all of them**: `StructureSource.synthesize()` — the only place `t` can move
+  backward — never calls into any of these five classes at all; it derives beat/bar phase itself
+  via the pure, stateless `beatPositionAt()` against the sidecar's static `beats[]` array. All
+  five are worklet-only, constructed once in `feature-worklet.ts`, fed exclusively by
+  `currentTime` (the `AudioWorkletGlobalScope` clock — spec-guaranteed monotonic, never reachable
+  from the position-only path). `BeatTracker`/`BarTracker` use fixed-size, count-indexed
+  `Float32Array`s (no `.push()`, immune regardless); `BuildDetector`/`BreakDetector` hold no
+  arrays at all; `DropDetector`'s novelty term already uses the fixed-capacity `NoveltyRingBuffer`
+  (immune). One minor, non-urgent note: `DropDetector`'s scalar `tNow`-comparison fields
+  (`refractoryUntil`/`armedAt`/`startedAt`) could theoretically stay suppressed/stuck-armed longer
+  than intended after a backward jump *if* it were ever reachable that way — it isn't, so this is
+  informational only, not a fix. `Conductor`'s own decay math uses `dt` sourced from a
+  `requestAnimationFrame` timestamp in `render-worker.ts` (spec-monotonic), so it can't go
+  negative and invert `Math.exp(-dt/TAU)` into growth either. **The `SimilarityTracker` fix above
+  was the only real gap in the whole pipeline for this bug class — closed.**

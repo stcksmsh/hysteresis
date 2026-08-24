@@ -10,7 +10,7 @@ visual, without a bespoke translation layer.
 
 Real OSC almost always travels over UDP, and **browsers have no raw UDP
 API at all** — the same underlying gap that makes Art-Net/sACN/DMX
-inaccessible directly from a webapp (see `hysteresis-master-prompt.md` §3).
+inaccessible directly from a webapp (see `AGENTS.md` §3.3).
 So the browser side speaks OSC over a WebSocket connection instead, and a
 tiny local relay (shipped in this repo) forwards those bytes on to real UDP:
 

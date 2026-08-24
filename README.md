@@ -6,7 +6,7 @@ built on hysteresis: the image itself accumulates history, so what's on
 screen depends on the whole recent signal, not just this instant. It winds
 up during builds, releases on drops, and goes suspended during breaks.
 
-See `SINTEZA_VIZ.md` for the design doc and `IO_PAGE_CHANGESET.md` §6 (in
+See `AGENTS.md` §2 for the design doc and `IO_PAGE_CHANGESET.md` §6 (in
 `stcksmsh.github.io`) for the interface as actually integrated. Ships as a
 package the host mounts once:
 
@@ -83,7 +83,7 @@ whether live audio ever attaches:
   oscilloscope beam falls back to its idle Lissajous (no real waveform
   survives an offline envelope) — everything else is genuinely reactive.
 
-See `SINTEZA_VIZ.md` §5 for the full fusion rules.
+See `AGENTS.md` §2 ("Current architecture") for the full fusion rules.
 
 ## Develop
 
