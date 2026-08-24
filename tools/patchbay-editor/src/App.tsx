@@ -11,7 +11,6 @@ import { seedNodes } from './seed-graph'
 import { screenGraph } from '../../../src/render/conductor/patchgraph/configs/screen-graph'
 import { SCREEN_TARGETS } from '../../../src/render/conductor/outputs/screen-targets'
 import { validatePatchGraph } from '../../../src/render/conductor/patchgraph/validate'
-import { PatchGraphEvaluator } from '../../../src/render/conductor/patchgraph/PatchGraphEvaluator'
 import { pruneGraphToTargets } from '../../../src/render/conductor/patchgraph/prune'
 import { addFixture, fixtureTargetCatalog, emptyFixtureDocument, type FixtureDocument } from '../../../src/render/conductor/patchgraph/fixture-document'
 import { fixtureTargetId } from '../../../src/render/conductor/patchgraph/fixture-types'
@@ -20,6 +19,7 @@ import type { DropDetectorDebug } from '../../../src/audio/worklet/brain/drop-de
 import type { PatchTargetDecl } from '../../../src/render/conductor/patchgraph/types'
 import { IsfPanel } from './IsfPanel'
 import { DmxOutPanel } from './DmxOutPanel'
+import { OscInPanel } from './OscInPanel'
 import { MidiPanel } from './MidiPanel'
 
 // Keyed by canvas element, not component instance: canvas.transferControlToOffscreen()
@@ -37,7 +37,7 @@ const bridgesByCanvas = new WeakMap<HTMLCanvasElement, RuntimeBridge>()
 
 function useRuntimeBridge(
   canvasRef: React.RefObject<HTMLCanvasElement | null>,
-  onSignalBus: (bus: SignalBus, dropDebug: DropDetectorDebug | null) => void,
+  onSignalBus: (bus: SignalBus, dropDebug: DropDetectorDebug | null, fixtureValues: Record<string, number>) => void,
   onIsfResult: (result: { ok: true; targets: PatchTargetDecl[] } | { ok: false; message: string }) => void,
 ) {
   const bridgeRef = useRef<RuntimeBridge | null>(null)
@@ -51,6 +51,8 @@ function useRuntimeBridge(
   // hot-swap loop is alive end to end.
   const [patchbayAckCount, setPatchbayAckCount] = useState(0)
   const [playback, setPlayback] = useState<PlaybackState>({ currentTime: 0, duration: NaN, playing: false })
+  const [fixtureOutStatus, setFixtureOutStatus] = useState<{ connected: boolean; message?: string }>({ connected: false })
+  const [oscInStatus, setOscInStatus] = useState<{ connected: boolean; message?: string }>({ connected: false })
 
   useEffect(() => {
     if (!canvasRef.current) return
@@ -64,6 +66,8 @@ function useRuntimeBridge(
       },
       onPlayback: (s: PlaybackState) => setPlayback(s),
       onIsfResult,
+      onFixtureOutStatus: (s: { connected: boolean; message?: string }) => setFixtureOutStatus(s),
+      onOscInStatus: (s: { connected: boolean; message?: string }) => setOscInStatus(s),
     }
     let bridge = bridgesByCanvas.get(canvasRef.current)
     if (bridge) {
@@ -77,7 +81,7 @@ function useRuntimeBridge(
     // eslint-disable-next-line react-hooks/exhaustive-deps -- bridge lifecycle is intentionally tied to mount only
   }, [])
 
-  return { bridgeRef, fps, error, patchbayError, patchbayAckCount, playback }
+  return { bridgeRef, fps, error, patchbayError, patchbayAckCount, playback, fixtureOutStatus, oscInStatus }
 }
 
 // Same rising-edge rule ScreenParamAssembler uses to reconstruct "a drop
@@ -125,10 +129,11 @@ export function App() {
   const [bus, setBus] = useState<SignalBus | null>(null)
   const [busMessageCount, setBusMessageCount] = useState(0)
   const [dropDebug, setDropDebug] = useState<DropDetectorDebug | null>(null)
-  const handleSignalBus = useCallback((b: SignalBus, dbg: DropDetectorDebug | null) => {
+  const handleSignalBus = useCallback((b: SignalBus, dbg: DropDetectorDebug | null, fixtureValues: Record<string, number>) => {
     setBus(b)
     setBusMessageCount((n) => n + 1)
     setDropDebug(dbg)
+    setResolvedValues(fixtureValues)
   }, [])
   // ISF import (master-prompt.md §6): the loaded shader's own declared
   // inputs, as real patch targets — merged into mergedCatalog below so the
@@ -144,7 +149,7 @@ export function App() {
     setIsfStatus(r.ok ? { state: 'loaded', fileName: pendingIsfFileName.current, targets: r.targets } : { state: 'error', fileName: pendingIsfFileName.current, message: r.message })
   }, [])
 
-  const { bridgeRef, fps, error, patchbayError, patchbayAckCount, playback } = useRuntimeBridge(canvasRef, handleSignalBus, handleIsfResult)
+  const { bridgeRef, fps, error, patchbayError, patchbayAckCount, playback, fixtureOutStatus, oscInStatus } = useRuntimeBridge(canvasRef, handleSignalBus, handleIsfResult)
   const dropLog = useDropLog(bus)
 
   function handleIsfLoad(source: string, fileName: string) {
@@ -199,20 +204,25 @@ export function App() {
     bridgeRef.current?.setScreenGraph(pruneGraphToTargets(graph, screenTargetIds))
   }, [graph, graphErrors.length, screenTargetIds, bridgeRef])
 
-  const fixtureEvaluator = useMemo(() => {
-    if (graphErrors.length > 0) return null
-    try {
-      return new PatchGraphEvaluator(pruneGraphToTargets(graph, fixtureTargetIds), targetCatalog)
-    } catch {
-      return null
-    }
-  }, [graph, targetCatalog, fixtureTargetIds, graphErrors.length])
-  const [resolvedValues, setResolvedValues] = useState<Record<string, number>>({})
+  // Real production wiring, not a local copy: the worker-resident
+  // FixtureOutput/PatchGraphEvaluator (src/render/conductor/outputs/
+  // FixtureOutput.ts, wired into render-worker.ts) now evaluates the
+  // fixture graph — this editor dogfoods the exact same
+  // setFixtureDocument/setFixtureGraph messages VizInstance's public API
+  // sends (see AGENTS.md's "dogfood the fixture API in the patchbay
+  // editor" session), instead of running its own separate ephemeral
+  // PatchGraphEvaluator copy the way it used to. `resolvedValues` (read by
+  // DmxOutPanel/FixtureVisuals below) comes back over the signalBus debug
+  // stream's fixtureValues field, set directly from handleSignalBus.
+  useEffect(() => {
+    bridgeRef.current?.setFixtureDocument(fixtureDoc)
+  }, [fixtureDoc, bridgeRef])
 
   useEffect(() => {
-    if (!bus || !fixtureEvaluator) return
-    setResolvedValues(fixtureEvaluator.evaluate(bus, 1 / 20)) // ~ the signalBus stream's own interval
-  }, [bus, fixtureEvaluator])
+    if (graphErrors.length > 0) return // same "don't even try, let the worker's ack surface the real reason" posture as the screen graph's own effect above
+    bridgeRef.current?.setFixtureGraph(pruneGraphToTargets(graph, fixtureTargetIds))
+  }, [graph, graphErrors.length, fixtureTargetIds, bridgeRef])
+  const [resolvedValues, setResolvedValues] = useState<Record<string, number>>({})
 
   // Removing a fixture can leave graph target-nodes pointing at a channel
   // that no longer exists — harmless (validatePatchGraph flags it, the
@@ -256,7 +266,7 @@ export function App() {
           <div>bus.energy: {bus ? bus.energy.toFixed(4) : '—'}</div>
           <div>bus.idle: {bus ? String(bus.idle) : '—'}</div>
           <div>graph: {graphErrors.length === 0 ? 'valid' : `invalid (${graphErrors.length} error(s) — see patch graph)`}</div>
-          <div>fixture evaluator: {fixtureEvaluator ? 'valid' : 'invalid/not constructed'}</div>
+          <div>fixture values from worker: {Object.keys(resolvedValues).length} routed channel(s)</div>
         </div>
       ),
     },
@@ -315,7 +325,7 @@ export function App() {
       id: 'midi',
       title: 'MIDI in',
       hint: 'Real Web MIDI device input — control-change activity and clock/beat sync, if a device sends it. See docs/midi.md.',
-      content: <MidiPanel />,
+      content: <MidiPanel onCcChange={(key, value) => bridgeRef.current?.setMidiCc(key, value)} />,
     },
   ]
 
@@ -395,7 +405,16 @@ export function App() {
                 <IsfPanel onLoad={handleIsfLoad} onClear={handleIsfClear} status={isfStatus} />
               </SectionCard>
               <SectionCard title="DMX out" hint="Send patched fixtures out over real Art-Net/sACN via a local relay (npm run udp-relay) — see docs/dmx-out.md.">
-                <DmxOutPanel fixtureDoc={fixtureDoc} resolvedValues={resolvedValues} />
+                <DmxOutPanel
+                  fixtureDoc={fixtureDoc}
+                  resolvedValues={resolvedValues}
+                  status={fixtureOutStatus}
+                  onConnect={(config) => bridgeRef.current?.setFixtureOut(config)}
+                  onDisconnect={() => bridgeRef.current?.setFixtureOut(null)}
+                />
+              </SectionCard>
+              <SectionCard title="OSC in" hint="Route a live incoming OSC message into the graph — see docs/osc.md.">
+                <OscInPanel status={oscInStatus} onConnect={(url) => bridgeRef.current?.setOscIn(url)} onDisconnect={() => bridgeRef.current?.setOscIn(null)} />
               </SectionCard>
               <SectionCard title="Fixtures">
                 <FixtureManager doc={fixtureDoc} onChange={handleFixtureDocChange} />

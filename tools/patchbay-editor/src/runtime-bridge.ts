@@ -1,5 +1,6 @@
-import type { MainToRenderWorker, RenderWorkerToMain, StateFrame } from '../../../src/shared/types'
+import type { FixtureOutConfig, MainToRenderWorker, RenderWorkerToMain, StateFrame } from '../../../src/shared/types'
 import type { PatchGraph, PatchTargetDecl } from '../../../src/render/conductor/patchgraph/types'
+import type { FixtureDocument } from '../../../src/render/conductor/patchgraph/fixture-document'
 import type { SignalBus } from '../../../src/render/conductor/types'
 import type { DropDetectorDebug } from '../../../src/audio/worklet/brain/drop-detector'
 import { AudioEngine } from '../../../src/audio/AudioEngine'
@@ -43,12 +44,15 @@ export interface PlaybackState {
 }
 
 export interface RuntimeBridgeCallbacks {
-  onSignalBus?: (bus: SignalBus, dropDebug: DropDetectorDebug | null) => void
+  onSignalBus?: (bus: SignalBus, dropDebug: DropDetectorDebug | null, fixtureValues: Record<string, number>) => void
   onStats?: (fps: number) => void
   onError?: (message: string) => void
   onPatchbayResult?: (result: { ok: true } | { ok: false; message: string }) => void
   onPlayback?: (state: PlaybackState) => void
   onIsfResult?: (result: { ok: true; targets: PatchTargetDecl[] } | { ok: false; message: string }) => void
+  onFixtureGraphResult?: (result: { ok: true } | { ok: false; message: string }) => void
+  onFixtureOutStatus?: (status: { connected: boolean; message?: string }) => void
+  onOscInStatus?: (status: { connected: boolean; message?: string }) => void
 }
 
 export class RuntimeBridge {
@@ -126,13 +130,22 @@ export class RuntimeBridge {
         this.callbacks.onStats?.(msg.fps)
         break
       case 'signalBus':
-        this.callbacks.onSignalBus?.(msg.bus, msg.dropDebug)
+        this.callbacks.onSignalBus?.(msg.bus, msg.dropDebug, msg.fixtureValues)
         break
       case 'patchbayConfigResult':
         this.callbacks.onPatchbayResult?.(msg.ok ? { ok: true } : { ok: false, message: msg.message })
         break
       case 'isfShaderResult':
         this.callbacks.onIsfResult?.(msg.ok ? { ok: true, targets: msg.targets } : { ok: false, message: msg.message })
+        break
+      case 'fixtureGraphResult':
+        this.callbacks.onFixtureGraphResult?.(msg.ok ? { ok: true } : { ok: false, message: msg.message })
+        break
+      case 'fixtureOutStatus':
+        this.callbacks.onFixtureOutStatus?.({ connected: msg.connected, message: msg.message })
+        break
+      case 'oscInStatus':
+        this.callbacks.onOscInStatus?.({ connected: msg.connected, message: msg.message })
         break
     }
   }
@@ -161,6 +174,32 @@ export class RuntimeBridge {
   // same one) — this editor is just one caller of it, not the only one.
   setIsfShader(source: string | null): void {
     this.post({ kind: 'setIsfShader', source })
+  }
+
+  // Real, non-debug messages (src/index.ts's VizInstance sends the same
+  // ones) — the editor is just one caller, same story as setIsfShader
+  // above. setFixtureDocument/setFixtureGraph drive the worker-resident
+  // FixtureOutput this editor now dogfoods instead of its own ephemeral
+  // React-side evaluator (see AGENTS.md's "dogfood the fixture API in the
+  // patchbay editor" session).
+  setFixtureDocument(doc: FixtureDocument): void {
+    this.post({ kind: 'setFixtureDocument', doc })
+  }
+
+  setFixtureGraph(graph: PatchGraph): void {
+    this.post({ kind: 'setFixtureGraph', graph })
+  }
+
+  setFixtureOut(config: FixtureOutConfig | null): void {
+    this.post({ kind: 'setFixtureOut', config })
+  }
+
+  setMidiCc(key: string, value: number): void {
+    this.post({ kind: 'midiCc', key, value })
+  }
+
+  setOscIn(wsUrl: string | null): void {
+    this.post({ kind: 'setOscIn', wsUrl })
   }
 
   async loadFile(file: File): Promise<void> {
