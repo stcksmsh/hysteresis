@@ -1,4 +1,4 @@
-# OSC out
+# OSC in/out
 
 Streams the live signal bus out as real [OSC](https://opensoundcontrol.stanford.edu/spec-1_0.html)
 (Open Sound Control) messages, so an external tool that understands OSC —
@@ -67,8 +67,44 @@ feel live, far below the cost of doing this every rendered frame). `scope`
 (the oscilloscope beam's raw waveform buffer) and `idle` (a meta flag, not
 a signal) are not included — same exclusion the patch graph itself applies.
 
+## OSC in
+
+An incoming OSC message from an external tool is now routable into the
+patch graph with an `oscIn` node (`patchgraph/types.ts`), the same way a
+`signal` or `midiCc` node is — wire a `curve`/`threshold`/`envelope` chain
+into it exactly like any other source, addressed by the message's own OSC
+address string (e.g. `/1/fader1`). Only a message's first numeric-ish
+argument (float/int/bool) is stored; a string-typed argument is dropped
+rather than coerced (see `src/osc/osc-in-bridge.ts`'s own doc comment).
+
+This direction needs the relay to also listen for inbound UDP and forward
+it back over the WebSocket — pass `--osc-in-port`:
+
+```sh
+npm run udp-relay -- --ws-port 9090 --udp-host 127.0.0.1 --udp-port 9000 --osc-in-port 9001
+```
+
+Point your OSC-sending tool at `udp://<this machine>:9001`. Then, from a
+page using the package:
+
+```ts
+const instance = init(canvas, opts)
+instance.setOscIn('ws://localhost:9090', (status) => {
+  console.log(status.connected ? 'OSC in connected' : `OSC in disconnected: ${status.message ?? ''}`)
+})
+// ...later
+instance.setOscIn(null) // disconnect
+```
+
+`--osc-in-port` is optional (omit it, or pass `0`, and the relay behaves
+exactly as it did before this option existed — no inbound listening at
+all) since a relay only ever used for `setOscOut`/DMX has nothing to gain
+from an extra open port.
+
 ## Status today
 
-This is OSC **out** only (Hysteresis → external tools). OSC **in** (routing
-an incoming OSC message into the patch graph, the way a fixture channel or
-an ISF shader input is routable today) isn't built yet.
+Both directions are real. Not built: OSC address pattern matching (an
+`oscIn` node matches one exact address, not a wildcard), and there's no
+UI in the patchbay editor showing which addresses have actually arrived
+(the OSC in panel shows connection status only, not a live value log —
+unlike the MIDI panel's CC activity list).

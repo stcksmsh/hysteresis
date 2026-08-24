@@ -42,13 +42,15 @@ should see:
 
 ## Status today
 
-- **Diagnostic-only, not yet routable.** Unlike ISF inputs or fixture
-  channels, a MIDI CC value isn't a patch-graph target you can wire a
-  `signal`/`curve`/`threshold` chain into yet — this pass proves the real
-  device/parsing/clock-tracking path works end to end first. Turning it
-  into a real graph input (most likely a new `midiCc` node kind alongside
-  `signal`/`const` in `patchgraph/types.ts`) is real, scoped future work,
-  not attempted here — see `AGENTS.md`.
+- **Now routable.** A `midiCc` patch-graph node kind
+  (`patchgraph/types.ts`) reads a live CC value the same way a `signal`
+  node reads a bus field — wire a `curve`/`threshold`/`envelope` chain into
+  it exactly like any other source. `VizInstance.connectMidiIn()`
+  (`src/index.ts`) forwards every real CC message to the render worker,
+  where `PatchGraphEvaluator.evaluate()`'s `external.midiCc` map is what
+  the node reads from. The patchbay editor's MIDI panel does the same via
+  `RuntimeBridge.setMidiCc()`. Clock sync is a separate, still-unrouted
+  concern — see below.
 - **Clock sync isn't wired into the Conductor's own tempo tracking** (the
   live-audio `BeatTracker`) — `MidiClockState`'s shape was chosen to be
   compatible with that future integration, but nothing consumes it that way

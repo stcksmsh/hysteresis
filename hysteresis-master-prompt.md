@@ -161,12 +161,13 @@ This is where ISF adoption matters most.
 
 ## 5. Protocols to explicitly support (priority order)
 1. **ISF** (visual scripting/prefab compatibility) — highest leverage, do first. ✅ done (§6).
-2. **OSC** (signal bus interop with the wider creative-coding world). ✅ out done, in not started (§6).
+2. **OSC** (signal bus interop with the wider creative-coding world). ✅ done, both directions (§6).
 3. **Art-Net / sACN** (network DMX — most common in modern lighting rigs). ✅ done (§6) — now has a real production fixture pipeline (`FixtureOutput` in the render worker); USB/Web Serial stays editor-tool-only (see §6).
 4. **DMX512 via USB-serial** (Bridge-mediated; covers dongle-based setups). ✅ done (§6) — NOT Bridge-mediated after all, turned out to be the one protocol Web Serial reaches directly.
 5. **MIDI** (both control input — mapping a knob to a patch parameter —
-   and MIDI clock/beat sync from a DAW). ✅ parsing/clock/CC-input done
-   (§6), not yet routable in the patch graph.
+   and MIDI clock/beat sync from a DAW). ✅ control input done and routable
+   via a `midiCc` patch-graph node (§6); clock/beat sync still not wired
+   into the Conductor's own tempo tracking.
 6. **ILDA / laser DAC support** (Bridge-mediated; smaller user base but a
    real differentiator since nothing unifies this with the rest cleanly).
    ✅ protocol layer done (§6) — real ILDA file format + Ether Dream
@@ -239,12 +240,15 @@ This is where ISF adoption matters most.
       phase, shape-compatible with the live-audio `BeatTracker` for a
       future Conductor integration that hasn't happened), a CC input model
       with 0..1 normalization and a "MIDI learn" primitive, and real Web
-      MIDI wiring (`src/midi/`) — see `docs/midi.md`. **Diagnostic-only so
-      far**: a live editor debug panel proves the real device/parsing path
-      works, but there is no `midiCc`-style patch-graph node kind yet, so a
-      CC still can't be routed into a chain the way an ISF input or fixture
-      channel can. Real Web MIDI, meaningfully broader browser support than
-      Web Serial (desktop + Android Chrome/Edge, Safari 17+).
+      MIDI wiring (`src/midi/`) — see `docs/midi.md`. **Now routable**: a
+      `midiCc` patch-graph node kind (`patchgraph/types.ts`) reads a live
+      CC value the same way a `signal` node reads a bus field, and
+      `VizInstance.connectMidiIn()` forwards every real CC message to the
+      render worker for it to read from. Real Web MIDI, meaningfully
+      broader browser support than Web Serial (desktop + Android
+      Chrome/Edge, Safari 17+). Clock sync into the Conductor's own tempo
+      tracking is still not wired (see the MIDI clock sync backlog item
+      below).
 - [x] WLED/E1.31 on-ramp. Real WLED "DRGB"/"WARLS" UDP realtime protocol
       encoders (`src/dmx/wled.ts`), reusing the exact same universe
       rendering and relay Art-Net/sACN use — a patched `rgb` fixture run
@@ -270,14 +274,21 @@ This is where ISF adoption matters most.
       concept of "a stream of laser points" at all yet (no fixture/target
       exists for it, unlike DMX's dimmer/RGB/servo types) — this is real,
       separate design work, not started.
-- [~] OSC in/out on the signal bus for external tool interop. OSC **out**
-      done: a real OSC 1.0 codec (`src/osc/`), every routable bus signal
+- [x] OSC in/out on the signal bus for external tool interop. OSC **out**:
+      a real OSC 1.0 codec (`src/osc/`), every routable bus signal
       streamed as `/hysteresis/bus/<name>` at 20Hz over a WebSocket, real
       public API (`VizInstance.setOscOut()`), plus a local relay
       (`npm run udp-relay`, browsers have no raw UDP) — see `docs/osc.md`.
-      OSC **in** (routing an incoming OSC message into the patch graph) not
-      started.
-- [ ] MIDI clock sync + MIDI CC mapping to patch parameters.
+      OSC **in**: an `oscIn` patch-graph node kind reads a live incoming
+      message's value by OSC address, fed by `OscInBridge`
+      (`src/osc/osc-in-bridge.ts`) decoding real packets the relay forwards
+      from an `--osc-in-port` inbound UDP listener — real public API
+      (`VizInstance.setOscIn()`). No address pattern matching (exact match
+      only) and no live-value-log UI in the editor yet.
+- [x] MIDI CC mapping to patch parameters — see the MIDI entry above (§5).
+      MIDI clock sync into the Conductor's own tempo tracking is still not
+      wired (`MidiClockState`'s shape was chosen to be compatible with a
+      future integration, but nothing consumes it that way yet).
 - [ ] Graph versioning/undo distinct from project-file save.
 
 ## 7. Design principles to hold onto
