@@ -13,8 +13,14 @@ function applyCurve(kind: CurveKind, v: number): number {
     case 'log':
       return Math.sign(v) * Math.log1p(Math.abs(v) * (Math.E - 1))
     case 'smoothstep': {
-      const t = clamp01(v)
-      return t * t * (3 - 2 * t)
+      // Sign-preserving, like 'exp'/'log' above — without this, a bipolar
+      // signal (bandTilt, pan) routed through smoothstep had its entire
+      // negative half silently clamped to 0 instead of easing through it,
+      // an inconsistency with how the other two nonlinear curves handle
+      // the exact same signal domain.
+      const s = Math.sign(v)
+      const t = clamp01(Math.abs(v))
+      return s * t * t * (3 - 2 * t)
     }
     default:
       return v

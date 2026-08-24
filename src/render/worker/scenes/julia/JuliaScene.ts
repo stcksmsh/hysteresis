@@ -671,13 +671,6 @@ export class JuliaScene implements Scene {
       this.panY = 0
       this.retarget(this.springCx.current, this.springCy.current)
       this.postFlash = 1
-      // Diagnostic (temporary): "went dark and stayed dark" has been
-      // reported twice now with no way to tell whether this is that
-      // designed reset (which should recover in POST_FLASH_SEC=1.6s) firing
-      // unexpectedly often/getting stuck, or something else entirely (GL
-      // context loss, adaptive-quality degradation). Cheap enough to leave
-      // in — remove once the actual cause is confirmed.
-      console.log('[sinteza-viz] JuliaScene zoom-floor reset fired', { t: performance.now() })
     }
     this.postFlash = Math.max(0, this.postFlash - dt / POST_FLASH_SEC)
     this.flash = Math.max(preFlash, this.postFlash)
@@ -744,11 +737,32 @@ export class JuliaScene implements Scene {
   // steered) change every frame, so this has to be recomputed and
   // re-uploaded every frame too — REF_ORBIT_LENGTH iterations of plain
   // arithmetic plus a few-KB texture upload, both trivial costs.
+  // `pan` is only a heuristic search target (vortex-search.ts's own
+  // comments note past failures to reliably find real boundary detail) —
+  // nothing guarantees it never sits somewhere that genuinely escapes
+  // fast. Left unguarded, a diverging orbit grows without bound in plain
+  // float64 and can hit Infinity/NaN well within REF_ORBIT_LENGTH
+  // iterations; those values fed straight into the shader's escape check
+  // (`dot(full,full) > 4.0`, which is always false for NaN under IEEE 754)
+  // happen to fail safe today rather than crash — but only by luck/an
+  // unrelated pass's own NaN sanitization downstream, not by design. Once
+  // the orbit stops being finite, hold the last finite point for the rest
+  // of the texture instead of uploading garbage/NaN — provably harmless
+  // rather than accidentally harmless.
   private updateReferenceOrbit(cx: number, cy: number): void {
     const gl = this.gl
     let zx = this.panX
     let zy = this.panY
     for (let i = 0; i < REF_ORBIT_LENGTH; i++) {
+      if (!Number.isFinite(zx) || !Number.isFinite(zy)) {
+        const lastZx = this.refOrbitData[(i - 1) * 2] ?? 0
+        const lastZy = this.refOrbitData[(i - 1) * 2 + 1] ?? 0
+        for (let j = i; j < REF_ORBIT_LENGTH; j++) {
+          this.refOrbitData[j * 2] = lastZx
+          this.refOrbitData[j * 2 + 1] = lastZy
+        }
+        break
+      }
       this.refOrbitData[i * 2] = zx
       this.refOrbitData[i * 2 + 1] = zy
       const nzx = zx * zx - zy * zy + cx

@@ -99,8 +99,25 @@ export class StructureSource {
     this.nextOnsetIndex = onsetIdx
   }
 
+  // `nextEventIndex`/`nextOnsetIndex` are monotonic cursors — correct only
+  // as long as `t` never moves backward without an explicit resyncTo()
+  // rewinding them first. Every caller of fuse()/synthesize() is SUPPOSED
+  // to route a seek through resyncTo() (see its own doc comment), but a
+  // host's periodic position feed isn't guaranteed to be monotonic itself
+  // — the SoundCloud/position-only path this class exists for (§5) reports
+  // position from an external embed's own widget, not a locally-owned
+  // clock, and a brief out-of-order reading (network jitter, a loop-repeat
+  // in the embed) is plausible. Without this self-heal, a cursor already
+  // past an event/onset in the dip range would silently never re-emit it
+  // for the rest of playback — treated as a class invariant here rather
+  // than trusted to every call site.
+  private healPositionRegression(t: number): void {
+    if (t < this.lastPosition - 1e-6) this.resyncTo(t)
+  }
+
   fuse(frame: StateFrame, positionSec: number): StateFrame {
     if (!this.sidecar) return frame
+    this.healPositionRegression(positionSec)
     const sidecar = this.sidecar
     const { beatPhase, barPhase } = beatPositionAt(sidecar.beats, positionSec)
     const structuralEvents = this.collectEvents(positionSec)
@@ -130,6 +147,7 @@ export class StructureSource {
   synthesize(positionSec: number): StateFrame {
     const sidecar = this.sidecar
     if (!sidecar) throw new Error('StructureSource.synthesize() called with no sidecar loaded')
+    this.healPositionRegression(positionSec)
 
     const { beatPhase, barPhase } = beatPositionAt(sidecar.beats, positionSec)
     const bandsRaw = {} as BandEnergies

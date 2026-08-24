@@ -16,8 +16,15 @@ export function applyCurve(curve: Curve | undefined, v: number): number {
     case 'log':
       return Math.sign(v) * Math.log1p(Math.abs(v) * (Math.E - 1))
     case 'smoothstep': {
-      const t = Math.min(1, Math.max(0, v))
-      return t * t * (3 - 2 * t)
+      // Sign-preserving, like 'exp'/'log' above — see evaluate-node.ts's
+      // matching fix (patchgraph/evaluate-node.ts) for why: this file is
+      // migrate-route-config.spec.ts's numerical-equivalence oracle for
+      // that evaluator, so both must apply the same fix together or the
+      // parity test would start failing for any bipolar signal (bandTilt,
+      // pan) routed through smoothstep.
+      const s = Math.sign(v)
+      const t = Math.min(1, Math.max(0, Math.abs(v)))
+      return s * t * t * (3 - 2 * t)
     }
   }
 }

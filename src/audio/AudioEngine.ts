@@ -11,6 +11,18 @@ export class AudioEngine {
   private workletNode: AudioWorkletNode | null = null
   private sourceNode: AudioNode | null = null
   private listeners = new Set<StateFrameListener>()
+  // Guards against a real re-entrancy race: `attached` (the caller-side
+  // guard index.ts's tryAttachAudio polls) only flips true once attach()
+  // fully resolves, but addModule() below can legitimately take longer
+  // than the poll interval (slow network, first-time worklet compile, a
+  // throttled/backgrounded tab) — if it does, a second attach() call can
+  // start before the first finishes, and each would create and wire up
+  // its own AudioWorkletNode, leaving two live pipelines both posting
+  // frames to the same `listeners` Set forever. Tracking the in-flight
+  // promise here (not just a boolean) means a concurrent caller gets the
+  // SAME attach, not a rejected/ignored call — attach() is safe to call
+  // concurrently regardless of caller discipline.
+  private attachPromise: Promise<void> | null = null
 
   onStateFrame(listener: StateFrameListener): () => void {
     this.listeners.add(listener)
@@ -32,6 +44,14 @@ export class AudioEngine {
   // `audioWorklet.addModule()` targets aren't specially handled by bundlers'
   // `new URL(..., import.meta.url)` asset scanning the way `new Worker()` is.
   async attach(ctx: AudioContext, workletUrl: string | URL, source?: AudioNode): Promise<void> {
+    if (this.attachPromise) return this.attachPromise
+    this.attachPromise = this.doAttach(ctx, workletUrl, source).finally(() => {
+      this.attachPromise = null
+    })
+    return this.attachPromise
+  }
+
+  private async doAttach(ctx: AudioContext, workletUrl: string | URL, source?: AudioNode): Promise<void> {
     this.detach()
     await ctx.audioWorklet.addModule(workletUrl)
 

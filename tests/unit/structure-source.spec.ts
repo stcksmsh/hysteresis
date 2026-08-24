@@ -101,6 +101,22 @@ describe('StructureSource', () => {
     expect(afterDrop.filter((e) => e.type === 'drop')).toHaveLength(0)
   })
 
+  it('self-heals a brief backward position jitter instead of permanently skipping the event it dipped past', () => {
+    const source = new StructureSource()
+    source.load(makeSidecar())
+    // Advance past the drop at t=8 normally.
+    source.fuse(liveFrame(8.1), 8.1)
+    // A jittery host position feed (e.g. an external embed's own reporting,
+    // not a locally-owned clock) briefly reports a value BEFORE the drop,
+    // with no explicit resyncTo() — this must not be trusted to have
+    // already consumed events in the now-ahead range.
+    source.fuse(liveFrame(7.5), 7.5)
+    // Advancing forward again past the drop a second time should still see
+    // it — it must not have been silently consumed by the dip.
+    const seenAgain = source.fuse(liveFrame(8.1), 8.1).events
+    expect(seenAgain.filter((e) => e.type === 'drop')).toHaveLength(1)
+  })
+
   it('keeps live onset events alongside sidecar structural events', () => {
     const source = new StructureSource()
     source.load(makeSidecar())
