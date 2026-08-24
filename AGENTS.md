@@ -320,14 +320,17 @@ live-reactive playback as two distinct export modes. **Not started.**
       error). Loadable from the editor AND as real public API (`loadIsfShader()`/
       `clearIsfShader()`, `docs/isf-shaders.md`) — opt-in, production still ships Julia by
       default.
-- [~] ISF superset spec ("the Hysteresis format") — the `hysteresisSignal` input type is real and
-      shipped (`src/isf/`, `docs/isf-shaders.md`): a shader can declare it wants any real bus
-      signal by name (`noveltyLocal`, `familiarity`, `harmonicNovelty`, per-band energies, the
-      sidecar-only presence signals, ...), validated at load time. `HYSTERESIS_SCRIPT` (an
-      optional per-file stateful JS companion — needed for anything a single GLSL fragment
-      shader can't express, e.g. Julia's own autopilot navigation) is reserved in the parser
-      (rejected with a clear error) but its execution engine is not built — real, separate,
-      later work, planned as the next phase before porting Julia itself onto this format.
+- [~] ISF superset spec ("the `.hyst` format") — real, shipped, tested, beyond just
+      `hysteresisSignal`: `HYSTERESIS_VERSION` (real future-proofing — unrecognized versions
+      reject clearly), scoped real multi-pass `PASSES` (`fullscreen` + a `lineTrace` kind reusing
+      the built-in Julia beam's real GPU-instanced-quad technique), and `resource` inputs (raw
+      non-scalar live data — `scope`'s waveform, deliberately never a routable patch-graph
+      target). `examples/isf/julia.hyst` is a real, working, checked-in port of the Julia
+      substrate + oscilloscope beam, driven by 7 live signals — genuinely part of the shader, not
+      an overlay. `HYSTERESIS_SCRIPT` (an optional per-file stateful JS companion — needed for
+      anything a single-pass shader can't express: Julia's own vortex-search navigation,
+      perturbation-orbit deep zoom) is still reserved-but-rejected — its execution engine is the
+      one real, separate, not-yet-built piece, and now the actual next phase (see §5).
 - [ ] Shadertoy → ISF import helper (mind licensing/attribution on ported shaders).
 - [ ] Live inline node state visualization (waveform/value preview per node).
 - [ ] Macro/sub-patch save-as-reusable-block.
@@ -568,6 +571,18 @@ real hardware or a real browser (no MIDI controller, no external OSC sender, no 
 receiver, no laser DAC, no browser access in most of these sessions) — typechecked and
 unit-tested at the logic layer only. Closing that loop for any one protocol, when real
 hardware/browser access is available, is higher-value than starting new scope.
+
+**As of the `.hyst` multi-pass/resource work + live-knob node params session**: the format itself
+is real, tested, and has a real working example (`examples/isf/julia.hyst`). The three concrete
+next candidates, in the order the user and I actually converged on when this was last discussed:
+(1) wire the still-unused Layer 2 signals (`noveltyLocal`/`fullness`/`harmonicNovelty`/stem-
+presence/...) into a real default route — small, contained, real value; (2) verify `midiCc`/the
+new envelope-attack/release-override feature against a real physical MIDI controller (the user
+has one) — closes a real, standing, never-tested gap rather than adding more untested surface;
+(3) **the big one** — the `HYSTERESIS_SCRIPT` execution engine + the actual Julia autopilot port
+(vortex-search navigation, perturbation-orbit deep zoom) onto this format, the single largest
+piece of remaining scope this whole roadmap has been pointing at since Phase 0. Multi-session
+work — needs its own scoped design pass before code, same as the `.hyst` format itself got.
 
 **Operating mode**:
 - Gap-analysis first, every time you resume — diff §3.7's checklist against what's actually in
