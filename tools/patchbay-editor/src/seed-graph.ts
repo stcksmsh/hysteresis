@@ -1,5 +1,33 @@
 import { makeDefaultDraft, makeNodeId, type DraftNode } from './graph-draft'
 import type { PatchTargetDecl } from '../../../src/render/conductor/patchgraph/types'
+import { CONTINUOUS_ONLY } from '../../../src/render/conductor/patchgraph/fixture-types'
+
+// Servo/mover channels (fixture-types.ts's CONTINUOUS_ONLY tag set) are the
+// exact targets that physically can't track a raw audio-rate signal — a
+// hi-hat or presence-band value jumps every frame, which reads as the
+// fixture "all over the place" rather than moving with the music. The demo
+// wiring's only job before this was range-mapping into the target's
+// physical range (mapIntoRange below); nothing actually smoothed the
+// motion. An `envelope` node (already a real graph node kind — see
+// evaluate-node.ts) between the raw signal and the range map fixes this
+// the same way a real rig's servo/laser routing should: ease in fast
+// enough to feel responsive, ease out slower so it doesn't visibly snap
+// back to rest between hits.
+const EASING_ATTACK_SEC = 0.15
+const EASING_RELEASE_SEC = 0.7
+
+function needsEasing(target: PatchTargetDecl): boolean {
+  return target.acceptsTags.length > 0 && target.acceptsTags.every((tag) => (CONTINUOUS_ONLY as readonly string[]).includes(tag))
+}
+
+function easeSignal(sourceId: string, nodes: DraftNode[]): string {
+  const env = makeDefaultDraft('envelope', makeNodeId())
+  env.attackSec = EASING_ATTACK_SEC
+  env.releaseSec = EASING_RELEASE_SEC
+  env.inputs = [sourceId]
+  nodes.push(env)
+  return env.id
+}
 
 // Continuous-tagged signals only — safe to feed any target (including
 // servo/mover's CONTINUOUS_ONLY channels) with no threshold/envelope in
@@ -34,7 +62,8 @@ export function seedChainForTarget(target: PatchTargetDecl, signal: DraftNode['s
   const sig = makeDefaultDraft('signal', makeNodeId())
   sig.signal = signal
   const nodes: DraftNode[] = [sig]
-  const mappedId = mapIntoRange(target, sig.id, nodes)
+  const eased = needsEasing(target) ? easeSignal(sig.id, nodes) : sig.id
+  const mappedId = mapIntoRange(target, eased, nodes)
   const tgt = makeDefaultDraft('target', makeNodeId())
   tgt.targetId = target.id
   tgt.inputs = [mappedId]
@@ -55,7 +84,8 @@ export function seedNodes(targets: readonly PatchTargetDecl[]): DraftNode[] {
   const th = makeDefaultDraft('threshold', makeNodeId())
   th.inputs = [sig.id]
   const nodes: DraftNode[] = [sig, th]
-  const mappedId = mapIntoRange(first, th.id, nodes)
+  const easedFirst = needsEasing(first) ? easeSignal(th.id, nodes) : th.id
+  const mappedId = mapIntoRange(first, easedFirst, nodes)
   const tgt = makeDefaultDraft('target', makeNodeId())
   tgt.inputs = [mappedId]
   tgt.targetId = first.id

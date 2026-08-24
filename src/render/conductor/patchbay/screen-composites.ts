@@ -28,7 +28,12 @@ const FIELD_DECAY_BREAK_MAX = 0.985
 const BAR_BREATH_AMPLITUDE = 0.01 // step 3: barPhase -> slow breathing, subtle so it never fights build/break
 
 const FLOW_STRENGTH_STIFFNESS = 40
-const FLOW_STRENGTH_DAMPING = 9
+// Was 9 — real-track verification (Instant Crush, SIGSEGV) showed the drop
+// shockwave visually decaying within well under a second, reading as a
+// single flash rather than a felt "hit". Lower damping ~= longer ring-out
+// at the same stiffness/impulse (decay time constant is 2/damping), still
+// underdamped enough to keep the punch/overshoot character, not a slow fade.
+const FLOW_STRENGTH_DAMPING = 6
 const FLOW_STRENGTH_BASE = 1
 const FLOW_STRENGTH_BUILD_GAIN = 2.2
 const FLOW_STRENGTH_ENERGY_GAIN = 0.9
@@ -42,7 +47,11 @@ const SYMMETRY_BUILD_GAIN = 0.55
 const SYMMETRY_FLOOR = 0.18
 const FLATNESS_BLOOM_THRESHOLD = 0.75
 const FLATNESS_BLOOM_GAIN = 0.6
-const SYMMETRY_DROP_HOLD_SEC = 2.0
+// Was 2.0s — same real-track verification found the drop's snap-to-1
+// mirror hold too brief to register against a full track (easy to miss in
+// a single frame; the symmetry-release smoothing then dissolves it before
+// it reads as an event).
+const SYMMETRY_DROP_HOLD_SEC = 3.5
 // Reported "too psychedelic": tension/buildProgress/flatness/familiarity
 // could all combine to push ambient symmetry all the way to full mirror —
 // and since decay (persistence/brightness) rises off the same tension/build

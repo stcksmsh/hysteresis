@@ -28,6 +28,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.worker.json && tsc --noEmit -p tsconfig.tools.json && tsc --noEmit -p tsconfig.patchbay-editor.json",
     "test": "vitest run",
     "analyze": "tsx scripts/analyze.ts",
+    "render-video": "tsx scripts/render-video.ts",
     "udp-relay": "tsx scripts/udp-relay.ts",
     "tcp-relay": "tsx scripts/tcp-relay.ts",
     "prepare": "npm run build:lib"
@@ -44,6 +45,7 @@
     "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^6.1.0",
     "concurrently": "^10.0.4",
+    "puppeteer-core": "^25.8.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "tsx": "^4.20.6",

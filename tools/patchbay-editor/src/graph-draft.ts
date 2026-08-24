@@ -89,7 +89,14 @@ export function toPatchGraphNode(d: DraftNode): PatchGraphNode {
     case 'threshold':
       return { id: d.id, kind: 'threshold', inputs: [inputs[0] ?? ''], cut: d.cut ?? 0.5, hysteresis: d.hysteresis, label }
     case 'envelope':
-      return { id: d.id, kind: 'envelope', inputs: [inputs[0] ?? ''], attackSec: d.attackSec ?? 0.1, releaseSec: d.releaseSec ?? 0.5, label }
+      return {
+        id: d.id,
+        kind: 'envelope',
+        inputs: [inputs[0] ?? '', inputs[1] ?? '', inputs[2] ?? ''],
+        attackSec: d.attackSec ?? 0.1,
+        releaseSec: d.releaseSec ?? 0.5,
+        label,
+      }
     case 'logic':
       return d.logicOp === 'not'
         ? { id: d.id, kind: 'logic', op: 'not', inputs: [inputs[0] ?? ''], label }

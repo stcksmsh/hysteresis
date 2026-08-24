@@ -1274,3 +1274,346 @@ here"* — never actually done until now).
   a real decision first (§3.8's open licensing question), not an assumption.
 - **Verified**: the two throwaway verification scripts were deleted after use; `git status`
   confirmed a clean tree (nothing added to the repo by this pass) before and after.
+
+## `render-video`: a real offline video renderer (same session, immediate follow-up)
+
+User's ask, reframed explicitly as wanting a genuine, reusable capability ("a good thing to have
+right?"), not a one-off script: render a full song through the real production pipeline, driven
+by a precomputed sidecar by default, with the new `hysteresisSignal`-augmented ISF shader loaded,
+plus two overlay panels for a single comprehensive test video — live signal debug readouts on the
+left, simulated physical-fixture visuals on the right, both at reduced opacity in a wide/
+landscape-phone aspect so the center visualizer stays the main attraction. Planned via a real
+plan-mode pass (two Explore forks grounding the render-worker's actual frame loop and the
+existing debug/fixture data pipeline) before writing anything — see that plan for the full design
+reasoning; summarizing what actually shipped here.
+
+- **`render-worker.ts` — real production file, extra care taken**: `init` gained an optional
+  `startLoop?: boolean` (default `true` — every existing caller omits it, zero behavior change).
+  `tick()`'s per-frame body (drain events, evaluate the screen graph, `ScreenOutput.update`,
+  fixture-graph evaluation) was extracted verbatim into a shared `renderStep(effectiveFrame, dt)`
+  — called by both the unchanged live rAF `loop()` (still wall-clock `dt`) and a new
+  `renderFrame` message (caller-supplied `StateFrame` + `dt`), which is the concrete guarantee
+  the live path's behavior can't have changed: same function, same code, different `dt` source.
+  Throttled/live-only side effects (the signalBus debug stream, OSC-out send, the real fixture
+  DMX send, adaptive quality reacting to wall-clock render time) deliberately stay OUTSIDE
+  `renderStep` and only run from `tick()` — an offline batch render doesn't want a real network
+  send, and wall-clock-reactive quality scaling would make an as-fast-as-possible render
+  nondeterministic. The `renderFrame` handler replies with the composited frame as a transferred
+  `ImageBitmap` (`OffscreenCanvas.transferToImageBitmap()` — no manual `gl.readPixels`/format
+  handling needed) bundled with that exact frame's `bus`/`dropDebug`/`fixtureValues`, synchronized
+  to the frame instead of racing the existing 20Hz debug-stream timer.
+- **No direct unit test for `renderStep`'s behavior-preservation**: `render-worker.ts` isn't
+  importable in this repo's `vitest` environment (`environment: 'node'`, no `self` global —
+  `typeof self.requestAnimationFrame` at module scope throws) — the same standing gap already
+  documented for `src/index.ts`. `renderStep` is a verbatim extraction with zero new computation,
+  composing only already-unit-tested functions (`Conductor.update`, `PatchGraphEvaluator.evaluate`
+  via `resolveScreenTargets`, `ScreenParamAssembler` — all covered by `conductor.spec.ts`), so
+  behavior-preservation is provable by inspection rather than a new runnable test; the real
+  end-to-end render below is what actually proves it live.
+- **`tools/render-video/`** (new, own Vite config `vite.render-video.config.ts`, same posture as
+  `tools/patchbay-editor/` — never reachable from `npm run build`/`build:lib`): `harness.ts`, no
+  UI, driven entirely by `window.__render*` functions a Puppeteer driver calls. No DOM `<canvas>`
+  anywhere — `new OffscreenCanvas(w,h)` is itself transferable via `postMessage`, sidestepping
+  `transferControlToOffscreen()` and a visible canvas element entirely. Reuses the exact same
+  render-worker.ts the shipped package uses (imported by relative URL, same pattern
+  `tools/patchbay-editor/src/runtime-bridge.ts` already established) — the rendered output is the
+  real production pipeline, not a mock. `overlay-debug.ts` draws the left panel (a genuinely more
+  complete signal readout than the patchbay editor's own debug drawer has ever had — every signal
+  from this session's earlier Layer 2 arc, confirmed via that session's own exploration to be
+  entirely absent from the editor UI, is drawn here for the first time). `overlay-fixtures.ts`
+  draws the right panel — canvas reimplementations of `FixtureVisuals.tsx`'s four widget types
+  (that component is DOM/CSS/SVG, confirmed not directly reusable for a canvas-composited video
+  frame) — but the *wiring* is reused verbatim, not reimplemented: the same 4 demo fixture types
+  `tools/patchbay-editor/src/App.tsx` already seeds, and `seed-graph.ts`'s `seedNodes()` (cross-
+  tool import, confirmed dependency-clean — no React) to auto-wire them to rotating real bus
+  signals, imported directly rather than duplicated.
+- **A real Vite gotcha found and worked around**: a static `vite build` of the harness
+  mis-bundles the `new Worker(new URL('...render-worker.ts', import.meta.url))` reference as a
+  raw, unexecutable `.ts` file in the output (confirmed by inspecting `dist-render-video/` after
+  a trial static build) — Rollup's worker-detection apparently doesn't handle this specific
+  variable-split pattern the same way the dev server's on-the-fly transpilation does. Fixed by
+  always driving the harness through Vite's own dev server (`vite --config
+  vite.render-video.config.ts`, spawned as a child process by the driver) instead of a static
+  build — the exact same proven pattern `tools/patchbay-editor/` already relies on (that tool has
+  also never been statically built, only ever run via `npm run patchbay`'s dev server).
+- **`scripts/render-video.ts`** (the real CLI, `npm run render-video --`): sidecar-driven by
+  default (runs `analyzeMix()` — already-real, already-tested — if `--sidecar` isn't given, same
+  as `scripts/analyze.ts` does); extracts audio via `ffmpeg` when the input is an `.mp4`; spawns
+  the harness's dev server, launches headless Chrome via `puppeteer-core` pointed at the system's
+  already-installed `/usr/bin/google-chrome` (`--use-gl=angle --use-angle=swiftshader` for
+  software WebGL2 — no real GPU needed); loads the sidecar (passed as a structured-cloned JS
+  object via `page.evaluate()`, not fetched over the network — sidesteps needing to serve the
+  file at all) and, if `--isf` is given, the shader plus one real route
+  (`signal:<--hysteresis-signal, default energy> -> target:isf.drive`) added on top of — not
+  replacing — the real default screen graph, since the memory-field/bloom pipeline's own required
+  routes still need to be live under a loaded ISF scene too. Then steps `t` from `0` to
+  `sidecar.duration` in `1/fps` increments, calling `__renderFrame` each time (fully
+  deterministic, no real-time wait — runs as fast as the machine allows), writes each returned
+  PNG to a frame sequence, and muxes with the real audio via one `ffmpeg` call at the end.
+  `--no-debug-overlay`/`--no-fixture-overlay` are real flags — this is meant to also produce a
+  clean, overlay-free render later, not just this test video.
+- **End-to-end proof, immediately, on the first real attempt**: an 8s/640×360/5fps smoke-test
+  render against a real Instant Crush clip with the augmented `hysteresisSignal` shader produced
+  a genuinely correct composited frame — the ISF shader's own procedural pattern visibly
+  rendering center-frame, the debug panel's full signal-label list rendering left, and all 4 demo
+  fixture widgets (dimmer glow, RGB swatch, servo needle, mover crosshair) rendering right, all
+  from one real headless-Chrome run of the actual production pipeline. **This is also the first
+  real browser verification `hysteresisSignal` has ever had** — every prior verification this
+  session was Node-side pipeline plumbing (real data flowing through real functions), never an
+  actual GL-rendered pixel; this closes that specific, previously-flagged gap. Then launched the
+  real deliverable: the full 5:40 Instant Crush MP4 at 1920×1080/30fps (~10,195 frames) against
+  the schema-3 stems sidecar (exercising the vocal/drums/bass/other/lead presence overlay rows
+  too, not just the core signals) — see below for the outcome once it finished.
+- **A real performance bug found and fixed, same session, on the user's own "this is really
+  slow, is this stupid" pushback**: the first full-song attempt above was on pace for ~5-6 hours
+  — genuinely too slow, and the user was right to question it. Root cause: `puppeteer.launch()`
+  was passed `--use-gl=angle --use-angle=swiftshader`, forcing **software** (CPU) WebGL
+  rendering — a full memory-field/bloom/composite GL pipeline, software-rendered per pixel at
+  1080p, is exactly as expensive as that sounds. This machine has a real Intel Iris Xe iGPU at
+  `/dev/dri/renderD128` (confirmed via `glxinfo`) that was simply never being used. Switched to
+  `--use-gl=angle --use-angle=gl-egl --enable-gpu-rasterization` (ANGLE's OpenGL-over-EGL backend
+  against the real Mesa driver) — measured directly, same 8s/1920×1080/30fps clip with the
+  `hysteresisSignal` shader: **34 seconds wall-clock total** (including ~10s of Chrome/Vite
+  startup), vs. the pace the software-rendered version was on track for — roughly a 20x
+  real-world speedup. Confirmed the output is still visually correct at this point (not just
+  fast-but-broken): inspected an extracted frame directly — the ISF shader's own procedural
+  pattern rendering in full 1080p detail, every debug-overlay row populated with real, distinct
+  values (`energy` 0.468, `bandTilt` -0.282, `familiarity` 0.977, `harmonicNovelty` 1.000, ...),
+  all 4 fixture widgets live. Killed the still-running slow (software-rendered) full attempt and
+  the various leftover dev-server/Chrome processes from earlier smoke tests (confirmed via `ps
+  aux` cleanup) before relaunching the real deliverable with the fixed flags.
+- **A real cleanup bug found and fixed, same session, without touching the in-flight full render**:
+  the harness's Vite dev-server child process didn't reliably die when `render-video.ts` exited
+  (`devServer.kill()` didn't reach the actual `vite` process — spawned via `npx vite ...`, and
+  `npx`'s own child-process layer doesn't reliably forward signals to what it execs). The
+  full-song render above only started successfully in the first place because it silently reused
+  a leftover dev server still bound to the port from the earlier smoke test — worked by luck
+  (identical content being served), not by design. Fixed properly, verified on a *second*,
+  independent smoke test on a freshly randomized port (deliberately not touching the in-flight
+  full render's own dev server/port): spawn the local `node_modules/.bin/vite` binary directly
+  instead of through `npx` (removes the extra process layer entirely), `detached: true` +
+  `process.kill(-devServer.pid, 'SIGTERM')` (the whole process group, not just the immediate
+  child — `vite` itself can spawn further children a plain `.kill()` never reached) on exit, and
+  a randomized port per invocation instead of a fixed one (so two concurrent runs of this tool
+  never collide in the first place). Confirmed via `ps aux` after the second smoke test: only the
+  original, still-legitimately-in-use full-render dev server remained — the second run's own
+  server was gone, no leak.
+
+## `render-video` finished, a real mistake made and disclosed, and the `.hyst` multi-pass/resource format (same session, immediate follow-up, 2026-08-24)
+
+The full Instant Crush render from the previous entry completed successfully (5:39.8, 1920×1080,
+real audio) after two more real fixes: JPEG intermediate frames instead of PNG (measured PNG's
+DEFLATE encode as the dominant per-frame cost, not GL rendering itself — live rendering hits
+45-60fps with neither an encode nor a base64/CDP round-trip at all; JPEG cut per-frame cost
+~2.7x further, ~50x total vs. the original software-rendered PNG version), and a 5-attempt retry
+loop around each frame's `page.evaluate()` call after a rare `NotReadableError` Blob flake
+surfaced at frame 90/10195 (never in short smoke tests) — plus a disk-full failure fixed with a
+`--work-dir` flag (redirect the tool's temp frame-sequence directory off a nearly-full `/`
+partition) and a `try/finally`-wrapped cleanup so a *failed* run's temp directory gets removed
+too, not just a successful one (previously leaked several GB per failed attempt).
+
+**A real mistake, disclosed at the time**: a cleanup command during this debugging used a broad
+`ps aux | grep -i chrome | ... | xargs kill` pattern that matched and killed every Chrome process
+on the system, including the user's own real browser session — not just the headless automation
+instances. Immediately disclosed; the user said no harm was done but asked to remember this for
+future sessions (saved as a persistent feedback memory: never use a bare product-name substring
+for a kill pattern, scope to something unique to the process actually started, e.g. a specific
+flag or a captured PID).
+
+The finished 227MB 1080p file exceeded the 30MB file-delivery limit; delivered instead as a
+960×540/450kbps re-encode (~24MB) since a direct-to-Drive/WeTransfer browser-automation upload
+turns out to hit the *same* 10MB cap the file-delivery tool does — not a Drive-specific limit.
+Added real `--video-bitrate`/`--audio-bitrate` flags to `scripts/render-video.ts` so a size budget
+can be hit directly at the shader's actual render resolution in one encode pass, instead of
+rendering at 1080p and downscale-recompressing afterward (the latter measurably hurt legibility of
+fine detail like the debug-overlay text and fixture icons — user feedback: "couldn't see
+laser/numbers well").
+
+Two more renders followed against a real user track (`SIGSEGV.wav`, their own unreleased
+MAXIMAVELIANISM/A2-BASELINE project, 6:43.7, 135.5bpm auto-detected — no sidecar/stems given, so
+`analyzeMix()` ran cold): the first close to identical settings, the second after user feedback
+that led to three real changes — (1) the `InnerDimensionalMatrix` shader was only ever driven by
+one signal (`energy→drive`) despite declaring 12 total ISF inputs; extended it to 7 live-signal-
+driven parameters (`beatFlash`, `buildZoom`, `hueCentroid`, `lowRate`, `dropPunch`,
+`suspensionGlow` added alongside `drive`), which required generalizing the render tool's
+single-hardcoded-route wiring (`harness.ts`'s `setScreenGraphWithHysteresisRoute` → plural
+`setScreenGraphWithHysteresisRoutes`) into auto-deriving routes from every `hysteresisSignal`
+input a loaded shader actually declares, via `parseIsf()` run directly in the Node driver; (2)
+demo fixture wiring (`tools/patchbay-editor/src/seed-graph.ts`) fed raw audio-rate bus signals
+straight into servo/mover targets with only a range remap, no smoothing — added a real `envelope`
+node (already existed in the graph engine, just never used here) ahead of any continuous-only
+target, 0.15s attack / 0.7s release; (3) the screen's drop shockwave/mirror-hold read as too
+brief against a full track (`screen-composites.ts`: `FLOW_STRENGTH_DAMPING` 9→6,
+`SYMMETRY_DROP_HOLD_SEC` 2.0→3.5).
+
+### Porting the built-in Julia scene, and a real bug it surfaced
+
+User asked to port the built-in Julia fractal scene (`JuliaScene.ts`) into a standalone shader —
+this repo's own AGENTS.md roadmap already flagged this as Phase 3/4, "the big one," not yet done.
+Scoped honestly: the substrate (`julia.frag.glsl`'s escape-iteration + palette, `boundary.ts`'s
+exact cardioid parametrization `c(θ)=e^{iθ}/2−e^{2iθ}/4`) is real GLSL, portable as-is. The
+autopilot (vortex-search navigation, perturbation-orbit deep zoom, spring-damped `c`-drift) is
+~1000 lines of stateful per-frame JS a single-pass shader categorically cannot hold — that's the
+still-not-built `HYSTERESIS_SCRIPT` engine. First pass ported the substrate only: θ/zoom as
+closed-form functions of `TIME` that live signals (`buildWindup`/`energy`/`tension`/`suspension`/
+`dropImpulse`/`centroid`/`beatPulse`) nudge additively, not an accumulated integral of a
+time-varying rate.
+
+User then asked for the oscilloscope beam too, and specifically not as a one-off bolt-on — a real
+step back to design the format itself first (see below). Before that redesign, though: **a real,
+previously-undetected bug was found and fixed while reading `IsfScene.ts`**. Its per-frame
+uniform-binding `switch` over input types was missing a `case 'hysteresisSignal'` entirely —
+every `hysteresisSignal`-typed uniform (all 7 in `InnerDimensionalMatrix`, all 7 in the Julia
+substrate port) was **never actually being set per-frame**, silently sitting at GL's
+zero-initialized default the whole render regardless of what the debug overlay showed the real
+signal doing. `float`/`bool`/`color`/`point2D` inputs were unaffected — only this one type, added
+in a later slice than the original switch. No test caught it (there's no GL-level test coverage
+for `IsfScene` at all, the same standing "no browser access for automated tests" gap this repo
+carries everywhere GL-shaped), and this session's own "verification" of the earlier renders never
+actually zoomed into a frame closely enough to catch it either — a real process gap, disclosed to
+the user directly rather than glossed over. One-line fix (`gl.uniform1f(loc, ...)` for the missing
+case). Practical effect: the InnerDimensionalMatrix and first Julia-substrate renders' "driven by
+N signals" framing was not accurate — those shaders were running on static defaults the whole
+time. Confirmed the fix visually afterward (palette/hue visibly differs between two frames at
+different track positions, which a `hueShift` formula with a `centroidIn*0.1` term could only do
+if that uniform were actually being set).
+
+### The `.hyst` format: real, versioned, scoped multi-pass
+
+Design done via an explicit plan-mode pass (see the session's plan file) before writing code, per
+the user's own ask to "concretely design and future-proof" the format rather than add another
+one-off. Grounded in what already existed: `ScreenOutput.ts` already manages multiple GL
+passes/FBOs (`createFbo`/`deleteFbo`, `src/render/worker/gl/fbo.ts`) and `Scene` already has a
+second `renderForeground?()` hook — a "multi-pass hysteresis format" formalizes something the
+native pipeline already does, not a foreign concept. A naive "loop over all 1024 waveform samples
+per pixel in a single fragment shader" approach for the beam was costed out and rejected (~2
+billion segment evals/1080p-frame vs. the beam's actual real-hardware-instanced-quad cost, which
+is close to free) before any code was written.
+
+- **`HYSTERESIS_VERSION`** (`src/isf/types.ts`/`parse-isf.ts`): a top-level header field, currently
+  only `1` recognized — an unrecognized version is rejected clearly, same "reject clearly, never
+  silently mis-render" discipline every other unsupported ISF feature here already follows. Absent
+  entirely = today's plain single-pass model, zero behavior change (confirmed by a dedicated test:
+  a version-less/`PASSES`-less file still gets the implicit `[{ kind: 'fullscreen', target: '' }]`
+  single pass). A stock ISF ecosystem shader declaring real multi-pass `PASSES` *without*
+  `HYSTERESIS_VERSION` is still rejected with the exact original message — this extension doesn't
+  change that case at all.
+- **Real, scoped `PASSES`**, typed by `KIND`: `'fullscreen'` (today's exact model, the default) and
+  a new `'lineTrace'` — draws an open polyline from a named `resource` input using the same
+  GPU-instanced-quad technique `beam.vert.glsl`/`beam.frag.glsl` already implement (real hardware
+  line rasterization, not a fragment-shader loop). A pass's `TARGET` becomes a real
+  `uniform sampler2D <target>` automatically available to the shared fullscreen body
+  (`translate-isf-glsl.ts`) — a `lineTrace` pass always renders full-brightness white shape only
+  (never tinted/blended itself); the fullscreen pass's own GLSL decides color/blend/warp entirely.
+  This is the actual mechanism that makes "the beam is part of the shader" real. Explicitly NOT
+  built: `PERSISTENT`/cross-frame feedback buffers (still rejected, even under
+  `HYSTERESIS_VERSION`), pass kinds beyond `fullscreen`/`lineTrace` — no motivating shader yet.
+- **`resource` inputs** (`IsfResourceInput`): the general answer to "not every live thing is a
+  scalar." Deliberately **not** a routable patch-graph target (the graph stays scalar-in/
+  scalar-out throughout, unchanged) — bound automatically by name, the same category `TIME`/
+  `RENDERSIZE` already are, just opt-in per shader. `RESOURCE` validated against a small explicit
+  `KNOWN_RESOURCES` list (`scope` only today — the one non-scalar live signal that actually
+  exists, `SignalBus.scope`), same discipline as `hysteresisSignal`'s `SIGNAL` validation.
+- **`IsfScene.ts`** generalized from "one program, one draw" to running a real `lineTrace` pass
+  (its own program/VAO/instanced buffers, reusing `beam.vert.glsl`/`beam.frag.glsl` verbatim,
+  rendered into a real FBO via the existing `createFbo`/`deleteFbo`) before the fullscreen pass,
+  which then samples every earlier pass's FBO texture by its declared uniform name. The beam's
+  point data (real waveform via `ParamBus.scope` when playing, the exact same idle Lissajous
+  fallback `JuliaScene`'s own beam uses when `params.idle`/no scope — `lissajous.ts` reused
+  directly, not reimplemented) is computed once per frame in `update()`, shared across however
+  many `lineTrace` passes reference the `scope` resource.
+- **Naming**: user confirmed `.hyst` as the real extension for files using these extensions,
+  explicitly accepting a known collision — an unrelated, older, retired tool's `song.hyst` files
+  already exist in the user's own SIGSEGV project folder (a completely different per-track event/
+  tone schema) — deemed acceptable since that tool will never open a file from this pipeline.
+- **Tests**: `parse-isf.spec.ts` (version parsing/rejection, real `lineTrace`+`fullscreen` PASSES
+  parsing, unknown `KIND`/`RESOURCE`/POINTS-cross-reference rejection, `PERSISTENT` still rejected
+  under a version, backward-compat confirmed), `translate-isf-glsl.spec.ts` (sampler2D uniform
+  auto-wiring, resource inputs never become uniforms), `isf-targets.spec.ts` (resource inputs
+  produce zero routable targets). 14 new tests; suite now 306 (was 292).
+- `julia-hysteresis.fs` extended with the real `lineTrace` beam pass and renamed `julia.hyst` —
+  end-to-end verified: a 20s smoke render at 960×540 shows the beam (idle Lissajous, since
+  `StructureSource.synthesize()`'s position-only mode always sets `idle: true`/`scope: null` —
+  the same real, documented, intentional behavior the production Julia scene already has in any
+  no-live-audio embed) glowing against the substrate, tinted by the same accent color the
+  substrate's own palette uses, genuinely reading as one visual identity rather than two
+  unrelated layers. Full 1920×1080 SIGSEGV re-render launched to confirm at scale — see whether a
+  further session entry follows for its outcome.
+- **Verified**: `npm run typecheck` (all 4 tsconfigs), `npm test` (306 passing), `npm run build`,
+  `npm run build:lib` all green throughout.
+
+**Not done, explicitly deferred** (tracked in the session's plan, not silently dropped): more
+`resource` kinds beyond `scope` (FFT bins, a future perturbation reference orbit), pass kinds
+beyond `fullscreen`/`lineTrace` (particles, etc.), `PERSISTENT`/feedback buffers, the
+`HYSTERESIS_SCRIPT` execution engine itself (still real, separate, unaffected by this work), and
+patchbay-editor UX for authoring multi-pass `.hyst` files by hand (today's editor only has a
+load-a-file flow). A knob/MIDI-CC-driven node-*parameter* modulation feature (e.g. a live control
+driving an `envelope` node's attack/release, not just a target's value) was discussed and
+deliberately deferred until after this format work and its own render landed.
+
+## Live knob/OSC control of an envelope's attack/release, and a `.hyst` example (same session, immediate follow-up)
+
+User feedback on the `.hyst` Julia port render: the palette washed the deep interior and the
+actual near-boundary filament detail into nearly the same flat violet (the original
+`julia.frag.glsl`-derived `palette()` saturated to one hue past `t≈0.625`, so both cases read
+almost identically), and fractal tracking wasn't great — the latter a known, disclosed limitation
+shared with the real built-in scene (this repo's own history already documents "Julia navigation
+... still doesn't reliably find interesting structure" as feedback on the *production* scene, not
+something this port regressed). Fixed the palette: real multi-cycle escape-time banding (`bands =
+t * 5.0`, several color wraps across the escape range instead of one) reveals the actual
+spiral/filament structure, and the never-escaping interior is now a deliberately flat, distinct
+dark case instead of blending into the boundary coloring. User confirmed the beam/signal "piping"
+itself reads well — the positive signal to keep building on this architecture.
+
+Then, the explicitly-deferred knob feature from earlier: a physical MIDI/OSC control driving a
+node's *parameter* (e.g. an `envelope`'s attack/release time), not just a target's *value*.
+`midiCc`/`oscIn` nodes already existed and could already drive any target directly — what was
+missing was a node parameter itself being live-controllable.
+
+- **`EnvelopeNode.inputs`** (`patchgraph/types.ts`) widened from a fixed 1-tuple to a fixed
+  3-tuple: `[value, attackOverride, releaseOverride]`, where `''` in slot 1/2 means "not
+  connected" (a real, valid value — not a dangling reference) and the static `attackSec`/
+  `releaseSec` fields apply exactly as before. Deliberately kept as extra **input slots** rather
+  than separate fields so the existing generic dependency-walk (`topo-sort.ts`'s
+  `for (const inputId of node.inputs)`, `PatchGraphEvaluator`'s `node.inputs.map(...)`) picks them
+  up automatically — zero special-casing needed for "this node kind has more than one
+  dependency", the same mechanism `combine`/`logic`'s N-input case already relies on.
+  `evaluate-node.ts`'s `envelope` case reads `inputValues[1]`/`[2]` only when the corresponding
+  `node.inputs` slot is actually wired, otherwise falls back to the static field — zero behavior
+  change for every graph that doesn't use this. A `midiCc`/`oscIn` node's value is always 0..1;
+  rescaling into a real seconds range is just the ordinary `map` node, no envelope-specific
+  remapping needed.
+- **A real, pre-existing UI bug found and fixed while wiring the editor side**: `PatchGraphCanvas
+  .tsx`'s `disconnectInput` did `inputs.splice(index, 1)` — correct for variable-arity nodes
+  (`combine`/`logic`, where slot order never carried meaning) but wrong for a fixed-arity node
+  with position-*significant* slots (this envelope case): disconnecting slot 1 would silently
+  reindex a connected slot 2 into slot 1, swapping "release override" into "attack override"
+  without any error. Every prior fixed-arity node had exactly one slot, so this never manifested
+  before. Fixed by keeping the slot's position (`inputs[index] = ''`) for fixed-arity nodes,
+  splicing only for variable-arity ones (`fixedInputSlotCount(n) !== null` already existing and
+  reused, not reinvented). `connectInput` had the mirror bug (a plain `.push()` would land a
+  connection at the wrong position if slots were wired out of order) — fixed by padding with `''`
+  up to the target index first.
+- **Editor UX**: `envelope` nodes now show 3 input nubs (was 1) with real per-slot tooltips
+  ("value" / "attack override (optional)" / "release override (optional)" — a new
+  `inputSlotLabel()` helper, `null` for every other node kind so nothing else changes), and the
+  node summary shows `(live)` next to attack/release whenever an override is actually wired.
+  `docs/patchbay-editor.md` gained a real usage section.
+- **Tests**: `patchgraph.spec.ts` — a live midiCc-driven attack override measurably speeds up the
+  envelope vs. its static field (routed through an ordinary `map` node, `0..1 → 0.01..2` seconds,
+  same pattern as any other knob-to-target route), an unconnected-overrides graph behaves
+  identically to before this feature existed, `validatePatchGraph` accepts `''` override slots as
+  valid (not a dangling reference) while still flagging a real bad reference in one, and still
+  enforces the new "always exactly 3" arity. 5 new tests; suite now 311 (was 306).
+- `examples/isf/` (new): `julia.hyst` (the Julia-port shader — substrate + `lineTrace` beam pass,
+  with the palette fix above) and a short README pointing back to `docs/isf-shaders.md`. First
+  real example shader committed to the repo — every prior ISF test fixture was inline in a spec
+  file or a scratch/job-tmp file, never a real, loadable, checked-in `.fs`/`.hyst` file.
+- **Verified**: `npm run typecheck` (all 4 tsconfigs), `npm test` (311 passing), `npm run build`,
+  `npm run build:lib` all green.
+
+**Not done**: a full 1080p re-render with the palette fix was in progress in the background when
+this feature work started and failed mid-render (frame 6748/12111, apparently a Chrome
+tab/page-level reload — `[vite] connecting...` followed by `no sidecar loaded` on every retry,
+not a shader/format bug) — not re-run as part of this slice per explicit instruction to finish
+the code/commit work first rather than wait on/babysit another ~15min render.

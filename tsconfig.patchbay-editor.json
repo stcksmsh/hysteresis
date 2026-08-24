@@ -12,7 +12,7 @@
     "resolveJsonModule": true,
     "types": ["vite/client", "w3c-web-serial"]
   },
-  "include": ["tools/patchbay-editor/**/*.ts", "tools/patchbay-editor/**/*.tsx", "src/**/*.ts"],
+  "include": ["tools/patchbay-editor/**/*.ts", "tools/patchbay-editor/**/*.tsx", "tools/render-video/**/*.ts", "src/**/*.ts"],
   // Worker/worklet code needs WebWorker/AudioWorklet globals this config's
   // plain-DOM lib doesn't have (and is already covered by tsconfig.worker.json
   // in the full `npm run typecheck` chain) — this tool only ever references

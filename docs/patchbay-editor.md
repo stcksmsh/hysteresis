@@ -51,6 +51,33 @@ Edit** returns to the authoring layout.
 - Mouse wheel zooms toward the cursor; drag empty background to pan; **⊡
   Fit** frames the whole graph.
 
+## Live-controlling an envelope's attack/release with a knob
+
+A `midiCc`/`oscIn` node can already drive any target's *value* directly
+(wire it straight to a `target` node, or into `combine`/`curve`/`map` like
+any signal). `envelope` nodes go one step further: their **attack/release
+time constants themselves** can be live-controlled too, not just the value
+being smoothed. This is what makes something like "a physical fader that
+controls how loose/tight a servo's motion feels, live" possible — the fader
+isn't driving the servo's position, it's driving *how the servo eases into*
+whatever position the signal chain gives it.
+
+An `envelope` node has 3 input slots in the graph canvas (hover a slot to
+see which is which):
+
+1. **value** — the signal to smooth (required, same as always).
+2. **attack override** (optional) — when wired, this input's live value
+   replaces the node's own `attackSec` field every frame. Leave unwired to
+   use the static field, exactly like before this existed.
+3. **release override** (optional) — same, for `releaseSec`.
+
+A `midiCc`/`oscIn` node's value is always 0..1, so route it through a `map`
+node first to rescale into a real seconds range before feeding an override
+slot — e.g. `midiCc → map(0..1 → 0.01..2.0) → envelope's attack override`.
+This is the same "remap a knob into a target's real range" pattern any
+other knob-to-target route already uses; nothing envelope-specific about
+the remap itself.
+
 ## Debug drawer
 
 The 🐞 **Debug** button opens diagnostics that are useful while tuning but

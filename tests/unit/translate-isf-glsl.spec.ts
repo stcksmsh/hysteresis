@@ -53,3 +53,42 @@ describe('translateIsfFragmentShader', () => {
     expect(() => translateIsfFragmentShader(noMainDoc)).toThrow(/main/)
   })
 })
+
+describe('translateIsfFragmentShader — HYSTERESIS_VERSION 1 multi-pass', () => {
+  const MULTI_PASS_SRC = `/*{
+    "HYSTERESIS_VERSION": 1,
+    "PASSES": [
+      { "TARGET": "beamTex", "KIND": "lineTrace", "POINTS": "scope" },
+      { "TARGET": "", "KIND": "fullscreen" }
+    ],
+    "INPUTS": [
+      { "NAME": "scope", "TYPE": "resource", "RESOURCE": "scope" },
+      { "NAME": "drive", "TYPE": "float", "DEFAULT": 0.0, "MIN": 0.0, "MAX": 1.0 }
+    ]
+  }*/
+  void main() {
+    vec4 beam = texture2D(beamTex, isf_FragNormCoord);
+    gl_FragColor = beam * drive;
+  }
+  `
+  const doc = parseIsf(MULTI_PASS_SRC)
+  const out = translateIsfFragmentShader(doc)
+
+  it('declares a sampler2D uniform for the lineTrace pass target', () => {
+    expect(out).toContain('uniform sampler2D beamTex;')
+  })
+
+  it('does not declare a uniform for the resource input itself', () => {
+    expect(out).not.toContain('uniform float scope;')
+    expect(out).not.toContain('uniform sampler2D scope;')
+  })
+
+  it('still declares a real uniform for ordinary scalar inputs', () => {
+    expect(out).toContain('uniform float drive;')
+  })
+
+  it('never declares a uniform for the final ("") output target', () => {
+    // Only one sampler2D decl should exist (beamTex) — no stray `uniform sampler2D ;`
+    expect(out.match(/uniform sampler2D/g)).toHaveLength(1)
+  })
+})

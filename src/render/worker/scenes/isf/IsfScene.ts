@@ -1,23 +1,57 @@
 import type { Scene, SceneContext } from '../Scene'
 import { createProgram } from '../../gl/program'
 import { createFullscreenQuad, drawFullscreenQuad } from '../../gl/fullscreen-quad'
+import { createFbo, deleteFbo, type Fbo } from '../../gl/fbo'
 import fullscreenVertSrc from '../../gl/fullscreen.vert.glsl?raw'
+import beamVertSrc from '../julia/shaders/beam.vert.glsl?raw'
+import beamFragSrc from '../julia/shaders/beam.frag.glsl?raw'
+import { lissajousPoint } from '../julia/lissajous'
+import { SCOPE_SIZE } from '../../../../shared/constants'
 import type { ParamBus } from '../../../../shared/types'
-import type { IsfDocument } from '../../../../isf/types'
+import type { IsfDocument, IsfLineTracePass } from '../../../../isf/types'
 import { translateIsfFragmentShader } from '../../../../isf/translate-isf-glsl'
 
-// Runs a user-supplied ISF shader as a real screen scene (master-prompt.md
-// §4.5/§6's "ISF import" backlog item) — the whole point is that this is
-// NOT a special-cased built-in effect, it's the same Scene interface
-// JuliaScene/MandelbulbScene implement, driven by whatever inputs the
-// loaded shader's own JSON header declares (see isf-targets.ts for how
-// those become routable patch targets). Deliberately does NOT read
-// ParamBus for its inputs the way JuliaScene does — ParamBus is a fixed,
-// Julia-shaped struct (screen-composites.ts's ScreenParamAssembler); an
-// arbitrary ISF shader's inputs have arbitrary names, so ScreenOutput feeds
-// them in directly via setInputValues() from the raw per-frame resolved
-// targets, bypassing that assembler entirely for this scene. `update()`
-// still exists (the Scene interface requires it) purely to track TIME.
+// Same idle-fallback shape as JuliaScene's own beam (lissajous.ts's header
+// comment: "the substrate's idle c-drift and the beam's idle trace both
+// walk this same curve so the two layers read as one stationary dynamic")
+// — a lineTrace pass reuses that exact fallback so an ISF/hysteresis
+// shader's beam behaves identically to the built-in one when there's no
+// live waveform (StructureSource.synthesize()'s position-only mode always
+// sets scope: null / idle: true — see AGENTS.md's own note on why).
+const IDLE_BEAM_POINTS = 220
+const BEAM_HALF_WIDTH_DEFAULT = 0.009
+const BEAM_SCOPE_GAIN = 3.2
+const MAX_SEGMENTS = Math.max(SCOPE_SIZE - 1, IDLE_BEAM_POINTS - 1)
+
+interface LineTraceState {
+  pass: IsfLineTracePass
+  fbo: Fbo | null
+  program: WebGLProgram
+  vao: WebGLVertexArrayObject
+  cornerBuffer: WebGLBuffer
+  p0Buffer: WebGLBuffer
+  p1Buffer: WebGLBuffer
+  uAspect: WebGLUniformLocation | null
+  uHalfWidth: WebGLUniformLocation | null
+  uColor: WebGLUniformLocation | null
+  uIntensity: WebGLUniformLocation | null
+}
+
+// Runs a user-supplied ISF/Hysteresis shader as a real screen scene
+// (master-prompt.md §4.5/§6's "ISF import" backlog item) — the whole point
+// is that this is NOT a special-cased built-in effect, it's the same Scene
+// interface JuliaScene/MandelbulbScene implement, driven by whatever
+// inputs/passes the loaded shader's own JSON header declares (see
+// isf-targets.ts for how scalar inputs become routable patch targets).
+// Deliberately does NOT read ParamBus for its SCALAR inputs the way
+// JuliaScene does — ParamBus is a fixed, Julia-shaped struct
+// (screen-composites.ts's ScreenParamAssembler); an arbitrary shader's
+// inputs have arbitrary names, so ScreenOutput feeds them in directly via
+// setInputValues() from the raw per-frame resolved targets, bypassing that
+// assembler entirely for this scene. `scope` (a `resource` input, never a
+// scalar target — see IsfResourceInput's comment in isf/types.ts) is the
+// one thing this scene DOES read straight off ParamBus, same channel
+// JuliaScene's own beam already uses.
 export class IsfScene implements Scene {
   readonly id = 'isf'
   readonly wantsPersistencePass = false
@@ -31,6 +65,7 @@ export class IsfScene implements Scene {
   private height = 0
   private timeSec = 0
   private frameIndex = 0
+  private idleClockSec = 0
   private uniformValues: Record<string, number | boolean | number[]> = {}
 
   private uTime: WebGLUniformLocation | null = null
@@ -40,6 +75,16 @@ export class IsfScene implements Scene {
   private uFrameIndex: WebGLUniformLocation | null = null
   private uDate: WebGLUniformLocation | null = null
   private inputLocations = new Map<string, WebGLUniformLocation | null>()
+  private passTargetLocations = new Map<string, WebGLUniformLocation | null>()
+
+  private lineTraces: LineTraceState[] = []
+  // Shared per-frame point buffer for every lineTrace pass whose resource
+  // is 'scope' (the only known resource today — see KNOWN_RESOURCES in
+  // parse-isf.ts) — computed once in update(), reused by however many
+  // passes reference it, exactly mirroring JuliaScene's updateBeamGeometry.
+  private scopeP0 = new Float32Array(MAX_SEGMENTS * 2)
+  private scopeP1 = new Float32Array(MAX_SEGMENTS * 2)
+  private scopeSegmentCount = 0
 
   // wantsMemoryField defaults on so a loaded ISF generator gets the same
   // "drive anything through the site's memory-field/bloom pipeline" look
@@ -47,7 +92,10 @@ export class IsfScene implements Scene {
   // drives screen and physical light together" framing extends to "same
   // pipeline treats a built-in and a user shader the same way") — callers
   // that want a raw, unsmeared preview can pass false.
-  constructor(private doc: IsfDocument, opts: { wantsMemoryField?: boolean } = {}) {
+  constructor(
+    private doc: IsfDocument,
+    opts: { wantsMemoryField?: boolean } = {},
+  ) {
     this.wantsMemoryField = opts.wantsMemoryField ?? true
   }
 
@@ -64,34 +112,190 @@ export class IsfScene implements Scene {
     this.uFrameIndex = this.gl.getUniformLocation(this.program, 'FRAMEINDEX')
     this.uDate = this.gl.getUniformLocation(this.program, 'DATE')
     for (const input of this.doc.inputs) {
+      if (input.type === 'resource') continue // never a uniform — see translate-isf-glsl.ts
       this.inputLocations.set(input.name, this.gl.getUniformLocation(this.program, input.name))
     }
+    for (const pass of this.doc.passes) {
+      if (pass.target !== '') {
+        this.passTargetLocations.set(pass.target, this.gl.getUniformLocation(this.program, pass.target))
+      }
+    }
+
+    this.lineTraces = this.doc.passes.filter((p): p is IsfLineTracePass => p.kind === 'lineTrace').map((pass) => this.createLineTrace(pass))
+
     this.resize(ctx)
+  }
+
+  private createLineTrace(pass: IsfLineTracePass): LineTraceState {
+    const gl = this.gl
+    const program = createProgram(gl, beamVertSrc, beamFragSrc)
+
+    const vao = gl.createVertexArray()
+    if (!vao) throw new Error('Failed to create lineTrace VAO')
+    gl.bindVertexArray(vao)
+
+    const cornerBuffer = gl.createBuffer()
+    if (!cornerBuffer) throw new Error('Failed to create lineTrace corner buffer')
+    gl.bindBuffer(gl.ARRAY_BUFFER, cornerBuffer)
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-0.5, 0, -0.5, 1, 0.5, 0, 0.5, 1]), gl.STATIC_DRAW)
+    gl.enableVertexAttribArray(0)
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0)
+
+    const p0Buffer = gl.createBuffer()
+    if (!p0Buffer) throw new Error('Failed to create lineTrace p0 buffer')
+    gl.bindBuffer(gl.ARRAY_BUFFER, p0Buffer)
+    gl.bufferData(gl.ARRAY_BUFFER, this.scopeP0.byteLength, gl.DYNAMIC_DRAW)
+    gl.enableVertexAttribArray(1)
+    gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 0, 0)
+    gl.vertexAttribDivisor(1, 1)
+
+    const p1Buffer = gl.createBuffer()
+    if (!p1Buffer) throw new Error('Failed to create lineTrace p1 buffer')
+    gl.bindBuffer(gl.ARRAY_BUFFER, p1Buffer)
+    gl.bufferData(gl.ARRAY_BUFFER, this.scopeP1.byteLength, gl.DYNAMIC_DRAW)
+    gl.enableVertexAttribArray(2)
+    gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 0, 0)
+    gl.vertexAttribDivisor(2, 1)
+
+    gl.bindVertexArray(null)
+
+    return {
+      pass,
+      fbo: null,
+      program,
+      vao,
+      cornerBuffer,
+      p0Buffer,
+      p1Buffer,
+      uAspect: gl.getUniformLocation(program, 'uAspect'),
+      uHalfWidth: gl.getUniformLocation(program, 'uHalfWidth'),
+      uColor: gl.getUniformLocation(program, 'uColor'),
+      uIntensity: gl.getUniformLocation(program, 'uIntensity'),
+    }
   }
 
   resize(ctx: SceneContext): void {
     this.width = ctx.width
     this.height = ctx.height
+    // Recreated lazily at render() time (ensureLineTraceFbos) rather than
+    // here — this.gl is guaranteed set by then, and it keeps FBO lifetime
+    // logic in one place instead of duplicated between init()/resize().
+    for (const lt of this.lineTraces) {
+      if (lt.fbo) {
+        deleteFbo(this.gl, lt.fbo)
+        lt.fbo = null
+      }
+    }
   }
 
   // Called by ScreenOutput each frame with the typed uniform values
   // isf-targets.ts's resolvedTargetsToIsfUniforms() reassembled from that
   // frame's resolved patch-graph targets — the seam that makes a loaded
-  // shader's inputs genuinely patchable, not just hardcoded to their
-  // header defaults.
+  // shader's SCALAR inputs genuinely patchable, not just hardcoded to
+  // their header defaults. `resource` inputs never appear here — see this
+  // class's own header comment.
   setInputValues(values: Record<string, number | boolean | number[]>): void {
     this.uniformValues = values
   }
 
-  update(dt: number, _params: ParamBus): void {
+  update(dt: number, params: ParamBus): void {
     this.timeSec += dt
     this.frameIndex += 1
+    if (params.idle) this.idleClockSec += dt
+
+    if (this.lineTraces.length === 0) return // no lineTrace pass declared — skip the point-buffer work entirely
+
+    const scope = params.idle ? null : params.scope
+    if (scope) {
+      const n = scope.length
+      this.scopeSegmentCount = n - 1
+      for (let i = 0; i < n; i++) {
+        const x = (i / (n - 1)) * 1.8 - 0.9
+        const y = Math.max(-0.9, Math.min(0.9, scope[i] * BEAM_SCOPE_GAIN))
+        if (i < n - 1) {
+          this.scopeP0[i * 2] = x
+          this.scopeP0[i * 2 + 1] = y
+        }
+        if (i > 0) {
+          this.scopeP1[(i - 1) * 2] = x
+          this.scopeP1[(i - 1) * 2 + 1] = y
+        }
+      }
+    } else {
+      const n = IDLE_BEAM_POINTS
+      this.scopeSegmentCount = n - 1
+      const phase = this.idleClockSec * 0.15
+      for (let i = 0; i < n; i++) {
+        const theta = (i / (n - 1)) * Math.PI * 2
+        const p = lissajousPoint(theta, phase)
+        if (i < n - 1) {
+          this.scopeP0[i * 2] = p.x * 0.75
+          this.scopeP0[i * 2 + 1] = p.y * 0.75
+        }
+        if (i > 0) {
+          this.scopeP1[(i - 1) * 2] = p.x * 0.75
+          this.scopeP1[(i - 1) * 2 + 1] = p.y * 0.75
+        }
+      }
+    }
+
+    const gl = this.gl
+    for (const lt of this.lineTraces) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, lt.p0Buffer)
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.scopeP0, 0, this.scopeSegmentCount * 2)
+      gl.bindBuffer(gl.ARRAY_BUFFER, lt.p1Buffer)
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.scopeP1, 0, this.scopeSegmentCount * 2)
+    }
+  }
+
+  private ensureLineTraceFbos(): void {
+    const gl = this.gl
+    for (const lt of this.lineTraces) {
+      if (!lt.fbo) lt.fbo = createFbo(gl, this.width, this.height, false)
+    }
+  }
+
+  private resolveHalfWidth(pass: IsfLineTracePass): number {
+    if (!pass.width) return BEAM_HALF_WIDTH_DEFAULT
+    const v = this.uniformValues[pass.width]
+    return typeof v === 'number' ? v : BEAM_HALF_WIDTH_DEFAULT
+  }
+
+  private renderLineTraces(): void {
+    const gl = this.gl
+    const aspect = this.height > 0 ? this.width / this.height : 1
+    for (const lt of this.lineTraces) {
+      if (!lt.fbo) continue
+      gl.bindFramebuffer(gl.FRAMEBUFFER, lt.fbo.framebuffer)
+      gl.viewport(0, 0, this.width, this.height)
+      gl.clearColor(0, 0, 0, 0)
+      gl.clear(gl.COLOR_BUFFER_BIT)
+      if (this.scopeSegmentCount === 0) continue
+      gl.disable(gl.BLEND)
+      gl.useProgram(lt.program)
+      gl.uniform1f(lt.uAspect, aspect)
+      gl.uniform1f(lt.uHalfWidth, this.resolveHalfWidth(lt.pass))
+      // Always full-brightness white here — tint/intensity is the
+      // compositing (fullscreen) pass's job (it samples this texture and
+      // decides how to color/blend it), not this pass's. This is what
+      // makes "the beam is part of the shader" real: this pass only ever
+      // rasterizes SHAPE, never final look.
+      gl.uniform3f(lt.uColor, 1, 1, 1)
+      gl.uniform1f(lt.uIntensity, 1)
+      gl.bindVertexArray(lt.vao)
+      gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, this.scopeSegmentCount)
+      gl.bindVertexArray(null)
+    }
   }
 
   render(targetFbo: WebGLFramebuffer | null): void {
     const gl = this.gl
+    this.ensureLineTraceFbos()
+    this.renderLineTraces()
+
     gl.bindFramebuffer(gl.FRAMEBUFFER, targetFbo)
     gl.viewport(0, 0, this.width, this.height)
+    gl.disable(gl.BLEND)
     gl.useProgram(this.program)
     gl.uniform1f(this.uTime, this.timeSec)
     gl.uniform1f(this.uTimeDelta, 1 / 60)
@@ -102,6 +306,7 @@ export class IsfScene implements Scene {
     gl.uniform4f(this.uDate, now.getFullYear(), now.getMonth() + 1, now.getDate(), now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds())
 
     for (const input of this.doc.inputs) {
+      if (input.type === 'resource') continue
       const loc = this.inputLocations.get(input.name)
       if (!loc) continue
       const value = this.uniformValues[input.name]
@@ -125,8 +330,26 @@ export class IsfScene implements Scene {
           gl.uniform2f(loc, p[0] ?? 0, p[1] ?? 0)
           break
         }
+        case 'hysteresisSignal':
+          gl.uniform1f(loc, typeof value === 'number' ? value : input.default)
+          break
       }
     }
+
+    // Bind every earlier lineTrace pass's rendered texture to the
+    // fullscreen pass's matching `uniform sampler2D <target>` — starting
+    // at texture unit 1 (unit 0 is free for a future 'fullscreen'-target
+    // pass; not used yet, see IsfFullscreenPass's own comment).
+    let unit = 1
+    for (const lt of this.lineTraces) {
+      const loc = this.passTargetLocations.get(lt.pass.target)
+      if (!loc || !lt.fbo) continue
+      gl.activeTexture(gl.TEXTURE0 + unit)
+      gl.bindTexture(gl.TEXTURE_2D, lt.fbo.texture)
+      gl.uniform1i(loc, unit)
+      unit++
+    }
+    gl.activeTexture(gl.TEXTURE0)
 
     gl.clearColor(0, 0, 0, 1)
     gl.clear(gl.COLOR_BUFFER_BIT)
@@ -134,7 +357,16 @@ export class IsfScene implements Scene {
   }
 
   dispose(): void {
-    this.gl.deleteProgram(this.program)
-    this.gl.deleteVertexArray(this.quad)
+    const gl = this.gl
+    gl.deleteProgram(this.program)
+    gl.deleteVertexArray(this.quad)
+    for (const lt of this.lineTraces) {
+      gl.deleteProgram(lt.program)
+      gl.deleteVertexArray(lt.vao)
+      gl.deleteBuffer(lt.cornerBuffer)
+      gl.deleteBuffer(lt.p0Buffer)
+      gl.deleteBuffer(lt.p1Buffer)
+      if (lt.fbo) deleteFbo(gl, lt.fbo)
+    }
   }
 }

@@ -4,7 +4,7 @@ import type { PatchTargetDecl } from '../../../src/render/conductor/patchgraph/t
 import { makeDefaultDraft, makeNodeId, toPatchGraph, type DraftNode } from './graph-draft'
 import { withAutoLayout } from './layout'
 import { nodeBoxHeight, nodeBoxWidth, NUB_START_Y, NUB_SPACING } from './node-box'
-import { NODE_KINDS, NodeFields, defaultLabel, displayName, fixedInputSlotCount, hasOutput, isVariableArity, nodeSummary } from './node-fields'
+import { NODE_KINDS, NodeFields, defaultLabel, displayName, fixedInputSlotCount, hasOutput, inputSlotLabel, isVariableArity, nodeSummary } from './node-fields'
 
 // The visual node-graph canvas: drag nodes to place them, drag from a
 // node's output circle to another node's input circle to wire them, pan by
@@ -156,8 +156,15 @@ export function PatchGraphCanvas({ nodes, onChange, targets }: PatchGraphCanvasP
       nodes.map((n) => {
         if (n.id !== destId) return n
         const inputs = [...n.inputs]
-        if (index >= inputs.length) inputs.push(sourceId)
-        else inputs[index] = sourceId
+        // Pad with '' up to `index` rather than a plain push — a
+        // fixed-arity node with position-significant slots (envelope's
+        // attack/release overrides) can have its slot 2 connected before
+        // slot 1 (or before slot 1 is ever wired at all); a plain
+        // `inputs.push(sourceId)` would land it at the wrong position
+        // whenever it isn't the very next index. Harmless no-op for the
+        // common append-at-the-end case every other kind already used.
+        while (inputs.length <= index) inputs.push('')
+        inputs[index] = sourceId
         return { ...n, inputs }
       }),
     )
@@ -168,7 +175,15 @@ export function PatchGraphCanvas({ nodes, onChange, targets }: PatchGraphCanvasP
       nodes.map((n) => {
         if (n.id !== destId) return n
         const inputs = [...n.inputs]
-        inputs.splice(index, 1)
+        // Fixed-arity nodes with position-significant slots (envelope)
+        // must keep every later slot at its own index — splicing index 1
+        // out would silently reindex a connected slot 2 (release
+        // override) into slot 1 (attack override), swapping their
+        // meaning. Variable-arity nodes (combine/logic) have no such
+        // positional meaning, so removing the slot entirely (shrinking
+        // the list) is correct there, same as before this fix.
+        if (fixedInputSlotCount(n) !== null) inputs[index] = ''
+        else inputs.splice(index, 1)
         return { ...n, inputs }
       }),
     )
@@ -424,7 +439,11 @@ export function PatchGraphCanvas({ nodes, onChange, targets }: PatchGraphCanvasP
                       data-node={node.id}
                       data-index={i}
                       onPointerDown={(e) => onInputNubDown(node.id, i, node.inputs[i], e)}
-                      title={node.inputs[i] ? `from ${node.inputs[i]} — click/drag to disconnect` : 'drag a wire here to connect'}
+                      title={(() => {
+                        const label = inputSlotLabel(node, i)
+                        const prefix = label ? `${label}: ` : ''
+                        return node.inputs[i] ? `${prefix}from ${node.inputs[i]} — click/drag to disconnect` : `${prefix}drag a wire here to connect`
+                      })()}
                     />
                   ))}
                   {hasOutput(node) && (

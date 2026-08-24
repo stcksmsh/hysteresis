@@ -20,11 +20,15 @@ function expectedInputCount(node: PatchGraphNode): { min: number; max: number } 
     case 'oscIn':
       return { min: 0, max: 0 }
     case 'threshold':
-    case 'envelope':
     case 'curve':
     case 'map':
     case 'target':
       return { min: 1, max: 1 }
+    case 'envelope':
+      // Always 3 slots — value (required) + optional attack/release
+      // overrides, '' in slots 1/2 meaning "not connected" (see
+      // EnvelopeNode's own comment in types.ts).
+      return { min: 3, max: 3 }
     case 'logic':
       return node.op === 'not' ? { min: 1, max: 1 } : { min: 1, max: Infinity }
     case 'combine':
@@ -55,6 +59,10 @@ export function validatePatchGraph(graph: PatchGraph, targets: PatchTargetDecl[]
 
   for (const node of graph.nodes) {
     for (const inputId of node.inputs) {
+      // '' is a real, valid value for envelope's optional attack/release
+      // override slots (see EnvelopeNode's own comment) — deliberately not
+      // a dangling reference, just "this optional slot isn't wired".
+      if (inputId === '') continue
       if (!byId.has(inputId)) {
         issues.push({ nodeId: node.id, message: `references unknown node "${inputId}"`, severity: 'error' })
       }

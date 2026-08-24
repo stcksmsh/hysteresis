@@ -57,6 +57,11 @@ export function isfInputsToTargets(doc: IsfDocument): IsfTargetDecl[] {
         const range: [number, number] = BIPOLAR_SIGNALS.has(input.signal) ? [-1, 1] : [0, 1]
         return [target(input.name, input.label, input.default, range)]
       }
+      case 'resource':
+        // Deliberately NOT a routable target — see IsfResourceInput's own
+        // comment in types.ts. A resource is bound automatically by name
+        // (IsfScene), never appears in the patch graph's target catalog.
+        return []
     }
   })
 
@@ -100,6 +105,10 @@ export function resolvedTargetsToIsfUniforms(doc: IsfDocument, resolved: Record<
         break
       case 'hysteresisSignal':
         uniforms[input.name] = read(input.name)
+        break
+      case 'resource':
+        // Not a scalar uniform at all — IsfScene binds it directly from
+        // ParamBus (e.g. `scope`), not through this resolved-targets path.
         break
     }
   }

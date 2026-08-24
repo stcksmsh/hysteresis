@@ -189,8 +189,11 @@ export function nodeSummary(node: DraftNode): string {
       return node.address || '(unset)'
     case 'threshold':
       return `cut ${(node.cut ?? 0.5).toFixed(2)}${node.hysteresis ? ` ±${node.hysteresis.toFixed(2)}` : ''}`
-    case 'envelope':
-      return `atk ${(node.attackSec ?? 0.1).toFixed(2)} / rel ${(node.releaseSec ?? 0.5).toFixed(2)}`
+    case 'envelope': {
+      const atkLive = node.inputs[1] ? ' (live)' : ''
+      const relLive = node.inputs[2] ? ' (live)' : ''
+      return `atk ${(node.attackSec ?? 0.1).toFixed(2)}${atkLive} / rel ${(node.releaseSec ?? 0.5).toFixed(2)}${relLive}`
+    }
     case 'logic':
       return node.logicOp ?? 'and'
     case 'combine':
@@ -257,16 +260,30 @@ export function fixedInputSlotCount(node: DraftNode): number | null {
     case 'oscIn':
       return 0
     case 'threshold':
-    case 'envelope':
     case 'curve':
     case 'map':
     case 'target':
       return 1
+    case 'envelope':
+      // value + optional attack/release override slots — see EnvelopeNode's
+      // own comment in patchgraph/types.ts. Always shown (even before
+      // wired) so there's somewhere to drop a wire for the live-knob case.
+      return 3
     case 'logic':
       return node.logicOp === 'not' ? 1 : null
     case 'combine':
       return null
   }
+}
+
+// Per-slot label for a fixed-arity node whose slots aren't interchangeable
+// (currently just envelope) — shown in the input nub's tooltip so "drag a
+// wire here" actually says what that wire would do. Every other fixed-arity
+// kind has exactly one, unambiguous slot and needs no label; variable-arity
+// nodes (combine/logic) don't have positionally-meaningful slots at all.
+export function inputSlotLabel(node: DraftNode, index: number): string | null {
+  if (node.kind !== 'envelope') return null
+  return ['value', 'attack override (optional)', 'release override (optional)'][index] ?? null
 }
 
 export function hasOutput(node: DraftNode): boolean {

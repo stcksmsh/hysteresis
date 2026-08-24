@@ -29,7 +29,7 @@ export interface FixtureTypeSpec {
 // smoothing it first — the same distinction the spec draws for servos vs.
 // screen targets, now actually enforced by fixture type instead of a single
 // hardcoded example.
-const CONTINUOUS_ONLY: TimescaleTag[] = ['continuous', 'bar', 'section']
+export const CONTINUOUS_ONLY: TimescaleTag[] = ['continuous', 'bar', 'section']
 const ALL_TAGS: TimescaleTag[] = ['transient', 'beat', 'bar', 'section', 'continuous']
 
 export const FIXTURE_TYPES: readonly FixtureTypeSpec[] = [

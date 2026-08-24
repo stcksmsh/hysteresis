@@ -100,9 +100,25 @@ export interface ThresholdNode extends NodeBase {
 // DtSmoother, reimplemented here rather than shared so this system has zero
 // dependency on conductor-internal helpers (keeps the "separate layer"
 // promise literal, not just organizational).
+//
+// inputs[0] is the value to smooth (required). inputs[1]/inputs[2]
+// (optional — '' means "not connected", never a dangling reference) are a
+// live override for attackSec/releaseSec respectively: wire a midiCc/oscIn
+// node (through a `map` node to rescale its 0..1 into a real seconds
+// range, same as any other target) in and a physical knob controls ease
+// timing directly, instead of a knob only ever being able to drive a
+// target's VALUE. Kept as extra input SLOTS rather than separate fields so
+// topo-sort/PatchGraphEvaluator's existing generic dependency walk
+// (`for (const inputId of node.inputs)`) already picks them up correctly
+// — no evaluator-specific-casing needed for "this node kind has more than
+// one dependency", the same mechanism combine/logic's N-input case already
+// relies on. Always exactly 3 slots (not variable-length) specifically
+// because slot POSITION is meaningful here (slot 1 is always "attack",
+// slot 2 is always "release") — unlike combine/logic, where slot order
+// never mattered.
 export interface EnvelopeNode extends NodeBase {
   kind: 'envelope'
-  inputs: readonly [NodeId]
+  inputs: readonly [NodeId, NodeId, NodeId]
   attackSec: number
   releaseSec: number
 }

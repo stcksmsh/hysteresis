@@ -1,0 +1,14 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>sinteza-viz render-video harness</title>
+  </head>
+  <body>
+    <!-- No UI: this page is driven entirely by scripts/render-video.ts via
+         Puppeteer's page.evaluate() calling the window.__render* functions
+         harness.ts exposes. No DOM <canvas> is needed — everything renders
+         to OffscreenCanvas instances constructed directly in harness.ts. -->
+    <script type="module" src="./harness.ts"></script>
+  </body>
+</html>

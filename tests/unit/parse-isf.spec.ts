@@ -129,4 +129,74 @@ describe('parseIsf', () => {
     const src = `/*{ "HYSTERESIS_SCRIPT": "", "INPUTS": [] }*/\nvoid main() { gl_FragColor = vec4(1.0); }`
     expect(() => parseIsf(src)).not.toThrow()
   })
+
+  // HYSTERESIS_VERSION 1: real multi-pass (lineTrace) + resource inputs.
+  describe('HYSTERESIS_VERSION and real multi-pass', () => {
+    it('a plain file with no HYSTERESIS_VERSION/PASSES gets the implicit single fullscreen pass', () => {
+      const doc = parseIsf(PLASMA_SRC)
+      expect(doc.hysteresisVersion).toBeUndefined()
+      expect(doc.passes).toEqual([{ kind: 'fullscreen', target: '' }])
+    })
+
+    it('rejects an unrecognized HYSTERESIS_VERSION', () => {
+      const src = `/*{ "HYSTERESIS_VERSION": 99, "INPUTS": [] }*/\nvoid main() { gl_FragColor = vec4(1.0); }`
+      expect(() => parseIsf(src)).toThrow(IsfUnsupportedFeatureError)
+      expect(() => parseIsf(src)).toThrow(/HYSTERESIS_VERSION/)
+    })
+
+    it('a stock multi-pass ISF shader without HYSTERESIS_VERSION is still rejected the same as before', () => {
+      const src = `/*{ "PASSES": [ {"TARGET":"a"}, {"TARGET":"b"} ], "INPUTS": [] }*/\nvoid main() { gl_FragColor = vec4(1.0); }`
+      expect(() => parseIsf(src)).toThrow(/Multi-pass/)
+    })
+
+    it('parses a real lineTrace + fullscreen PASSES pair', () => {
+      const src = `/*{
+        "HYSTERESIS_VERSION": 1,
+        "PASSES": [
+          { "TARGET": "beamTex", "KIND": "lineTrace", "POINTS": "scope", "WIDTH": "beamWidth" },
+          { "TARGET": "", "KIND": "fullscreen" }
+        ],
+        "INPUTS": [
+          { "NAME": "scope", "TYPE": "resource", "RESOURCE": "scope" },
+          { "NAME": "beamWidth", "TYPE": "float", "DEFAULT": 0.01, "MIN": 0.001, "MAX": 0.05 }
+        ]
+      }*/
+      uniform sampler2D beamTex;
+      void main() { gl_FragColor = texture2D(beamTex, isf_FragNormCoord); }`
+      const doc = parseIsf(src)
+      expect(doc.hysteresisVersion).toBe(1)
+      expect(doc.passes).toEqual([
+        { kind: 'lineTrace', target: 'beamTex', points: 'scope', width: 'beamWidth' },
+        { kind: 'fullscreen', target: '' },
+      ])
+      expect(doc.inputs).toContainEqual({ type: 'resource', name: 'scope', label: undefined, resource: 'scope' })
+    })
+
+    it('rejects an unknown RESOURCE', () => {
+      const src = `/*{ "HYSTERESIS_VERSION": 1, "INPUTS": [ { "NAME": "x", "TYPE": "resource", "RESOURCE": "madeUp" } ] }*/\nvoid main() { gl_FragColor = vec4(1.0); }`
+      expect(() => parseIsf(src)).toThrow(IsfParseError)
+      expect(() => parseIsf(src)).toThrow(/unknown RESOURCE "madeUp"/)
+    })
+
+    it('rejects a lineTrace pass with an unknown KIND', () => {
+      const src = `/*{ "HYSTERESIS_VERSION": 1, "PASSES": [ {"TARGET":"a","KIND":"particles"}, {"TARGET":"","KIND":"fullscreen"} ], "INPUTS": [] }*/\nvoid main() { gl_FragColor = vec4(1.0); }`
+      expect(() => parseIsf(src)).toThrow(IsfUnsupportedFeatureError)
+      expect(() => parseIsf(src)).toThrow(/unknown KIND "particles"/)
+    })
+
+    it('rejects a lineTrace pass whose POINTS does not match a declared resource input', () => {
+      const src = `/*{
+        "HYSTERESIS_VERSION": 1,
+        "PASSES": [ { "TARGET": "beamTex", "KIND": "lineTrace", "POINTS": "nope" }, { "TARGET": "", "KIND": "fullscreen" } ],
+        "INPUTS": []
+      }*/\nvoid main() { gl_FragColor = vec4(1.0); }`
+      expect(() => parseIsf(src)).toThrow(IsfParseError)
+      expect(() => parseIsf(src)).toThrow(/POINTS "nope"/)
+    })
+
+    it('still rejects PERSISTENT even under HYSTERESIS_VERSION', () => {
+      const src = `/*{ "HYSTERESIS_VERSION": 1, "PASSES": [ {"TARGET":"buf","PERSISTENT":true} ], "INPUTS": [] }*/\nvoid main() { gl_FragColor = vec4(1.0); }`
+      expect(() => parseIsf(src)).toThrow(/PERSISTENT/)
+    })
+  })
 })

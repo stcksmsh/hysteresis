@@ -67,7 +67,7 @@ export function migrateRouteConfigToGraph(config: PatchbayConfig, targets: Targe
       nodes.push({
         id: envId,
         kind: 'envelope',
-        inputs: [cur],
+        inputs: [cur, '', ''],
         attackSec: route.smoothing.attackSec,
         releaseSec: route.smoothing.releaseSec,
         label: 'smoothing',

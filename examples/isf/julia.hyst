@@ -1,0 +1,198 @@
+/*{
+	"CREDIT": "Ported from this project's own built-in Julia scene (src/render/worker/scenes/julia/JuliaScene.ts + shaders/julia.frag.glsl/beam.vert.glsl/beam.frag.glsl + boundary.ts's cardioidPoint) into a self-contained .hyst shader.",
+	"CATEGORIES" : [ "generator", "fractal" ],
+	"DESCRIPTION" : "Audio-reactive Mandelbrot-cardioid-boundary Julia set, now with the real scene's oscilloscope beam too (HYSTERESIS_VERSION 1's lineTrace pass — see PASSES below). c(theta) sweeps the exact same cardioid parametrization the real built-in scene uses (c=0.25 cauliflower at theta=0, c=-0.75 San Marco at theta=pi), so every constant it visits is genuinely at the stable/chaotic boundary. First-pass port, NOT full parity: the real scene's autopilot (vortex-search navigation, perturbation-orbit deep zoom, spring-damped drift) needs persistent per-frame JS state a single-pass shader can't hold (that's the project's planned-but-not-built HYSTERESIS_SCRIPT phase) — here theta/zoom are closed-form functions of TIME that live signals nudge directly, not an accumulated integral of a time-varying rate. Zoom depth is capped well short of the real scene's perturbation threshold so plain float32 iteration stays accurate throughout.",
+	"HYSTERESIS_VERSION" : 1,
+	"PASSES" : [
+		{ "TARGET" : "beamTex", "KIND" : "lineTrace", "POINTS" : "scope", "WIDTH" : "beamWidth" },
+		{ "TARGET" : "", "KIND" : "fullscreen" }
+	],
+	"INPUTS" : [
+		{ "NAME" : "scope", "TYPE" : "resource", "RESOURCE" : "scope" },
+		{ "NAME" : "beamWidth", "TYPE" : "float", "DEFAULT" : 0.009, "MIN" : 0.001, "MAX" : 0.05 },
+		{ "NAME" : "beamGain", "TYPE" : "float", "DEFAULT" : 1.3, "MIN" : 0.0, "MAX" : 3.0 },
+		{ "NAME" : "zoomPeriodSec", "TYPE" : "float", "DEFAULT" : 48.0, "MIN" : 8.0, "MAX" : 180.0 },
+		{ "NAME" : "zoomStart", "TYPE" : "float", "DEFAULT" : 2.2, "MIN" : 0.5, "MAX" : 4.0 },
+		{ "NAME" : "zoomFloor", "TYPE" : "float", "DEFAULT" : 0.015, "MIN" : 0.002, "MAX" : 0.2 },
+		{ "NAME" : "thetaBaseSpeed", "TYPE" : "float", "DEFAULT" : 0.10, "MIN" : 0.0, "MAX" : 1.0 },
+		{ "NAME" : "accentColor", "TYPE" : "color", "DEFAULT" : [1.0, 0.36, 0.22, 1.0] },
+		{
+			"NAME" : "windup",
+			"TYPE" : "hysteresisSignal",
+			"SIGNAL" : "buildWindup",
+			"DEFAULT" : 0.0
+		},
+		{
+			"NAME" : "energyIn",
+			"TYPE" : "hysteresisSignal",
+			"SIGNAL" : "energy",
+			"DEFAULT" : 0.0
+		},
+		{
+			"NAME" : "tensionIn",
+			"TYPE" : "hysteresisSignal",
+			"SIGNAL" : "tension",
+			"DEFAULT" : 0.0
+		},
+		{
+			"NAME" : "suspIn",
+			"TYPE" : "hysteresisSignal",
+			"SIGNAL" : "suspension",
+			"DEFAULT" : 0.0
+		},
+		{
+			"NAME" : "dropIn",
+			"TYPE" : "hysteresisSignal",
+			"SIGNAL" : "dropImpulse",
+			"DEFAULT" : 0.0
+		},
+		{
+			"NAME" : "centroidIn",
+			"TYPE" : "hysteresisSignal",
+			"SIGNAL" : "centroid",
+			"DEFAULT" : 0.0
+		},
+		{
+			"NAME" : "beatIn",
+			"TYPE" : "hysteresisSignal",
+			"SIGNAL" : "beatPulse",
+			"DEFAULT" : 0.0
+		}
+	]
+}
+*/
+
+#ifdef GL_ES
+precision highp float;
+#endif
+
+// beamTex (the lineTrace pass's output — see PASSES above) is auto-
+// declared by the runtime, not here (translate-isf-glsl.ts emits
+// `uniform sampler2D beamTex;` for every non-'' pass TARGET automatically
+// — declaring it again here would be a GLSL redeclaration error). Always
+// full-brightness white shape (rgb=alpha=coverage): tint/blend is entirely
+// this fullscreen pass's job, not the lineTrace pass's.
+
+const int MAX_ITER = 192;
+
+// Exact parametrization of the Mandelbrot main cardioid's boundary — same
+// formula as boundary.ts's cardioidPoint(), the real scene's only source
+// of Julia constants. Every c here sits precisely on the stable/chaotic
+// transition, never a dull quickly-repeating interior point.
+vec2 cardioidPoint(float theta) {
+	return vec2(cos(theta) * 0.5 - cos(2.0 * theta) * 0.25, sin(theta) * 0.5 - sin(2.0 * theta) * 0.25);
+}
+
+vec2 cMul(vec2 a, vec2 b) {
+	return vec2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x);
+}
+
+int iterateDirect(vec2 z0, vec2 c, out vec2 finalZ) {
+	vec2 z = z0;
+	int iter = 0;
+	for (int i = 0; i < MAX_ITER; i++) {
+		if (dot(z, z) > 4.0) {
+			finalZ = z;
+			return iter;
+		}
+		z = cMul(z, z) + c;
+		iter++;
+	}
+	finalZ = z;
+	return iter;
+}
+
+// Real escape-time banding, not julia.frag.glsl's original single-fade
+// palette() — that version's mix(base, violet*hueRot, clamp(t*1.6,0,1))
+// saturates to one flat hue past t≈0.625, so BOTH the deep interior
+// (t=1, never escapes) and the actually-interesting near-boundary
+// filaments (t close to but below 1) rendered as nearly the same solid
+// violet — the fractal's own fine structure was there, just invisible.
+// Multiple color cycles across t (a standard fractal-coloring technique)
+// reveal it instead: `bands` wraps hueRot several times across the escape-
+// time range, so each ring of iteration count gets a visibly different
+// hue — this is what actually shows the spirals/filaments, not just a
+// mood-color wash. `interior` (never escaped) is handled as a separate,
+// deliberately flat dark case so the solid Julia-set body reads as solid,
+// not as one more noisy band.
+const float BANDS = 5.0;
+vec3 palette(float t, float hueShift, float paletteMix, vec3 accent, bool interior) {
+	vec3 base = vec3(0.04, 0.035, 0.07);
+	vec3 violet = vec3(0.29, 0.18, 0.55);
+	if (interior) return base;
+	float bands = t * BANDS;
+	vec3 hueRot = vec3(
+		0.5 + 0.5 * cos(6.28318 * (bands + hueShift)),
+		0.5 + 0.5 * cos(6.28318 * (bands + hueShift + 0.33)),
+		0.5 + 0.5 * cos(6.28318 * (bands + hueShift + 0.67))
+	);
+	// Still fades in from base near t=0 (fast-escaping background stays
+	// dark/quiet) but no longer clamps to a single flat hue once inside
+	// the interesting near-boundary range — every band keeps its own
+	// distinct color all the way to t=1.
+	vec3 mood = mix(base, violet * hueRot, smoothstep(0.0, 0.35, t));
+	return mix(mood, accent * hueRot, paletteMix * 0.6);
+}
+
+void main() {
+	vec2 uv = (gl_FragCoord.xy - 0.5 * RENDERSIZE.xy) / RENDERSIZE.y;
+
+	float susp = max(tensionIn, suspIn);
+	// theta: continuous, monotonic in TIME (thetaBaseSpeed*TIME) with a
+	// direct additive "kick" from live signals — not an accumulated
+	// integral of a time-varying rate (see header DESCRIPTION for why a
+	// single-pass shader can't do that). Gains chosen to roughly match the
+	// real scene's felt responsiveness: a sustained build/high-energy
+	// passage visibly shifts which part of the cardioid boundary is
+	// showing, a drop snaps it hard, a suspension/breakdown pulls it back.
+	float theta = thetaBaseSpeed * TIME + 1.4 * windup + 0.7 * energyIn - 0.9 * susp + 2.2 * dropIn;
+	vec2 c = cardioidPoint(theta);
+	vec2 pan = c; // same boundary point the view centers on, like the real scene's cardioidPoint(thetaSweep) pan target
+
+	// zoom: a smooth log-linear dive that cycles every zoomPeriodSec,
+	// instead of the real scene's one-way dive-then-reset (which needs
+	// state to know where in the dive it currently is). zoomFloor is kept
+	// well above the real scene's perturbation threshold so plain float32
+	// direct iteration stays fully accurate at the deepest point.
+	float cyclePos = fract(TIME / zoomPeriodSec);
+	float zoom = exp(mix(log(zoomStart), log(zoomFloor), cyclePos));
+
+	vec2 z0 = pan + uv * zoom;
+	vec2 z;
+	int iter = iterateDirect(z0, c, z);
+
+	float smoothIter = float(iter);
+	if (iter < MAX_ITER) {
+		float logZn = log(dot(z, z)) * 0.5;
+		float nu = log(logZn / log(2.0)) / log(2.0);
+		smoothIter = float(iter) + 1.0 - nu;
+	}
+	float t = smoothIter / float(MAX_ITER);
+	bool interior = (iter >= MAX_ITER);
+
+	// hueShift: a slow automatic drift (matching the real scene's
+	// hueDrift sawtooth) plus a small centroid-driven nudge — the exact
+	// same "hueDrift + centroid*0.1" shape screen-only.ts's paletteRoutes
+	// wire up for the built-in scene.
+	float hueShift = fract(TIME * 0.05 + centroidIn * 0.1);
+	// paletteMix: the real scene reads this straight off buildWindup
+	// (screen-only.ts's paletteRoutes is a pure passthrough) — same here.
+	float paletteMix = windup;
+	vec3 accent = accentColor.rgb;
+	vec3 color = palette(t, hueShift, paletteMix, accent, interior);
+
+	// beatIn: a light on-beat twinkle, distinct from the palette's own
+	// continuous cycling and from drive-style brightness pulsing.
+	color += beatIn * 0.12 * accent;
+
+	// The oscilloscope beam (real waveform when playing, the built-in
+	// idle Lissajous figure otherwise — IsfScene.ts's own fallback,
+	// exactly matching JuliaScene's real idle behavior): additively
+	// blended, tinted with the same accent color the substrate's own
+	// palette windup-blend uses, so beam and substrate read as one
+	// coherent visual identity instead of two unrelated layers.
+	vec4 beam = texture2D(beamTex, isf_FragNormCoord);
+	color += beam.rgb * accent * beamGain;
+
+	gl_FragColor = vec4(color, 1.0);
+}

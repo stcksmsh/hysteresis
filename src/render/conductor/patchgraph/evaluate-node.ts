@@ -72,7 +72,14 @@ export function evaluateNode(
     }
     case 'envelope': {
       const target = inputValues[0] ?? 0
-      const tc = target > envelopeState.value ? node.attackSec : node.releaseSec
+      // inputs[1]/[2] are '' when not connected (see EnvelopeNode's own
+      // comment) — only read the live override when a real node is wired
+      // there, otherwise fall back to the static field exactly as before
+      // this feature existed (zero behavior change for every graph that
+      // doesn't use it).
+      const attackSec = node.inputs[1] ? (inputValues[1] ?? node.attackSec) : node.attackSec
+      const releaseSec = node.inputs[2] ? (inputValues[2] ?? node.releaseSec) : node.releaseSec
+      const tc = target > envelopeState.value ? attackSec : releaseSec
       // Same discretized-RC form as the screen side's DtSmoother — the two
       // are independently implemented (see this module's header comment)
       // but there's exactly one sane way to do a frame-rate-independent

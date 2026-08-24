@@ -111,3 +111,27 @@ describe('hysteresisSignal targets', () => {
     expect(uniforms.novelty).toBe(0.77)
   })
 })
+
+describe('resource inputs are never routable targets', () => {
+  const SRC = `/*{
+    "HYSTERESIS_VERSION": 1,
+    "INPUTS": [
+      { "NAME": "scope", "TYPE": "resource", "RESOURCE": "scope" },
+      { "NAME": "drive", "TYPE": "float", "DEFAULT": 0.0, "MIN": 0.0, "MAX": 1.0 }
+    ]
+  }*/
+  void main() { gl_FragColor = vec4(1.0); }
+  `
+  const doc = parseIsf(SRC)
+  const targets = isfInputsToTargets(doc)
+
+  it('produces no target for a resource input, but still one for an ordinary input', () => {
+    expect(targets).toHaveLength(1)
+    expect(targets[0].id).toBe(`${ISF_TARGET_PREFIX}drive`)
+  })
+
+  it('resolvedTargetsToIsfUniforms never emits a uniform for a resource input', () => {
+    const uniforms = resolvedTargetsToIsfUniforms(doc, { [`${ISF_TARGET_PREFIX}drive`]: 0.5 })
+    expect(uniforms).toEqual({ drive: 0.5 })
+  })
+})

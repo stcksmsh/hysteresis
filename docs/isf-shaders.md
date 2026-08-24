@@ -44,9 +44,12 @@ this capability decides on its own.
 
 A real subset, not a stub — anything accepted here renders for real:
 
-- Single-pass shaders only (`PASSES` with more than one entry is rejected).
-- Input types: `float`, `bool`, `long`, `color`, `point2D`, `hysteresisSignal`
-  (see below — this repo's own real extension beyond standard ISF).
+- Single-pass shaders by default (`PASSES` with more than one entry is
+  rejected) — unless `HYSTERESIS_VERSION` declares real Hysteresis-format
+  multi-pass support (see below).
+- Input types: `float`, `bool`, `long`, `color`, `point2D`, `hysteresisSignal`,
+  `resource` (both are this repo's own real extensions beyond standard ISF —
+  see below).
   - `color` and `point2D` inputs expand into separate scalar targets
     (`isf.tint.r`/`.g`/`.b`/`.a`, `isf.center.x`/`.y`) since every patch
     graph node is scalar-in/scalar-out.
@@ -87,6 +90,99 @@ difference from a plain `float` input is that it's self-documenting about
 which live signal it's shaped for, and gets a sensible default range for
 free.
 
+## `HYSTERESIS_VERSION` and real multi-pass: the `.hyst` format
+
+Files using the extensions below are conventionally named `.hyst` rather
+than `.fs` — same physical shape (one file, `/*{ ... }*/` JSON header then
+GLSL), just signaling "this uses the real Hysteresis-format extensions, not
+just stock ISF". A plain `.fs`/`.hyst` file with no `HYSTERESIS_VERSION` at
+all behaves identically either way — the extension is a naming convention,
+not something the parser checks.
+
+`"HYSTERESIS_VERSION": 1` at the header's top level is what actually makes
+the extensions below available, and is the format's real future-proofing
+mechanism: an unrecognized version (anything other than the one number this
+parser currently knows) is rejected clearly at load time, rather than
+guessed at — the same "reject clearly, never silently mis-render"
+discipline every other unsupported feature here already follows. A file
+with no `HYSTERESIS_VERSION` is 100% the plain single-pass model above,
+unchanged.
+
+### Real `PASSES`, typed by `KIND`
+
+Under `HYSTERESIS_VERSION: 1`, `PASSES` becomes real — but a deliberately
+scoped subset, not the entirety of what the real ISF spec allows (no
+`PERSISTENT`/feedback buffers yet — see "What's not supported" below). Each
+pass has a `KIND`:
+
+- `"KIND": "fullscreen"` (the default if omitted) — exactly today's model:
+  one GLSL `main()` (`doc.body`, shared by every fullscreen pass) drawn
+  over a fullscreen quad.
+- `"KIND": "lineTrace"` — draws an open polyline from a named `resource`
+  input (see below), using the same cheap GPU-instanced-quad technique the
+  built-in Julia scene's oscilloscope beam already uses (real hardware line
+  rasterization — a naive "loop over every sample in the fragment shader"
+  approach was costed out during this format's design and rejected: ~2
+  billion segment evaluations per 1080p frame, versus near-free instanced
+  geometry). A `lineTrace` pass has no shader-author GLSL body — it's
+  structural, not a fragment shader.
+  - `POINTS` (required): the `NAME` of a declared `resource` input
+    supplying the polyline's points.
+  - `WIDTH` (optional): the `NAME` of a declared `float`/`hysteresisSignal`
+    input controlling line half-width; omitted uses a sensible runtime
+    default.
+
+Every pass's `TARGET` (a non-empty string, required for `lineTrace`,
+optional for `fullscreen`) becomes a real `uniform sampler2D <TARGET>;`
+automatically available to the shared fullscreen body — this is the actual
+mechanism for "the beam is part of the shader": a `lineTrace` pass
+rasterizes the waveform's shape into a texture (always full-brightness
+white — tint/blend/warp is entirely the fullscreen pass's own GLSL's job,
+not baked into the line pass), and the fullscreen shader samples/recolors/
+composites it however it wants:
+
+```json
+{
+  "HYSTERESIS_VERSION": 1,
+  "PASSES": [
+    { "TARGET": "beamTex", "KIND": "lineTrace", "POINTS": "scope", "WIDTH": "beamWidth" },
+    { "TARGET": "", "KIND": "fullscreen" }
+  ],
+  "INPUTS": [
+    { "NAME": "scope", "TYPE": "resource", "RESOURCE": "scope" },
+    { "NAME": "beamWidth", "TYPE": "float", "DEFAULT": 0.01, "MIN": 0.001, "MAX": 0.05 }
+  ]
+}
+```
+```glsl
+uniform sampler2D beamTex;
+void main() {
+  vec4 beam = texture2D(beamTex, isf_FragNormCoord);
+  gl_FragColor = beam * vec4(1.0, 0.4, 0.2, 1.0); // shader decides the beam's own color/blend
+}
+```
+
+### `resource` inputs — for live data that isn't a scalar
+
+`hysteresisSignal` covers every *scalar* live signal, but not everything the
+Feature Engine produces is a scalar — `scope` (`SignalBus.scope`, the raw
+oscilloscope waveform) is a `Float32Array` snapshot, not a number. A
+`resource` input is how a shader accesses one:
+
+```json
+{ "NAME": "scope", "TYPE": "resource", "RESOURCE": "scope" }
+```
+
+Unlike every other input type, a `resource` is **never a routable patch-
+graph target** — the patch graph stays scalar-in/scalar-out throughout
+(unchanged). It's bound automatically by name instead, the same category
+`TIME`/`RENDERSIZE` already are, just opt-in per shader. `RESOURCE` is
+validated against a small, explicit, real list (currently just `"scope"` —
+the one non-scalar live signal that exists today) — an unknown name is
+rejected at load time with the valid list, same discipline as
+`hysteresisSignal`'s `SIGNAL` field. A `lineTrace` pass's `POINTS` names
+which declared `resource` input feeds it.
+
 ## `HYSTERESIS_SCRIPT` — reserved, not executed yet
 
 A shader's header may declare `"HYSTERESIS_SCRIPT": "..."` — a **planned**
@@ -106,11 +202,21 @@ it lands.
 Rejected at load time with a specific error, rather than silently
 mis-rendering:
 
-- **Multi-pass shaders** (`PASSES` with more than one entry) and
-  **`PERSISTENT` buffers** — these need their own ping-pong buffer
-  management per shader; only a single fullscreen draw exists today.
-- **`image`/`audio`/`audioFFT` inputs** — there's no asset-import or
-  audio-texture pipeline yet.
+- **Stock ISF multi-pass** (`PASSES` with more than one entry, no
+  `HYSTERESIS_VERSION` declared) — real ISF ecosystem shaders using the
+  spec's own `PASSINDEX`-branching multi-pass model aren't supported.
+  `HYSTERESIS_VERSION: 1`'s own real (but scoped) `PASSES`/`KIND` model
+  above is a different, Hysteresis-format-specific mechanism.
+- **`PERSISTENT` buffers** — cross-*frame* feedback, real, separate future
+  work; rejected under `HYSTERESIS_VERSION` too, not just stock ISF.
+- **Pass `KIND`s beyond `fullscreen`/`lineTrace`** — no motivating shader
+  yet (particles, SDF clouds, etc.).
+- **`resource` kinds beyond `scope`** — no other non-scalar live signal
+  exists yet (a future FFT-bins or reference-orbit resource would extend
+  `KNOWN_RESOURCES` in `parse-isf.ts`, not require a format change).
+- **`image`/`audio`/`audioFFT` inputs** — there's no general asset-import
+  or audio-texture pipeline (distinct from the narrow, system-provided
+  `resource` mechanism above).
 - **`IMPORTED` images** — same reason.
 - **`event`-type inputs** — not yet mapped to anything in the patch graph.
 

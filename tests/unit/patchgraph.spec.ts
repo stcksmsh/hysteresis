@@ -193,6 +193,43 @@ describe('validatePatchGraph', () => {
     expect(issues[0].message).toMatch(/transient/)
   })
 
+  it('an envelope with only its value slot wired (attack/release left "") is valid, not a dangling reference', () => {
+    const graph: PatchGraph = {
+      id: 'g',
+      nodes: [
+        { id: 'a', kind: 'signal', inputs: [], signal: 'energy' },
+        { id: 'e', kind: 'envelope', inputs: ['a', '', ''], attackSec: 0.1, releaseSec: 0.5 },
+        { id: 't', kind: 'target', inputs: ['e'], targetId: LED_TARGET.id },
+      ],
+    }
+    expect(validatePatchGraph(graph, [LED_TARGET])).toEqual([])
+  })
+
+  it('flags an envelope with the wrong number of input slots (must always be exactly 3)', () => {
+    const graph: PatchGraph = {
+      id: 'g',
+      nodes: [
+        { id: 'a', kind: 'signal', inputs: [], signal: 'energy' },
+        // @ts-expect-error deliberately wrong arity, same as a hand-edited/loaded file could have
+        { id: 'e', kind: 'envelope', inputs: ['a'], attackSec: 0.1, releaseSec: 0.5 },
+      ],
+    }
+    const issues = validatePatchGraph(graph, [LED_TARGET])
+    expect(issues.some((i) => i.nodeId === 'e' && i.message.includes('expects exactly 3'))).toBe(true)
+  })
+
+  it('a real (non-"") dangling reference in an envelope override slot is still flagged', () => {
+    const graph: PatchGraph = {
+      id: 'g',
+      nodes: [
+        { id: 'a', kind: 'signal', inputs: [], signal: 'energy' },
+        { id: 'e', kind: 'envelope', inputs: ['a', 'doesNotExist', ''], attackSec: 0.1, releaseSec: 0.5 },
+      ],
+    }
+    const issues = validatePatchGraph(graph, [LED_TARGET])
+    expect(issues.some((i) => i.nodeId === 'e' && i.message.includes('unknown node "doesNotExist"'))).toBe(true)
+  })
+
   it('does not warn when a transient signal is gated through a threshold first', () => {
     const graph: PatchGraph = {
       id: 'g',
@@ -351,7 +388,7 @@ describe('PatchGraphEvaluator', () => {
       id: 'g',
       nodes: [
         { id: 'a', kind: 'signal', inputs: [], signal: 'energy' },
-        { id: 'e', kind: 'envelope', inputs: ['a'], attackSec: 0.1, releaseSec: 1 },
+        { id: 'e', kind: 'envelope', inputs: ['a', '', ''], attackSec: 0.1, releaseSec: 1 },
         { id: 't', kind: 'target', inputs: ['e'], targetId: LED_TARGET.id },
       ],
     }
@@ -363,6 +400,45 @@ describe('PatchGraphEvaluator', () => {
     // A slow release (1s time constant) should barely move in one 0.1s step.
     expect(afterRelease).toBeGreaterThan(afterAttack - 0.15)
     expect(afterRelease).toBeLessThan(afterAttack)
+  })
+
+  it('envelope attack/release can be driven live by a midiCc knob instead of the static field', () => {
+    const graph: PatchGraph = {
+      id: 'g',
+      nodes: [
+        { id: 'a', kind: 'signal', inputs: [], signal: 'energy' },
+        { id: 'knob', kind: 'midiCc', inputs: [], ccKey: '0:1' },
+        // knob (0..1) rescaled into a real seconds range via the ordinary
+        // `map` node — the same "remap a knob into a target's real range"
+        // pattern seed-graph.ts already uses, no special-casing needed
+        // just because the destination is a node PARAMETER instead of a
+        // target's value.
+        { id: 'atkMap', kind: 'map', inputs: ['knob'], inRange: [0, 1], outRange: [0.01, 2], clamp: true },
+        { id: 'e', kind: 'envelope', inputs: ['a', 'atkMap', ''], attackSec: 0.1, releaseSec: 1 },
+        { id: 't', kind: 'target', inputs: ['e'], targetId: LED_TARGET.id },
+      ],
+    }
+    const evalr = new PatchGraphEvaluator(graph, [LED_TARGET])
+    // knob at 0 -> mapped attackSec ~0.01s (near-instant) — should already
+    // be close to the target after one 0.1s step, unlike the node's own
+    // static attackSec (0.1s) which would only be ~63% of the way there.
+    const fast = evalr.evaluate(makeBus({ energy: 1 }), 0.1, { midiCc: new Map([['0:1', 0]]) })[LED_TARGET.id]
+    expect(fast).toBeGreaterThan(0.95)
+  })
+
+  it('an envelope with unconnected override slots behaves exactly as before this feature (static fields only)', () => {
+    const graph: PatchGraph = {
+      id: 'g',
+      nodes: [
+        { id: 'a', kind: 'signal', inputs: [], signal: 'energy' },
+        { id: 'e', kind: 'envelope', inputs: ['a', '', ''], attackSec: 0.1, releaseSec: 1 },
+        { id: 't', kind: 'target', inputs: ['e'], targetId: LED_TARGET.id },
+      ],
+    }
+    const evalr = new PatchGraphEvaluator(graph, [LED_TARGET])
+    const afterAttack = evalr.evaluate(makeBus({ energy: 1 }), 0.1)[LED_TARGET.id]
+    expect(afterAttack).toBeGreaterThan(0.5)
+    expect(afterAttack).toBeLessThan(0.95) // NOT near-instant — the static 0.1s attackSec is in effect, not a phantom live override
   })
 
   it('a target with no route to it is simply absent from the result', () => {

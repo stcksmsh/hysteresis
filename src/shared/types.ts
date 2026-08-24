@@ -156,8 +156,22 @@ export type WorkletToMain =
   | { kind: 'error'; message: string }
 
 export type MainToRenderWorker =
-  | { kind: 'init'; canvas: OffscreenCanvas; dpr: number; reducedMotion: boolean }
+  // `startLoop` (optional, default true — every existing caller omits it,
+  // so behavior is unchanged): false skips the automatic rAF `start()` call,
+  // for a caller that drives frames deterministically via `renderFrame`
+  // below instead (tools/render-video/'s offline harness) rather than real
+  // wall-clock time.
+  | { kind: 'init'; canvas: OffscreenCanvas; dpr: number; reducedMotion: boolean; startLoop?: boolean }
   | { kind: 'state'; frame: StateFrame }
+  // Deterministic single-frame render (tools/render-video/'s offline
+  // harness): runs the exact same per-frame pipeline `tick()` runs live
+  // (renderStep(effectiveFrame, dt) — see render-worker.ts), but with a
+  // caller-supplied StateFrame and dt instead of the latest live/fallback
+  // frame and a wall-clock delta, then replies with the rendered frame as a
+  // transferred ImageBitmap (see `frameRendered` below). Only meaningful
+  // after `init` with `startLoop: false` — otherwise the live rAF loop is
+  // also drawing to the same canvas concurrently.
+  | { kind: 'renderFrame'; frame: StateFrame; dt: number }
   | { kind: 'resize'; cssWidth: number; cssHeight: number; dpr: number }
   | { kind: 'visibility'; hidden: boolean }
   | { kind: 'setReducedMotion'; value: boolean }
@@ -236,6 +250,13 @@ export type RenderWorkerToMain =
   // DmxOutPanel read it here instead of running their own copy of the
   // evaluator (see AGENTS.md's "dogfood the fixture API" session).
   | { kind: 'signalBus'; bus: SignalBus; dropDebug: DropDetectorDebug | null; fixtureValues: Record<string, number> }
+  // Reply to `renderFrame` above — the composited frame (an ImageBitmap,
+  // transferred, from OffscreenCanvas.transferToImageBitmap()) plus the
+  // same bus/dropDebug/fixtureValues shape `signalBus` carries, but for the
+  // exact frame just rendered rather than a separately-throttled snapshot —
+  // an offline compositor (tools/render-video/) needs data synchronized to
+  // the frame it's drawing, not racing a live 20Hz timer.
+  | { kind: 'frameRendered'; bitmap: ImageBitmap; bus: SignalBus; dropDebug: DropDetectorDebug | null; fixtureValues: Record<string, number> }
   // Dev-only: acks debugSetScreenGraph — either it was applied, or (most
   // usefully) it failed PatchGraphEvaluator's construction-time validation
   // (§5.3-equivalent: throws on any error-severity issue) and the worker

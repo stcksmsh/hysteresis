@@ -24,7 +24,24 @@ export function translateIsfFragmentShader(doc: IsfDocument): string {
   const insertAt = mainMatch.index! + mainMatch[0].length
   body = `${body.slice(0, insertAt)}\n  vec2 isf_FragNormCoord = gl_FragCoord.xy / RENDERSIZE;\n${body.slice(insertAt)}`
 
-  const uniformDecls = doc.inputs.map((input) => `uniform ${glslType(input)} ${input.name};`).join('\n')
+  // `resource` inputs aren't GLSL uniforms at all (see IsfResourceInput's
+  // comment in types.ts) — IsfScene binds them directly, never through a
+  // declared uniform, so they're excluded here.
+  const uniformDecls = doc.inputs
+    .filter((input) => input.type !== 'resource')
+    .map((input) => `uniform ${glslType(input)} ${input.name};`)
+    .join('\n')
+
+  // Earlier passes' render targets become sampler2D uniforms this (shared,
+  // PASSINDEX-branching-style) body can sample — e.g. a `lineTrace` pass
+  // named "beamTex" becomes `uniform sampler2D beamTex;`, which is how a
+  // shader composites the beam however its own GLSL wants instead of the
+  // runtime hardcoding it on top. '' (the final output target) never gets
+  // a uniform — nothing can meaningfully sample its own output.
+  const passTargetDecls = doc.passes
+    .filter((pass) => pass.target !== '')
+    .map((pass) => `uniform sampler2D ${pass.target};`)
+    .join('\n')
 
   return `#version 300 es
 precision highp float;
@@ -36,6 +53,7 @@ uniform int PASSINDEX;
 uniform int FRAMEINDEX;
 uniform vec4 DATE;
 ${uniformDecls}
+${passTargetDecls}
 
 out vec4 isf_FragColor;
 
@@ -60,5 +78,10 @@ function glslType(input: IsfInput): string {
       // TYPE distinction only matters at the patch-graph/routing layer (isf-targets.ts),
       // not to the shader itself.
       return 'float'
+    case 'resource':
+      // Never called — resource inputs are filtered out before this
+      // function is invoked (see uniformDecls above). Kept for
+      // exhaustiveness since `input.type` is a real discriminated union.
+      throw new Error('resource inputs are not GLSL uniforms')
   }
 }

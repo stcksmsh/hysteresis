@@ -168,8 +168,8 @@ const cancelRaf =
     ? (h: number) => self.cancelAnimationFrame(h)
     : (h: ReturnType<typeof setTimeout>) => clearTimeout(h)
 
-function post(msg: RenderWorkerToMain) {
-  self.postMessage(msg)
+function post(msg: RenderWorkerToMain, transfer?: Transferable[]) {
+  self.postMessage(msg, transfer ?? [])
 }
 
 // Never let an uncaught exception anywhere in a frame kill the rAF chain.
@@ -194,6 +194,34 @@ function loop(t: number) {
     post({ kind: 'error', message: `render loop threw: ${err instanceof Error ? err.message : String(err)}` })
   }
   rafHandle = raf(loop)
+}
+
+// The actual per-frame pipeline — Conductor -> per-output resolve/update ->
+// fixture-graph evaluation — shared verbatim between the live rAF path
+// (tick(), below) and the deterministic offline `renderFrame` message
+// handler. Extracted specifically so an offline render (tools/render-video/)
+// runs the *exact same code*, just with a caller-supplied `dt` instead of a
+// wall-clock delta — the concrete guarantee that adding offline rendering
+// cannot change the live path's behavior. Throttled/live-only side effects
+// (the signalBus debug stream, OSC-out send, the real fixture DMX send,
+// adaptive quality) deliberately stay in tick() and are NOT part of this
+// function — an offline render doesn't want a real network send, and
+// adaptive quality reacting to actual wall-clock render time would make an
+// as-fast-as-possible batch render nondeterministic.
+function renderStep(effectiveFrame: StateFrame, dt: number) {
+  const bus = conductor.update(effectiveFrame, dt)
+  for (const output of outputs) {
+    // Only one output exists today (screenOutput) — resolveScreenTargets is
+    // screen-specific (idle/scope passthrough by name). Adding a second real
+    // output later needs its own PatchGraphEvaluator + a resolver of its
+    // own, same as it would have needed its own Patchbay before.
+    const resolved = resolveScreenTargets(screenGraphEvaluator, output.targets, bus, dt, currentExternalInputs())
+    output.update(dt, resolved)
+  }
+  if (fixtureGraphEvaluator) {
+    lastFixtureResolved = fixtureGraphEvaluator.evaluate(bus, dt, currentExternalInputs())
+  }
+  return bus
 }
 
 function tick(t: number) {
@@ -225,15 +253,7 @@ function tick(t: number) {
     events,
   }
 
-  const bus = conductor.update(effectiveFrame, dt)
-  for (const output of outputs) {
-    // Only one output exists today (screenOutput) — resolveScreenTargets is
-    // screen-specific (idle/scope passthrough by name). Adding a second real
-    // output later needs its own PatchGraphEvaluator + a resolver of its
-    // own, same as it would have needed its own Patchbay before.
-    const resolved = resolveScreenTargets(screenGraphEvaluator, output.targets, bus, dt, currentExternalInputs())
-    output.update(dt, resolved)
-  }
+  const bus = renderStep(effectiveFrame, dt)
 
   if (streamSignalBus && t - lastSignalBusPost > SIGNAL_BUS_STREAM_INTERVAL_MS) {
     lastSignalBusPost = t
@@ -245,12 +265,9 @@ function tick(t: number) {
     oscOutBridge.send(bus)
   }
 
-  if (fixtureGraphEvaluator) {
-    lastFixtureResolved = fixtureGraphEvaluator.evaluate(bus, dt, currentExternalInputs())
-    if (t - lastFixtureOutSend > FIXTURE_OUT_INTERVAL_MS) {
-      lastFixtureOutSend = t
-      fixtureOutput.send(lastFixtureResolved)
-    }
+  if (fixtureGraphEvaluator && t - lastFixtureOutSend > FIXTURE_OUT_INTERVAL_MS) {
+    lastFixtureOutSend = t
+    fixtureOutput.send(lastFixtureResolved)
   }
 
   if (dt > 0) updateAdaptiveQuality(dt * 1000, t)
@@ -380,7 +397,7 @@ self.onmessage = (e: MessageEvent<MainToRenderWorker>) => {
       }
       caps.gl.viewport(0, 0, msg.canvas.width, msg.canvas.height)
       screenOutput.init(caps, msg.canvas.width, msg.canvas.height, msg.dpr, reducedMotion)
-      start()
+      if (msg.startLoop !== false) start()
 
       // No listener anywhere in this codebase previously handled WebGL
       // context loss at all — without calling preventDefault() on
@@ -421,6 +438,20 @@ self.onmessage = (e: MessageEvent<MainToRenderWorker>) => {
       latestStateFrame = msg.frame
       pendingEvents.push(...msg.frame.events)
       pendingHits.push(...msg.frame.spectralHits)
+      break
+    }
+    case 'renderFrame': {
+      if (!canvasRef) {
+        post({ kind: 'error', message: 'renderFrame received before init' })
+        break
+      }
+      // Deterministic — no fallback-frame/debug-override/pending-events
+      // machinery: the caller already built a complete StateFrame (e.g.
+      // StructureSource.synthesize(t) or a precomputed live hop) for this
+      // exact output frame, so it IS the effective frame, verbatim.
+      const bus = renderStep(msg.frame, msg.dt)
+      const bitmap = canvasRef.transferToImageBitmap()
+      post({ kind: 'frameRendered', bitmap, bus, dropDebug: msg.frame.dropDebug ?? null, fixtureValues: lastFixtureResolved }, [bitmap])
       break
     }
     case 'setReducedMotion': {
