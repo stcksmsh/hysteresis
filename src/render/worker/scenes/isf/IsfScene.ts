@@ -8,8 +8,10 @@ import beamFragSrc from '../julia/shaders/beam.frag.glsl?raw'
 import { lissajousPoint } from '../julia/lissajous'
 import { SCOPE_SIZE } from '../../../../shared/constants'
 import type { ParamBus } from '../../../../shared/types'
-import type { IsfDocument, IsfLineTracePass } from '../../../../isf/types'
+import type { IsfDocument, IsfLineTracePass, IsfScriptTexturePass } from '../../../../isf/types'
 import { translateIsfFragmentShader } from '../../../../isf/translate-isf-glsl'
+import { buildScriptOutputContract } from '../../../../isf/script-runtime/contract'
+import { HysteresisScriptHost } from './script-runtime/script-host'
 
 // Same idle-fallback shape as JuliaScene's own beam (lissajous.ts's header
 // comment: "the substrate's idle c-drift and the beam's idle trace both
@@ -22,6 +24,11 @@ const IDLE_BEAM_POINTS = 220
 const BEAM_HALF_WIDTH_DEFAULT = 0.009
 const BEAM_SCOPE_GAIN = 3.2
 const MAX_SEGMENTS = Math.max(SCOPE_SIZE - 1, IDLE_BEAM_POINTS - 1)
+
+interface ScriptTextureState {
+  pass: IsfScriptTexturePass
+  texture: WebGLTexture
+}
 
 interface LineTraceState {
   pass: IsfLineTracePass
@@ -78,6 +85,11 @@ export class IsfScene implements Scene {
   private passTargetLocations = new Map<string, WebGLUniformLocation | null>()
 
   private lineTraces: LineTraceState[] = []
+  private scriptTextures: ScriptTextureState[] = []
+  // Non-null only when the shader declares a real HYSTERESIS_SCRIPT — owns the sandboxed nested
+  // Worker that runs it (see script-runtime/script-host.ts). null for every scriptless shader
+  // (today's common case), so none of this machinery runs at all unless a shader opts in.
+  private scriptHost: HysteresisScriptHost | null = null
   // Shared per-frame point buffer for every lineTrace pass whose resource
   // is 'scope' (the only known resource today — see KNOWN_RESOURCES in
   // parse-isf.ts) — computed once in update(), reused by however many
@@ -122,8 +134,37 @@ export class IsfScene implements Scene {
     }
 
     this.lineTraces = this.doc.passes.filter((p): p is IsfLineTracePass => p.kind === 'lineTrace').map((pass) => this.createLineTrace(pass))
+    this.scriptTextures = this.doc.passes.filter((p): p is IsfScriptTexturePass => p.kind === 'scriptTexture').map((pass) => this.createScriptTexture(pass))
+
+    if (this.doc.hysteresisScript) {
+      const contract = buildScriptOutputContract(this.doc)
+      this.scriptHost = new HysteresisScriptHost(this.doc.hysteresisScript, contract, (message) => {
+        // Runtime faults (a hang, a throw, a load-time syntax error) are logged clearly rather
+        // than silently swallowed — rendering keeps going on last-known/default values either
+        // way (see HysteresisScriptHost's own header comment), so this is diagnostic, not fatal.
+        console.error(`[hysteresis-script] ${message}`)
+      })
+    }
 
     this.resize(ctx)
+  }
+
+  private createScriptTexture(pass: IsfScriptTexturePass): ScriptTextureState {
+    const gl = this.gl
+    const texture = gl.createTexture()
+    if (!texture) throw new Error('Failed to create scriptTexture texture')
+    gl.bindTexture(gl.TEXTURE_2D, texture)
+    // texelFetch (what a shader reading this via GLSL is expected to use, same as
+    // JuliaScene.ts's uRefOrbit) ignores filtering/wrap mode entirely, but the texture still
+    // needs to be complete.
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+    // RG32F sampling is core WebGL2 (no extension needed) as long as it's only ever sampled,
+    // never rendered to — which is all this does, same as JuliaScene.ts's own ref-orbit texture.
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG32F, pass.length, 1, 0, gl.RG, gl.FLOAT, null)
+    return { pass, texture }
   }
 
   private createLineTrace(pass: IsfLineTracePass): LineTraceState {
@@ -203,6 +244,15 @@ export class IsfScene implements Scene {
     this.frameIndex += 1
     if (params.idle) this.idleClockSec += dt
 
+    // Fire-and-forget, per HysteresisScriptHost's own design — this frame's render() reads
+    // whatever the LATEST completed reply is (possibly from a slightly earlier frame), never
+    // blocking on this call. `idle` is supplied here directly off ParamBus (not a routable
+    // signal — see SIGNAL_TAGS's own comment), the same non-patch-graph exception this scene
+    // already makes for `scope` below. `this.uniformValues` is exactly the same resolved-target
+    // snapshot the shader's own GLSL uniforms are bound from (setInputValues(), called by
+    // ScreenOutput before update() each frame) — the script never sees the raw SignalBus.
+    this.scriptHost?.postUpdate({ dt, time: this.timeSec, idle: params.idle, inputs: this.uniformValues })
+
     if (this.lineTraces.length === 0) return // no lineTrace pass declared — skip the point-buffer work entirely
 
     const scope = params.idle ? null : params.scope
@@ -245,6 +295,26 @@ export class IsfScene implements Scene {
       gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.scopeP0, 0, this.scopeSegmentCount * 2)
       gl.bindBuffer(gl.ARRAY_BUFFER, lt.p1Buffer)
       gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.scopeP1, 0, this.scopeSegmentCount * 2)
+    }
+  }
+
+  // Uploads this frame's latest script-produced texture data (e.g. a perturbation reference
+  // orbit — see JuliaScene.ts's updateReferenceOrbit/uRefOrbit, the concrete motivating case) —
+  // called once per render() right after the scriptOutput uniforms are bound, before the earlier-
+  // passes texture-binding loop reads these textures. Silently a no-op for every scriptless
+  // shader (this.scriptTextures is empty) and for any frame before the script's first reply
+  // lands (getLatestOutput() still null — the texture just keeps whatever it was last set to,
+  // zero-initialized at allocation).
+  private uploadScriptTextures(): void {
+    if (this.scriptTextures.length === 0) return
+    const gl = this.gl
+    const output = this.scriptHost?.getLatestOutput()
+    if (!output) return
+    for (const st of this.scriptTextures) {
+      const data = output.textures[st.pass.source]
+      if (!data) continue
+      gl.bindTexture(gl.TEXTURE_2D, st.texture)
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, st.pass.length, 1, gl.RG, gl.FLOAT, new Float32Array(data))
     }
   }
 
@@ -333,10 +403,41 @@ export class IsfScene implements Scene {
         case 'hysteresisSignal':
           gl.uniform1f(loc, typeof value === 'number' ? value : input.default)
           break
+        case 'scriptOutput': {
+          // Never from `this.uniformValues` (the patch-graph-fed path) — a scriptOutput input is
+          // never routable (isf-targets.ts's isfInputsToTargets returns [] for it), its value
+          // only ever comes from the HYSTERESIS_SCRIPT host's latest completed reply, falling
+          // back to the input's own declared default before the first reply lands or if the
+          // script never supplies this name (engine-source.ts's own coercion already guarantees
+          // that fallback happens inside the sandbox too — this is a second, harmless belt-and-
+          // braces fallback on the trusted side).
+          const scripted = this.scriptHost?.getLatestOutput()?.uniforms[input.name] ?? input.default
+          switch (input.kind) {
+            case 'float':
+              gl.uniform1f(loc, typeof scripted === 'number' ? scripted : 0)
+              break
+            case 'bool':
+              gl.uniform1i(loc, scripted === true ? 1 : 0)
+              break
+            case 'point2D': {
+              const p = Array.isArray(scripted) ? scripted : [0, 0]
+              gl.uniform2f(loc, p[0] ?? 0, p[1] ?? 0)
+              break
+            }
+            case 'color': {
+              const c = Array.isArray(scripted) ? scripted : [0, 0, 0, 1]
+              gl.uniform4f(loc, c[0] ?? 0, c[1] ?? 0, c[2] ?? 0, c[3] ?? 1)
+              break
+            }
+          }
+          break
+        }
       }
     }
 
-    // Bind every earlier lineTrace pass's rendered texture to the
+    this.uploadScriptTextures()
+
+    // Bind every earlier lineTrace/scriptTexture pass's texture to the
     // fullscreen pass's matching `uniform sampler2D <target>` — starting
     // at texture unit 1 (unit 0 is free for a future 'fullscreen'-target
     // pass; not used yet, see IsfFullscreenPass's own comment).
@@ -346,6 +447,14 @@ export class IsfScene implements Scene {
       if (!loc || !lt.fbo) continue
       gl.activeTexture(gl.TEXTURE0 + unit)
       gl.bindTexture(gl.TEXTURE_2D, lt.fbo.texture)
+      gl.uniform1i(loc, unit)
+      unit++
+    }
+    for (const st of this.scriptTextures) {
+      const loc = this.passTargetLocations.get(st.pass.target)
+      if (!loc) continue
+      gl.activeTexture(gl.TEXTURE0 + unit)
+      gl.bindTexture(gl.TEXTURE_2D, st.texture)
       gl.uniform1i(loc, unit)
       unit++
     }
@@ -368,5 +477,14 @@ export class IsfScene implements Scene {
       gl.deleteBuffer(lt.p1Buffer)
       if (lt.fbo) deleteFbo(gl, lt.fbo)
     }
+    for (const st of this.scriptTextures) {
+      gl.deleteTexture(st.texture)
+    }
+    // Must terminate the nested Worker on every dispose — a shader hot-swap
+    // (ScreenOutput.setIsfScene()/resetToDefaultScene() both call
+    // scene.dispose() before replacing this.scene) would otherwise leak one
+    // running Worker per swap, the same class of resource-lifecycle bug
+    // this codebase has hit before with canvas transfers/context loss.
+    this.scriptHost?.dispose()
   }
 }

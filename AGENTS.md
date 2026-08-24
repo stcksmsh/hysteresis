@@ -320,17 +320,18 @@ live-reactive playback as two distinct export modes. **Not started.**
       error). Loadable from the editor AND as real public API (`loadIsfShader()`/
       `clearIsfShader()`, `docs/isf-shaders.md`) — opt-in, production still ships Julia by
       default.
-- [~] ISF superset spec ("the `.hyst` format") — real, shipped, tested, beyond just
+- [x] ISF superset spec ("the `.hyst` format") — real, shipped, tested, beyond just
       `hysteresisSignal`: `HYSTERESIS_VERSION` (real future-proofing — unrecognized versions
-      reject clearly), scoped real multi-pass `PASSES` (`fullscreen` + a `lineTrace` kind reusing
-      the built-in Julia beam's real GPU-instanced-quad technique), and `resource` inputs (raw
-      non-scalar live data — `scope`'s waveform, deliberately never a routable patch-graph
-      target). `examples/isf/julia.hyst` is a real, working, checked-in port of the Julia
-      substrate + oscilloscope beam, driven by 7 live signals — genuinely part of the shader, not
-      an overlay. `HYSTERESIS_SCRIPT` (an optional per-file stateful JS companion — needed for
-      anything a single-pass shader can't express: Julia's own vortex-search navigation,
-      perturbation-orbit deep zoom) is still reserved-but-rejected — its execution engine is the
-      one real, separate, not-yet-built piece, and now the actual next phase (see §5).
+      reject clearly), real multi-pass `PASSES` (`fullscreen`, a `lineTrace` kind reusing the
+      built-in Julia beam's real GPU-instanced-quad technique, and `scriptTexture` for
+      script-produced non-scalar data), `resource` inputs (system-provided raw non-scalar live
+      data — `scope`'s waveform), and `scriptOutput` inputs (script-produced scalar/vector data) —
+      none of the last three are routable patch-graph targets. `examples/isf/julia.hyst` is the
+      substrate+beam-only first-pass port (7 live signals); `examples/isf/julia-autopilot.hyst` is
+      the real thing — the full autopilot (vortex-search navigation, spring-damped drift,
+      perturbation-orbit deep zoom) via a real `HYSTERESIS_SCRIPT`, a sandboxed nested-Worker
+      execution engine (`src/render/worker/scenes/isf/script-runtime/`) that never blocks or
+      crashes the render worker. See §6's dated entry for the full design.
 - [ ] Shadertoy → ISF import helper (mind licensing/attribution on ported shaders).
 - [ ] Live inline node state visualization (waveform/value preview per node).
 - [ ] Macro/sub-patch save-as-reusable-block.
@@ -560,11 +561,14 @@ dogfoods the production fixture API. §4's Layer 2 understanding build order (al
 landed — the Signal Bus now carries `noveltyLocal`/`noveltySection`/`fullness`/`onsetDensity`/
 `harmonicNovelty`/`chromaRootHue`/`chroma`/the 5 sidecar-only presence signals — and every one of
 those (including the `--stems` Demucs path) has now been verified against a real 5:40 track, not
-just synthetic fixtures (see the "headless real-audio test run" §6 entry). **None of these new
-signals are wired into any default screen/fixture route yet**, though — deliberately out of
-scope for both sessions, still real follow-up work. §3.7's checklist is the source of truth for
-what's next — don't assume any older list (§3.5's protocol order) still dictates priority, it's
-exhausted.
+just synthetic fixtures (see the "headless real-audio test run" §6 entry). **As of the Layer 2
+default-route session**: the 6 live (non-sidecar) signals are now real `screen.*` targets
+(`screen-only.ts`'s `identityRoutes`), with `chromaRootHue`/`fullness` specifically also wired
+into a native composite (hueShift, flowStrength) — see that session's own §6 entry for exactly
+which two and why only those two. The 5 sidecar-only stem-presence signals are still unrouted, and
+the fixture side is untouched — both real follow-up work. §3.7's checklist is the source of truth
+for what's next — don't assume any older list (§3.5's protocol order) still dictates priority,
+it's exhausted.
 
 **Standing caveat across almost everything in §6**: most of it has never been verified against
 real hardware or a real browser (no MIDI controller, no external OSC sender, no Art-Net/sACN
@@ -572,17 +576,18 @@ receiver, no laser DAC, no browser access in most of these sessions) — typeche
 unit-tested at the logic layer only. Closing that loop for any one protocol, when real
 hardware/browser access is available, is higher-value than starting new scope.
 
-**As of the `.hyst` multi-pass/resource work + live-knob node params session**: the format itself
-is real, tested, and has a real working example (`examples/isf/julia.hyst`). The three concrete
-next candidates, in the order the user and I actually converged on when this was last discussed:
-(1) wire the still-unused Layer 2 signals (`noveltyLocal`/`fullness`/`harmonicNovelty`/stem-
-presence/...) into a real default route — small, contained, real value; (2) verify `midiCc`/the
-new envelope-attack/release-override feature against a real physical MIDI controller (the user
-has one) — closes a real, standing, never-tested gap rather than adding more untested surface;
-(3) **the big one** — the `HYSTERESIS_SCRIPT` execution engine + the actual Julia autopilot port
-(vortex-search navigation, perturbation-orbit deep zoom) onto this format, the single largest
-piece of remaining scope this whole roadmap has been pointing at since Phase 0. Multi-session
-work — needs its own scoped design pass before code, same as the `.hyst` format itself got.
+**As of the `HYSTERESIS_SCRIPT` execution engine session**: "the big one" — the single largest
+piece of remaining scope this whole roadmap has been pointing at since Phase 0 — is now real. The
+engine (a sandboxed nested Worker, `src/render/worker/scenes/isf/script-runtime/`), the format's
+`scriptOutput`/`scriptTexture` extensions, and the actual Julia autopilot port
+(`examples/isf/julia-autopilot.hyst`) all landed in one session — see §6's dated entry for the
+full design and what's still deferred (editor authoring UX for `HYSTERESIS_SCRIPT`, fine constant
+tuning against live visual feedback). The two other standing candidates from the prior session are
+unchanged and still open: (1) wire the still-unused Layer 2 signals (`noveltyLocal`/`fullness`/
+`harmonicNovelty`/stem-presence/...) into a real default route — small, contained, real value;
+(2) verify `midiCc`/the envelope-attack/release-override feature against a real physical MIDI
+controller (the user has one) — closes a real, standing, never-tested gap rather than adding more
+untested surface.
 
 **Operating mode**:
 - Gap-analysis first, every time you resume — diff §3.7's checklist against what's actually in
@@ -1660,3 +1665,203 @@ that actually matched the real failure was resilience, not a different architect
   failure never reliably reproduced in a short smoke test either, only after ~6700 frames of a
   full-song run) — a full re-render was launched in the background to exercise it for real at
   scale, same as the original failure's conditions.
+
+## The `HYSTERESIS_SCRIPT` execution engine + the real Julia autopilot port (2026-08-24)
+
+"The big one" — flagged since Phase 0 as the single largest piece of remaining `.hyst`-format
+scope (AGENTS.md's own §5). Did a real plan-mode design pass first (per the format's own prior
+session's convention), grounded directly in `JuliaScene.ts`/`vortex-search.ts`/`boundary.ts` (the
+actual autopilot being ported, not a re-guess of it) and in the real render-worker/ISF code
+(`IsfScene.ts`, `ScreenOutput.ts`, `parse-isf.ts`) before writing anything. Confirmed two
+architectural forks with the user before finalizing: script source lives **inline** in the
+`.hyst` header (matches the field's already-reserved `string` contract), and execution happens in
+a **sandboxed nested Worker** talking async `postMessage` (not same-thread `eval`) — explicitly
+because uptime was named the primary constraint, and a same-thread hang/throw would otherwise take
+the whole render worker down with it.
+
+**The format's two new extensions** (`src/isf/types.ts`/`parse-isf.ts`):
+- **`HYSTERESIS_SCRIPT`** is now parsed, not rejected, when `HYSTERESIS_VERSION` is declared (same
+  version-gating discipline `PASSES` already uses) — `IsfDocument.hysteresisScript?: string`.
+- **`scriptOutput` inputs** (`{ "TYPE": "scriptOutput", "KIND": "float"|"bool"|"point2D"|"color" }`)
+  — a value the script computes every frame instead of the patch graph. Never a routable target
+  (`isfInputsToTargets` returns `[]` for it, same treatment as `resource`) — no ambiguity about
+  which mechanism owns a given uniform.
+- **`scriptTexture` passes** (`{ "KIND": "scriptTexture", "TARGET", "SOURCE", "LENGTH" }`) — the
+  non-scalar counterpart, generalizing the exact mechanism `lineTrace` already established (a pass
+  produces a named `uniform sampler2D`, the fullscreen body decides what to do with it) to a THIRD
+  source of pixel data: a `Float32Array`-shaped field in the script's own per-frame output, not GPU
+  geometry rasterization. RG32F, height 1, `LENGTH` texels (`REF_ORBIT_LENGTH`'s exact shape) —
+  the concrete motivating case is the perturbation reference orbit `JuliaScene.ts`'s
+  `updateReferenceOrbit`/`uRefOrbit` already compute/use in production.
+- Both require `HYSTERESIS_SCRIPT` to be declared (parse-time rejected otherwise, same "reject
+  clearly" discipline every other unsupported combination here already follows).
+
+**The engine itself** (`src/render/worker/scenes/isf/script-runtime/` + `src/isf/script-runtime/contract.ts`):
+- **`contract.ts`** (real TS, host-side): `HysteresisScriptFrameInput { dt, time, idle, inputs }` /
+  `HysteresisScriptFrameOutput { uniforms, textures }` — `inputs` is exactly the shader's own
+  resolved patch-graph values (same as its GLSL uniforms get), never the raw `SignalBus` (keeps
+  R2 — a `VizOutput` never sees it directly — intact even though the script executes as part of
+  `IsfScene`/`ScreenOutput`); `idle`/`time` are supplied the same non-patch-graph way `IsfScene`
+  already reads `params.idle`/`params.scope` off `ParamBus`, a small precedented exception, not a
+  new one. `buildScriptOutputContract(doc)` derives the plain, JSON-serializable "what shape is
+  this script's output allowed to be" contract from a document's declared `scriptOutput`/
+  `scriptTexture` shapes.
+- **`engine-source.js`/`script-worker-entry.js`** (deliberately **plain JavaScript, not
+  TypeScript**) — the actual runtime that `Function`-evaluates a script's source and validates/
+  coerces its per-frame output against the contract (wrong-typed values, non-finite numbers, a
+  wrong-length texture array all fall back to their declared default) BEFORE it's ever handed back
+  across the trust boundary. **A real bug caught by writing the first unit test for this, before
+  ever reaching a browser**: Vite's `?raw` import returns UNPROCESSED file bytes — it does not
+  transpile TypeScript — so a `.ts` file's type annotations would have reached the runtime
+  (both the nested-Worker Blob AND a `Function`-eval in a test) as literal, invalid syntax. The fix
+  was authoring these two files as plain JS from the start, not a wrapper/transpile step. Their own
+  header comments document why they carry no `tsc` coverage — real unit-test coverage of the exact
+  runtime text matters more here than static typing of a small, self-contained file, and
+  `tests/unit/hysteresis-script-runtime.spec.ts` `?raw`-imports and evaluates the SAME text a
+  production Worker runs, not a parallel reimplementation.
+- **`script-host.ts`** (`HysteresisScriptHost`, real TS, owned by `IsfScene`) — spawns the nested
+  Worker from a **Blob** (`?raw`-inlined trusted source text; the shader's own untrusted script
+  source is sent as plain string DATA in the first `'load'` message, never concatenated into the
+  Blob's static text), NOT a normal Vite-bundled `new Worker(new URL(...))` entry — found and
+  confirmed during design that the render worker's own build
+  (`vite.render-worker.config.ts`) is a deliberately single-file, no-code-splitting bundle (so the
+  package stays portable wherever it's installed), and a second statically-detected worker entry
+  would have broken that invariant. Classic (non-module) Worker — the two Blob files have no
+  import/export at all, nothing to opt a module scope in for. Every frame: `postUpdate()` is
+  fire-and-forget, `getLatestOutput()` always returns the last completed reply — one frame of
+  async latency at most, imperceptible at these signals' real timescales (springs settle over
+  100ms+, nav re-checks every 250ms, zoom dives run minutes). A hang (no reply within 800ms) OR an
+  explicit `'error'` reply (a synchronous throw inside `update()` does NOT kill the Worker or stop
+  it receiving future messages, so a script that throws every frame needs an immediate error reply
+  to be detected at all — a hang-timeout-only design would never catch that case) both count as a
+  fault: terminate + restart, rendering continuing on frozen last-known values throughout. After 5
+  consecutive faults, stops retrying and reports once via `onFault` — never throws back into the
+  render loop either way. "Sandboxed" here means fault/crash isolation, not a security boundary
+  (documented honestly in `docs/isf-shaders.md` — the Worker still has `fetch`/`XMLHttpRequest`).
+- **`IsfScene.ts`** wiring: constructs the host in `init()` when `doc.hysteresisScript` is set,
+  posts the frame in `update()`, binds `scriptOutput` uniforms and uploads `scriptTexture` data
+  (`texSubImage2D`, generalizing the existing lineTrace-only texture-bind loop) in `render()`,
+  terminates the host in `dispose()` — called out explicitly during implementation since a
+  worker leak on hot-swap is a real, previously-found bug class in this codebase's own history
+  (canvas double-transfer/context-loss), not a hypothetical one.
+
+**The actual port** (`examples/isf/julia-autopilot.hyst`, new — `examples/isf/julia.hyst` kept
+as-is, the deliberately-partial first-pass substrate+beam port): a direct, faithful port of
+`JuliaScene.ts`'s real autopilot, not a re-derivation — same constants, same structure.
+`cardioidPoint`/`sampleOrbit`/`clusterScore`/`findVortexTarget` ported near-verbatim from
+`vortex-search.ts`/`boundary.ts` (pure math, zero framework deps); the spring-damped `c`-drift
+inlined directly (`spring-damper.ts`'s own accel/velocity/value integration, small enough not to
+need the whole module); `updateNavigation`/`updateZoom`/`updateZoomOut`'s full state machine
+(target-pull-weighted heading, local re-search on empty, zoom-out reveal, blackout-flash reset);
+`updateReferenceOrbit`'s float64 orbit walk feeding the new `scriptTexture` pass. One real,
+necessary adaptation: the script only ever sees the shader's declared `hysteresisSignal` inputs
+(continuous values), never the discrete internal `DropTrigger` event `JuliaScene.ts` reads
+directly off `ParamBus` — so a drop is reconstructed via edge-detecting a rise in the continuous
+`dropImpulse` signal past a threshold, the same "reconstruct a one-shot event from a continuous
+bus signal" pattern `ScreenOutput.ts`'s own `dropImpulse` handling already uses elsewhere in this
+codebase, not a new invention. `hueShift`/`paletteMix` stay ordinary closed-form GLSL fed by live
+signals (no reason to move logic into the script that GLSL already expresses fine — same posture
+`julia.hyst` v1 takes); the GLSL body's perturbation iteration (`iterateDirect`/`iteratePerturbed`/
+`cMul`) is an unmodified port of `julia.frag.glsl`'s own, reading the new `refOrbit` sampler
+instead of `uRefOrbit`.
+
+**Tests**: `parse-isf.spec.ts` (`scriptOutput` KIND parsing/validation, `scriptTexture` pass
+parsing/validation, both requiring `HYSTERESIS_SCRIPT`, `HYSTERESIS_SCRIPT` now requiring
+`HYSTERESIS_VERSION` instead of unconditional rejection, scriptless-doc regression),
+`isf-targets.spec.ts`/`translate-isf-glsl.spec.ts` (`scriptOutput` never a target, correct GLSL
+type per `KIND`, `scriptTexture` sampler2D auto-wiring), `hysteresis-script-runtime.spec.ts` (new —
+loads and evaluates the REAL `engine-source.js` text: closure state persists across frames, a
+missing `update` is a clear load error, malformed/non-finite/wrong-length output falls back to
+declared defaults, a diverging texture value holds the last finite entry, a throw inside `update()`
+propagates), `hysteresis-script-host.spec.ts` (new — mocks the global `Worker`: normal round trip,
+stale-reply rejection, hang-timeout terminate+restart with last-known-value preserved, an explicit
+error reply faulting immediately rather than waiting out a timeout, the consecutive-fault cap
+giving up cleanly, a `loadError` being permanent). 26 new tests; suite now 337 (was 311).
+
+**Verified**: `npm run typecheck && npm test && npm run build && npm run build:lib` all green
+throughout (checked after each increment, not just at the end) — confirmed via `grep` on the built
+`public/render-worker.js` that the `?raw`-inlined engine text actually landed inline in the single
+bundled file, not as a separate chunk, before ever reaching a browser. **Real end-to-end
+verification via `render-video`** against a short synthesized smoke WAV (25s, `ffmpeg`-generated —
+no real track needed for this check): `julia-autopilot.hyst` loads, parses, and renders through
+real headless Chrome with no errors/hangs; two output frames several seconds apart show genuinely
+different substrate structure/color (flat background → rich fractal detail), confirming the script
+is actually driving `c`/`pan`/`zoom`/the ref-orbit texture frame to frame — not silently sitting at
+declared defaults, the exact class of bug the prior session's `hysteresisSignal` uniform-binding
+miss turned out to be. The reference-orbit/perturbation path specifically (only reachable once zoom
+drops below `DIRECT_ZOOM_THRESHOLD`) was separately confirmed via a longer simulated run of the
+pure script runtime (not the full GL render): zoom crosses the threshold at ~24s simulated at max
+windup/energy, and `refOrbit` becomes real, finite, non-zero data at that point, not all zeros.
+
+**Not done, explicitly deferred**: fine hand-tuning of the ported constants against live visual
+feedback (this session had no interactive browser access for the kind of iterative tuning
+`JuliaScene.ts`'s own history shows was needed multiple times even for the original code — the
+port targets behavioral fidelity to the real algorithm, not a re-tuned feel); patchbay-editor UI
+for authoring/hot-reloading a `HYSTERESIS_SCRIPT` (today's editor only has a load-a-file flow,
+unaffected either way); `scriptOutput` `KIND: "long"` (no motivating shader needs it);
+`scriptTexture` formats beyond RG32F; a full-length, real-track `render-video` render (the smoke
+render above was a short synthetic-audio clip, sufficient to prove the mechanism works, not a
+"does this look good over a real song" check — that's real follow-up work, same as every other
+`.hyst`/Julia-tuning session in this file's history has needed more than one visual pass).
+
+## Real-track verification of the Julia autopilot port, and Layer 2 signals wired into a real default route (same day, immediate follow-up)
+
+Closed two of the three standing candidates the prior session's own entry left open (§5), per the
+user's explicit "do everything" — the third (verifying `midiCc` against a real physical MIDI
+controller) needs hardware in the user's hands, not something this session could do unattended,
+and is called out below as still genuinely blocked rather than silently skipped.
+
+**Full-length real-track render of `julia-autopilot.hyst`** — the prior session's own render-video
+verification used a short synthesized WAV; this one used a real 39-minute track
+(`~/Music/Albums/MAXIMAVELIANISM/test.wav`, the same album the earlier `SIGSEGV.wav`
+end-to-end-verification session used), rendered at 960×540/30fps for its first 5 minutes in real
+headless Chrome. Completed cleanly (9000 frames, no errors/hangs/timeouts) — the debug overlay
+confirms `noveltyLocal`/`noveltySection`/`fullness`/`onsetDensity`/`harmonicNovelty`/
+`chromaRootHue` are all genuinely alive against real audio (not synthetic-fixture-only), and
+frames spread across the render show real, continuously-evolving fractal structure/color, closing
+the "full-length render" item the prior session's own entry explicitly deferred.
+
+**Layer 2 signals wired into a real default route** (AGENTS.md §3.7/§5's own standing note: these
+6 live signals have been real and on the bus for a while, never wired into anything a user would
+actually see):
+
+- **All 6** (`noveltyLocal`/`noveltySection`/`fullness`/`onsetDensity`/`harmonicNovelty`/
+  `chromaRootHue`) now have real `screen.*` targets (`screen-targets.ts`) and a default 1:1 route
+  into them (`screen-only.ts`'s `identityRoutes`) — immediately routable/patchable from the editor
+  even before any native composite reads them, the same "real target, not magic" treatment every
+  other bus signal already gets.
+- **Two, deliberately only two, also drive a native composite**: `chromaRootHue` sums into the
+  same `screen.hueShift` target `hueDrift`/`centroid` already feed (gain 0.15 — §4.2's own framing,
+  "pitch-class → hue," now real), and `fullness` adds a modest term (gain 0.5, about half of
+  `energy`'s own) into `flowStrength`'s spring target (`screen-composites.ts`).
+- **`noveltyLocal`/`noveltySection`/`harmonicNovelty`/`onsetDensity` deliberately NOT wired into
+  `symmetry`**, even though novelty-as-organization-spike is a natural-sounding pairing: this
+  codebase's own history (the "fold seam / Julia zoom follow-up" and later sessions) already
+  records real user feedback that symmetry reads as overused/"too psychedelic" when too many
+  signals feed it, and `SYMMETRY_AMBIENT_CEILING` exists specifically because of that. Adding more
+  contributors to an already-flagged-as-sensitive composite without the ability to watch it live
+  and get real feedback would be guessing, not engineering — left as pure default routes instead,
+  a real capability increase (routable/patchable/inspectable today) without a new guess about
+  "how much is too much." A genuine open question for the user to weigh in on, not an oversight.
+- **Tests**: `conductor.spec.ts` — all 6 signals resolve as real `screen.*` values (not just
+  internal `SignalBus` state) through a full `Conductor → Patchbay(screen-only) → composites`
+  pipeline tick; `chromaRootHue`'s exact hueShift contribution; `fullness`'s flowStrength increase;
+  a regression guard proving the 4 deliberately-unwired signals don't move `symmetry` even at
+  max value. 4 new tests; suite now 341 (was 337).
+- **Verified**: `npm run typecheck && npm test && npm run build && npm run build:lib` all green.
+  A short `render-video` smoke render of the **native production default scene** (no `--isf`, the
+  actual code path these changes touch — the julia-autopilot render above exercises the separate
+  `.hyst`/ISF path, which doesn't consume these routes at all) confirms no regression: renders
+  cleanly, real fractal output, no errors. The synthetic smoke audio used for that specific check
+  has almost no chroma/fullness variation of its own, so it doesn't visually demonstrate the new
+  hue/flow effect distinctly — the unit tests above are what actually prove the effect's existence
+  and bounds; a real-track native-scene render to SEE the effect is real further follow-up, not
+  done here.
+
+**Not done**: `midiCc`/envelope-attack-release-override verification against a real physical MIDI
+controller — the user has the hardware, this environment doesn't, so this is genuinely blocked on
+the user plugging a controller in and driving the editor themselves, not something to fake or
+skip past. Wiring the 5 sidecar-only stem-presence signals into any route (they need a
+`--stems`-analyzed track to ever be nonzero, a different, narrower case than the 6 live signals
+above). Any fixture/DMX-side default routing for these same 6 signals (`fixture-document.ts`/
+`FixtureOutput` untouched this session — screen-only).

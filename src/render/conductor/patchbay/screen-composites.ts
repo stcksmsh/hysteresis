@@ -37,6 +37,13 @@ const FLOW_STRENGTH_DAMPING = 6
 const FLOW_STRENGTH_BASE = 1
 const FLOW_STRENGTH_BUILD_GAIN = 2.2
 const FLOW_STRENGTH_ENERGY_GAIN = 0.9
+// §4.2's fullness ("sustained low-band energy, crest-penalized — is the mix full or sparse") is
+// distinct from instantaneous energy — this is the second (and, deliberately, only other) of the
+// six newly-routed Layer 2 signals (see screen-only.ts's own comment) wired into a native
+// composite: a modest additional thickening of the flow field when the mix is genuinely, not just
+// momentarily, full. About half of energy's own gain so it reads as a gentle reinforcement, not a
+// second independent driver competing with it.
+const FLOW_STRENGTH_FULLNESS_GAIN = 0.5
 const FLOW_SHOCKWAVE_IMPULSE = 30
 const BEAT_THROB_GAIN = 0.14 // step 3: beatPulse -> field throb, modest so groove reads as a pulse not a strobe
 
@@ -106,6 +113,7 @@ export class ScreenParamAssembler {
     const barPhase = num(resolved['screen.barPhase'])
     const bandTilt = num(resolved['screen.bandTilt'])
     const familiarity = num(resolved['screen.familiarity'])
+    const fullness = num(resolved['screen.fullness'])
     const bands = {
       sub: num(resolved['screen.sub']),
       low: num(resolved['screen.low']),
@@ -147,6 +155,7 @@ export class ScreenParamAssembler {
       FLOW_STRENGTH_BASE +
         FLOW_STRENGTH_BUILD_GAIN * Math.max(buildWindup, tension) +
         FLOW_STRENGTH_ENERGY_GAIN * energy +
+        FLOW_STRENGTH_FULLNESS_GAIN * fullness +
         BEAT_THROB_GAIN * beatPulse,
     )
     const flowStrength = Math.max(0, this.flowStrengthSpring.update(dt))

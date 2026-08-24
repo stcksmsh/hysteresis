@@ -1,0 +1,257 @@
+/*{
+  "CREDIT": "Ported from this project's own built-in Julia scene (src/render/worker/scenes/julia/JuliaScene.ts + vortex-search.ts + boundary.ts + shaders/julia.frag.glsl/beam.vert.glsl/beam.frag.glsl) into a self-contained .hyst shader, using the real HYSTERESIS_SCRIPT execution engine (src/render/worker/scenes/isf/script-runtime/) instead of a closed-form approximation.",
+  "CATEGORIES": [
+    "generator",
+    "fractal"
+  ],
+  "DESCRIPTION": "The full Julia autopilot, not a substrate-only approximation (compare examples/isf/julia.hyst, the prior session's deliberately partial first-pass port): vortex-search boundary navigation, a spring-damped c-drift, and perturbation-orbit deep zoom all run as real per-frame stateful JS in HYSTERESIS_SCRIPT below, ported near-verbatim from the production TypeScript (same constants, same algorithms) rather than re-derived. The script computes c/pan/zoom/flash/paletteFlip every frame (scriptOutput inputs below) and the perturbation reference orbit (the refOrbit scriptTexture pass) exactly the way JuliaScene.ts does; the GLSL body is otherwise an unmodified port of julia.frag.glsl's real perturbation iteration.",
+  "HYSTERESIS_VERSION": 1,
+  "HYSTERESIS_SCRIPT": "// HYSTERESIS_SCRIPT: a direct port of JuliaScene.ts's real autopilot (vortex-search boundary\n// navigation, spring-damped c-drift, perturbation-orbit deep zoom) onto this format's stateful\n// script engine. Same constants, same structure, same algorithms as the production TypeScript —\n// this is a faithful port, not a re-derivation. See JuliaScene.ts / vortex-search.ts / boundary.ts\n// in this repo for the original, fully-commented source this was ported from.\n\nconst THETA_SPEED_BASE = 0.008\nconst THETA_SPEED_WINDUP_GAIN = 0.01\nconst THETA_SPEED_TENSION_GAIN = -0.006\nconst THETA_SPEED_ENERGY_GAIN = 0.006\nconst THETA_DROP_JUMP = 0.1\nconst DROP_EDGE_THRESHOLD = 0.5 // dropImpulse rising past this = one real drop event (edge-detected)\n\nconst RADIAL_BASE = 1\nconst RADIAL_AMPLITUDE = 0.05\nconst RADIAL_SPEED = 0.013\nconst THETA_ZOOM_FLOOR = 0.03\n\nconst C_SPRING_STIFFNESS = 55\nconst C_SPRING_DAMPING = 16\nconst DROP_IMPULSE = 1.2\nconst C_MAX_RADIUS = 0.05\n\nconst ZOOM_START_MIN = 1.2\nconst ZOOM_START_MAX = 2.1\nconst DIRECT_ZOOM_THRESHOLD = 0.0006\nconst ZOOM_MIN = 1e-6\nconst ZOOM_RATE_BASE = 0.036\nconst ZOOM_RATE_WINDUP_GAIN = 0.2\nconst ZOOM_RATE_ENERGY_GAIN = 0.024\nconst ZOOM_SEEK_MIN_FACTOR = 0.6\nconst NAV_CONFIDENCE_SMOOTH = 0.12\nconst ZOOM_OUT_RATE = 0.05\nconst ZOOM_RESET_WIDE = 4\nconst ZOOM_OUT_PAN_RETURN_RATE = 0.3\nconst PRE_FLASH_LOG_WINDOW = 0.5\nconst POST_FLASH_SEC = 1.6\n\nconst NAV_DIRECTIONS = 8\nconst NAV_PROBE_FRACTION = 0.5\nconst NAV_ITER_CAP = 200\nconst NAV_CHECK_INTERVAL_SEC = 0.25\nconst NAV_HEADING_SMOOTH = 0.15\nconst NAV_PAN_SPEED = 0.18\nconst NAV_PAN_SPEED_ABS_MAX = 0.09\nconst NAV_LOCAL_WEIGHT = 1\nconst NAV_TARGET_PULL_WEIGHT = 2.5\nconst NAV_EMPTY_RETRY_AFTER_SEC = 0.6\nconst LOCAL_RETARGET_RADIUS_FACTOR = 8\nconst LOCAL_RETARGET_RADIUS_MIN_FRACTION = 0.1\nconst NAV_INITIAL_HEADING_STRENGTH = 0.3\nconst NAV_SCALE_MIN_FRACTION = 0.08\nconst NAV_PAN_MAX_RADIUS = 0.45\nconst NAV_PAN_RAMP_SEC = 30\nconst IDLE_RECENTER_RATE = 0.05\n\nconst REF_ORBIT_LENGTH = 192\n\nconst DIVERSITY_SAMPLES = 6\nconst DIVERSITY_CLUSTER_FRACTION = 0.15\nconst NAV_VORTEX_WINDING_SCALE = 4\nconst NAV_VORTEX_BOOST = 2.5\nconst VORTEX_SEARCH_RINGS = 6\nconst VORTEX_SEARCH_PER_RING = 16\nconst VORTEX_SEARCH_ITER_CAP = 400\n\nfunction clamp(v, lo, hi) {\n  return Math.max(lo, Math.min(hi, v))\n}\n\n// boundary.ts's cardioidPoint, verbatim.\nfunction cardioidPoint(theta) {\n  return { x: Math.cos(theta) / 2 - Math.cos(2 * theta) / 4, y: Math.sin(theta) / 2 - Math.sin(2 * theta) / 4 }\n}\n\n// vortex-search.ts's sampleOrbit/clusterScore/findVortexTarget, verbatim.\nfunction sampleOrbit(zx0, zy0, cx, cy, cap) {\n  let zx = zx0\n  let zy = zy0\n  let prevAngle = Math.atan2(zy0, zx0)\n  let winding = 0\n  let iter = 0\n  for (; iter < cap; iter++) {\n    const nzx = zx * zx - zy * zy + cx\n    const nzy = 2 * zx * zy + cy\n    zx = nzx\n    zy = nzy\n    const angle = Math.atan2(zy, zx)\n    let delta = angle - prevAngle\n    if (delta > Math.PI) delta -= 2 * Math.PI\n    else if (delta < -Math.PI) delta += 2 * Math.PI\n    winding += Math.abs(delta)\n    prevAngle = angle\n    if (zx * zx + zy * zy > 4) break\n  }\n  return { iter, winding }\n}\n\nfunction clusterScore(px, py, clusterRadius, cx, cy, cap) {\n  const seen = new Set()\n  let windingSum = 0\n  for (let i = 0; i < DIVERSITY_SAMPLES; i++) {\n    const angle = (i / DIVERSITY_SAMPLES) * Math.PI * 2\n    const sx = px + Math.cos(angle) * clusterRadius\n    const sy = py + Math.sin(angle) * clusterRadius\n    const sample = sampleOrbit(sx, sy, cx, cy, cap)\n    seen.add(sample.iter)\n    windingSum += sample.winding\n  }\n  const diversity = seen.size\n  if (diversity <= 1) return 0\n  const avgWinding = windingSum / DIVERSITY_SAMPLES\n  const vortex = 1 - Math.exp(-avgWinding / NAV_VORTEX_WINDING_SCALE)\n  return diversity * (1 + NAV_VORTEX_BOOST * vortex)\n}\n\nfunction findVortexTarget(cx, cy, maxRadius, centerX, centerY) {\n  centerX = centerX || 0\n  centerY = centerY || 0\n  let bestScore = 0\n  let bestX = centerX\n  let bestY = centerY\n  let found = false\n  for (let r = 1; r <= VORTEX_SEARCH_RINGS; r++) {\n    const radius = (r / VORTEX_SEARCH_RINGS) * maxRadius\n    const stagger = r * 0.37\n    const clusterRadius = radius * DIVERSITY_CLUSTER_FRACTION\n    for (let i = 0; i < VORTEX_SEARCH_PER_RING; i++) {\n      const angle = (i / VORTEX_SEARCH_PER_RING) * Math.PI * 2 + stagger\n      const x = centerX + Math.cos(angle) * radius\n      const y = centerY + Math.sin(angle) * radius\n      const score = clusterScore(x, y, clusterRadius, cx, cy, VORTEX_SEARCH_ITER_CAP)\n      if (score > bestScore) {\n        bestScore = score\n        bestX = x\n        bestY = y\n        found = true\n      }\n    }\n  }\n  return { x: bestX, y: bestY, found: found }\n}\n\n// State — every field here is exactly one of JuliaScene.ts's own private fields, initialized the\n// same way its constructor does (start centered on theta=0's cardioid point).\nlet thetaSweep = 0\nlet radialPhase = 0\nconst start = cardioidPoint(0)\nlet springCx = { value: start.x * RADIAL_BASE, velocity: 0 }\nlet springCy = { value: start.y * RADIAL_BASE, velocity: 0 }\nlet zoomStart = ZOOM_START_MAX\nlet zoomLog = Math.log(zoomStart)\nlet zoomingOut = false\nlet flash = 0\nlet postFlash = 0\nlet panX = 0\nlet panY = 0\nlet headingX = 0\nlet headingY = 0\nlet searchTargetX = 0\nlet searchTargetY = 0\nlet navEmptySec = 0\nlet navConfidence = 0\nlet navCheckAccum = 0\nlet diveElapsedSec = 0\nlet paletteFlip = 0\nlet prevDropImpulse = 0\nconst refOrbitData = new Array(REF_ORBIT_LENGTH * 2).fill(0)\n\nfunction retarget(cx, cy) {\n  const target = findVortexTarget(cx, cy, NAV_PAN_MAX_RADIUS)\n  searchTargetX = target.x\n  searchTargetY = target.y\n  const dist = Math.hypot(target.x, target.y) || 1\n  headingX = (target.x / dist) * NAV_INITIAL_HEADING_STRENGTH\n  headingY = (target.y / dist) * NAV_INITIAL_HEADING_STRENGTH\n  diveElapsedSec = 0\n}\nretarget(springCx.value, springCy.value)\n\nfunction springUpdate(spring, target, dt) {\n  const accel = (target - spring.value) * C_SPRING_STIFFNESS - spring.velocity * C_SPRING_DAMPING\n  spring.velocity += accel * dt\n  spring.value += spring.velocity * dt\n}\n\nfunction updateNavigation(dt, idle) {\n  if (zoomingOut) return\n  const zoom = Math.exp(zoomLog)\n\n  if (idle) {\n    const ease = Math.min(1, IDLE_RECENTER_RATE * dt)\n    panX -= panX * ease\n    panY -= panY * ease\n    headingX *= 1 - NAV_HEADING_SMOOTH\n    headingY *= 1 - NAV_HEADING_SMOOTH\n    navCheckAccum = 0\n    navEmptySec = 0\n    return\n  }\n\n  navCheckAccum += dt\n  if (navCheckAccum >= NAV_CHECK_INTERVAL_SEC) {\n    navCheckAccum = 0\n    const cx = springCx.value\n    const cy = springCy.value\n    const navScale = Math.max(zoom, NAV_PAN_MAX_RADIUS * NAV_SCALE_MIN_FRACTION)\n    const probe = navScale * NAV_PROBE_FRACTION\n    const clusterRadius = probe * DIVERSITY_CLUSTER_FRACTION\n\n    let sumX = 0\n    let sumY = 0\n    let totalScore = 0\n    for (let i = 0; i < NAV_DIRECTIONS; i++) {\n      const angle = (i / NAV_DIRECTIONS) * Math.PI * 2\n      const dirX = Math.cos(angle)\n      const dirY = Math.sin(angle)\n      const score = clusterScore(panX + dirX * probe, panY + dirY * probe, clusterRadius, cx, cy, NAV_ITER_CAP)\n      sumX += dirX * score\n      sumY += dirY * score\n      totalScore += score\n    }\n\n    const localLen = Math.hypot(sumX, sumY)\n    const localDirX = localLen > 0 ? sumX / localLen : 0\n    const localDirY = localLen > 0 ? sumY / localLen : 0\n\n    const toTargetX = searchTargetX - panX\n    const toTargetY = searchTargetY - panY\n    const toTargetDist = Math.hypot(toTargetX, toTargetY)\n    const targetWeight = toTargetDist > 1e-6 ? Math.min(1, toTargetDist / NAV_PAN_MAX_RADIUS) * NAV_TARGET_PULL_WEIGHT : 0\n    const targetDirX = toTargetDist > 1e-6 ? toTargetX / toTargetDist : 0\n    const targetDirY = toTargetDist > 1e-6 ? toTargetY / toTargetDist : 0\n\n    const desiredX = localDirX * NAV_LOCAL_WEIGHT + targetDirX * targetWeight\n    const desiredY = localDirY * NAV_LOCAL_WEIGHT + targetDirY * targetWeight\n\n    if (totalScore > 0 || targetWeight > 0) {\n      const len = Math.hypot(desiredX, desiredY) || 1\n      headingX += (desiredX / len - headingX) * NAV_HEADING_SMOOTH\n      headingY += (desiredY / len - headingY) * NAV_HEADING_SMOOTH\n    } else {\n      headingX *= 1 - NAV_HEADING_SMOOTH\n      headingY *= 1 - NAV_HEADING_SMOOTH\n    }\n\n    navConfidence += ((totalScore > 0 ? 1 : 0) - navConfidence) * NAV_CONFIDENCE_SMOOTH\n\n    if (totalScore > 0) {\n      navEmptySec = 0\n    } else {\n      navEmptySec += NAV_CHECK_INTERVAL_SEC\n      if (navEmptySec > NAV_EMPTY_RETRY_AFTER_SEC) {\n        navEmptySec = 0\n        const localRadius = Math.max(zoom * LOCAL_RETARGET_RADIUS_FACTOR, NAV_PAN_MAX_RADIUS * LOCAL_RETARGET_RADIUS_MIN_FRACTION)\n        const local = findVortexTarget(cx, cy, localRadius, panX, panY)\n        if (local.found) {\n          searchTargetX = local.x\n          searchTargetY = local.y\n        } else {\n          zoomingOut = true\n        }\n      }\n    }\n  }\n\n  diveElapsedSec += dt\n  const speed = Math.min(zoom * NAV_PAN_SPEED, NAV_PAN_SPEED_ABS_MAX)\n  panX += headingX * speed * dt\n  panY += headingY * speed * dt\n\n  const maxRadius = NAV_PAN_MAX_RADIUS * clamp(diveElapsedSec / NAV_PAN_RAMP_SEC, 0, 1)\n  const dist = Math.hypot(panX, panY)\n  if (dist > maxRadius) {\n    const nx = dist > 0 ? panX / dist : 0\n    const ny = dist > 0 ? panY / dist : 0\n    panX = nx * maxRadius\n    panY = ny * maxRadius\n    const radial = headingX * nx + headingY * ny\n    if (radial > 0) {\n      headingX -= radial * nx\n      headingY -= radial * ny\n    }\n  }\n}\n\nfunction updateZoomOut(dt) {\n  zoomLog += ZOOM_OUT_RATE * dt\n  const panDist = Math.hypot(panX, panY)\n  if (panDist > 1e-4) {\n    const ease = Math.min(1, ZOOM_OUT_PAN_RETURN_RATE * dt)\n    panX -= panX * ease\n    panY -= panY * ease\n  }\n  if (zoomLog >= Math.log(ZOOM_RESET_WIDE)) {\n    zoomingOut = false\n    navEmptySec = 0\n    navConfidence = 0\n    zoomStart = ZOOM_RESET_WIDE\n    retarget(springCx.value, springCy.value)\n  }\n  postFlash = Math.max(0, postFlash - dt / POST_FLASH_SEC)\n  flash = postFlash\n}\n\nfunction updateZoom(dt, windup, energy) {\n  if (zoomingOut) {\n    updateZoomOut(dt)\n    return\n  }\n  const seekSlowdown = ZOOM_SEEK_MIN_FACTOR + (1 - ZOOM_SEEK_MIN_FACTOR) * navConfidence\n  const rate = (ZOOM_RATE_BASE + ZOOM_RATE_WINDUP_GAIN * windup + ZOOM_RATE_ENERGY_GAIN * energy) * seekSlowdown\n  zoomLog -= rate * dt\n\n  const logFloor = Math.log(ZOOM_MIN)\n  const remaining = zoomLog - logFloor\n  const preFlash = remaining < PRE_FLASH_LOG_WINDOW ? 1 - clamp(remaining / PRE_FLASH_LOG_WINDOW, 0, 1) : 0\n\n  if (remaining <= 0) {\n    navEmptySec = 0\n    navConfidence = 0\n    zoomStart = ZOOM_START_MIN + Math.random() * (ZOOM_START_MAX - ZOOM_START_MIN)\n    zoomLog = Math.log(zoomStart)\n    panX = 0\n    panY = 0\n    retarget(springCx.value, springCy.value)\n    postFlash = 1\n  }\n  postFlash = Math.max(0, postFlash - dt / POST_FLASH_SEC)\n  flash = Math.max(preFlash, postFlash)\n}\n\nfunction boundedC() {\n  const radius = RADIAL_BASE + RADIAL_AMPLITUDE * Math.sin(radialPhase)\n  const target = cardioidPoint(thetaSweep)\n  const tx = target.x * radius\n  const ty = target.y * radius\n  const dx = springCx.value - tx\n  const dy = springCy.value - ty\n  const dist = Math.hypot(dx, dy)\n  if (dist <= C_MAX_RADIUS) return { x: springCx.value, y: springCy.value }\n  const scale = C_MAX_RADIUS / dist\n  return { x: tx + dx * scale, y: ty + dy * scale }\n}\n\n// JuliaScene.ts's updateReferenceOrbit, ported to write into a plain array (this engine's\n// texture output channel) instead of a Float32Array/GL texture directly.\nfunction updateReferenceOrbit(cx, cy) {\n  let zx = panX\n  let zy = panY\n  for (let i = 0; i < REF_ORBIT_LENGTH; i++) {\n    if (!Number.isFinite(zx) || !Number.isFinite(zy)) {\n      const lastZx = refOrbitData[(i - 1) * 2] || 0\n      const lastZy = refOrbitData[(i - 1) * 2 + 1] || 0\n      for (let j = i; j < REF_ORBIT_LENGTH; j++) {\n        refOrbitData[j * 2] = lastZx\n        refOrbitData[j * 2 + 1] = lastZy\n      }\n      break\n    }\n    refOrbitData[i * 2] = zx\n    refOrbitData[i * 2 + 1] = zy\n    const nzx = zx * zx - zy * zy + cx\n    const nzy = 2 * zx * zy + cy\n    zx = nzx\n    zy = nzy\n  }\n}\n\nfunction update(dt, inputs, idle, time) {\n  const windup = clamp(inputs.windup || 0, 0, 1)\n  const suspension = clamp(Math.max(inputs.tensionIn || 0, inputs.suspIn || 0), 0, 1)\n  const energy = clamp(inputs.energyIn || 0, 0, 1)\n  const dropImpulse = clamp(inputs.dropIn || 0, 0, 1)\n\n  const thetaSpeed = THETA_SPEED_BASE + THETA_SPEED_WINDUP_GAIN * windup + THETA_SPEED_TENSION_GAIN * suspension + THETA_SPEED_ENERGY_GAIN * energy\n  const zoomExploreScale = Math.max(THETA_ZOOM_FLOOR, Math.min(1, Math.exp(zoomLog)))\n  thetaSweep += Math.max(0.003, thetaSpeed) * zoomExploreScale * dt\n  radialPhase += RADIAL_SPEED * zoomExploreScale * dt\n\n  // Edge-detected drop (dropImpulse rising past DROP_EDGE_THRESHOLD) — the same\n  // reconstruct-a-one-shot-event-from-a-continuous-signal pattern ScreenOutput.ts's own\n  // dropImpulse handling already uses elsewhere in this codebase, since a script only ever sees\n  // the continuous hysteresisSignal value, never the discrete internal DropTrigger event.\n  if (dropImpulse > DROP_EDGE_THRESHOLD && prevDropImpulse <= DROP_EDGE_THRESHOLD) {\n    thetaSweep += THETA_DROP_JUMP * (0.5 + dropImpulse)\n    springCx.velocity += DROP_IMPULSE * dropImpulse\n    springCy.velocity += -DROP_IMPULSE * dropImpulse * 0.7\n    paletteFlip = paletteFlip === 0 ? 1 : 0\n  }\n  prevDropImpulse = dropImpulse\n\n  const radius = RADIAL_BASE + RADIAL_AMPLITUDE * Math.sin(radialPhase)\n  const target = cardioidPoint(thetaSweep)\n  springUpdate(springCx, target.x * radius, dt)\n  springUpdate(springCy, target.y * radius, dt)\n\n  updateNavigation(dt, idle)\n  updateZoom(dt, windup, energy)\n\n  const c = boundedC()\n  const zoom = Math.exp(zoomLog)\n  if (zoom <= DIRECT_ZOOM_THRESHOLD) {\n    updateReferenceOrbit(c.x, c.y)\n  }\n\n  return {\n    uniforms: {\n      c: [c.x, c.y],\n      pan: [panX, panY],\n      zoom: zoom,\n      flash: flash,\n      paletteFlip: paletteFlip,\n    },\n    textures: {\n      refOrbit: refOrbitData,\n    },\n  }\n}\n",
+  "PASSES": [
+    {
+      "TARGET": "refOrbit",
+      "KIND": "scriptTexture",
+      "SOURCE": "refOrbit",
+      "LENGTH": 192
+    },
+    {
+      "TARGET": "beamTex",
+      "KIND": "lineTrace",
+      "POINTS": "scope",
+      "WIDTH": "beamWidth"
+    },
+    {
+      "TARGET": "",
+      "KIND": "fullscreen"
+    }
+  ],
+  "INPUTS": [
+    {
+      "NAME": "scope",
+      "TYPE": "resource",
+      "RESOURCE": "scope"
+    },
+    {
+      "NAME": "beamWidth",
+      "TYPE": "float",
+      "DEFAULT": 0.009,
+      "MIN": 0.001,
+      "MAX": 0.05
+    },
+    {
+      "NAME": "beamGain",
+      "TYPE": "float",
+      "DEFAULT": 1.3,
+      "MIN": 0,
+      "MAX": 3
+    },
+    {
+      "NAME": "perturbThreshold",
+      "TYPE": "float",
+      "DEFAULT": 0.0006,
+      "MIN": 0.0001,
+      "MAX": 0.01
+    },
+    {
+      "NAME": "accentColor",
+      "TYPE": "color",
+      "DEFAULT": [
+        1,
+        0.36,
+        0.22,
+        1
+      ]
+    },
+    {
+      "NAME": "windup",
+      "TYPE": "hysteresisSignal",
+      "SIGNAL": "buildWindup",
+      "DEFAULT": 0
+    },
+    {
+      "NAME": "energyIn",
+      "TYPE": "hysteresisSignal",
+      "SIGNAL": "energy",
+      "DEFAULT": 0
+    },
+    {
+      "NAME": "tensionIn",
+      "TYPE": "hysteresisSignal",
+      "SIGNAL": "tension",
+      "DEFAULT": 0
+    },
+    {
+      "NAME": "suspIn",
+      "TYPE": "hysteresisSignal",
+      "SIGNAL": "suspension",
+      "DEFAULT": 0
+    },
+    {
+      "NAME": "dropIn",
+      "TYPE": "hysteresisSignal",
+      "SIGNAL": "dropImpulse",
+      "DEFAULT": 0
+    },
+    {
+      "NAME": "centroidIn",
+      "TYPE": "hysteresisSignal",
+      "SIGNAL": "centroid",
+      "DEFAULT": 0
+    },
+    {
+      "NAME": "beatIn",
+      "TYPE": "hysteresisSignal",
+      "SIGNAL": "beatPulse",
+      "DEFAULT": 0
+    },
+    {
+      "NAME": "c",
+      "TYPE": "scriptOutput",
+      "KIND": "point2D",
+      "DEFAULT": [
+        0.25,
+        0
+      ]
+    },
+    {
+      "NAME": "pan",
+      "TYPE": "scriptOutput",
+      "KIND": "point2D",
+      "DEFAULT": [
+        0,
+        0
+      ]
+    },
+    {
+      "NAME": "zoom",
+      "TYPE": "scriptOutput",
+      "KIND": "float",
+      "DEFAULT": 2
+    },
+    {
+      "NAME": "flash",
+      "TYPE": "scriptOutput",
+      "KIND": "float",
+      "DEFAULT": 0
+    },
+    {
+      "NAME": "paletteFlip",
+      "TYPE": "scriptOutput",
+      "KIND": "float",
+      "DEFAULT": 0
+    }
+  ]
+}*/
+
+#ifdef GL_ES
+precision highp float;
+#endif
+
+// refOrbit/beamTex (scriptTexture / lineTrace pass outputs — see PASSES above) are auto-declared
+// by the runtime, not here (translate-isf-glsl.ts emits `uniform sampler2D <target>;` for every
+// non-'' pass TARGET automatically — declaring them again here would be a GLSL redeclaration
+// error). refOrbit holds the perturbation reference orbit HYSTERESIS_SCRIPT computes every frame
+// (Z_i in texel i, RG32F) — same exact technique as the real built-in scene's uRefOrbit
+// (JuliaScene.ts's updateReferenceOrbit / julia.frag.glsl's iteratePerturbed).
+
+const int MAX_ITER = 192;
+
+vec2 cMul(vec2 a, vec2 b) {
+	return vec2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x);
+}
+
+int iterateDirect(vec2 z0, out vec2 finalZ) {
+	vec2 z = z0;
+	int iter = 0;
+	for (int i = 0; i < MAX_ITER; i++) {
+		if (dot(z, z) > 4.0) {
+			finalZ = z;
+			return iter;
+		}
+		z = cMul(z, z) + c;
+		iter++;
+	}
+	finalZ = z;
+	return iter;
+}
+
+// Perturbation: iterates only delta, the tiny offset from the reference orbit, via
+// delta_{n+1} = 2*Z_n*delta_n + delta_n^2 (the c terms cancel) — delta stays small and
+// well-conditioned in float32 regardless of zoom depth. Exact port of
+// julia.frag.glsl's iteratePerturbed, reading refOrbit (this file's scriptTexture pass)
+// instead of uRefOrbit.
+int iteratePerturbed(vec2 delta0, out vec2 finalZ) {
+	vec2 delta = delta0;
+	int iter = 0;
+	finalZ = pan + delta;
+	for (int i = 0; i < MAX_ITER; i++) {
+		vec2 Zi = texelFetch(refOrbit, ivec2(i, 0), 0).xy;
+		vec2 full = Zi + delta;
+		if (dot(full, full) > 4.0) {
+			finalZ = full;
+			return iter;
+		}
+		delta = 2.0 * cMul(Zi, delta) + cMul(delta, delta);
+		iter++;
+	}
+	return iter;
+}
+
+// Real escape-time banding (same fix as julia.hyst v1's own palette — see that file's header
+// comment for why the original single-fade version hid the fractal's fine structure).
+const float BANDS = 5.0;
+vec3 palette(float t, float hueShift, float paletteMix, vec3 accent, bool interior) {
+	vec3 base = vec3(0.04, 0.035, 0.07);
+	vec3 violet = vec3(0.29, 0.18, 0.55);
+	if (interior) return base;
+	float h = hueShift + paletteFlip * 0.5;
+	float bands = t * BANDS;
+	vec3 hueRot = vec3(
+		0.5 + 0.5 * cos(6.28318 * (bands + h)),
+		0.5 + 0.5 * cos(6.28318 * (bands + h + 0.33)),
+		0.5 + 0.5 * cos(6.28318 * (bands + h + 0.67))
+	);
+	vec3 mood = mix(base, violet * hueRot, smoothstep(0.0, 0.35, t));
+	return mix(mood, accent * hueRot, paletteMix * 0.6);
+}
+
+void main() {
+	vec2 uv = (gl_FragCoord.xy - 0.5 * RENDERSIZE.xy) / RENDERSIZE.y;
+
+	vec2 z;
+	int iter;
+	// Uniform-only branch — every fragment in the draw call takes the same side, same as the
+	// real built-in scene's uZoom > uPerturbThreshold branch.
+	if (zoom > perturbThreshold) {
+		iter = iterateDirect(pan + uv * zoom, z);
+	} else {
+		iter = iteratePerturbed(uv * zoom, z);
+	}
+
+	float smoothIter = float(iter);
+	if (iter < MAX_ITER) {
+		float logZn = log(dot(z, z)) * 0.5;
+		float nu = log(logZn / log(2.0)) / log(2.0);
+		smoothIter = float(iter) + 1.0 - nu;
+	}
+	float t = smoothIter / float(MAX_ITER);
+	bool interior = (iter >= MAX_ITER);
+
+	// hueShift/paletteMix stay ordinary closed-form GLSL fed by live signals — no reason to move
+	// logic into the script that GLSL already expresses fine (same posture julia.hyst v1 takes).
+	float hueShift = fract(TIME * 0.05 + centroidIn * 0.1);
+	float paletteMix = windup;
+	vec3 accent = accentColor.rgb;
+	vec3 color = palette(t, hueShift, paletteMix, accent, interior);
+	color = mix(color, vec3(0.0), flash);
+
+	// beatIn: a light on-beat twinkle, same as julia.hyst v1.
+	color += beatIn * 0.12 * accent;
+
+	// The oscilloscope beam (real waveform when playing, the built-in idle Lissajous otherwise)
+	// — additively blended, tinted with the same accent color the substrate's palette uses.
+	vec4 beam = texture2D(beamTex, isf_FragNormCoord);
+	color += beam.rgb * accent * beamGain;
+
+	gl_FragColor = vec4(color, 1.0);
+}

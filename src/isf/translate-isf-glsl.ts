@@ -83,5 +83,22 @@ function glslType(input: IsfInput): string {
       // function is invoked (see uniformDecls above). Kept for
       // exhaustiveness since `input.type` is a real discriminated union.
       throw new Error('resource inputs are not GLSL uniforms')
+    case 'scriptOutput':
+      // A script-produced value still binds to an ordinary GLSL uniform of
+      // the shape its declared `kind` names — the TYPE distinction (script-
+      // vs patch-graph-sourced) only matters at the binding layer
+      // (IsfScene), not to the shader itself. Mirrors the scalar/vector
+      // cases above one-for-one; `long`-shaped script outputs aren't
+      // supported yet (see IsfScriptOutputKind's own comment).
+      switch (input.kind) {
+        case 'float':
+          return 'float'
+        case 'bool':
+          return 'bool'
+        case 'point2D':
+          return 'vec2'
+        case 'color':
+          return 'vec4'
+      }
   }
 }

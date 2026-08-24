@@ -8,7 +8,8 @@ import {
 } from './types'
 import { SIGNAL_TAGS } from '../render/conductor/types'
 
-const SUPPORTED_TYPES = new Set(['float', 'bool', 'long', 'color', 'point2D', 'hysteresisSignal', 'resource'])
+const SUPPORTED_TYPES = new Set(['float', 'bool', 'long', 'color', 'point2D', 'hysteresisSignal', 'resource', 'scriptOutput'])
+const SCRIPT_OUTPUT_KINDS = new Set(['float', 'bool', 'point2D', 'color'])
 const UNSUPPORTED_TYPES: readonly IsfUnsupportedInputType[] = ['image', 'audio', 'audioFFT', 'event']
 
 // HYSTERESIS_VERSION 1's real (scoped) multi-pass/resource extension — see
@@ -86,44 +87,61 @@ export function parseIsf(source: string): IsfDocument {
   if (header.IMPORTED && typeof header.IMPORTED === 'object' && Object.keys(header.IMPORTED as object).length > 0) {
     throw new IsfUnsupportedFeatureError('IMPORTED images are not supported yet — this shader needs an asset it can\'t bring with it.')
   }
-  // Reserved, not implemented (AGENTS.md's "Hysteresis format" Phase 1): a shader MAY declare a
-  // HYSTERESIS_SCRIPT (per-frame JS state — orbit tracking, target-seeking, anything a single
-  // GLSL fragment shader can't express, per ISF's own "shader + JSON header" model having no
-  // concept of stateful JS at all). Rejecting it clearly now — rather than silently ignoring a
-  // key the shader may depend on for correct rendering — means a shader authored against it
-  // fails loudly instead of mis-rendering, and the file format's shape is already stable for
-  // when the real execution engine (Phase 4) lands.
-  if (typeof header.HYSTERESIS_SCRIPT === 'string' && header.HYSTERESIS_SCRIPT.length > 0) {
-    throw new IsfUnsupportedFeatureError(
-      'HYSTERESIS_SCRIPT is reserved but not executed yet — stateful per-frame JS scripts are not supported until the state-script engine lands.',
-    )
+  // HYSTERESIS_SCRIPT (AGENTS.md's "HYSTERESIS_SCRIPT execution engine" phase): a shader may
+  // declare an inline JS companion providing per-frame stateful outputs a single GLSL fragment
+  // shader can't express on its own (orbit tracking, target-seeking springs — see
+  // scriptOutput/scriptTexture below). Requires HYSTERESIS_VERSION, same version-gating
+  // discipline real multi-pass PASSES already uses — a file using this extension without
+  // declaring the version it's written against is rejected clearly rather than guessed at.
+  const rawScript = header.HYSTERESIS_SCRIPT
+  let hysteresisScript: string | undefined
+  if (typeof rawScript === 'string' && rawScript.length > 0) {
+    if (hysteresisVersion === undefined) {
+      throw new IsfUnsupportedFeatureError('HYSTERESIS_SCRIPT requires HYSTERESIS_VERSION to be declared — a scriptless shader never needs this field.')
+    }
+    hysteresisScript = rawScript
   }
 
   const rawInputs = Array.isArray(header.INPUTS) ? (header.INPUTS as Record<string, unknown>[]) : []
   const unsupported = rawInputs.filter((i) => UNSUPPORTED_TYPES.includes(i.TYPE as IsfUnsupportedInputType))
   if (unsupported.length > 0) {
     const names = unsupported.map((i) => `${String(i.NAME)} (${String(i.TYPE)})`).join(', ')
-    throw new IsfUnsupportedFeatureError(`Unsupported ISF input type(s): ${names} — only float/bool/long/color/point2D/hysteresisSignal inputs are supported.`)
+    throw new IsfUnsupportedFeatureError(`Unsupported ISF input type(s): ${names} — only float/bool/long/color/point2D/hysteresisSignal/resource/scriptOutput inputs are supported.`)
   }
 
   const inputs: IsfInput[] = rawInputs
     .filter((i) => SUPPORTED_TYPES.has(i.TYPE as string))
     .map((i) => parseInput(i))
 
-  // Cross-validate lineTrace passes against the inputs they actually
-  // reference — a POINTS/WIDTH name that doesn't match a declared input is
-  // a real authoring bug, caught here rather than silently reading as
-  // "resource not found" deep in the render path.
-  for (const pass of passes) {
-    if (pass.kind !== 'lineTrace') continue
-    const pointsInput = inputs.find((i) => i.name === pass.points)
-    if (!pointsInput || pointsInput.type !== 'resource') {
-      throw new IsfParseError(`PASSES lineTrace pass's POINTS "${pass.points}" does not match any declared TYPE resource input`)
+  // scriptOutput inputs and scriptTexture passes are only meaningful with a real
+  // HYSTERESIS_SCRIPT behind them — same "reject clearly, never silently mis-render" discipline
+  // as every other unsupported-combination check in this file.
+  if (hysteresisScript === undefined) {
+    const scriptOutputNames = inputs.filter((i) => i.type === 'scriptOutput').map((i) => i.name)
+    if (scriptOutputNames.length > 0) {
+      throw new IsfParseError(`Input(s) declare TYPE scriptOutput (${scriptOutputNames.join(', ')}) but no HYSTERESIS_SCRIPT is declared to produce their values.`)
     }
-    if (pass.width !== undefined) {
-      const widthInput = inputs.find((i) => i.name === pass.width)
-      if (!widthInput || (widthInput.type !== 'float' && widthInput.type !== 'hysteresisSignal')) {
-        throw new IsfParseError(`PASSES lineTrace pass's WIDTH "${pass.width}" does not match any declared TYPE float/hysteresisSignal input`)
+    const scriptTextureTargets = passes.filter((p) => p.kind === 'scriptTexture').map((p) => p.target)
+    if (scriptTextureTargets.length > 0) {
+      throw new IsfParseError(`PASSES declare KIND scriptTexture (target ${scriptTextureTargets.join(', ')}) but no HYSTERESIS_SCRIPT is declared to produce their data.`)
+    }
+  }
+
+  // Cross-validate lineTrace/scriptTexture passes against the inputs they
+  // actually reference — a POINTS/WIDTH name that doesn't match a declared
+  // input is a real authoring bug, caught here rather than silently
+  // reading as "resource not found" deep in the render path.
+  for (const pass of passes) {
+    if (pass.kind === 'lineTrace') {
+      const pointsInput = inputs.find((i) => i.name === pass.points)
+      if (!pointsInput || pointsInput.type !== 'resource') {
+        throw new IsfParseError(`PASSES lineTrace pass's POINTS "${pass.points}" does not match any declared TYPE resource input`)
+      }
+      if (pass.width !== undefined) {
+        const widthInput = inputs.find((i) => i.name === pass.width)
+        if (!widthInput || (widthInput.type !== 'float' && widthInput.type !== 'hysteresisSignal')) {
+          throw new IsfParseError(`PASSES lineTrace pass's WIDTH "${pass.width}" does not match any declared TYPE float/hysteresisSignal input`)
+        }
       }
     }
   }
@@ -135,6 +153,7 @@ export function parseIsf(source: string): IsfDocument {
     inputs,
     hysteresisVersion,
     passes,
+    hysteresisScript,
     body,
   }
 }
@@ -154,7 +173,15 @@ function parsePass(raw: unknown, index: number): IsfPass {
     const width = typeof p.WIDTH === 'string' ? p.WIDTH : undefined
     return { kind: 'lineTrace', target, points, width }
   }
-  throw new IsfUnsupportedFeatureError(`PASSES[${index}] has unknown KIND "${kind}" — only "fullscreen"/"lineTrace" are supported.`)
+  if (kind === 'scriptTexture') {
+    const source = typeof p.SOURCE === 'string' ? p.SOURCE : ''
+    if (!source) throw new IsfParseError(`PASSES[${index}] (scriptTexture) is missing SOURCE (the name of a field in the script's per-frame textures output)`)
+    if (!target) throw new IsfParseError(`PASSES[${index}] (scriptTexture) is missing TARGET (the name later passes will sample it by)`)
+    const length = typeof p.LENGTH === 'number' && Number.isInteger(p.LENGTH) && p.LENGTH > 0 ? p.LENGTH : undefined
+    if (length === undefined) throw new IsfParseError(`PASSES[${index}] (scriptTexture) is missing a positive integer LENGTH (the fixed texel count)`)
+    return { kind: 'scriptTexture', target, source, length }
+  }
+  throw new IsfUnsupportedFeatureError(`PASSES[${index}] has unknown KIND "${kind}" — only "fullscreen"/"lineTrace"/"scriptTexture" are supported.`)
 }
 
 function parseInput(raw: Record<string, unknown>): IsfInput {
@@ -203,6 +230,34 @@ function parseInput(raw: Record<string, unknown>): IsfInput {
         throw new IsfParseError(`ISF input "${name}" declares TYPE resource with an unknown RESOURCE "${resource}" — must be one of: ${known}`)
       }
       return { type: 'resource', name, label, resource }
+    }
+    case 'scriptOutput': {
+      const kind = String(raw.KIND ?? '')
+      if (!SCRIPT_OUTPUT_KINDS.has(kind)) {
+        const known = [...SCRIPT_OUTPUT_KINDS].join(', ')
+        throw new IsfParseError(`ISF input "${name}" declares TYPE scriptOutput with an unknown KIND "${kind}" — must be one of: ${known}`)
+      }
+      const scriptKind = kind as 'float' | 'bool' | 'point2D' | 'color'
+      let def: number | boolean | [number, number] | [number, number, number, number]
+      switch (scriptKind) {
+        case 'float':
+          def = numberOr(raw.DEFAULT, 0)
+          break
+        case 'bool':
+          def = raw.DEFAULT === true
+          break
+        case 'point2D': {
+          const d = Array.isArray(raw.DEFAULT) ? (raw.DEFAULT as number[]) : [0, 0]
+          def = [numberOr(d[0], 0), numberOr(d[1], 0)]
+          break
+        }
+        case 'color': {
+          const d = Array.isArray(raw.DEFAULT) ? (raw.DEFAULT as number[]) : [1, 1, 1, 1]
+          def = [numberOr(d[0], 1), numberOr(d[1], 1), numberOr(d[2], 1), numberOr(d[3], 1)]
+          break
+        }
+      }
+      return { type: 'scriptOutput', name, label, kind: scriptKind, default: def }
     }
     case 'point2D': {
       const d = Array.isArray(raw.DEFAULT) ? (raw.DEFAULT as number[]) : [0, 0]

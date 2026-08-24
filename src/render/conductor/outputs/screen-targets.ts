@@ -41,4 +41,15 @@ export const SCREEN_TARGETS: TargetDecl[] = [
   { id: 'screen.paletteMix', acceptsTags: ALL_TAGS, defaultValue: 0, range: [0, 1] },
   { id: 'screen.idle', acceptsTags: ALL_TAGS, defaultValue: 0, range: [0, 1], passThrough: true },
   { id: 'screen.scope', acceptsTags: ALL_TAGS, defaultValue: 0, range: [0, 0], passThrough: true },
+  // §4's Layer 2 understanding signals (AGENTS.md §3.7/§5: "real, live, never wired into a
+  // default route yet") — now real routable/patchable targets, same as every signal above.
+  // screen-only.ts's identityRoutes wires all six in 1:1 by default; screen-composites.ts/
+  // paletteRoutes additionally consume chromaRootHue/fullness for a real (small, deliberately
+  // cautious) visual effect — see those files' own comments for which two and why only those two.
+  { id: 'screen.noveltyLocal', acceptsTags: ALL_TAGS, defaultValue: 0, range: [0, 1] },
+  { id: 'screen.noveltySection', acceptsTags: ALL_TAGS, defaultValue: 0, range: [0, 1] },
+  { id: 'screen.fullness', acceptsTags: ALL_TAGS, defaultValue: 0, range: [0, 1] },
+  { id: 'screen.onsetDensity', acceptsTags: ALL_TAGS, defaultValue: 0, range: [0, 1] },
+  { id: 'screen.harmonicNovelty', acceptsTags: ALL_TAGS, defaultValue: 0, range: [0, 1] },
+  { id: 'screen.chromaRootHue', acceptsTags: ALL_TAGS, defaultValue: 0, range: [0, 1] },
 ]

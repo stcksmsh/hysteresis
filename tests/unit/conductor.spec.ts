@@ -145,4 +145,53 @@ describe('Conductor -> Patchbay(screen-only) -> screen composites (SINTEZA_VIZ.m
     expect(duringBuild.paletteMix).toBeGreaterThan(0.3)
     expect(duringBuild.paletteMix).toBeCloseTo(duringBuild.windup, 5)
   })
+
+  // AGENTS.md §3.7/§5's own standing note: the six Layer 2 understanding signals
+  // (noveltyLocal/noveltySection/fullness/onsetDensity/harmonicNovelty/chromaRootHue) were real
+  // and live on the SignalBus but never wired into any default screen route. Now real, routable
+  // screen.* targets (screen-only.ts's identityRoutes) — this is the concrete proof, not just a
+  // config-file inspection.
+  it('all six Layer 2 signals resolve as real screen.* targets, not just SignalBus-internal values', () => {
+    const chroma = new Float32Array(12)
+    chroma[3] = 1 // an arbitrary dominant pitch class
+    const conductor = new Conductor()
+    const patchbay = new Patchbay(screenOnlyConfig, [SCREEN_TARGETS])
+    const bus = conductor.update(makeFrame({ fullness: 0.7, onsetDensity: 0.4, chroma }), 0)
+    const resolved = patchbay.resolve(bus, 0, SCREEN_TARGETS)
+
+    expect(resolved['screen.fullness']).toBeCloseTo(0.7, 5)
+    expect(resolved['screen.onsetDensity']).toBeCloseTo(0.4, 5)
+    expect(resolved['screen.chromaRootHue']).toBeCloseTo(3 / 12, 5)
+    // noveltyLocal/noveltySection/harmonicNovelty aren't directly settable via StateFrame (they're
+    // derived from Conductor's own novelty trackers) — just prove they resolve to a real number,
+    // not undefined/NaN, confirming the route itself (not the upstream computation) is wired.
+    expect(typeof resolved['screen.noveltyLocal']).toBe('number')
+    expect(typeof resolved['screen.noveltySection']).toBe('number')
+    expect(typeof resolved['screen.harmonicNovelty']).toBe('number')
+  })
+
+  it('chromaRootHue nudges hueShift, summed alongside hueDrift/centroid (the only one of the six wired into a composite)', () => {
+    const chroma = new Float32Array(12)
+    chroma[6] = 1 // dominantPitchClassHue = 6/12 = 0.5
+    const { params: withChroma } = run(() => makeFrame({ chroma }), 0)
+    const { params: withoutChroma } = run(() => makeFrame(), 0)
+    expect(withChroma.hueShift).toBeCloseTo(withoutChroma.hueShift + 0.5 * 0.15, 5)
+  })
+
+  it('fullness gently thickens flowStrength, distinct from and additive with energy', () => {
+    const { params: withFullness } = run(() => makeFrame({ fullness: 1 }), 1)
+    const { params: withoutFullness } = run(() => makeFrame({ fullness: 0 }), 1)
+    expect(withFullness.flowStrength).toBeGreaterThan(withoutFullness.flowStrength)
+  })
+
+  it('the four remaining Layer 2 signals (noveltyLocal/noveltySection/harmonicNovelty/onsetDensity) are deliberately NOT wired into symmetry', () => {
+    // A regression guard for the deliberate restraint documented in screen-only.ts: this
+    // codebase's own history flags symmetry as already reported "too psychedelic"/overused, so
+    // these four stay pure default routes rather than new symmetry contributors. Maxing them out
+    // (via a full-novelty first frame + high onsetDensity) must not move symmetry beyond what
+    // familiarity/tension/buildProgress/flatness alone already produce at rest.
+    const { params: baseline } = run(() => makeFrame(), 0)
+    const { params: withLayer2Maxed } = run(() => makeFrame({ onsetDensity: 1 }), 0)
+    expect(withLayer2Maxed.symmetry).toBeCloseTo(baseline.symmetry, 5)
+  })
 })

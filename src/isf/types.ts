@@ -96,7 +96,33 @@ export interface IsfResourceInput {
   resource: string
 }
 
-export type IsfInput = IsfFloatInput | IsfBoolInput | IsfLongInput | IsfColorInput | IsfPoint2DInput | IsfHysteresisSignalInput | IsfResourceInput
+// The HYSTERESIS_SCRIPT execution engine's other half of the format (AGENTS.md's "Phase 4"): an
+// input whose per-frame value comes from the shader's own stateful JS companion, not the patch
+// graph. Deliberately never a routable target (isf-targets.ts's isfInputsToTargets returns []
+// for it, same treatment as `resource`) — there's no ambiguity about "is this patch-routed or
+// script-driven", a shader author picks one mechanism per input, not both. `kind` mirrors the
+// shape of a real scalar/vector input type; deliberately NOT `long`-capable yet (no motivating
+// shader needs it — same "extend when there's a second real case" discipline `resource`'s
+// KNOWN_RESOURCES and the pass KIND set already follow in this codebase).
+export type IsfScriptOutputKind = 'float' | 'bool' | 'point2D' | 'color'
+
+export interface IsfScriptOutputInput {
+  type: 'scriptOutput'
+  name: string
+  label?: string
+  kind: IsfScriptOutputKind
+  default: number | boolean | [number, number] | [number, number, number, number]
+}
+
+export type IsfInput =
+  | IsfFloatInput
+  | IsfBoolInput
+  | IsfLongInput
+  | IsfColorInput
+  | IsfPoint2DInput
+  | IsfHysteresisSignalInput
+  | IsfResourceInput
+  | IsfScriptOutputInput
 
 // HYSTERESIS_VERSION 1's real (scoped) multi-pass support: a pass is typed
 // by KIND. 'fullscreen' is stock ISF's existing single-draw model — the
@@ -108,7 +134,14 @@ export type IsfInput = IsfFloatInput | IsfBoolInput | IsfLongInput | IsfColorInp
 // ~2 billion segment evals/1080p-frame and rejected). A lineTrace pass has
 // no shader-author GLSL body at all; it's structural, driven by the
 // runtime's own beam vertex/fragment shaders.
-export type HysteresisPassKind = 'fullscreen' | 'lineTrace'
+// 'scriptTexture' is the HYSTERESIS_SCRIPT engine's non-scalar output channel — generalizes the
+// exact mechanism 'lineTrace' already established (a pass produces a named `uniform sampler2D`,
+// the fullscreen body decides what to do with it) to a THIRD source of pixel data: not GPU
+// geometry rasterization, but a Float32Array the script's per-frame output provides directly
+// (e.g. a perturbation reference orbit — see JuliaScene.ts's updateReferenceOrbit/uRefOrbit,
+// the concrete motivating case). RG32F-only, height 1 (a 1D data texture) — the one real shape
+// needed today; extend when a second motivating shader needs a different format.
+export type HysteresisPassKind = 'fullscreen' | 'lineTrace' | 'scriptTexture'
 
 export interface IsfFullscreenPass {
   kind: 'fullscreen'
@@ -133,7 +166,21 @@ export interface IsfLineTracePass {
   width?: string
 }
 
-export type IsfPass = IsfFullscreenPass | IsfLineTracePass
+// The scriptTexture pass's own shape: `source` names a `textures` field the script's per-frame
+// output object provides (HysteresisScriptFrameOutput.textures in script-runtime/contract.ts),
+// `length` is the fixed texel count the runtime validates/coerces the script's Float32Array
+// against BEFORE it ever leaves the sandboxed script Worker (see script-runtime/run-script-pure.ts)
+// — a wrong-length array reaching IsfScene's texSubImage2D call would be a GL-level failure on
+// the trusted render-worker side, which the Worker sandbox does nothing to contain once a bad
+// value has already been handed over, so validation has to happen before that handoff, not after.
+export interface IsfScriptTexturePass {
+  kind: 'scriptTexture'
+  target: string
+  source: string
+  length: number
+}
+
+export type IsfPass = IsfFullscreenPass | IsfLineTracePass | IsfScriptTexturePass
 
 export interface IsfDocument {
   description?: string
@@ -149,6 +196,14 @@ export interface IsfDocument {
   // PASSES gets the implicit `[{ kind: 'fullscreen', target: '' }]` —
   // every existing single-pass shader's real, unchanged shape.
   passes: IsfPass[]
+  // The optional per-file stateful JS companion (AGENTS.md's "HYSTERESIS_SCRIPT execution
+  // engine" phase) — raw JS source, inline in the header as a plain string (matches the field's
+  // already-reserved contract; keeps a .hyst file self-contained rather than referencing a
+  // sibling file). undefined = no script, exactly today's behavior; a document declaring
+  // `scriptOutput` inputs or `scriptTexture` passes without one is a parse-time error (see
+  // parse-isf.ts). Never executed directly in this render worker's own thread — see
+  // src/isf/script-runtime/ for the sandboxed nested-Worker execution engine.
+  hysteresisScript?: string
   // The GLSL source AFTER the JSON header comment — untranslated, still
   // written against ISF's built-ins (isf_FragNormCoord, RENDERSIZE, TIME,
   // gl_FragColor, texture2D, ...), not valid GLSL ES 300 on its own. See

@@ -29,6 +29,16 @@ const IDENTITY_SIGNALS = [
   'tempoConfidence',
   'dropImpulse',
   'familiarity',
+  // §4's Layer 2 understanding signals — real and live since a prior session, but never wired
+  // into any default route until now (AGENTS.md §3.7/§5's own standing note). Routed 1:1 like
+  // every signal above so they're immediately available to patch/inspect from the editor even
+  // before (or beyond) the two small native composite uses below.
+  'noveltyLocal',
+  'noveltySection',
+  'fullness',
+  'onsetDensity',
+  'harmonicNovelty',
+  'chromaRootHue',
 ] as const
 
 const identityRoutes: Route[] = IDENTITY_SIGNALS.map((signal) => ({
@@ -47,9 +57,19 @@ const identityRoutes: Route[] = IDENTITY_SIGNALS.map((signal) => ({
 // `centroid` for a different signal's gain, or route something else into
 // `screen.paletteMix` entirely, all without touching this file by hand
 // (that's the whole point of the patchbay editor).
+// chromaRootHue (§4.2: "a genuinely new visual driver — pitch-class -> hue/rotation") is the
+// first of the six Layer 2 signals above to actually drive a native composite, not just be
+// routable: summed into the same hueShift target as hueDrift/centroid, a modest gain so a real
+// key/chord change nudges the palette without dominating the existing slow drift. Deliberately
+// the ONLY one of the six wired into a composite here — noveltyLocal/noveltySection/
+// harmonicNovelty/onsetDensity are left as pure default routes (real, patchable, inspectable)
+// rather than added into symmetry, given this file's own screen-composites.ts already documents
+// user feedback that symmetry reads as overused/"too psychedelic" when too many signals feed
+// it — that's a live open question for the user to weigh in on, not something to guess at here.
 const paletteRoutes: Route[] = [
   { from: 'hueDrift', to: 'screen.hueShift', curve: 'linear' },
   { from: 'centroid', to: 'screen.hueShift', curve: 'linear', gain: 0.1 },
+  { from: 'chromaRootHue', to: 'screen.hueShift', curve: 'linear', gain: 0.15 },
   { from: 'buildWindup', to: 'screen.paletteMix', curve: 'linear' },
 ]
 

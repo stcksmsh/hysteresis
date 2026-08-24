@@ -48,8 +48,8 @@ A real subset, not a stub — anything accepted here renders for real:
   rejected) — unless `HYSTERESIS_VERSION` declares real Hysteresis-format
   multi-pass support (see below).
 - Input types: `float`, `bool`, `long`, `color`, `point2D`, `hysteresisSignal`,
-  `resource` (both are this repo's own real extensions beyond standard ISF —
-  see below).
+  `resource`, `scriptOutput` (the last three are this repo's own real
+  extensions beyond standard ISF — see below).
   - `color` and `point2D` inputs expand into separate scalar targets
     (`isf.tint.r`/`.g`/`.b`/`.a`, `isf.center.x`/`.y`) since every patch
     graph node is scalar-in/scalar-out.
@@ -183,19 +183,108 @@ rejected at load time with the valid list, same discipline as
 `hysteresisSignal`'s `SIGNAL` field. A `lineTrace` pass's `POINTS` names
 which declared `resource` input feeds it.
 
-## `HYSTERESIS_SCRIPT` — reserved, not executed yet
+## `HYSTERESIS_SCRIPT` — a real stateful JS companion
 
-A shader's header may declare `"HYSTERESIS_SCRIPT": "..."` — a **planned**
-per-frame stateful JS companion (orbit tracking, target-seeking, anything a
-single GLSL fragment shader can't express on its own, since ISF's model has
-no concept of persistent JS-side state at all). This key is currently
-**rejected at load time with a clear error** rather than silently ignored —
-a shader that depends on it for correct rendering should fail loudly, not
-mis-render. The real execution engine (persistent per-frame state, typed bus
-access, producing extra uniforms beyond plain signal routing) is real,
-separate, not-yet-built work — this is deliberately reserved now so a
-future shader authored against it won't need a breaking format change once
-it lands.
+A shader's header may declare `"HYSTERESIS_SCRIPT": "..."` — a per-frame
+stateful JS companion for anything a single GLSL fragment shader can't
+express on its own, since ISF's model has no concept of persistent JS-side
+state at all (orbit tracking, target-seeking navigation, spring-damped
+drift — see `examples/isf/julia-autopilot.hyst`, a real port of the
+built-in Julia scene's own autopilot onto this mechanism). Requires
+`HYSTERESIS_VERSION` to be declared, same version-gating discipline real
+multi-pass `PASSES` already uses.
+
+**The script's shape.** The source must define (and leave in scope) a
+function `update(dt, inputs, idle, time)`, called once per render frame:
+
+- `dt` — seconds since the last call.
+- `inputs` — the shader's own declared `hysteresisSignal` (and other
+  patch-routed scalar) input values, exactly as resolved that frame — the
+  script never sees the raw Feature Engine signal bus, only what the patch
+  graph already resolved into this shader's own inputs, the same values its
+  GLSL uniforms get.
+- `idle` — true when there's no live audio driving the scene (not a
+  routable signal; supplied the same direct, non-patch-graph way the
+  built-in beam's idle Lissajous fallback already works).
+- `time` — the shader's own running clock (matches the GLSL `TIME` uniform).
+
+It must return `{ uniforms, textures }` (either may be omitted): `uniforms`
+supplies the current-frame value for every declared `scriptOutput` input
+(see below) by name; `textures` supplies a flat `number[]` for every
+declared `scriptTexture` pass's `SOURCE` name (see below). All per-frame
+state — springs, search targets, accumulated zoom — lives in the script's
+own closure, exactly like a hand-written `Scene` class's private fields
+would.
+
+**`scriptOutput` inputs** — a value the script computes every frame instead
+of the patch graph:
+
+```json
+{ "NAME": "zoom", "TYPE": "scriptOutput", "KIND": "float", "DEFAULT": 2.0 }
+```
+
+`KIND` is one of `float`/`bool`/`point2D`/`color` (mirrors the shape of the
+matching ordinary input type; `long` isn't supported yet — no motivating
+shader needs it). Like `resource`, a `scriptOutput` input is **never a
+routable patch-graph target** — there's no ambiguity about which mechanism
+owns its value. Requires `HYSTERESIS_SCRIPT` to be declared.
+
+**`scriptTexture` passes** — the non-scalar counterpart, for data too big to
+be a single uniform (a perturbation reference orbit, say):
+
+```json
+{ "TARGET": "refOrbit", "KIND": "scriptTexture", "SOURCE": "refOrbit", "LENGTH": 192 }
+```
+
+Generalizes the exact mechanism a `lineTrace` pass already established: `TARGET`
+becomes a real `uniform sampler2D <TARGET>` the fullscreen body can
+`texelFetch` from, just backed by the script's own per-frame data instead of
+GPU-rasterized geometry. `SOURCE` names the field in the script's returned
+`textures` object; `LENGTH` is the fixed **texel** count — the runtime
+always uses two floats per texel (RG32F, height 1), so the script's array
+for a `LENGTH: 192` pass must be 384 numbers long (interleaved R, G per
+texel — exactly `JuliaScene.ts`'s own `Float32Array(REF_ORBIT_LENGTH * 2)`
+shape). A wrong-length or non-finite array is padded/truncated/sanitized
+(holding the last finite value) automatically — see "How it's executed"
+below for where that happens. Requires `HYSTERESIS_SCRIPT` to be declared.
+
+**How it's executed.** The script never runs on the render worker's own
+thread. It runs inside a separate, sandboxed nested Worker, spawned fresh
+for each loaded shader, talking to the render worker over `postMessage`.
+Every frame, the render worker sends that frame's `{dt, inputs, idle,
+time}` and immediately continues rendering with the **last completed
+reply** — it never blocks waiting for a fresh one. In practice this is one
+frame of latency at most, imperceptible at the timescales a script like
+this actually operates on (springs settling over 100ms+, a navigation
+re-check every 250ms, a zoom dive running for minutes). If the script hangs
+(no reply within its timeout budget) or throws, its Worker is terminated
+and a fresh one spawned — rendering keeps going on the last-known values
+throughout, never blocking or crashing. After several consecutive faults,
+the host stops retrying (a script that's fundamentally broken won't be
+fixed by another restart) and reports the failure once, still rendering on
+frozen values indefinitely.
+
+Every value the script returns is validated and coerced against the
+shader's own declared `scriptOutput`/`scriptTexture` shapes **inside** the
+sandboxed Worker, before it's ever sent back — a malformed or wrong-length
+value falls back to its declared default there, so it never reaches the
+trusted render-worker side (and a real GL call) malformed.
+
+**"Sandboxed" here means fault/crash isolation, not a security boundary.**
+The script's Worker still has `fetch`/`XMLHttpRequest` and can make network
+requests — it just can't touch the render worker's GL context, DOM, canvas,
+or any other state directly, and a hang or crash inside it can never take
+down rendering. Treat a `HYSTERESIS_SCRIPT` the same trust level as any
+other shader source you'd load — this protects uptime, not against a
+genuinely malicious script.
+
+**One practical constraint**: spawning the nested Worker (a `blob:` URL)
+and evaluating the script's own source (a real `Function` construction)
+both need a permissive-enough Content-Security-Policy (`worker-src blob:`,
+`script-src 'unsafe-eval'`) wherever this runs. `loadIsfShader` is opt-in
+and the production site never calls it today, so this has no current
+impact — it's a real constraint on whether a host page *could* load a
+shader using this feature, not something this engine can work around.
 
 ## What's not supported (yet)
 
@@ -207,13 +296,16 @@ mis-rendering:
   spec's own `PASSINDEX`-branching multi-pass model aren't supported.
   `HYSTERESIS_VERSION: 1`'s own real (but scoped) `PASSES`/`KIND` model
   above is a different, Hysteresis-format-specific mechanism.
-- **`PERSISTENT` buffers** — cross-*frame* feedback, real, separate future
-  work; rejected under `HYSTERESIS_VERSION` too, not just stock ISF.
-- **Pass `KIND`s beyond `fullscreen`/`lineTrace`** — no motivating shader
-  yet (particles, SDF clouds, etc.).
-- **`resource` kinds beyond `scope`** — no other non-scalar live signal
-  exists yet (a future FFT-bins or reference-orbit resource would extend
-  `KNOWN_RESOURCES` in `parse-isf.ts`, not require a format change).
+- **`PERSISTENT` buffers** — cross-*frame* GPU feedback, distinct from
+  `HYSTERESIS_SCRIPT`'s own CPU-side state; rejected under
+  `HYSTERESIS_VERSION` too, not just stock ISF.
+- **Pass `KIND`s beyond `fullscreen`/`lineTrace`/`scriptTexture`** — no
+  motivating shader yet (particles, SDF clouds, etc.).
+- **`resource` kinds beyond `scope`** — no other *system-provided*
+  non-scalar live signal exists yet (a future FFT-bins resource would
+  extend `KNOWN_RESOURCES` in `parse-isf.ts`, not require a format change;
+  a script-*produced* non-scalar value is `scriptTexture`, already real).
+- **`scriptOutput` `KIND: "long"`** — no motivating shader needs it yet.
 - **`image`/`audio`/`audioFFT` inputs** — there's no general asset-import
   or audio-texture pipeline (distinct from the narrow, system-provided
   `resource` mechanism above).

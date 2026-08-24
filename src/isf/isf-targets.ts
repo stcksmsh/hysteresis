@@ -62,6 +62,11 @@ export function isfInputsToTargets(doc: IsfDocument): IsfTargetDecl[] {
         // comment in types.ts. A resource is bound automatically by name
         // (IsfScene), never appears in the patch graph's target catalog.
         return []
+      case 'scriptOutput':
+        // Also never routable — see IsfScriptOutputInput's own comment in
+        // types.ts. Its value comes from HYSTERESIS_SCRIPT every frame, not
+        // the patch graph; no ambiguity about which mechanism owns it.
+        return []
     }
   })
 
@@ -109,6 +114,11 @@ export function resolvedTargetsToIsfUniforms(doc: IsfDocument, resolved: Record<
       case 'resource':
         // Not a scalar uniform at all — IsfScene binds it directly from
         // ParamBus (e.g. `scope`), not through this resolved-targets path.
+        break
+      case 'scriptOutput':
+        // Not patch-graph-resolved at all — IsfScene reads its value from
+        // the HYSTERESIS_SCRIPT host's latest output instead (see
+        // script-runtime/), never from `resolved`.
         break
     }
   }

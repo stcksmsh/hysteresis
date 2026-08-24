@@ -92,3 +92,38 @@ describe('translateIsfFragmentShader — HYSTERESIS_VERSION 1 multi-pass', () =>
     expect(out.match(/uniform sampler2D/g)).toHaveLength(1)
   })
 })
+
+describe('translateIsfFragmentShader — scriptOutput inputs and scriptTexture passes', () => {
+  const SCRIPT_SRC = `/*{
+    "HYSTERESIS_VERSION": 1,
+    "HYSTERESIS_SCRIPT": "function update() { return {}; }",
+    "PASSES": [
+      { "TARGET": "refOrbit", "KIND": "scriptTexture", "SOURCE": "refOrbit", "LENGTH": 192 },
+      { "TARGET": "", "KIND": "fullscreen" }
+    ],
+    "INPUTS": [
+      { "NAME": "c", "TYPE": "scriptOutput", "KIND": "point2D", "DEFAULT": [0.25, 0] },
+      { "NAME": "zoom", "TYPE": "scriptOutput", "KIND": "float", "DEFAULT": 2.0 },
+      { "NAME": "flash", "TYPE": "scriptOutput", "KIND": "bool", "DEFAULT": false },
+      { "NAME": "tint", "TYPE": "scriptOutput", "KIND": "color", "DEFAULT": [1, 1, 1, 1] }
+    ]
+  }*/
+  void main() {
+    vec2 z = texelFetch(refOrbit, ivec2(0, 0), 0).xy;
+    gl_FragColor = vec4(z, zoom, 1.0);
+  }
+  `
+  const doc = parseIsf(SCRIPT_SRC)
+  const out = translateIsfFragmentShader(doc)
+
+  it('declares a scriptOutput uniform with the GLSL type matching its KIND', () => {
+    expect(out).toContain('uniform vec2 c;')
+    expect(out).toContain('uniform float zoom;')
+    expect(out).toContain('uniform bool flash;')
+    expect(out).toContain('uniform vec4 tint;')
+  })
+
+  it('declares a sampler2D uniform for the scriptTexture pass target, same as a lineTrace pass', () => {
+    expect(out).toContain('uniform sampler2D refOrbit;')
+  })
+})
