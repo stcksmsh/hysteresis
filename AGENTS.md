@@ -599,6 +599,21 @@ untested surface.
 - If a decision genuinely needs the user's input (§3.8's open questions, or anything expensive to
   reverse), ask; don't guess and proceed.
 
+**Working style (ponytail + caveman, installed as skills under `.claude/skills/`):**
+- Code: climb the ladder, stop at the first rung that holds — skip if speculative (YAGNI), reuse
+  what's already in the repo, stdlib, native platform feature, an already-installed dep, one line,
+  only then new code. No unrequested abstractions, no scaffolding "for later." Shortest diff wins
+  — but only *after* tracing the real flow end to end; §5 rule 1 (never break the live path) and
+  rule 3 (ship working slices, not partial scaffolding) already say this, ponytail is the same
+  instinct applied to every diff, not a separate mode. Never lazy about: input validation, error
+  handling that prevents data loss, security, or anything §5/§3.2 already require. A deliberate cut
+  corner gets a one-line comment naming the ceiling (`ponytail: ...`), same spirit as this repo's
+  existing "flag clearly when X isn't verified" convention.
+- Prose: terse, technical substance intact. Drop filler/hedging/pleasantries, keep exact numbers,
+  code, commands, error strings, and negation words (not/never/no/only) verbatim. No restating what
+  a diff already shows. §6 session-history entries and this file's own prose stay normal, full
+  English — caveman governs chat replies, not durable docs or commit messages.
+
 ---
 
 ## 6. Session history (appendix — chronological, detailed, trust this over any summary above)
