@@ -1,6 +1,11 @@
 import { useState } from 'react'
 import { addFixture, removeFixture, renameFixture, setFixtureDmxPatch, type FixtureDocument } from '../../../src/render/conductor/patchgraph/fixture-document'
 import { FIXTURE_TYPES } from '../../../src/render/conductor/patchgraph/fixture-types'
+import { IconButton } from './ui/IconButton'
+import { Button } from './ui/Button'
+import { Select } from './ui/Select'
+import { NumberInput } from './ui/NumberInput'
+import { IconTrash, IconPlus } from './ui/icons'
 
 interface FixtureManagerProps {
   doc: FixtureDocument
@@ -36,9 +41,7 @@ export function FixtureManager({ doc, onChange }: FixtureManagerProps) {
                 style={{ flex: 1, fontSize: 12 }}
               />
               <span style={{ color: 'var(--text-2)', minWidth: 90 }}>{type?.label ?? fixture.typeId}</span>
-              <button onClick={() => onChange(removeFixture(doc, fixture.id))} style={{ padding: '2px 8px', fontSize: 11 }} title="Remove fixture">
-                ✕
-              </button>
+              <IconButton icon={<IconTrash size={13} />} label="Remove fixture" onClick={() => onChange(removeFixture(doc, fixture.id))} />
             </div>
             {/* Real DMX address (docs/dmx-out.md) — optional, only needed to
                 send this fixture out over Art-Net/sACN. Unset by default,
@@ -46,32 +49,24 @@ export function FixtureManager({ doc, onChange }: FixtureManagerProps) {
                 DmxPatch doc comment). */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-2)' }}>
               <span>DMX:</span>
-              <input
-                type="number"
+              <NumberInput
+                step={1}
                 min={1}
-                placeholder="universe"
-                value={patch?.universe ?? ''}
-                onChange={(e) => {
-                  const universe = Number(e.target.value)
-                  onChange(
-                    setFixtureDmxPatch(doc, fixture.id, Number.isFinite(universe) && universe > 0 ? { universe, startAddress: patch?.startAddress ?? 1 } : null),
-                  )
-                }}
-                style={{ width: 64, fontSize: 11 }}
+                width={64}
+                value={patch?.universe ?? 0}
+                onChange={(universe) => onChange(setFixtureDmxPatch(doc, fixture.id, universe > 0 ? { universe, startAddress: patch?.startAddress ?? 1 } : null))}
               />
               <span>@</span>
-              <input
-                type="number"
+              <NumberInput
+                step={1}
                 min={1}
                 max={512}
-                placeholder="address"
-                value={patch?.startAddress ?? ''}
+                width={64}
                 disabled={!patch}
-                onChange={(e) => {
-                  const startAddress = Number(e.target.value)
-                  if (patch && Number.isFinite(startAddress)) onChange(setFixtureDmxPatch(doc, fixture.id, { ...patch, startAddress }))
+                value={patch?.startAddress ?? 0}
+                onChange={(startAddress) => {
+                  if (patch) onChange(setFixtureDmxPatch(doc, fixture.id, { ...patch, startAddress }))
                 }}
-                style={{ width: 64, fontSize: 11 }}
               />
             </div>
           </div>
@@ -79,16 +74,16 @@ export function FixtureManager({ doc, onChange }: FixtureManagerProps) {
       })}
       <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 4 }}>
         <input type="text" placeholder="name" value={newName} onChange={(e) => setNewName(e.target.value)} style={{ flex: 1, fontSize: 12 }} />
-        <select value={newType} onChange={(e) => setNewType(e.target.value)} style={{ fontSize: 12 }}>
+        <Select uiSize="sm" value={newType} onChange={(e) => setNewType(e.target.value)}>
           {FIXTURE_TYPES.map((t) => (
             <option key={t.id} value={t.id}>
               {t.label}
             </option>
           ))}
-        </select>
-        <button className="primary" onClick={handleAdd} style={{ fontSize: 12 }}>
-          + Add
-        </button>
+        </Select>
+        <Button variant="primary" icon={<IconPlus size={13} />} onClick={handleAdd}>
+          Add
+        </Button>
       </div>
     </div>
   )

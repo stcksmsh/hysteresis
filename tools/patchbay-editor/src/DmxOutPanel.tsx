@@ -4,6 +4,10 @@ import { renderDmxUniverses, DMX_UNIVERSE_SIZE } from '../../../src/dmx/render-d
 import type { FixtureDocument } from '../../../src/render/conductor/patchgraph/fixture-document'
 import type { DmxProtocol } from '../../../src/dmx/dmx-out-bridge'
 import type { FixtureOutConfig } from '../../../src/shared/types'
+import { Button } from './ui/Button'
+import { Select } from './ui/Select'
+import { TextInput } from './ui/TextInput'
+import { Badge } from './ui/Badge'
 
 export interface DmxOutPanelProps {
   fixtureDoc: FixtureDocument
@@ -99,52 +103,55 @@ export function DmxOutPanel({ fixtureDoc, resolvedValues, onConnect, onDisconnec
         {patchedCount === 0 ? 'No fixtures have a DMX address yet — set one in Fixtures below.' : `${patchedCount} fixture(s) patched.`}
       </p>
       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-        <select value={mode} onChange={(e) => setMode(e.target.value as OutMode)} disabled={isConnected} style={{ fontSize: 12 }}>
+        <Select uiSize="sm" value={mode} onChange={(e) => setMode(e.target.value as OutMode)} disabled={isConnected}>
           <option value="artnet">Art-Net</option>
           <option value="sacn">sACN (E1.31)</option>
           <option value="wled-drgb">WLED (UDP realtime)</option>
           <option value="usb">USB (Enttec-protocol dongle)</option>
-        </select>
+        </Select>
         {mode === 'usb' ? null : mode === 'wled-drgb' ? (
-          <input type="text" placeholder="192.168.1.50" value={wledHost} onChange={(e) => setWledHost(e.target.value)} disabled={isConnected} style={{ flex: 1, fontSize: 12 }} />
+          <TextInput placeholder="192.168.1.50" value={wledHost} onChange={(e) => setWledHost(e.target.value)} disabled={isConnected} style={{ flex: 1, fontSize: 12 }} />
         ) : (
-          <input type="text" value={wsUrl} onChange={(e) => setWsUrl(e.target.value)} disabled={isConnected} style={{ flex: 1, fontSize: 12 }} />
+          <TextInput value={wsUrl} onChange={(e) => setWsUrl(e.target.value)} disabled={isConnected} style={{ flex: 1, fontSize: 12 }} />
         )}
       </div>
       {isSingleUniverseMode && (
-        <select value={singleUniverse ?? ''} onChange={(e) => setSingleUniverse(e.target.value ? Number(e.target.value) : null)} style={{ fontSize: 12 }}>
+        <Select uiSize="sm" value={singleUniverse ?? ''} onChange={(e) => setSingleUniverse(e.target.value ? Number(e.target.value) : null)}>
           <option value="">select universe…</option>
           {patchedUniverses.map((u) => (
             <option key={u} value={u}>
               universe {u}
             </option>
           ))}
-        </select>
+        </Select>
       )}
       {mode === 'usb' && !isWebSerialSupported() && <div className="banner banner-warn">Web Serial isn't supported in this browser (Chromium desktop only).</div>}
       <div style={{ display: 'flex', gap: 6 }}>
         {!isConnected ? (
-          <button onClick={connect} disabled={!canConnect}>
+          <Button onClick={connect} disabled={!canConnect}>
             {mode === 'usb' ? 'Select serial port…' : 'Connect'}
-          </button>
+          </Button>
         ) : (
           <>
             {mode === 'usb' && (
-              <button onClick={() => setSending((v) => !v)} disabled={!canSend}>
+              <Button onClick={() => setSending((v) => !v)} disabled={!canSend}>
                 {sending ? 'Stop sending' : 'Start sending'}
-              </button>
+              </Button>
             )}
-            <button onClick={disconnect}>Disconnect</button>
+            <Button onClick={disconnect}>Disconnect</Button>
           </>
         )}
       </div>
       <div className="mono readout">
+        {(mode === 'usb' ? serialStatus.connected : status.connected) && <Badge tone="ok">connected</Badge>}{' '}
         {mode === 'usb'
           ? serialStatus.connected
-            ? `connected${sending ? ' — sending' : ''}`
+            ? sending
+              ? 'sending'
+              : ''
             : (serialStatus.message ?? 'disconnected')
           : status.connected
-            ? 'connected — the render worker sends automatically'
+            ? 'the render worker sends automatically'
             : (status.message ?? 'disconnected')}
       </div>
     </div>

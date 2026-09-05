@@ -1,5 +1,6 @@
 node_modules/
 dist/
+dist-patchbay-editor/
 public/worklets/
 public/render-worker.js
 *.log

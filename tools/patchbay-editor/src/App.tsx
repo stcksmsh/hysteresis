@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { RuntimeBridge, type PlaybackState } from './runtime-bridge'
 import { TransportBar } from './TransportBar'
-import { FixtureManager } from './FixtureManager'
-import { PatchGraphCanvas } from './PatchGraphCanvas'
-import { FixtureVisuals } from './FixtureVisuals'
-import { SectionCard } from './SectionCard'
+import { NavBar } from './NavBar'
+import { GraphScreen } from './screens/GraphScreen'
+import { ShaderScreen } from './shaders/ShaderScreen'
+import { OutputScreen } from './screens/OutputScreen'
+import { DiagnosticsScreen, type DropLogEntry } from './screens/DiagnosticsScreen'
+import type { Screen } from './screens'
+import { IconButton } from './ui/IconButton'
+import { IconExpand, IconClose } from './ui/icons'
 import { serializeGraphAndFixtures, saveToFile } from './serialize-config'
 import { toPatchGraph, fromPatchGraphNode, type DraftNode } from './graph-draft'
 import { seedNodes } from './seed-graph'
@@ -13,14 +17,9 @@ import { SCREEN_TARGETS } from '../../../src/render/conductor/outputs/screen-tar
 import { validatePatchGraph } from '../../../src/render/conductor/patchgraph/validate'
 import { pruneGraphToTargets } from '../../../src/render/conductor/patchgraph/prune'
 import { addFixture, fixtureTargetCatalog, emptyFixtureDocument, type FixtureDocument } from '../../../src/render/conductor/patchgraph/fixture-document'
-import { fixtureTargetId } from '../../../src/render/conductor/patchgraph/fixture-types'
 import type { SignalBus } from '../../../src/render/conductor/types'
 import type { DropDetectorDebug } from '../../../src/audio/worklet/brain/drop-detector'
 import type { PatchTargetDecl } from '../../../src/render/conductor/patchgraph/types'
-import { IsfPanel } from './IsfPanel'
-import { DmxOutPanel } from './DmxOutPanel'
-import { OscInPanel } from './OscInPanel'
-import { MidiPanel } from './MidiPanel'
 
 // Keyed by canvas element, not component instance: canvas.transferControlToOffscreen()
 // is a genuine one-shot browser API (confirmed: attempting it twice on the
@@ -94,11 +93,6 @@ function useRuntimeBridge(
 const DROP_EDGE_EPS = 0.05
 const DROP_LOG_MAX = 12
 
-interface DropLogEntry {
-  atMs: number // performance.now() when observed — wall-clock since page load, not track position (this tool doesn't track playback position)
-  strength: number
-}
-
 function useDropLog(bus: SignalBus | null) {
   const [log, setLog] = useState<DropLogEntry[]>([])
   const prevImpulse = useRef(0)
@@ -117,15 +111,13 @@ function useDropLog(bus: SignalBus | null) {
 
 export function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  // 'demo' = canvas fills the viewport, no panels — for actually watching
-  // it. 'edit' = canvas shrinks to a small corner preview, panels take the
-  // rest — for wiring the graph. Never both at full size at once (that
-  // squeezed-sidebar layout was the thing an earlier pass already replaced
-  // once, see AGENTS.md's layout-overhaul note — this is the same lesson
-  // applied one level up: a *tool-wide* mode split, not just a canvas-size
-  // knob within one cramped layout).
+  // 'demo' = canvas fills the viewport, no chrome — for actually watching
+  // it. 'edit' = canvas shrinks to a small corner preview, the active
+  // screen takes the rest — for wiring/authoring. Never both at full size
+  // at once (a squeezed-sidebar layout was the thing an earlier pass
+  // already replaced once).
   const [viewMode, setViewMode] = useState<'demo' | 'edit'>('edit')
-  const [showDebug, setShowDebug] = useState(false)
+  const [screen, setScreen] = useState<Screen>('graph')
   const [bus, setBus] = useState<SignalBus | null>(null)
   const [busMessageCount, setBusMessageCount] = useState(0)
   const [dropDebug, setDropDebug] = useState<DropDetectorDebug | null>(null)
@@ -135,11 +127,11 @@ export function App() {
     setDropDebug(dbg)
     setResolvedValues(fixtureValues)
   }, [])
-  // ISF import (master-prompt.md §6): the loaded shader's own declared
-  // inputs, as real patch targets — merged into mergedCatalog below so the
-  // graph canvas's target dropdown offers them exactly like a screen/
-  // fixture target. `pendingIsfFileName` bridges the load call to the
-  // async onIsfResult callback, which carries no filename of its own.
+  // ISF/.hyst import: the loaded shader's own declared inputs, as real
+  // patch targets — merged into mergedCatalog below so the graph canvas's
+  // target dropdown offers them exactly like a screen/fixture target.
+  // `pendingIsfFileName` bridges the load call to the async onIsfResult
+  // callback, which carries no filename of its own.
   const [isfStatus, setIsfStatus] = useState<
     { state: 'empty' } | { state: 'loaded'; fileName: string; targets: PatchTargetDecl[] } | { state: 'error'; fileName: string; message: string }
   >({ state: 'empty' })
@@ -152,7 +144,7 @@ export function App() {
   const { bridgeRef, fps, error, patchbayError, patchbayAckCount, playback, fixtureOutStatus, oscInStatus } = useRuntimeBridge(canvasRef, handleSignalBus, handleIsfResult)
   const dropLog = useDropLog(bus)
 
-  function handleIsfLoad(source: string, fileName: string) {
+  function handleIsfApply(source: string, fileName: string) {
     pendingIsfFileName.current = fileName
     bridgeRef.current?.setIsfShader(source)
   }
@@ -173,7 +165,7 @@ export function App() {
   // Screen targets + every fixture channel, one list — this is what makes
   // "one signal drives both a screen effect and a servo" a real option in
   // the canvas: a target node can point at either, side by side, in the
-  // same graph. See AGENTS.md's "unify screen + physical patch graphs" note.
+  // same graph.
   const mergedCatalog = useMemo(() => [...SCREEN_TARGETS, ...isfTargets, ...targetCatalog], [isfTargets, targetCatalog])
   // isf.* targets are screen-side (they drive the loaded shader's own
   // uniforms via ScreenOutput, same as SCREEN_TARGETS) — included here so
@@ -197,29 +189,24 @@ export function App() {
   const graphErrors = useMemo(() => validatePatchGraph(graph, mergedCatalog).filter((i) => i.severity === 'error'), [graph, mergedCatalog])
 
   // The worker only ever sees the screen-relevant slice of the unified
-  // graph (see prune.ts) — it has no idea a fixture half exists, exactly
-  // like it never knew about Patchbay's screen-only.ts before this session.
+  // graph (see prune.ts) — it has no idea a fixture half exists.
   useEffect(() => {
-    if (graphErrors.length > 0) return // don't even try — the worker's own construction-time validation would just reject it anyway, and this way patchbayError reflects THIS specific rejection reason if the worker path itself has a narrower issue
+    if (graphErrors.length > 0) return // don't even try — the worker's own construction-time validation would just reject it anyway
     bridgeRef.current?.setScreenGraph(pruneGraphToTargets(graph, screenTargetIds))
   }, [graph, graphErrors.length, screenTargetIds, bridgeRef])
 
   // Real production wiring, not a local copy: the worker-resident
-  // FixtureOutput/PatchGraphEvaluator (src/render/conductor/outputs/
-  // FixtureOutput.ts, wired into render-worker.ts) now evaluates the
-  // fixture graph — this editor dogfoods the exact same
-  // setFixtureDocument/setFixtureGraph messages VizInstance's public API
-  // sends (see AGENTS.md's "dogfood the fixture API in the patchbay
-  // editor" session), instead of running its own separate ephemeral
-  // PatchGraphEvaluator copy the way it used to. `resolvedValues` (read by
-  // DmxOutPanel/FixtureVisuals below) comes back over the signalBus debug
+  // FixtureOutput/PatchGraphEvaluator evaluates the fixture graph — this
+  // editor dogfoods the exact same setFixtureDocument/setFixtureGraph
+  // messages VizInstance's public API sends. `resolvedValues` (read by
+  // DmxOutPanel/FixtureVisuals) comes back over the signalBus debug
   // stream's fixtureValues field, set directly from handleSignalBus.
   useEffect(() => {
     bridgeRef.current?.setFixtureDocument(fixtureDoc)
   }, [fixtureDoc, bridgeRef])
 
   useEffect(() => {
-    if (graphErrors.length > 0) return // same "don't even try, let the worker's ack surface the real reason" posture as the screen graph's own effect above
+    if (graphErrors.length > 0) return
     bridgeRef.current?.setFixtureGraph(pruneGraphToTargets(graph, fixtureTargetIds))
   }, [graph, graphErrors.length, fixtureTargetIds, bridgeRef])
   const [resolvedValues, setResolvedValues] = useState<Record<string, number>>({})
@@ -254,110 +241,25 @@ export function App() {
     setSaveStatus(result.ok ? `Saved to ${result.path}` : `Save failed: ${result.message}`)
   }
 
-  // Diagnostic-only readouts — never the main workspace, always behind the
-  // 🐞 Debug drawer (see the return statement below). Nothing here shapes
-  // the graph; it's all read-only observation of live state.
-  const debugPanels: { id: string; title: string; hint?: string; content: React.ReactNode }[] = [
-    {
-      id: 'debug',
-      title: 'Debug readout',
-      content: (
-        <div className="mono readout">
-          <div>bus.energy: {bus ? bus.energy.toFixed(4) : '—'}</div>
-          <div>bus.idle: {bus ? String(bus.idle) : '—'}</div>
-          <div>graph: {graphErrors.length === 0 ? 'valid' : `invalid (${graphErrors.length} error(s) — see patch graph)`}</div>
-          <div>fixture values from worker: {Object.keys(resolvedValues).length} routed channel(s)</div>
-        </div>
-      ),
-    },
-    {
-      id: 'musical',
-      title: 'Musical state (Layer 2 → bus)',
-      content: (
-        <div className="mono readout">
-          <div>tension: {bus ? bus.tension.toFixed(4) : '—'}</div>
-          <div>buildProgress: {bus ? bus.buildProgress.toFixed(4) : '—'}</div>
-          <div>suspension: {bus ? bus.suspension.toFixed(4) : '—'}</div>
-          <div>dropImpulse: {bus ? bus.dropImpulse.toFixed(4) : '—'}</div>
-          <div>familiarity: {bus ? bus.familiarity.toFixed(4) : '—'}</div>
-          <div>flatness: {bus ? bus.flatness.toFixed(4) : '—'}</div>
-          <div>tempoBpm / confidence: {bus ? `${bus.tempoBpm.toFixed(1)} / ${bus.tempoConfidence.toFixed(2)}` : '—'}</div>
-        </div>
-      ),
-    },
-    {
-      id: 'dropInternals',
-      title: 'Drop detector internals',
-      hint: "The detector's own live qualifying values, straight from inside it — not the bus. If dropImpulse never fires, this is what tells you WHICH condition is failing against real audio.",
-      content: (
-        <div className="mono readout">
-          <div>fullness: {dropDebug ? dropDebug.fullness.toFixed(4) : '—'} (needs &gt; 0.5)</div>
-          <div>onsetJump: {dropDebug ? dropDebug.onsetJump.toFixed(4) : '—'} (needs &gt; 0.06 for the rhythmic path)</div>
-          <div>noveltyPeak: {dropDebug ? dropDebug.noveltyPeak.toFixed(4) : '—'} (needs &gt; 0.3)</div>
-          <div>armed: {dropDebug ? String(dropDebug.armed) : '—'}</div>
-          {dropDebug === null && bus !== null && (
-            <div style={{ color: 'var(--warn)' }}>
-              null — either no track is loaded, or detectors are disabled (sidecar/position-only mode has no live
-              detector to read from at all).
-            </div>
-          )}
-        </div>
-      ),
-    },
-    {
-      id: 'dropLog',
-      title: 'Drop detector log',
-      hint: `Rising edges of bus.dropImpulse (>${DROP_EDGE_EPS} in one tick), most recent first. Time is seconds since this page loaded, not track position.`,
-      content:
-        dropLog.length === 0 ? (
-          <div className="empty-hint">No drops observed yet.</div>
-        ) : (
-          <div className="mono readout">
-            {dropLog.map((entry, i) => (
-              <div key={i}>
-                +{(entry.atMs / 1000).toFixed(1)}s — strength {entry.strength.toFixed(2)}
-              </div>
-            ))}
-          </div>
-        ),
-    },
-    {
-      id: 'midi',
-      title: 'MIDI in',
-      hint: 'Real Web MIDI device input — control-change activity and clock/beat sync, if a device sends it. See docs/midi.md.',
-      content: <MidiPanel onCcChange={(key, value) => bridgeRef.current?.setMidiCc(key, value)} />,
-    },
-  ]
-
   const handleTogglePlay = useCallback(() => bridgeRef.current?.togglePlayback(), [bridgeRef])
   const handleSeek = useCallback((sec: number) => bridgeRef.current?.seek(sec), [bridgeRef])
-
-  // Escape closes the debug drawer when it's open — takes priority over the
-  // demo-mode Escape handler above since the drawer only ever shows in edit
-  // mode (no conflict: at most one of the two effects is listening at a time).
-  useEffect(() => {
-    if (!showDebug) return
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') setShowDebug(false)
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [showDebug])
+  const handleMidiCcChange = useCallback((key: string, value: number) => bridgeRef.current?.setMidiCc(key, value), [bridgeRef])
 
   // Rendered exactly once, at exactly one place in the tree, regardless of
-  // viewMode — canvas.transferControlToOffscreen() is a genuine one-shot
-  // browser API (see the bridgesByCanvas comment above), so this element's
-  // identity must never change. Its size/position is purely a CSS class
-  // swap (fixed-position full-viewport vs. a small fixed corner box) —
-  // exactly the lesson AGENTS.md's "fullscreen toggle unmounting the
-  // canvas" bug already taught once, applied here to a bigger mode switch
-  // instead of a boolean.
+  // viewMode or which screen is active — canvas.transferControlToOffscreen()
+  // is a genuine one-shot browser API (see the bridgesByCanvas comment
+  // above), so this element's identity must never change. Its size/position
+  // is purely a CSS class swap (fixed-position full-viewport vs. a small
+  // fixed corner box).
   const canvasBlock = (
     <div className={`canvas-block ${viewMode === 'demo' ? 'canvas-block-demo' : 'canvas-block-corner'}`}>
       <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block' }} />
-      <button className="canvas-mode-toggle" onClick={() => setViewMode(viewMode === 'demo' ? 'edit' : 'demo')} title={viewMode === 'demo' ? 'Back to editing (Esc)' : 'Fullscreen demo'}>
-        {viewMode === 'demo' ? '✕ Edit' : '⤢'}
-      </button>
+      <IconButton
+        className="canvas-mode-toggle"
+        icon={viewMode === 'demo' ? <IconClose size={14} /> : <IconExpand size={14} />}
+        label={viewMode === 'demo' ? 'Back to editing (Esc)' : 'Fullscreen demo'}
+        onClick={() => setViewMode(viewMode === 'demo' ? 'edit' : 'demo')}
+      />
       <span className="status-pill canvas-fps-pill">{fps > 0 ? `${fps.toFixed(0)} fps` : '—'}</span>
     </div>
   )
@@ -373,10 +275,8 @@ export function App() {
         <>
           <header className="app-header">
             <strong className="app-title">Patchbay</strong>
+            <NavBar active={screen} onSelect={setScreen} />
             {saveStatus && <span className="status-pill">{saveStatus}</span>}
-            <button className={showDebug ? 'debug-toggle active' : 'debug-toggle'} onClick={() => setShowDebug((v) => !v)} title="Show/hide diagnostic panels">
-              🐞 Debug ({debugPanels.length})
-            </button>
             <span className="status-pill" style={{ marginLeft: 'auto' }}>
               signalBus msgs: {busMessageCount} · acks: {patchbayAckCount}
             </span>
@@ -385,65 +285,22 @@ export function App() {
           {error && <div className="banner banner-error">Render worker error: {error}</div>}
           {patchbayError && <div className="banner banner-warn">Config rejected (previous graph still running): {patchbayError}</div>}
 
-          <div className="workspace">
-            <div className="workspace-main">
-              <div className="workspace-main-header">
-                <h2 className="workspace-main-title">Patch graph — screen + fixtures</h2>
-                <span className="section-hint" style={{ margin: 0 }}>
-                  One unified graph: signal → operator → target chains, driving both the live screen and the fixtures
-                  on the right from the same wiring.
-                </span>
-                <button onClick={handleSaveGraph} style={{ marginLeft: 'auto' }}>
-                  Save to file
-                </button>
-              </div>
-              <PatchGraphCanvas nodes={graphNodes} onChange={setGraphNodes} targets={mergedCatalog} />
-            </div>
-
-            <aside className="workspace-rail">
-              <SectionCard title="ISF shader" hint="Load a real single-pass ISF (.fs) generator/filter as the screen scene — its inputs become routable targets below.">
-                <IsfPanel onLoad={handleIsfLoad} onClear={handleIsfClear} status={isfStatus} />
-              </SectionCard>
-              <SectionCard title="DMX out" hint="Send patched fixtures out over real Art-Net/sACN via a local relay (npm run udp-relay) — see docs/dmx-out.md.">
-                <DmxOutPanel
-                  fixtureDoc={fixtureDoc}
-                  resolvedValues={resolvedValues}
-                  status={fixtureOutStatus}
-                  onConnect={(config) => bridgeRef.current?.setFixtureOut(config)}
-                  onDisconnect={() => bridgeRef.current?.setFixtureOut(null)}
-                />
-              </SectionCard>
-              <SectionCard title="OSC in" hint="Route a live incoming OSC message into the graph — see docs/osc.md.">
-                <OscInPanel status={oscInStatus} onConnect={(url) => bridgeRef.current?.setOscIn(url)} onDisconnect={() => bridgeRef.current?.setOscIn(null)} />
-              </SectionCard>
-              <SectionCard title="Fixtures">
-                <FixtureManager doc={fixtureDoc} onChange={handleFixtureDocChange} />
-              </SectionCard>
-              <SectionCard title="Fixture visuals">
-                <FixtureVisuals doc={fixtureDoc} resolved={resolvedValues} />
-              </SectionCard>
-            </aside>
-          </div>
-        </>
-      )}
-
-      {showDebug && viewMode === 'edit' && (
-        <>
-          <div className="debug-drawer-backdrop" onClick={() => setShowDebug(false)} />
-          <div className="debug-drawer">
-            <div className="debug-drawer-header">
-              <strong>Debug</strong>
-              <button className="debug-drawer-close" onClick={() => setShowDebug(false)} title="Close (Esc)">
-                ✕
-              </button>
-            </div>
-            <div className="debug-drawer-body">
-              {debugPanels.map((p) => (
-                <SectionCard key={p.id} title={p.title} hint={p.hint}>
-                  {p.content}
-                </SectionCard>
-              ))}
-            </div>
+          <div className="screen-outlet">
+            {screen === 'graph' && <GraphScreen nodes={graphNodes} onChange={setGraphNodes} targets={mergedCatalog} onSave={handleSaveGraph} />}
+            {screen === 'shaders' && <ShaderScreen onApply={handleIsfApply} onClear={handleIsfClear} liveStatus={isfStatus} />}
+            {screen === 'output' && (
+              <OutputScreen
+                fixtureDoc={fixtureDoc}
+                onFixtureDocChange={handleFixtureDocChange}
+                resolvedValues={resolvedValues}
+                dmxProps={{ status: fixtureOutStatus, onConnect: (config) => bridgeRef.current?.setFixtureOut(config), onDisconnect: () => bridgeRef.current?.setFixtureOut(null) }}
+                oscInProps={{ status: oscInStatus, onConnect: (url) => bridgeRef.current?.setOscIn(url), onDisconnect: () => bridgeRef.current?.setOscIn(null) }}
+                onMidiCcChange={handleMidiCcChange}
+              />
+            )}
+            {screen === 'diagnostics' && (
+              <DiagnosticsScreen bus={bus} graphErrorCount={graphErrors.length} routedFixtureChannelCount={Object.keys(resolvedValues).length} dropDebug={dropDebug} dropLog={dropLog} />
+            )}
           </div>
         </>
       )}

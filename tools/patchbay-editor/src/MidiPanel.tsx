@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { MidiInput, isWebMidiSupported, type MidiInputStatus } from '../../../src/midi/midi-input'
 import type { MidiClockState } from '../../../src/midi/midi-clock'
+import { Button } from './ui/Button'
+import { Badge } from './ui/Badge'
 
 const CC_LOG_MAX = 8
 const CLOCK_POLL_MS = 100
@@ -68,10 +70,18 @@ export function MidiPanel({ onCcChange }: MidiPanelProps) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 }}>
       <div style={{ display: 'flex', gap: 6 }}>
-        {!status.connected ? <button onClick={connect}>Connect MIDI</button> : <button onClick={disconnect}>Disconnect</button>}
+        {!status.connected ? <Button onClick={connect}>Connect MIDI</Button> : <Button onClick={disconnect}>Disconnect</Button>}
       </div>
       <div className="mono readout">
-        <div>{status.connected ? `connected — ${status.deviceNames.length ? status.deviceNames.join(', ') : 'no input ports'}` : (status.message ?? 'disconnected')}</div>
+        <div>
+          {status.connected ? (
+            <>
+              <Badge tone="ok">connected</Badge> {status.deviceNames.length ? status.deviceNames.join(', ') : 'no input ports'}
+            </>
+          ) : (
+            (status.message ?? 'disconnected')
+          )}
+        </div>
         <div>
           clock: {clockState.running ? `${clockState.bpm.toFixed(1)} bpm (confidence ${clockState.confidence.toFixed(2)})` : 'not running'} — beatPhase{' '}
           {clockState.beatPhase.toFixed(2)}, barPhase {clockState.barPhase.toFixed(2)}

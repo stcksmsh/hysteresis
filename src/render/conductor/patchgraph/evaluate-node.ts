@@ -4,7 +4,11 @@ function clamp01(v: number): number {
   return Math.max(0, Math.min(1, v))
 }
 
-function applyCurve(kind: CurveKind, v: number): number {
+// Exported so the patchbay editor's curve-shape preview widget can render
+// the exact real math instead of a separate hand-drawn approximation that
+// could silently drift from what actually runs (see NodeFields' own
+// CurvePreview in tools/patchbay-editor/src/node-fields.tsx).
+export function applyCurve(kind: CurveKind, v: number): number {
   switch (kind) {
     case 'linear':
       return v

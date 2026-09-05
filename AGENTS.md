@@ -1865,3 +1865,88 @@ skip past. Wiring the 5 sidecar-only stem-presence signals into any route (they 
 `--stems`-analyzed track to ever be nonzero, a different, narrower case than the 6 live signals
 above). Any fixture/DMX-side default routing for these same 6 signals (`fixture-document.ts`/
 `FixtureOutput` untouched this session — screen-only).
+
+## Patchbay editor redesign: navigation shell, design system, and a real shader-authoring screen (2026-08-25)
+
+User asked for the editor's UI to be genuinely finished-feeling ("spotless... noone will see it
+and think anything bad") across three axes confirmed up front: visual/interaction polish,
+navigation/information architecture, and a real new screen for authoring `.hyst`/
+`HYSTERESIS_SCRIPT` shaders — which had **zero** in-editor support before this (file-picker load
+only, no text editor, no `.hyst` awareness at all). Also asked to "expand" the tool to catch up
+with what's landed since it was last touched. Did a real plan-mode design pass first, grounded in
+a dedicated Explore-agent inventory of the entire existing tool (every file, the actual render
+tree, every panel's real interaction model) before designing anything. `claude-in-chrome` was
+checked twice (start of session, and again the next day) and was not connected either time — same
+standing "never verified in a real browser" caveat this tool's whole history carries; everything
+below is typechecked + dev-server-transform-verified + a real HTTP round-trip test of both save
+endpoints, not eyeballed.
+
+**Navigation**: replaced the single dense workspace (graph hero + a permanent 320px rail + an
+overlay debug drawer) with 4 real screens behind a persistent nav bar — **Patch Graph** (now full
+width, no rail competing for it), **Shaders** (new), **Output** (Fixtures + Fixture Visuals +
+DMX/OSC/MIDI, consolidated — MIDI moved here from its old home buried inside the debug drawer,
+since connecting a controller is I/O setup, not a diagnostic), **Diagnostics** (the same 4
+debug-drawer panels, promoted from a slide-in overlay to a real screen). The canvas + transport
+bar keep their exact prior DOM position/CSS-class-swap mechanism (`App.tsx`'s `canvasBlock`
+comment) — `transferControlToOffscreen()` is still one-shot, that constraint didn't change.
+
+**Design system** (`tools/patchbay-editor/src/ui/`): `Button`/`IconButton`/`Select`/`TextInput`/
+`Toggle`/`Badge`/`Card`, plus a hand-authored inline-SVG icon set (`icons.tsx`) replacing the raw
+emoji (🐞⤢✕⊡▶⏸📁) every panel used before. `FixtureManager`/`DmxOutPanel`/`OscInPanel`/
+`MidiPanel` — the four panels the redesign's own inventory flagged as the biggest visual
+inconsistency (ad hoc inline styles vs. the graph canvas's shared classes) — retrofit onto these
+primitives; internal logic/state untouched, presentation only, to keep the risk of breaking real
+WebSerial/WebMIDI wiring low. `NumberInput` adds real click-and-drag-to-scrub (the Figma/After-
+Effects-style number field gesture) on top of the native input — a plain click still focuses it
+for typing, only real horizontal movement past a small threshold engages the drag — the concrete
+"usable, easily navigable" win for gain/offset/threshold/cut fields that only ever accepted typed
+values before. `node-fields.tsx`'s `curve` node also gained a small inline SVG sparkline preview
+next to its KIND select, driven by `evaluate-node.ts`'s real `applyCurve()` (newly exported for
+exactly this — so the preview can never drift from what actually runs), and `envelope`'s live
+attack/release-override state (previously only visible via a nub tooltip) now shows as a `Badge`
+in the inspector too.
+
+**Shaders screen** (`tools/patchbay-editor/src/shaders/`, new) — the actual centerpiece. Added
+**CodeMirror 6** as a devDependency (real syntax highlighting/bracket-matching/undo — the one
+deliberate new dependency this pass adds, confirmed with the user first, since unlike
+`resize`/drag-and-drop this tool already reaches for natively, there's no browser primitive for
+real code editing). A `.hyst` file is edited as three tabs — Header (JSON), GLSL, and, genuinely
+new, **Script** (`HYSTERESIS_SCRIPT`'s JS edited unescaped in its own pane, not hand-escaped
+JSON-string text) — via `hyst-source.ts`'s `splitHystSource`/`buildHystSource`, a pure text
+reshape, **not** a second parser: the real `parseIsf()` stays the sole authority on validity, both
+for live debounced parse feedback while typing and for the Apply button, which is gated only on
+the header actually being well-formed JSON (the minimum needed to construct any source text at
+all) — a header that's valid JSON but semantically wrong still gets sent, and the worker's own
+real rejection is what's authoritative, exactly like every other loading path in this tool already
+works. Apply calls the exact same `bridge.setIsfShader()` path the old file-picker-only `IsfPanel`
+used; the always-visible canvas becomes the live preview the instant it succeeds, no second canvas
+needed. Template gallery seeded from the two real, checked-in example shaders
+(`examples/isf/julia.hyst`, `julia-autopilot.hyst`, pulled in via Vite `?raw` imports) — both
+existed as files reachable from nowhere in the tool before this. Save extends the existing
+dev-only Vite middleware pattern (`serialize-config.ts`'s `saveToFile`/`patchbaySavePlugin`) with
+a sibling endpoint (`save-shader.ts`/`patchbaySaveShaderPlugin`) scoped to `examples/isf/`, same
+restricted-prefix + no-path-separators + resolved-path-must-stay-under-dir discipline — verified
+directly with a real HTTP POST (wrote and cleaned up a throwaway file) and a real rejected
+path-traversal attempt (`../../src/evil.hyst` → 400), not just read from the code. `IsfPanel.tsx`
+is deleted, not kept alongside the new screen — its one capability (load-by-file/drag-drop)
+is subsumed into the Shaders screen's own file list.
+
+**Verified**: `npm run typecheck` (all 4 tsconfigs) and `npm test` (341, unchanged — this redesign
+touches no logic the suite covers) green throughout. `npm run patchbay`'s dev server: every
+new/changed module (30 files) fetched and transformed with no errors, both save endpoints
+round-tripped for real over HTTP. `npm run build`/`build:lib` confirmed byte-identical in output
+size to before this session (this tool has never been reachable from either, and stays that way).
+The editor's own real production build (`vite build --config vite.patchbay-editor.config.ts`,
+rarely exercised but real) also still succeeds with CodeMirror bundled in (810kB, a real chunk-size
+warning but not an error — a dev-tool-only bundle, not a shipping concern). Its output directory
+(`dist-patchbay-editor/`) was untracked and not gitignored before this session — added to
+`.gitignore`, a real small gap this pass happened to surface.
+
+**Not done, explicitly deferred**: minimap/multi-select/copy-paste/undo-redo/node-grouping on the
+graph canvas (real gaps, no motivating urgency this pass — flagged in the plan, not silently
+dropped); a structured drag-and-drop header-field builder for the Shaders screen (add/remove
+`INPUTS` via UI controls) — scoped out from the start as a materially bigger, separate project,
+text editing is the real deliverable here; a live browser click-through of any of this (the
+standing caveat above) — ask for one directly, or say if `claude-in-chrome` gets connected and a
+follow-up session should use it instead of the typecheck/dev-server/HTTP-round-trip fallback this
+one had to rely on.

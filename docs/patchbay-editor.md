@@ -15,6 +15,20 @@ Opens a local dev server. Use the **⤢** button (or the file picker in the
 transport bar) to load a music file and hear/see the visual react; **✕
 Edit** returns to the authoring layout.
 
+## Screens
+
+The canvas preview + transport bar are always visible (top-right in edit
+mode, full-viewport in demo mode). Below them, four screens, switched via
+the nav bar in the header:
+
+- **Patch Graph** — the node canvas (see below), full width.
+- **Shaders** — author/load a `.hyst`/ISF shader (see below).
+- **Output** — Fixtures, Fixture Visuals, and DMX/OSC/MIDI I/O configuration,
+  all in one place.
+- **Diagnostics** — live bus/musical-state readouts, the drop detector's
+  internal qualifying conditions, and a log of recent drop events. Read-only;
+  nothing here shapes the graph.
+
 ## The mental model
 
 - **Signal bus** — every frame, Hysteresis computes a flat set of named,
@@ -78,13 +92,28 @@ This is the same "remap a knob into a target's real range" pattern any
 other knob-to-target route already uses; nothing envelope-specific about
 the remap itself.
 
-## Debug drawer
+## Authoring a shader (the Shaders screen)
 
-The 🐞 **Debug** button opens diagnostics that are useful while tuning but
-not part of the graph itself: live bus values, musical-state readouts, the
-drop detector's internal qualifying conditions (useful if `dropImpulse`
-isn't firing on a real track — it shows exactly which condition is
-failing), and a log of recent drop events.
+Load, author, or edit a `.hyst`/ISF shader entirely inside the tool — no
+external editor round-trip required. A shader is edited as three tabs:
+
+- **Header** — the JSON header (`INPUTS`, `PASSES`, `CATEGORIES`, etc.), raw
+  text with real syntax highlighting.
+- **GLSL** — the fullscreen pass body.
+- **Script** — the `HYSTERESIS_SCRIPT` companion (see
+  [ISF shaders](./isf-shaders.md)), edited as plain, unescaped JavaScript —
+  not the hand-escaped JSON-string text the raw file format actually uses.
+  Click **+ Add HYSTERESIS_SCRIPT** to start one on a shader that doesn't
+  have one yet.
+
+Parse feedback (a structured summary of the shader's declared inputs/passes,
+or a real `parseIsf()` error message) updates live as you type, debounced.
+**Apply** (or ⌘/Ctrl+Enter) sends the current draft to the live render
+worker — the canvas preview becomes that shader immediately on success.
+**Save** writes it to a real file under `examples/isf/`. The two bundled
+example shaders (`julia.hyst`, `julia-autopilot.hyst` — the full Julia
+autopilot, ported onto `HYSTERESIS_SCRIPT`) are one click away as starting
+templates.
 
 ## Saving a graph
 
