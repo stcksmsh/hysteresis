@@ -32,6 +32,10 @@ pub struct Knot {
     pub time: f64,
     pub phase: String,
     pub joints: [f64; 3],
+    /// Joint velocity (deg/s) passing through this knot. Absent = full stop.
+    /// Segments are quintic Hermite: C2, zero acceleration at knots.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub velocity: Option<[f64; 3]>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -71,6 +75,10 @@ pub struct SectionPlan {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Score {
     pub duration: f64,
+    /// Overlapping action: joint j samples the knot curve at `t - lag[j]`,
+    /// so elbow and wrist trail the shoulder. Zero in older scores.
+    #[serde(default, rename = "jointLagSeconds")]
+    pub joint_lag_seconds: [f64; 3],
     #[serde(default)]
     pub sections: Vec<SectionPlan>,
     pub cues: Vec<Cue>,
@@ -83,12 +91,14 @@ impl Score {
         if self.cues.is_empty() {
             return REST_POSE;
         }
-        let t = time.clamp(0.0, self.duration);
-        let i = self
-            .cues
-            .partition_point(|c| c.end < t)
-            .min(self.cues.len() - 1);
-        sample_knots(&self.cues[i].knots, t)
+        std::array::from_fn(|j| {
+            let t = (time - self.joint_lag_seconds[j]).clamp(0.0, self.duration);
+            let i = self
+                .cues
+                .partition_point(|c| c.end < t)
+                .min(self.cues.len() - 1);
+            sample_knots(&self.cues[i].knots, t)[j]
+        })
     }
 }
 
@@ -219,13 +229,39 @@ fn motif_poses(s: &Sidecar, p: &SectionPlan) -> Vec<(String, [f64; 3])> {
     };
     let rot = p.motif.bytes().next().map_or(0, |b| usize::from(b.wrapping_sub(b'A')));
     let flip = p.variation % 2 == 1;
-    (0..4)
-        .map(|k| {
-            let name = family[(rot + k * 2 + k / 2) % family.len()];
-            let side = (k % 2 == 1) != flip;
-            let q = if side { mirror(pose(name)) } else { pose(name) };
-            let label = format!("{name} {}", if side { "L" } else { "R" });
-            (label, lerp(NEUTRAL, q, feel(&p.level).amp))
+    // Candidates: each family pose on both sides. Start from the motif's own
+    // pose, then always take the unused candidate farthest from the last one,
+    // so consecutive phrases contrast instead of nudging.
+    let mut pool: Vec<(String, [f64; 3])> = family
+        .iter()
+        .flat_map(|n| [(format!("{n} R"), pose(n)), (format!("{n} L"), mirror(pose(n)))])
+        .collect();
+    let first = pool.remove((rot * 2) % pool.len());
+    let mut chosen = vec![first];
+    while chosen.len() < 4 && !pool.is_empty() {
+        let last = chosen.last().unwrap().1;
+        let far = |q: &[f64; 3]| (0..3).map(|j| (q[j] - last[j]).abs()).sum::<f64>();
+        let i = (0..pool.len())
+            .max_by(|a, b| far(&pool[*a].1).total_cmp(&far(&pool[*b].1)).then(b.cmp(a)))
+            .unwrap();
+        chosen.push(pool.remove(i));
+    }
+    // Recurrence variation: mirror the whole motif (L <-> R).
+    let amp = feel(&p.level).amp;
+    chosen
+        .into_iter()
+        .map(|(name, q)| {
+            let (name, q) = if flip {
+                let swapped = match name.rsplit_once(' ') {
+                    Some((n, "R")) => format!("{n} L"),
+                    Some((n, _)) => format!("{n} R"),
+                    None => name,
+                };
+                (swapped, mirror(q))
+            } else {
+                (name, q)
+            };
+            (name, lerp(NEUTRAL, q, amp))
         })
         .collect()
 }
@@ -312,14 +348,32 @@ fn compile(s: &Sidecar, rms: Option<&[f32]>, config: CompileConfig) -> Score {
     arrivals.dedup_by(|b, a| b.time - a.time < 0.6);
 
     let section_at = |t: f64| sections.iter().position(|p| t >= p.start && t < p.end).unwrap_or(sections.len() - 1);
+    // Evolution: each pass through a motif (every 4 steps) bends its poses
+    // by a deterministic offset, so a long section develops instead of
+    // looping; intensity also builds toward the end of each section.
+    let planned = |a: &Arrival| -> [f64; 3] {
+        let m = &motifs[a.section];
+        let base = m[a.step % m.len()].1;
+        let c = (a.step / m.len()) as i64;
+        let off = if c == 0 || sections[a.section].level == "rest" {
+            [0.0; 3]
+        } else {
+            [
+                ((c * 37) % 21 - 10) as f64,
+                ((c * 53) % 31 - 15) as f64,
+                ((c * 71) % 41 - 20) as f64,
+            ]
+        };
+        floor_safe(std::array::from_fn(|j| base[j] + off[j]))
+    };
     let mut cues = Vec::new();
     let mut q = REST_POSE;
     let mut t0 = 0.0;
     for (i, a) in arrivals.iter().enumerate() {
         let sec = &sections[a.section];
         let f = feel(&sec.level);
-        let (name, wanted) = motifs[a.section][a.step % motifs[a.section].len()].clone();
-        let wanted = floor_safe(wanted);
+        let name = motifs[a.section][a.step % motifs[a.section].len()].0.clone();
+        let wanted = planned(a);
         // Lead = time the move needs at full size (speed/accel limits, with
         // anticipation + overshoot headroom). If the bar is too short, the
         // move shrinks so it still *arrives on the beat*; it never smears
@@ -335,18 +389,32 @@ fn compile(s: &Sidecar, rms: Option<&[f32]>, config: CompileConfig) -> Score {
             lerp(q, wanted, x)
         };
         let lead = f.lead.max(move_time(q, target, f.overshoot, &limits)).min(available).max(0.12);
-        // Absorb slivers of stillness shorter than 0.25 s into the move.
-        let start = if a.time - lead - t0 < 0.25 { t0 } else { a.time - lead };
+        // Spend spare time moving, not parked: gaps under 1.5 s (drift has
+        // pre-travelled part of the move) become a slower, longer move.
+        // Rests keep their stillness.
+        let absorb = if sec.level == "rest" { 0.25 } else { 1.5 };
+        let start = if a.time - lead - t0 < absorb { t0 } else { a.time - lead };
+        let lead = a.time - start;
         if start > t0 + 1e-6 {
             cues.push(hold_cue(t0, start, q, section_at(t0), "stillness before next phrase"));
         }
         let next_start = arrivals.get(i + 1).map_or(s.duration, |n| {
             let nf = feel(&sections[n.section].level);
-            let next = floor_safe(motifs[n.section][n.step % motifs[n.section].len()].1);
+            let next = planned(n);
             let next_lead = nf.lead.max(move_time(target, next, nf.overshoot, &limits));
             (n.time - next_lead).max(a.time + f.settle + 0.1)
         });
         let end = next_start.min(s.duration).max(a.time + 0.05);
+        let progress = ((a.time - sec.start) / (sec.end - sec.start)).clamp(0.0, 1.0);
+        let build = 0.75 + 0.5 * progress;
+        // Drift: while holding, keep travelling toward the next pose, so the
+        // arm is never parked (up to 35% of the way by the next move).
+        let next_pose = arrivals.get(i + 1).map_or(target, planned);
+        let drift_share = if sec.level == "rest" { 0.0 } else { 0.35 };
+        let drift = |t: f64| {
+            let x = ((t - a.time) / (end - a.time).max(1e-6)).clamp(0.0, 1.0);
+            floor_safe(lerp(target, next_pose, drift_share * x))
+        };
         let mut knots: Vec<(f64, &'static str, [f64; 3])> = vec![(start, "start", q)];
         if config.enable_windups && f.overshoot > 0.0 && lead > 0.3 {
             // Anticipation: brief counter-move before committing.
@@ -370,33 +438,37 @@ fn compile(s: &Sidecar, rms: Option<&[f32]>, config: CompileConfig) -> Score {
         for o in &hits {
             let d = [4.0 * sign, 16.0 * sign, 30.0 * sign];
             let lo = if o.tone < 0.46 { -1.0 } else { 1.0 };
-            sustain.push((o.t - 0.22, "hit", target));
-            sustain.push((o.t, "hit", std::array::from_fn(|j| target[j] + d[j] * lo * f.amp)));
+            sustain.push((o.t - 0.22, "hit", drift(o.t - 0.22)));
+            let base = drift(o.t);
+            sustain.push((o.t, "hit", std::array::from_fn(|j| base[j] + d[j] * lo * f.amp)));
             if o.t + 0.35 < end - 0.05 {
-                sustain.push((o.t + 0.35, "hit", target));
+                sustain.push((o.t + 0.35, "hit", drift(o.t + 0.35)));
             }
         }
         if f.bounce > 0.0 {
             // Groove: dip on each beat, lift on the off-beat.
             for w in beat.windows(2).filter(|w| w[0] > settle_t + 0.1 && w[0] < end - 0.2) {
-                let b = f.bounce * f.amp;
-                sustain.push((w[0], "beat", [target[0] - 2.0 * b * sign, target[1] - 7.0 * b * sign, target[2] - 12.0 * b * sign]));
+                let b = f.bounce * f.amp * build;
+                let d = drift(w[0]);
+                sustain.push((w[0], "beat", [d[0] - 2.0 * b * sign, d[1] - 7.0 * b * sign, d[2] - 12.0 * b * sign]));
                 let off = (w[0] + w[1]) / 2.0;
                 if off < end - 0.12 {
-                    sustain.push((off, "offbeat", [target[0] + 1.0 * b * sign, target[1] + 3.0 * b * sign, target[2] + 6.0 * b * sign]));
+                    let d = drift(off);
+                    sustain.push((off, "offbeat", [d[0] + 1.0 * b * sign, d[1] + 3.0 * b * sign, d[2] + 6.0 * b * sign]));
                 }
             }
         } else if sec.level != "rest" && end - settle_t > 2.0 {
             // Quiet: one slow breath across the held pose.
             let mid = (settle_t + end) / 2.0;
-            sustain.push((mid, "breath", [target[0] + 4.0 * sign, target[1] - 6.0, target[2] + 10.0 * sign]));
+            let d = drift(mid);
+            sustain.push((mid, "breath", [d[0] + 4.0 * sign, d[1] - 6.0, d[2] + 10.0 * sign]));
         }
         sustain.sort_by(|a, b| a.0.total_cmp(&b.0));
         // Hits win over nearby beat knots.
         let hit_times: Vec<f64> = hits.iter().map(|o| o.t).collect();
         sustain.retain(|k| k.1 == "hit" || hit_times.iter().all(|h| (k.0 - h).abs() > 0.35));
         knots.extend(sustain);
-        knots.push((end, "recovery", target));
+        knots.push((end, "recovery", drift(end)));
         knots.sort_by(|a, b| a.0.total_cmp(&b.0));
         let mut cleaned: Vec<(f64, &'static str, [f64; 3])> = Vec::new();
         for k in knots {
@@ -410,7 +482,7 @@ fn compile(s: &Sidecar, rms: Option<&[f32]>, config: CompileConfig) -> Score {
         let mut prev = (start, q);
         for (i, (t, phase, want)) in cleaned.into_iter().enumerate() {
             let joints = if i == 0 { q } else { constrain(prev.1, floor_safe(want), t - prev.0, &limits) };
-            out.push(Knot { time: t, phase: phase.into(), joints });
+            out.push(Knot { time: t, phase: phase.into(), joints, velocity: None });
             prev = (t, joints);
         }
         q = prev.1;
@@ -460,7 +532,14 @@ fn compile(s: &Sidecar, rms: Option<&[f32]>, config: CompileConfig) -> Score {
             c.section = None;
         }
     }
-    Score { duration: s.duration, sections, cues, limits }
+    add_flow(&mut cues, &limits, 0.9);
+    Score {
+        duration: s.duration,
+        joint_lag_seconds: [0.0, 0.05, 0.11],
+        sections,
+        cues,
+        limits,
+    }
 }
 
 /// Lowest joint/tip height (cm) for the assumed 32/26/12 cm planar links.
@@ -509,8 +588,8 @@ fn hold_cue(start: f64, end: f64, q: [f64; 3], section: usize, why: &str) -> Cue
         arrival_anchor: None,
         section: Some(section),
         knots: vec![
-            Knot { time: start, phase: "hold".into(), joints: q },
-            Knot { time: end, phase: "hold".into(), joints: q },
+            Knot { time: start, phase: "hold".into(), joints: q, velocity: None },
+            Knot { time: end, phase: "hold".into(), joints: q, velocity: None },
         ],
     }
 }
@@ -668,6 +747,22 @@ fn novelty_cuts(features: &Features, duration: f64) -> Vec<f64> {
     cuts
 }
 
+/// Novelty peaks sit where *all* features changed most, which on the supplied
+/// track landed 6–9 s after the audible loudness change. Move each cut to the
+/// steepest loudness step (2 s windows) within ±6 s, in the direction of the
+/// overall change: a rise when entering louder material, a fall when leaving.
+fn refine_cut(features: &Features, prev: f64, cut: f64, next: f64) -> f64 {
+    let loud = |a: f64, b: f64| features.mean(a.max(0.0), b)[0];
+    // Direction from whole neighbouring sections, so a short dip or push
+    // right at the edge cannot flip it.
+    let dir = (loud(cut, next) - loud(prev, cut)).signum();
+    let steps = (-60..=60).map(|k| cut + f64::from(k) * 0.1);
+    steps
+        .map(|t| (dir * (loud(t, t + 2.0) - loud(t - 2.0, t)), t))
+        .max_by(|a, b| a.0.total_cmp(&b.0).then(b.1.total_cmp(&a.1)))
+        .map_or(cut, |(_, t)| t)
+}
+
 /// Split the song into sustained regimes, then label recurrences.
 /// Uses sidecar sections only when they describe real structure (>=2 long
 /// sections); otherwise multi-feature novelty (see `novelty_cuts`).
@@ -684,8 +779,15 @@ fn plan_sections(s: &Sidecar, rms: Option<&[f32]>) -> Vec<SectionPlan> {
     } else {
         novelty_cuts(&features, s.duration)
     };
-    let mut cuts: Vec<f64> = cuts
-        .into_iter()
+    let mut cuts: Vec<f64> = cuts;
+    cuts.sort_by(f64::total_cmp);
+    let rough = cuts.clone();
+    let mut cuts: Vec<f64> = (0..rough.len())
+        .map(|i| {
+            let prev = if i == 0 { 0.0 } else { rough[i - 1] };
+            let next = rough.get(i + 1).copied().unwrap_or(s.duration);
+            refine_cut(&features, prev, rough[i], next)
+        })
         .map(|t| nearest_beat(&s.beats, t).unwrap_or(t))
         .filter(|t| *t >= MIN_SECTION * 0.75 && *t <= s.duration - MIN_SECTION * 0.75)
         .collect();
@@ -796,13 +898,114 @@ fn sample_knots(k: &[Knot], t: f64) -> [f64; 3] {
     }
     for w in k.windows(2) {
         if t <= w[1].time {
-            let x = ((t - w[0].time) / (w[1].time - w[0].time)).clamp(0., 1.);
-            let q = x * x * x * (10. + x * (-15. + 6. * x));
-            return std::array::from_fn(|j| w[0].joints[j] + (w[1].joints[j] - w[0].joints[j]) * q);
+            let span = w[1].time - w[0].time;
+            let x = ((t - w[0].time) / span).clamp(0., 1.);
+            return hermite(&w[0], &w[1], span, x).0;
         }
     }
     k.last().unwrap().joints
 }
+/// Quintic Hermite (position, velocity, zero acceleration at both ends):
+/// returns position, velocity, acceleration at normalized `x`.
+/// With no velocities this is exactly the classic 10-15-6 smoothstep.
+fn hermite(a: &Knot, b: &Knot, span: f64, x: f64) -> ([f64; 3], [f64; 3], [f64; 3]) {
+    let (x2, x3, x4, x5) = (x * x, x * x * x, x.powi(4), x.powi(5));
+    let h0 = 1.0 - 10.0 * x3 + 15.0 * x4 - 6.0 * x5;
+    let h0d = -30.0 * x2 + 60.0 * x3 - 30.0 * x4;
+    let h0dd = -60.0 * x + 180.0 * x2 - 120.0 * x3;
+    let h1 = x - 6.0 * x3 + 8.0 * x4 - 3.0 * x5;
+    let h1d = 1.0 - 18.0 * x2 + 32.0 * x3 - 15.0 * x4;
+    let h1dd = -36.0 * x + 96.0 * x2 - 60.0 * x3;
+    let h4 = -4.0 * x3 + 7.0 * x4 - 3.0 * x5;
+    let h4d = -12.0 * x2 + 28.0 * x3 - 15.0 * x4;
+    let h4dd = -24.0 * x + 84.0 * x2 - 60.0 * x3;
+    let va = a.velocity.unwrap_or([0.0; 3]);
+    let vb = b.velocity.unwrap_or([0.0; 3]);
+    let mut out = ([0.0; 3], [0.0; 3], [0.0; 3]);
+    for j in 0..3 {
+        let (p0, p1) = (a.joints[j], b.joints[j]);
+        out.0[j] = p0 * h0 + p1 * (1.0 - h0) + span * (va[j] * h1 + vb[j] * h4);
+        out.1[j] = (p0 - p1) * h0d / span + va[j] * h1d + vb[j] * h4d;
+        out.2[j] = (p0 - p1) * h0dd / (span * span) + (va[j] * h1dd + vb[j] * h4dd) / span;
+    }
+    out
+}
+
+/// Give knots velocity where motion continues through them (monotone,
+/// harmonic-mean tangents; zero at reversals and holds), then shrink any
+/// velocity whose adjacent segments would break speed/acceleration limits.
+fn add_flow(cues: &mut [Cue], limits: &JointLimits, flow: f64) {
+    // Flatten; a cue's first knot duplicates the previous cue's last one.
+    let mut refs: Vec<(usize, usize)> = Vec::new();
+    for (c, cue) in cues.iter().enumerate() {
+        for k in 0..cue.knots.len() {
+            if c > 0 && k == 0 {
+                continue;
+            }
+            refs.push((c, k));
+        }
+    }
+    let knot = |cues: &[Cue], r: (usize, usize)| cues[r.0].knots[r.1].clone();
+    let mut vel = vec![[0.0; 3]; refs.len()];
+    for i in 1..refs.len().saturating_sub(1) {
+        let (a, b, c) = (knot(cues, refs[i - 1]), knot(cues, refs[i]), knot(cues, refs[i + 1]));
+        if b.phase == "hold" || b.phase == "hit" {
+            continue;
+        }
+        vel[i] = std::array::from_fn(|j| {
+            let d1 = (b.joints[j] - a.joints[j]) / (b.time - a.time);
+            let d2 = (c.joints[j] - b.joints[j]) / (c.time - b.time);
+            if d1 * d2 > 0.0 {
+                flow * 2.0 / (1.0 / d1 + 1.0 / d2)
+            } else {
+                0.0
+            }
+        });
+    }
+    let ok = |a: &Knot, b: &Knot| {
+        let span = b.time - a.time;
+        (0..=24).all(|k| {
+            let (_, v, acc) = hermite(a, b, span, f64::from(k) / 24.0);
+            (0..3).all(|j| {
+                v[j].abs() <= limits.max_speed_degrees_per_second[j]
+                    && acc[j].abs() <= limits.max_acceleration_degrees_per_second2[j]
+            })
+        })
+    };
+    for _ in 0..12 {
+        for (i, r) in refs.iter().enumerate() {
+            cues[r.0].knots[r.1].velocity = (vel[i] != [0.0; 3]).then_some(vel[i]);
+        }
+        let mut changed = false;
+        for i in 1..refs.len() {
+            if !ok(&knot(cues, refs[i - 1]), &knot(cues, refs[i])) {
+                for k in [i - 1, i] {
+                    vel[k] = vel[k].map(|v| v * 0.7);
+                }
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    // Anything still over the limit falls back to full stops (known safe).
+    for i in 1..refs.len() {
+        if !ok(&knot(cues, refs[i - 1]), &knot(cues, refs[i])) {
+            vel[i - 1] = [0.0; 3];
+            vel[i] = [0.0; 3];
+        }
+    }
+    for (i, r) in refs.iter().enumerate() {
+        cues[r.0].knots[r.1].velocity = (vel[i] != [0.0; 3]).then_some(vel[i]);
+    }
+    // Keep the duplicated cue-boundary knots identical.
+    for c in 1..cues.len() {
+        let last = cues[c - 1].knots.last().unwrap().velocity;
+        cues[c].knots[0].velocity = last;
+    }
+}
+
 fn percentile(v: &[f32], q: f64) -> f32 {
     let mut x = v
         .iter()
@@ -869,10 +1072,13 @@ mod tests {
         assert!(moves.len() >= 4, "{}", moves.len());
         for c in moves {
             let k = |p: &str| c.knots.iter().find(|k| k.phase == p).unwrap().joints;
-            let travel = (0..3).map(|j| (k("arrival")[j] - k("start")[j]).abs()).fold(0.0, f64::max);
-            let drift = (0..3).map(|j| (k("recovery")[j] - k("arrival")[j]).abs()).fold(0.0, f64::max);
-            // Regression: truncated leads once smeared the move across the bar.
-            assert!(drift < 0.35 * travel.max(20.0), "{}: travel {travel:.1} drift {drift:.1}", c.gesture);
+            let dist = |a: [f64; 3], b: [f64; 3]| (0..3).map(|j| (a[j] - b[j]).abs()).fold(0.0, f64::max);
+            let done = dist(k("arrival"), k("start"));
+            let total = dist(k("recovery"), k("start"));
+            // Regression: truncated leads once smeared the move across the
+            // bar (arrival ~7% of the phrase's travel). Drift toward the
+            // next pose after arriving is intended and stays secondary.
+            assert!(total < 20.0 || done >= 0.6 * total, "{}: done {done:.1} of {total:.1}", c.gesture);
         }
     }
 

@@ -337,20 +337,6 @@ pub fn audit_score(score: &hyst_compile::Score) -> Result<serde_json::Value, Str
         for pair in cue.knots.windows(2) {
             let dt = pair[1].time - pair[0].time;
             require(dt.is_finite() && dt > 0.0, "non-increasing knot times")?;
-            for j in 0..3 {
-                let distance = (pair[1].joints[j] - pair[0].joints[j]).abs();
-                speed[j] = speed[j].max(distance * 1.875 / dt);
-                acceleration[j] =
-                    acceleration[j].max(distance * (10.0 / 3.0_f64.sqrt()) / dt.powi(2));
-                require(
-                    speed[j] <= score.limits.max_speed_degrees_per_second[j] + 1e-7,
-                    "speed limit exceeded",
-                )?;
-                require(
-                    acceleration[j] <= score.limits.max_acceleration_degrees_per_second2[j] + 1e-7,
-                    "acceleration limit exceeded",
-                )?;
-            }
         }
         if cue.gesture == "hold" {
             require(
@@ -382,6 +368,30 @@ pub fn audit_score(score: &hyst_compile::Score) -> Result<serde_json::Value, Str
         (end - score.duration).abs() < 1e-9,
         "score does not cover duration",
     )?;
+    // Knots may carry velocity (Hermite flow) and joints may lag, so check
+    // speed/acceleration densely: 1 kHz finite differences, 2% tolerance.
+    let h = 0.001;
+    let mut prev = (score.sample(0.0), score.sample(h));
+    for i in 2..=(score.duration / h) as usize {
+        let q = score.sample(i as f64 * h);
+        for j in 0..3 {
+            let v = (q[j] - prev.1[j]) / h;
+            let a = (q[j] - 2.0 * prev.1[j] + prev.0[j]) / (h * h);
+            speed[j] = speed[j].max(v.abs());
+            acceleration[j] = acceleration[j].max(a.abs());
+        }
+        prev = (prev.1, q);
+    }
+    for j in 0..3 {
+        require(
+            speed[j] <= score.limits.max_speed_degrees_per_second[j] * 1.02,
+            "speed limit exceeded",
+        )?;
+        require(
+            acceleration[j] <= score.limits.max_acceleration_degrees_per_second2[j] * 1.02,
+            "acceleration limit exceeded",
+        )?;
+    }
     let mut clearance = f64::INFINITY;
     let arm = Arm::default();
     for i in 0..=(score.duration * 120.0).ceil() as usize {
@@ -404,7 +414,7 @@ pub fn audit_score(score: &hyst_compile::Score) -> Result<serde_json::Value, Str
         "exactArrivalAnchors":anchors,
         "maxSpeedDegreesPerSecond":speed,"maxAccelerationDegreesPerSecond2":acceleration,
         "sampledFloorClearanceCm":clearance,"clearanceSamplingHz":120,
-        "continuity":"C2 at quintic knots; positions shared across cues",
+        "continuity":"C2 quintic Hermite; positions/velocities shared across cues; joint lags applied",
         "seek":"deterministic random access"
     }))
 }

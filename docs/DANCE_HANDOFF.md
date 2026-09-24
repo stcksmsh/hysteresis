@@ -166,3 +166,16 @@ pose); lead now reserved, move shrinks if bar too short. Regression test proven
 by mutation. Real track: tip −65..63 cm × 8..70 cm, 98 cues, 97 exact arrivals,
 8.08 cm clearance, still ~16% of time. Videos rendered offline from score (PIL +
 ffmpeg, scratchpad render.py, not in repo). Perceptual verdict pending user.
+
+## Continuation — 2026-09-24 flow, section timing
+
+User on v3: loud-section entry/exit ~late ("undershoots"), motion "rigid, one
+thing then another, no fluidity, no evolution"; loud part "looks decent", beat
+OK, missing "feel". Reference: OK Go "Love" (chaotic, loose on beat, energetic).
+Section edges: novelty cuts landed 6–9 s after loudness change (91→97.9,
+~129.5→135.1); signed loudness-step refinement now 92.0/129.7. Flow: Hermite
+knot velocities, overlapping joint lag, drift toward next pose, contrast-max
+motif, per-cycle pose evolution, section build, gaps absorbed into slower moves.
+Real track: loud still 3%, mid 6%, quiet 22% of time; 100 cues, audit pass,
+8.16 cm clearance. v4 video rendered via `sample_score`. Not yet: chaos/loose
+beat per OK Go reference, multi-arm ensemble.

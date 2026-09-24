@@ -877,3 +877,11 @@ bar lines/strong onsets, anticipation/overshoot, beat bounces, onset hits,
 frozen rests; floor guard >=8 cm; limits = assumed servo class. Fixed lead-
 truncation smear bug. Tests rewritten (compile 5, acceptance 6). Real track
 audit pass. Perceptual quality awaiting user review of rendered MP4.
+
+### Song slice — flow + section-edge timing (2026-09-24)
+
+Section cuts refined to signed loudness steps (first loud block now 92.0–129.7s,
+was 97.9–135.1). Knots gain optional velocity (C2 quintic Hermite, limit-checked),
+Score gains `jointLagSeconds` (overlapping action), held bars drift toward next
+pose, motif picks max-contrast poses, poses evolve per cycle. Audit now dense
+1 kHz. New `sample_score` example for offline renders. Tests green; clippy clean.

@@ -53,14 +53,24 @@ Compiler splits song into sections (z-scored loudness/5 bands/centroid/flatness,
 | rest | section | fold to rest pose | frozen |
 
 Poses come from 8 full-range key poses (rise, reach, arc, fold, sweep, hook,
-coil, open) + mirrors; section motif = 4 poses alternating sides, chosen by
-timbre family. Similar later sections replay the motif mirrored. Moves arrive
-exactly on bar lines (downbeat phase = beat parity with most onset strength;
-provisional) or on a strong onset within 0.3s of the bar. Lead time is reserved
-before each arrival; if a bar is too short, the move shrinks rather than
-smearing past the beat. Strong onsets during a held bar become hits; accents
-inside a big move's wind-up are not hit separately (known gap). Every knot pose
-keeps >=8 cm floor clearance.
+coil, open) + mirrors. Section motif = 4 poses, each the candidate farthest from
+the previous one; similar later sections replay it mirrored, and every further
+pass through a motif bends its poses (evolution); bounce depth builds across a
+section. Moves arrive exactly on bar lines (downbeat phase = beat parity with
+most onset strength; provisional) or on a strong onset within 0.3s. Lead time
+is reserved before each arrival; if a bar is too short the move shrinks rather
+than smearing past the beat. Spare time becomes slower travel, not parking.
+
+Flow: knots carry velocity where motion continues (monotone harmonic-mean
+tangents, zero at reversals, holds and hits), segments are C2 quintic Hermite,
+velocities shrink until 25-point checks pass speed/accel limits. During held
+bars the arm drifts up to 35% toward the next pose. Overlapping action: elbow
+and wrist trail the shoulder by 0.05/0.11 s (`jointLagSeconds`). Strong onsets
+in held bars become hits; accents inside a move's wind-up are not hit (gap).
+Every knot pose keeps >=8 cm floor clearance.
+
+Section edges: novelty cuts are refined to the steepest loudness step within
+±6 s in the direction of the whole-section change (fixed 6–9 s late edges).
 
 ## Remote mode
 
@@ -104,15 +114,19 @@ phrasing, not verified verse/chorus or semantic dance analysis.
 arrival; brightness blends across cue boundaries. Both use audio time + score delay.
 
 ```sh
-cargo run -p hyst-previz --example audit_score -- "$media/instant-crush.score.json"
+cargo run --release -p hyst-previz --example audit_score -- "$media/instant-crush.score.json"
+cargo run --release -p hyst-previz --example sample_score -- "$media/instant-crush.score.json" 30 > frames.json
 ```
 
+`sample_score` dumps joint angles for offline video rendering, so rendered
+videos use the exact Rust sampler (velocities + joint lag).
+
 Audit checks complete coverage, shared boundary poses, exact arrival knots, joint
-ranges and analytic quintic speed/acceleration extrema. Floor clearance is sampled
+ranges and 1 kHz finite-difference speed/acceleration (2% tolerance). Floor clearance is sampled
 at 120Hz, not proven collision-free. Holds and deterministic random-access sampling
 are checked. Exported `instant-crush.audit.json` records supplied-track results.
 
-Current supplied track: 19 sections, 98 cues, 97 exact arrivals. Max joint
-speeds 240/300/338 degrees/s, minimum sampled floor clearance 8.08 cm. Audit logic lives in
+Current supplied track: 19 sections (first loud block 92.0–129.7s), 100 cues, 99 exact arrivals. Max joint
+speeds 205/300/279 degrees/s, minimum sampled floor clearance 8.16 cm. Audit logic lives in
 `hyst_previz::audit_score`, shared by CLI and acceptance tests.
 Human-quality dance remains unproven; the preview is ready for listening review.
