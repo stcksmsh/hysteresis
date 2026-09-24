@@ -893,3 +893,10 @@ Planner = calm phrase home path + voice layer following the dominant element
 `scripts/arm_elements.py` (heuristic HPSS/mid-side; Demucs weights host is
 network-blocked in cloud env). Section cuts snap to bar lines at the start of
 the loudness change. Tests: element-following acceptance test added.
+
+### Song slice — always-on groove layer (2026-09-24)
+
+`grooveSlots` (per-8th kick/snare strength) from `scripts/arm_elements.py`;
+compiler adds a groove under every style (dip on kick, snap on snare), voice
+layer eases back when drums dominate. Groove sized to acceleration limits.
+Tests: groove acceptance test (mutation-checked). v6 video rendered.

@@ -201,8 +201,17 @@ fn with_elements(json: &str) -> String {
     let melody: Vec<f64> = (0..n)
         .map(|i| if t(i) < 24.0 { 0.5 - 0.5 * (std::f64::consts::TAU * t(i) / 8.0).cos() } else { -1.0 })
         .collect();
-    v["elements"] = json!({"drums": vec![0.1; n], "bass": bass, "vocals": vocals,
-        "synth": vec![0.1; n], "melody": melody, "melodyOnsets": []});
+    // Kick on every beat, snare on 2 and 4, weak off-beats.
+    let slots: Vec<serde_json::Value> = (0..(n as f64 / RATE / 0.25) as usize)
+        .map(|i| {
+            let t = i as f64 * 0.25;
+            let on_beat = i % 2 == 0;
+            let backbeat = i % 4 == 2;
+            json!([t, if on_beat && !backbeat { 0.9 } else { 0.05 }, if backbeat { 0.9 } else { 0.05 }])
+        })
+        .collect();
+    v["elements"] = json!({"drums": vec![0.6; n], "bass": bass, "vocals": vocals,
+        "synth": vec![0.1; n], "melody": melody, "melodyOnsets": [], "grooveSlots": slots});
     v.to_string()
 }
 
@@ -220,6 +229,31 @@ fn arm_follows_the_dominant_element() {
     let y = |t: f64| tip(score.sample(t)).1;
     let (high, low) = ((y(12.0) + y(20.0)) / 2.0, (y(8.0) + y(16.0)) / 2.0);
     assert!(high > low + 4.0, "tip height high-melody {high:.1} vs low {low:.1}");
+}
+
+#[test]
+fn groove_dips_on_kicks_under_every_style() {
+    let score = compile_sidecar_json(&with_elements(&song(&[Part(48.0, 0.6, 0.5)], &[]))).unwrap();
+    // Kick slots at t = k*1.0 (+0, beats 1 and 3 of each 2 s bar); off-beat
+    // slots at +0.25. Elbow (shoulder-relative) must sit lower on kicks.
+    let knot_at = |t: f64| {
+        score
+            .cues
+            .iter()
+            .flat_map(|c| &c.knots)
+            .find(|k| (k.time - t).abs() < 1e-9)
+            .map(|k| k.joints[1])
+    };
+    let mut deltas = Vec::new();
+    for i in 4..44 {
+        let t = i as f64;
+        if let (Some(kick), Some(off)) = (knot_at(t), knot_at(t + 0.25)) {
+            deltas.push(off - kick);
+        }
+    }
+    assert!(deltas.len() > 20, "{}", deltas.len());
+    let dip = deltas.iter().sum::<f64>() / deltas.len() as f64;
+    assert!(dip > 3.0, "mean elbow dip on kicks {dip:.2} deg (vocal part and bass part)");
 }
 
 #[test]

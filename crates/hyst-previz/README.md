@@ -52,16 +52,22 @@ node --import tsx "$PWD/scripts/analyze.ts" "$media/instant-crush-analysis.wav" 
    gliding in over up to a bar and landing exactly on the phrase downbeat.
    Poses: 8 full-range key poses + mirrors; motif = 4 maximally contrasting
    poses; recurring sections mirror it; each further cycle bends poses.
-3. **Voice layer**: moves to whichever element dominates (`elements` from
+3. **Groove layer** (always on, except rest): at every 8th-note slot the
+   body dips by the detected kick strength and the wrist snaps by the snare
+   strength (`elements.grooveSlots`), sized by drum loudness. Keeps time
+   under every style, and leads when little else plays (intros). Sized to
+   the acceleration budget: a 16th-note rebound was tried and rejected
+   (a servo cannot bounce more than ~3° at that rate within 2000°/s²).
+4. **Voice layer**: moves to whichever element dominates (`elements` from
    `scripts/arm_elements.py`; HPSS + mid/side heuristic, not neural stems),
    weights = softmax over ±1.5 s element levels, so styles cross-fade:
    - vocals: pulls toward a raised pose as the melody rises, lowered as it
      falls; wrist articulates sung notes
    - synth: flowing orbit, one loop per 2 bars
    - bass: heavy side-to-side swing per bar, arm sinks
-   - drums: dip on the beat
-   Without `elements`, only the drums layer (from energy) is active.
-4. **Flow**: half-beat knots with velocity (C2 quintic Hermite, limit-
+   Drums are handled by the groove layer; when they dominate, the voice
+   layer eases back. Without `elements`, the groove is a steady on-beat pulse.
+5. **Flow**: half-beat knots with velocity (C2 quintic Hermite, limit-
    checked), elbow/wrist lag 0.05/0.11 s. Knot `phase` names the element the
    arm follows (label hysteresis); the viewer shows it.
 

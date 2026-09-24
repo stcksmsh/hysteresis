@@ -199,6 +199,19 @@ fn parse_elements(v: &serde_json::Value, required: usize) -> Result<Elements, St
         synth: series("synth", 0.0)?,
         melody: series("melody", -1.0)?,
         melody_onsets: onsets,
+        groove: v
+            .get("grooveSlots")
+            .and_then(|x| x.as_array())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|r| {
+                        let r = r.as_array()?;
+                        let g: Vec<f64> = r.iter().filter_map(|x| x.as_f64()).collect();
+                        (g.len() == 3 && g.iter().all(|x| x.is_finite())).then(|| [g[0], g[1].clamp(0.0, 1.0), g[2].clamp(0.0, 1.0)])
+                    })
+                    .collect()
+            })
+            .unwrap_or_default(),
     })
 }
 
@@ -337,6 +350,8 @@ pub struct Elements {
     pub synth: Vec<f32>,
     pub melody: Vec<f32>,
     pub melody_onsets: Vec<f64>,
+    /// `[t, kick, snare]` per 8th-note slot (0..1 relative strengths).
+    pub groove: Vec<[f64; 3]>,
 }
 
 const ELEMENTS: [&str; 4] = ["vocals", "synth", "bass", "drums"];
@@ -446,13 +461,6 @@ fn compile(s: &Sidecar, rms: Option<&[f32]>, el: Option<&Elements>, config: Comp
         let sum: f64 = e.iter().sum::<f64>().max(1e-12);
         std::array::from_fn(|k| e[k] / sum)
     };
-    let beat_phase = |t: f64| -> f64 {
-        let i = beats.partition_point(|b| *b <= t);
-        if i == 0 || i >= beats.len() {
-            return 0.0;
-        }
-        (t - beats[i - 1]) / (beats[i] - beats[i - 1])
-    };
     let bar_phase = |t: f64| -> f64 {
         let i = bars.partition_point(|b| *b <= t);
         if i == 0 || i >= bars.len() {
@@ -493,14 +501,36 @@ fn compile(s: &Sidecar, rms: Option<&[f32]>, el: Option<&Elements>, config: Comp
         let lvl = window(bass, t, 0.5);
         let v = [28.0 * b * lvl.max(0.5), -16.0 - 10.0 * lvl, 14.0 * b];
         (0..3).for_each(|j| d[j] += w[2] * v[j]);
-        // drums: dip on the beat, lift between.
-        let p = (tau * beat_phase(t)).cos();
-        let lvl = window(drums, t, 0.3);
-        let v = [-3.0 * p * side, -10.0 * p * lvl.max(0.4), -14.0 * p * lvl.max(0.4)];
-        (0..3).for_each(|j| d[j] += w[3] * v[j]);
-        (d.map(|x| x * gain), w)
+        // Drums are not an expression style: the groove layer carries them
+        // under everything. When drums dominate, expression eases back.
+        (d.map(|x| x * gain * (1.0 - 0.5 * w[3])), w)
     };
 
+    // Groove slots: detected kick/snare strengths per 8th note, or (without
+    // elements) a steady on-beat pulse.
+    let slots: Vec<[f64; 3]> = match el.map(|e| &e.groove) {
+        Some(g) if !g.is_empty() => g.clone(),
+        _ => beats
+            .windows(2)
+            .flat_map(|w| [[w[0], 0.7, 0.0], [(w[0] + w[1]) / 2.0, 0.1, 0.0]])
+            .collect(),
+    };
+    // Groove: the body keeps time under every style. Dip lands on the kick,
+    // the wrist snaps on the snare, sized by how hard the drums play.
+    let groove_at = |slot: &[f64; 3], side: f64, level_gain: f64| -> [f64; 3] {
+        let lvl = window(drums, slot[0], 0.3);
+        if lvl < 0.1 {
+            return [0.0; 3];
+        }
+        let g = level_gain * (0.35 + 0.65 * lvl.min(1.0));
+        let (k, n) = (slot[1], slot[2] * (1.0 - 0.5 * slot[1]));
+        [
+            // Sized to the acceleration budget at 8th-note spacing (~0.27 s).
+            g * (-6.0 * k + 3.0 * n) * side,
+            g * (-20.0 * k + 6.0 * n),
+            g * (-20.0 * k + 16.0 * n) * side,
+        ]
+    };
     let mut cues = Vec::new();
     let first = phrases.first().map_or(s.duration, |p| (p.time - glide[0]).max(0.0));
     if first > 0.0 {
@@ -514,13 +544,23 @@ fn compile(s: &Sidecar, rms: Option<&[f32]>, el: Option<&Elements>, config: Comp
         let start = if i == 0 { first } else { cues.last().map_or(0.0, |c: &Cue| c.end) };
         let end = phrases.get(i + 1).map_or(s.duration, |n| n.time - glide[i + 1]).max(p.time + 0.1);
         let side = if motifs[p.section][p.step % motifs[p.section].len()].0.ends_with('L') { -1.0 } else { 1.0 };
-        // Half-beat knots (plus the arrival) sample home + voice.
-        let half = beats.windows(2).map(|w| (w[1] - w[0]) / 2.0).next().unwrap_or(0.25).clamp(0.15, 0.5);
+        // Knots: every 8th-note groove slot, plus the phrase arrival; home +
+        // expression + groove are sampled at each. (A 16th-note rebound was
+        // tried: bouncing at that rate exceeds joint acceleration limits.)
         let mut times: Vec<f64> = vec![start];
-        let mut t = start + half;
-        while t < end - 0.08 {
-            times.push(t);
-            t += half;
+        let mut hits: Vec<(f64, [f64; 3])> = Vec::new();
+        let level_gain = if sec.level == "peak" { 1.0 } else { 0.9 };
+        for w in slots.windows(2).filter(|w| w[0][0] > start + 0.05 && w[0][0] < end - 0.05) {
+            times.push(w[0][0]);
+            hits.push((w[0][0], groove_at(&w[0], side, level_gain)));
+        }
+        if times.len() == 1 {
+            // No drums in this span: keep a half-second sampling for expression.
+            let mut t = start + 0.5;
+            while t < end - 0.08 {
+                times.push(t);
+                t += 0.5;
+            }
         }
         times.push(end);
         // The phrase arrival is exact; drop grid knots crowding it.
@@ -545,7 +585,12 @@ fn compile(s: &Sidecar, rms: Option<&[f32]>, el: Option<&Elements>, config: Comp
                 current_lead = top;
             }
             let lead = current_lead;
-            let want = floor_safe(std::array::from_fn(|j| h[j] + d[j]));
+            let g = if sec.level == "rest" {
+                [0.0; 3]
+            } else {
+                hits.iter().find(|x| (x.0 - t).abs() < 1e-9).map_or([0.0; 3], |x| x.1)
+            };
+            let want = floor_safe(std::array::from_fn(|j| h[j] + d[j] + g[j]));
             let joints = if k == 0 { q } else { constrain(prev.1, want, t - prev.0, &limits) };
             let phase = if (t - p.time).abs() < 1e-9 { "arrival".to_string() } else if sec.level == "rest" { "hold".to_string() } else { ELEMENTS[lead].to_string() };
             knots.push(Knot { time: t, phase, joints, velocity: None });

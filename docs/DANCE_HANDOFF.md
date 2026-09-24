@@ -193,3 +193,16 @@ Planner rewritten: calm home path (2/4-bar phrases) + dominance-blended voice
 layer. Real track: 54 phrase cues, vocals/bass/synth lead, audit pass,
 7.48 cm clearance. With Demucs available, feed its stems into the same
 `elements` fields for better separation.
+
+## Continuation — 2026-09-24 groove layer
+
+User on v5: better, "still not dancing"; suggested following kick/drums when
+everything is quiet (offered as an idea, not a decision). Diagnosis: layers
+were exclusive, so rhythm vanished whenever vocals dominated. Added always-on
+groove: `arm_elements.py` now exports `grooveSlots` ([t, kick, snare] per 8th,
+relative to 8-bar max; hard hit detection tried first, ~6 hits/s from hat and
+bass bleed, rejected). Compiler: dip on kick, wrist snap on snare, every
+section but rest; voice layer eases back when drums dominate. A 16th rebound
+was rejected: it breaks acceleration limits. Measured elbow dip on-beat vs
+off-beat on real track: intro 4.8°, verse 3.0°, chorus 3.1°: modest, visible
+bob limited by the acceleration budget. New acceptance test (mutation-checked).

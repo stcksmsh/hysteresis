@@ -14,7 +14,12 @@ were unreachable in the cloud session that wrote this):
 Each element is normalised to its own range (dB, p10..p95 -> 0..1), so values
 say "this element is at its own loud level", not absolute loudness.
 melody = height (0..1) of the strongest harmonic mid peak 100-1000 Hz where
-vocals are active, else -1. Existing sidecar fields are unchanged.
+vocals are active, else -1.
+grooveSlots = [t, kick, snare] for every 8th-note slot of the sidecar beat grid:
+strongest percussive flux within +-70 ms in 40-150 Hz / 1.5-6 kHz, relative to
+the loudest slot within 8 bars (0..1; 0 where drums are silent). Continuous
+strengths, since band bleed (bass guitar, guitars) makes hard hit/no-hit noisy.
+Existing sidecar fields are unchanged.
 """
 import json
 import pathlib
@@ -108,7 +113,33 @@ def analyse(wav_path, sidecar):
     peaks, _ = find_peaks(flux, height=med + 4 * mad, distance=int(0.15 * sr / hop))
     onsets = [round(float(times[p]), 4) for p in peaks]
 
+    # Drum hits on the rhythm grid: for every 8th-note slot (beats + midpoints)
+    # take the strongest percussive flux within +-70 ms; a slot is a hit when
+    # it reaches 55% of the loudest slot in the surrounding 8 bars. Keeps the
+    # real kick/snare pattern (syncopation at 8th resolution), drops hats/16ths.
+    beats = np.array(sorted(float(b) for b in sidecar["beats"]))
+    slots = np.sort(np.concatenate([beats, (beats[:-1] + beats[1:]) / 2])) if len(beats) > 1 else beats
+    drum_level = normalise_db(raw["drums"])
+
+    def hits(lo, hi):
+        f = np.maximum(np.diff(pm[band(freqs, lo, hi)], axis=1), 0).sum(axis=0)
+        f = np.concatenate([[0.0], f])
+        out = []
+        for slot in slots:
+            i0, i1 = np.searchsorted(times, [slot - 0.07, slot + 0.07])
+            if i1 <= i0:
+                out.append((slot, 0.0))
+                continue
+            k = i0 + int(np.argmax(f[i0:i1]))
+            out.append((float(times[k]), float(f[k]) if drum_level[k] > 0.15 else 0.0))
+        vals = np.array([v for _, v in out])
+        rel = [float(v / (vals[max(0, i - 32) : i + 33].max() + 1e-12)) for i, (_, v) in enumerate(out)]
+        return [t for t, _ in out], rel
+
     rounded = {k: [round(float(x), 4) for x in v] for k, v in elements.items()}
+    slot_t, kick = hits(40, 150)
+    _, snare = hits(1500, 6000)
+    rounded["grooveSlots"] = [[round(t, 4), round(k, 3), round(n, 3)] for t, k, n in zip(slot_t, kick, snare)]
     rounded["melody"] = [round(float(x), 4) for x in melody]
     rounded["melodyOnsets"] = onsets
     rounded["source"] = "HPSS + mid/side heuristic (not neural stems)"
@@ -122,4 +153,7 @@ if __name__ == "__main__":
     data = analyse(wav, json.loads(src.read_text()))
     dst.write_text(json.dumps(data))
     e = data["elements"]
-    print(f"elements -> {dst}: {len(e['drums'])} samples, {len(e['melodyOnsets'])} melodic onsets")
+    print(
+        f"elements -> {dst}: {len(e['drums'])} samples, {len(e['melodyOnsets'])} melodic onsets, "
+        f"{len(e['grooveSlots'])} groove slots"
+    )
