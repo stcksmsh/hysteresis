@@ -1,0 +1,10 @@
+[package]
+name = "hyst-cli"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "hyst"
+path = "src/main.rs"
+
+[dependencies]

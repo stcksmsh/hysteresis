@@ -1,0 +1,6 @@
+[package]
+name = "hyst-hw"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]

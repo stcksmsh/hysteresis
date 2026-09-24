@@ -1,0 +1,24 @@
+[workspace]
+resolver = "2"
+members = [
+  "crates/hyst-core",
+  "crates/hyst-audio",
+  "crates/hyst-render",
+  "crates/hyst-script",
+  "crates/hyst-choreo",
+  "crates/hyst-compile",
+  "crates/hyst-output",
+  "crates/hyst-hw",
+  "crates/hyst-previz",
+  "crates/hyst-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+
+[workspace.dependencies]
+hyst-core = { path = "crates/hyst-core" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "1"

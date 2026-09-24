@@ -1,0 +1,6 @@
+[package]
+name = "hyst-choreo"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]

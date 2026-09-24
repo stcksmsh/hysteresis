@@ -1,1952 +1,858 @@
-# AGENTS.md — sinteza-viz (published as `hysteresis` on GitHub, pending rename)
+# AGENTS.md — Hysteresis (native Rust rewrite)
 
-The single AI-facing reference for this repo: what it is, how it's built today, where it's
-going, and the full session-by-session history. This file absorbs what used to be five separate
-docs (`SINTEZA_VIZ.md`, `SINTEZA_SIGNAL_BUS.md`, `hysteresis-master-prompt.md`,
-`NEXT_SESSION_PROMPT.md`, and this file's own prior self) — they drifted from each other (most
-visibly: `SINTEZA_SIGNAL_BUS.md`'s original spec described a flat Patchbay/Route model a later
-addendum in the same file said was retired) and are gone now, folded in below. `docs/*.md`
-(`isf-shaders.md`, `dmx-out.md`, `midi.md`, `osc.md`, `ilda.md`, `patchbay-editor.md`) are
-**not** part of this merge — those are real per-protocol reference docs meant for human users
-too, kept separate on purpose.
+## Active user priority — 2026-09-24 dance handoff
 
-Read in this order: §1 (what this is) → §2 (current architecture) → §3 (target architecture &
-backlog) → §4 (Layer 2 understanding spec) → §5 (resume / operating mode) → §6 (session history,
-the detailed "how we got here" appendix — long, chronological, trust it over any summary above
-when they conflict).
+Read `docs/DANCE_HANDOFF.md` for current task, assets and acceptance. User confirms
+audio-synchronized 16-beat study does not meet goal: motion must respond to song
+content. User authorizes coordinator cross-crate integration for this vertical
+slice; assign workers bounded file ownership. Frozen `src/` and `tools/` remain
+read-only. Explicitly delegate coding to cheaper agents; Astra medium coordinates.
+Preserve substantial pre-existing uncommitted/untracked native rewrite.
+
+
+The single AI-facing entry point for this repo, **for the Rust rewrite currently in progress.**
+The browser/TypeScript system this rewrite supersedes is archived verbatim at
+`docs/LEGACY_TS.md` — frozen reference material, never edited, see its own header.
+
+Read in this order: §1 (what this is) → §2 (source of truth) → §3 (rules) → §4 (resume /
+operating mode) → §5 (session history — trust this over any summary above when they conflict).
 
 ---
 
 ## 1. What this is
 
-A WebGL2 music visualizer package (`the СИНТЕЗА visualizer` / "sinteza-viz") consumed by
-`stcksmsh/stcksmsh.github.io` as a persistent site-wide background, and — per §3's broader
-target — the seed of a general audio-reactive patchbay instrument ("Hysteresis") that can drive
-screen visuals, LEDs, DMX lighting, and lasers from the same signal graph.
+A native Rust rewrite of the СИНТЕЗА visualizer / Hysteresis patch instrument — a music
+visualizer that becomes the brain of a physical installation (screen + DMX/LED lighting +
+servo-driven choreography + dense physical arrays), replacing the browser/TS implementation
+entirely. See `SINTEZA_IMPLEMENTATION_PLAN.md` §0 for the full rationale (native for coherence
+with the installation's machine-native aesthetic, not because the browser was a performance
+bottleneck) and its non-negotiable decisions (Rust incl. renderer, Lua scripting via `mlua`, a
+plain-directory + `.hystproj`-zip project format, CI-built binaries).
 
-**Naming.** *The СИНТЕЗА visualizer* is the signature audio-reactive surface of the СИНТЕЗА
-design system, not a separately-branded product. **HYSTERESIS is the internal technical
-principle** driving the core layer: a system whose visible output depends on its whole history,
-not just the current input — the feedback memory field literally renders this. "Hysteresis" is
-also the working name of the broader patchbay-instrument project this package is growing into
-(§3).
-
-**The thesis (why the memory field is the whole point).** Almost every audio visualizer is
-memoryless: this frame reacts to this instant, then forgets. The СИНТЕЗА visualizer is built on
-the opposite principle — the image itself accumulates history. A feedback field continuously
-smears, flows, and decays past states into the present, so the screen is a slowly-evolving
-record of the last few seconds of the song, not a snapshot. The emotional arc this produces maps
-onto electronic music structure and is the spine of all choreography: **MEMORY → PROCESSING →
-RESOLUTION** — the field accumulates (energy loads into the feedback buffer over a build), the
-flow reorganizes what it holds (domain-warp churns and densifies), an event resolves it into a
-single gesture (the drop discharges the field). Maximalism is on-brand but *earned by the
-memory*, never piled on: if a visual element isn't wired to memory/energy/event state, it doesn't
-ship.
-
-**Also part of the thesis (§4 below): musical *understanding* is the actual moat, not the
-renderer.** Anyone can render a Julia set and send Art-Net. Almost nobody exposes musical
-understanding with memory and structure — beat phase that survives silence, novelty against the
-recent past, section structure, salience of prominent elements. Everything visual is a consumer
-of that understanding, not the product itself.
+**Naming**: same project as before — "Hysteresis" is both the technical principle (a system
+whose output depends on its whole history) and the working name of the whole patch-instrument
+project. See `docs/LEGACY_TS.md` §1 for the full thesis if it's ever needed; not restated here.
 
 ---
 
-## 2. Current architecture
+## 2. Source of truth
 
-Framework-agnostic package the host mounts once via `init(canvas, opts)` (`src/index.ts`,
-`VizOpts`/`VizInstance` — see `README.md` for the real call signature). No DOM ownership beyond
-the canvas, no routing, no player, no knowledge of the site.
-
-```
-[Audio Source: live worklet | sidecar]
-        │
-        ▼
-Layer 1 — the ear (src/audio/worklet/)         AudioWorklet, audio thread
-   FFT, perceptual bands, centroid, flatness, spectral flux/onsets, waveform ring buffer
-        │
-        ▼
-Layer 2 — the sense (src/audio/worklet/brain/, src/audio/StructureSource.ts)
-   beat/bar tracking, build/drop/break detectors, sidecar fusion (structure prefers
-   sidecar when loaded; detail is always live)
-        │
-        ▼
-Conductor (src/render/conductor/Conductor.ts)   → produces the Signal Bus, output-blind
-        │
-        ▼
-Signal Bus (src/render/conductor/types.ts)      flat, named, timescale-tagged signals — THE
-        │                                        cross-boundary contract
-        ▼
-PatchGraph (src/render/conductor/patchgraph/)   node-graph engine: signal/const/threshold/
-        │                                        envelope/logic/combine/curve/map/target/
-        │                                        midiCc/oscIn nodes, topologically evaluated
-        ▼
-VizOutput[] (src/render/conductor/outputs/)     peers behind one interface, pull model:
-                                                  ScreenOutput (production), FixtureOutput
-                                                  (Art-Net/sACN/WLED, production)
-```
-
-**Layer 1 — the ear** (`src/audio/worklet/`): `feature-worklet.ts` (`FeatureProcessor extends
-AudioWorkletProcessor`, registered `'feature-processor'`) runs a windowed FFT (`fft.ts`,
-`WindowedFFT`) per hop, perceptual band split sub/low/mid/presence/air (`bands.ts`, each band
-smoothed by an `EnvelopeFollower` + `AdaptiveNormalizer`), spectral centroid/flatness
-(`spectral.ts`), spectral-flux onset novelty (`onset.ts`, `SpectralFlux`), stereo pan, and emits
-a `StateFrame` (`src/shared/types.ts`) every hop via `postMessage`.
-
-**Layer 2 — the sense** (`src/audio/worklet/brain/`): `beat-tracker.ts` (`BeatTracker`/
-`BarTracker` — tempo + a phase-locked oscillator that free-runs through silence/breaks),
-`build-detector.ts`, `break-detector.ts`, `drop-detector.ts` (`DropDetector` — fires on a
-conjunction of **fullness** — multi-second sustained low-band energy, crest-factor-penalized so a
-pulsing reverb tail doesn't read as full — **onset-density jump**, and **novelty contrast**
-against a 4s window, OR the same fullness+novelty pair alone for rhythm-free "soft" drops;
-`getDebug()` exposes the three raw values). `novelty.ts` is the shared primitive
-(`cosineSimilarity`, `NoveltyRingBuffer`) both `DropDetector` and the render-side
-`familiarity.ts` build on, as two separate instances (different threads/cadences). Detectors are
-gated by a runtime `debugSetDetectorsEnabled` toggle for the groove-reactivity acceptance test
-(§3's history has the details).
-
-`src/audio/StructureSource.ts` fuses a precomputed sidecar (`src/shared/sidecar.ts`, schema
-2 today — see §4 for the schema-3 work landing alongside it) with live Layer 1/2 output:
-`fuse(frame, positionSec)` overlays sidecar structure (tempo, beat/bar phase, buildProgress,
-tension, structural events) onto an otherwise-live `StateFrame`; `synthesize(positionSec)` builds
-a **complete** `StateFrame` from the sidecar alone with no live audio at all (the SoundCloud/
-cross-origin-embed case — `idle: true` is set deliberately here so the beam plays its idle
-Lissajous instead of a fake trace, everything else is genuine track structure). Both self-heal a
-backward position jump (`healPositionRegression()`) since an external widget's position feed
-isn't guaranteed monotonic.
-
-**Conductor → Signal Bus** (`src/render/conductor/Conductor.ts`, `types.ts`): the (renamed,
-widened) former `Choreographer`. Output-blind by construction (no WebGL/canvas/Scene/serial
-imports — a grep test). Produces a `SignalBus` every frame: `TimescaleTag = 'transient' | 'beat'
-| 'bar' | 'section' | 'continuous'`, `SIGNAL_TAGS` maps every routable field to its tag.
-Continuous group (alive every frame — the fix for the old "amplitude follower" failure mode):
-`energy, sub, low, mid, presence, air, bandTilt, centroid, flatness, pan, familiarity, hueDrift`.
-Beat: `beatPhase, beatPulse`. Bar: `barPhase, downbeatPulse`. Section (sparse, dramatic):
-`buildWindup, buildProgress, tension, suspension`. Transient: `dropImpulse, onsetImpulse` (+
-internal-only `dropTrigger`). Pass-through (raw, exempt from scalar/tag rules): `scope`. Meta:
-`idle, tempoBpm, tempoConfidence`. `familiarity` (`familiarity.ts`, `FamiliarityTracker`) is a
-time-bucketed ring buffer (~12s window) of `[sub,low,mid,presence,air,centroid,flatness]`
-vectors; each frame, cosine-similarity the current vector against a strided sample of the buffer
-→ 0..1 "how much does now resemble the recent past."
-
-**PatchGraph** (`src/render/conductor/patchgraph/`): the *only* live routing engine —
-`PatchGraph`/`PatchGraphEvaluator`, a small operator graph (`signal`, `const`, `threshold`
-w/hysteresis, `envelope`, `logic` and/or/not, `combine`, `curve`, `map`, `target`, `midiCc`,
-`oscIn` node kinds), topologically evaluated with per-node persistent state, construction-time
-validated (throws on error-severity `validatePatchGraph` issues — a hot-swap handler rejects a
-bad edit and keeps the previous graph running). `ScreenOutput` consumes `configs/screen-graph.ts`
-(migrated from an earlier flat `Patchbay`/`Route` model — that model and its `screen-only.ts`
-config are still in the tree, still tested, kept only as the migration's numerically-verified
-oracle, not live). Three nonlinear screen composites (`flowStrength`, `symmetry`, `fieldDecay` —
-spring/damper + edge-triggered impulse dynamics, `patchbay/screen-composites.ts`) are
-deliberately hand-written outside the graph, not generic nodes — considered and rejected as a
-graph rewrite, no browser access to re-verify hand-tuned motion math from scratch.
-
-**Outputs** (`src/render/conductor/outputs/`): `ScreenOutput` wraps the existing WebGL2 render
-pipeline (Julia substrate, curl-noise memory field, oscilloscope beam, bloom, ISF-shader hot-swap
-support) — unchanged internals, just fed by patch-graph-resolved targets instead of a
-conductor-produced `ParamBus` directly. `FixtureOutput` is the worker-resident production
-counterpart for physical fixtures: renders DMX universes (`src/dmx/render-dmx-universe.ts`) from
-a `FixtureDocument` + its own `PatchGraphEvaluator`, sent over a WebSocket relay
-(`DmxOutBridge`) to Art-Net/sACN/WLED. Real public API on `VizInstance`: `loadIsfShader()`/
-`clearIsfShader()`, `setOscOut()`/`setOscIn()`, `setFixtureDocument()`/`setFixtureGraph()`/
-`setFixtureOut()`, `connectMidiIn()`/`disconnectMidiIn()` — all opt-in/additive, no existing
-integration calls any of them by default.
-
-**Visual composition** (`src/render/worker/scenes/julia/`, `src/render/worker/passes/`): Julia
-substrate (2D escape-time, XaoS-style continuous autopilot — `c` sweeps the Mandelbrot cardioid
-boundary, a distance-estimator autopilot pans/zooms toward genuine detail, `JuliaScene.ts`) +
-oscilloscope beam (Woscope-style glowing vector, trigger-locked when live audio is attached, idle
-Lissajous otherwise) composited into a ping-pong feedback buffer, advected through a shared
-curl-noise flow field, decayed by a factor tied to `tension`/section — **this ping-pong buffer is
-the signature layer**, the hysteresis principle rendered as an image. Earned symmetry (kaleidoscope
-fold-count/mirror-strength) modulates the *sampling coordinate* the memory field reads its own
-previous frame through, never the final composited frame, and is always a response (rises with
-tension/buildProgress, snaps to full symmetry for ~1 bar on a drop) — never a constant filter.
-Bloom + color-grade composite to screen. Onset-particles (a 4th layer) shipped once and was
-removed — see §6 for why; don't re-add something similar without addressing why it read as
-distracting.
-
-**Idle & power tiers**: no audio → the Julia autopilot keeps running, the beam draws idle
-Lissajous, the field keeps flowing/decaying gently — never frozen (except `prefers-reduced-motion`,
-which the host handles by disabling the canvas). Tiers `full`/`cheap`/`idle-only` per
-`setTier()`.
-
-**Two run modes**: live (mic/line-in → worklet → Conductor → bus, the opening-party case) and
-unattended looped playback with precomputed sidecars (best case — look-ahead anticipation via
-`StructureSource`) or ambient mic — most of the exhibition's actual runtime, must auto-start and
-survive a crash with no keyboard (host/IO-page concern, noted here so it isn't forgotten).
-
-**Offline analysis** (`scripts/analyze.ts`/`scripts/structure.ts`, this repo, not the host):
-ingests a WAV master, reuses the *exact* browser worklet modules (FFT/bands/spectral/onset/
-beat-tracker/detectors — no reimplementation, no Python/ONNX dependency for the schema-2 path)
-in a manual hop loop, downsamples envelopes to 20Hz, emits a schema-2 `<slug>.sidecar.json`:
-`{schema:2, tempo, beats[], sections[], events[], onsets[], energyEnvelope[], bandEnvelope,
-centroidEnvelope[], flatnessEnvelope[], envelopeRate}`. Produced here, served by the host as a
-static asset. §4 below adds a schema-3 path (stem presence) that *does* need an external
-dependency (Python + Demucs), scoped narrowly to stay opt-in.
+- **`SINTEZA_IMPLEMENTATION_PLAN.md` is the plan of record.** It is a work-split (crate
+  boundaries, dependency waves, per-workstream done-when criteria), not a design document —
+  read the spec section your workstream names before writing code (its own §1.1).
+- **`SINTEZA_OFFLINE_SSM.md`** (workstream A) and **`SINTEZA_CHOREOGRAPHY.md`** (workstreams
+  R4/R5/R7/R9) are older companion specs, **directional background, not verified current design**
+  — they predate this session's confirmation that the implementation plan is what's authoritative.
+  Treat their specifics (e.g. `allin1` as the chosen MIR tool, the exact Effort/curve taxonomy) as
+  plausible but unconfirmed; flag anything load-bearing before building on it rather than assuming
+  it's settled.
+- **`docs/LEGACY_TS.md`** is the frozen TS system — read freely for porting reference (signal bus
+  shape, sidecar schema, detector logic), never edited.
+- `docs/*.md` (`isf-shaders.md`, `dmx-out.md`, `midi.md`, `osc.md`, `ilda.md`,
+  `patchbay-editor.md`) describe TS-era, browser-specific surfaces (npm embed API, the patchbay
+  editor UI) that the implementation plan §0.8/§6 explicitly drops, not ports. Reference only for
+  protocol/format detail (e.g. the real ILDA/Art-Net specifics) that outlives the rewrite.
 
 ---
 
-## 3. Target architecture & backlog
+## 3. Rules every agent follows
 
-*(This section is `hysteresis-master-prompt.md` §1–§8, carried over close to verbatim as the spec
-of record — it describes where the whole "Hysteresis" project is going, one level broader than
-just this package's current state in §2 above.)*
+Verbatim from `SINTEZA_IMPLEMENTATION_PLAN.md` §1 — repeated here so they're not missed:
 
-### 3.1 Positioning
-
-Hysteresis is a patch-based instrument that turns music into a rich, named stream of signals —
-spectral, structural, and temporal-memory — and lets users wire those signals to *anything*: a
-built-in fractal renderer, a user-written shader, a strip of LEDs, a DMX rig, or a laser. It is
-not trying to out-feature TouchDesigner as a general compositor, and not trying to out-feature
-QLC+ as a lighting console. Its wedge is being the one tool where the *same graph* drives screen
-and physical light together, informed by audio understanding richer than raw FFT bins.
-
-### 3.2 Non-goals (say these out loud so scope doesn't creep)
-
-- Not a general-purpose node-based compositor (not competing with TD/Notch on generality).
-- Not a full lighting console (not replacing GrandMA/Chamsys for complex theatrical rigs).
-- Not a DAW. Audio is input, not something authored inside the tool.
-- Not trying to replace ISF/Shadertoy as shader ecosystems — adopt and extend them, don't reinvent.
-
-### 3.3 Architecture decision: stay web, add a native bridge (do not fully port)
-
-**Verdict: keep the webapp as the core. Ship a small local "Bridge" companion process for
-hardware I/O the browser cannot reach directly.** Rationale:
-
-- WebGPU has broad support across Chrome/Edge/Firefox/Safari, so GPU-bound rendering is not a
-  reason to leave the browser.
-- The real gap is hardware: no browser API for Art-Net/sACN (raw UDP); Web Serial (USB-DMX) and
-  Web MIDI are Chromium-desktop-leaning, Safari opposes Web Serial over fingerprinting, neither
-  has real mobile support. A protocol problem, not a "browser is too weak" problem.
-- Every native lighting tool solves this the same way (an external interface/bridge process) — so
-  the standard-practice answer is a tiny local **Hysteresis Bridge daemon**: speaks Art-Net/sACN/
-  raw DMX (USB-serial)/ILDA on the hardware side, WebSocket+OSC to the webapp on the other.
-  Preserves the whole existing web codebase, isolates the "needs native/OS access" surface to one
-  small, replaceable component.
-- Revisit full native (Tauri-wrapping, not a rewrite) only if the WebGPU ceiling is genuinely hit,
-  or offline/installer distribution + OS-level low-latency audio access become recurring user
-  complaints. Neither is true today.
-- **Status**: `scripts/udp-relay.ts`/`scripts/tcp-relay.ts` are real, working, narrowly-scoped
-  seeds of this (byte-forwarding only, no protocol encoding) — not the full daemon. DMX-serial and
-  MIDI turned out not to need a bridge at all (Web Serial/Web MIDI reach hardware directly).
-
-### 3.4 Core pipeline (target shape)
-
-```
-[Audio Source] → [Feature Engine] → [Signal Bus] → [Patchbay Graph] → [Output Adapters]
-     ↑                  ↓
-  (sidecar          (memory/state:
-   import/export)    novelty, similarity,
-                      section tracking)
-```
-
-**Audio Source**: live input and file playback, at minimum. Sidecar format: portable, versioned
-JSON/binary, per-frame features + detected structure, ideally content-hash-keyed (not filename)
-so it survives renames — **not yet true**, today's schema-2/3 sidecar is filename/URL-keyed via
-a track's `sidecar` content field (§3.7's backlog). Should be tool-agnostic enough someone could
-generate one with Python/librosa and hand it to Hysteresis; diffable/inspectable, not opaque.
-
-**Feature Engine** — two tiers, both first-class and patchable:
-- *Instantaneous* (no memory): RMS/loudness, spectral centroid, N-band split, spectral flux,
-  onset strength, pitch/key estimate, stereo width/pan. — largely built (§2), chroma/harmonic
-  added in §4.
-- *Temporal/structural* (the differentiator, protect it from being an afterthought): novelty
-  curve, self-similarity against a rolling window, section-change/boundary detection, "build"/
-  "drop" as continuous tunable confidence values (not magic booleans), tempo/beat/bar phase. —
-  §4 below is the concrete build-out of this tier.
-- Should be swappable/extensible: a plugin interface so power users can add custom analyzers
-  (TouchDesigner's VST-hosting pattern — an analyzer as a pluggable typed-output unit, not a
-  hardcoded internal). **Not started.**
-
-**Signal Bus**: every feature a named/typed/timestamped stream (float, vector, event/trigger, or
-boolean-with-confidence). Should support recording/scrubbing for offline patch-authoring against
-a fixed sidecar timeline (**not started**). OSC-compatible addressing so external tools
-(Ableton, TouchDesigner, VCV Rack) can send/receive against the same bus with no translation layer
-— **done**, `/hysteresis/bus/<name>`.
-
-**Patchbay Graph**: node-graph UI, live state visible on every node inline (VDMX-style bar —
-**not started**, the editor currently has no per-node live value/waveform preview). Nodes typed
-by signal kind, connections type-check visually — **done** (timescale-tag validation). Macro/
-grouped nodes (save a sub-patch as a reusable block) — **not started**. Undo/redo and versioning
-on the graph itself — **not started**.
-
-**Output Adapters — "drive anything"**: ISF as the primary screen-scripting surface — **done**
-(§3.7). Extend ISF's input types with Feature Engine outputs (novelty/similarity/
-section-confidence as first-class typed shader inputs) — **not started**, the real differentiator
-no existing ISF host has; §4's new signals are what this would expose once built. Physical
-outputs unified under one adapter interface, protocol-specific underneath — **done** for DMX/
-Art-Net/sACN/WLED/USB-serial (§3.7), ILDA protocol-layer-only. Fixture/profile system (QLC+-style
-reusable definitions, not raw channel patching) — **not started**.
-
-**Export/Presentation Mode**: a stripped-down runtime target — fixed showfile playback and
-live-reactive playback as two distinct export modes. **Not started.**
-
-### 3.5 Protocols (priority order — all 7 now have real, tested work landed)
-
-1. **ISF** ✅ done.
-2. **OSC** ✅ done, both directions.
-3. **Art-Net/sACN** ✅ done, real production fixture pipeline (`FixtureOutput`); USB/Web Serial
-   stays editor-tool-only (needs a main-thread user gesture a worker can't trigger).
-4. **DMX512 via USB-serial** ✅ done — turned out reachable directly via Web Serial, no Bridge
-   needed.
-5. **MIDI** ✅ control input done, routable via a `midiCc` patch-graph node; clock/beat sync not
-   wired into the Conductor's own tempo tracking yet.
-6. **ILDA/laser DAC** ✅ protocol layer done (real ILDA file format + Ether Dream codecs,
-   cross-checked against real implementations); no patch-graph laser point source or live client
-   yet.
-7. **WLED/E1.31** ✅ done, reuses the Art-Net/sACN universe rendering.
-
-### 3.6 Design principles to hold onto
-
-- **Signals are typed and named, never magic.** "Drop detected" is a thresholded view of a
-  continuous, inspectable confidence signal, not an opaque boolean the user can't tune or
-  distrust.
-- **Prefabs are real citizens of the scripting layer, not hardcoded exceptions.** If the built-in
-  Julia fractal can't be forked/edited the same way a user's custom ISF script can, the
-  extensibility story is fake.
-- **Don't reinvent formats the ecosystem already agreed on.** ISF for shaders, OSC for signal
-  interop, Art-Net/sACN for networked lighting.
-- **Physical and screen output are peers, not a bolted-on afterthought to a video tool.** Protect
-  this in every architecture decision — don't let the Output Adapter interface silently assume
-  "frame = image".
-
-### 3.7 Concrete feature backlog
-
-- [ ] Sidecar format spec: versioned ✅, content-hash-keyed ❌ (still filename/URL-keyed).
-- [ ] Feature Engine plugin interface (custom analyzer support) — not started.
-- [x] ISF import + auto-generated patchbay node UI — real single-pass subset (float/bool/long/
-      color/point2D inputs; multi-pass/PERSISTENT/image/audio inputs rejected with a clear
-      error). Loadable from the editor AND as real public API (`loadIsfShader()`/
-      `clearIsfShader()`, `docs/isf-shaders.md`) — opt-in, production still ships Julia by
-      default.
-- [x] ISF superset spec ("the `.hyst` format") — real, shipped, tested, beyond just
-      `hysteresisSignal`: `HYSTERESIS_VERSION` (real future-proofing — unrecognized versions
-      reject clearly), real multi-pass `PASSES` (`fullscreen`, a `lineTrace` kind reusing the
-      built-in Julia beam's real GPU-instanced-quad technique, and `scriptTexture` for
-      script-produced non-scalar data), `resource` inputs (system-provided raw non-scalar live
-      data — `scope`'s waveform), and `scriptOutput` inputs (script-produced scalar/vector data) —
-      none of the last three are routable patch-graph targets. `examples/isf/julia.hyst` is the
-      substrate+beam-only first-pass port (7 live signals); `examples/isf/julia-autopilot.hyst` is
-      the real thing — the full autopilot (vortex-search navigation, spring-damped drift,
-      perturbation-orbit deep zoom) via a real `HYSTERESIS_SCRIPT`, a sandboxed nested-Worker
-      execution engine (`src/render/worker/scenes/isf/script-runtime/`) that never blocks or
-      crashes the render worker. See §6's dated entry for the full design.
-- [ ] Shadertoy → ISF import helper (mind licensing/attribution on ported shaders).
-- [ ] Live inline node state visualization (waveform/value preview per node).
-- [ ] Macro/sub-patch save-as-reusable-block.
-- [~] Hysteresis Bridge daemon — partial (`udp-relay.ts`/`tcp-relay.ts`, byte-forwarding only).
-- [ ] Fixture profile system (QLC+-style reusable definitions).
-- [ ] Presentation/export mode (fixed showfile vs. live-reactive).
-- [x] Art-Net/sACN output — production (`FixtureOutput`), no 16-bit/fine-channel, no
-      fixture-profile import.
-- [~] DMX512 via USB-serial — real, editor-tool-only (Web Serial's `requestPort()` needs a
-      main-thread gesture).
-- [~] MIDI: control input + clock/beat sync — CC input real and routable (`midiCc` node); clock
-      sync into Conductor tempo tracking not wired.
-- [x] WLED/E1.31 on-ramp — production, reuses Art-Net/sACN universe rendering.
-- [~] ILDA/laser DAC protocol layer — real codecs, no live client, no patch-graph laser concept.
-- [x] OSC in/out on the signal bus — both directions real, no address-pattern matching (exact
-      match only) for OSC-in.
-- [x] MIDI CC mapping to patch parameters.
-- [ ] Graph versioning/undo distinct from project-file save.
-- [x] **Online multi-scale novelty (`noveltyLocal`/`noveltySection`) + beat-synchronous feature
-      aggregation** — §4 below. `noveltyLocal`/`noveltySection` real bus signals, both pushed
-      only on beat-boundary edges (`Conductor.ts`).
-- [x] **`onsetDensity`/`fullness` as real, generally-routable bus signals** — extracted from
-      `DropDetector`'s internals into `src/audio/worklet/brain/activity.ts`
-      (`FullnessTracker`/`OnsetDensityTracker`), now always-alive (not detector-gated) and on
-      the bus.
-- [x] **Chromagram + `harmonicNovelty`** — `src/audio/worklet/chroma.ts`, `chromaRootHue`
-      too. First harmonic sense this pipeline has ever had.
-- [x] **Schema-3 sidecar: per-stem presence via offline Demucs separation**
-      (`vocalPresence`/`drumsPresence`/`bassPresence`/`otherPresence`) — `scripts/analyze.ts
-      --stems`, shells out to the real Python Demucs CLI. **Verified end-to-end against a real
-      track** (Daft Punk — Instant Crush, 5:40) in a follow-up session, see its own §6 entry.
-- [x] **Heuristic sidecar section labeling** (intro/build/breakdown/outro — deterministic rules,
-      not ML) — `scripts/structure.ts`'s `labelSections()`.
-- [x] **Lead-salience tracking within the separated `other` stem** (approximate) —
-      `leadPresence`, a per-hop sustained-spectral-peak tracker, part of the same `--stems` pass.
-
-### 3.8 Open questions worth resolving early
-
-- Licensing stance on imported/ported ISF and Shadertoy content (CC variants differ).
-- How much of the Bridge daemon needs code-signing/notarization for smooth install on macOS/
-  Windows given it does raw serial/network I/O.
-- Whether sidecar generation should ever require server-side compute (heavier MIR models) or must
-  remain fully client-side/offline-capable. **§4's Demucs stem-presence step is a real instance
-  of this question**: it requires a local Python + `demucs` install to run `scripts/analyze.ts
-  --stems` — deliberately kept an opt-in, manual, per-track offline step (not a build/CI/hosted
-  dependency), consistent with "must remain offline-capable" until this question gets a real
-  answer.
+1. Read the spec sections your workstream names before writing code.
+2. The Rust tree is new. **Never edit the TypeScript tree** (`src/`, `tools/` — the latter is the
+   patchbay-editor/render-video dev tools, genuinely frozen too) — it is frozen reference. Read
+   freely, port from it, don't touch it. **Correction (verified 2026-09-05): the plan's "tools/" in
+   its workstream-A description is a misnomer** — the real, still-live Node/Python offline pipeline
+   is `scripts/` (`analyze.ts`/`structure.ts`/`demucs.ts`/`wav.ts`), not `tools/`. `scripts/` is the
+   one part of the TS-looking tree workstream A may edit; everything under `src/` (including
+   `src/shared/sidecar.ts`) stays frozen — a schema-4 field extension belongs in a new type defined
+   inside `scripts/` itself (extending, not modifying, the frozen `Sidecar` interface), the same way
+   `hyst-core`'s Rust `Sidecar` already carries schema-4 as additive/optional fields.
+3. `cargo check` / `cargo test` / `cargo clippy` green at every commit, workspace-wide.
+4. Stay inside your workstream's crate boundary (`crates/hyst-*`, see the plan's §2 layout).
+   Needing to cross it means stopping and flagging, not editing across the seam.
+5. Additive schema changes only for anything the offline pipeline emits (sidecar, and later the
+   Choreography Score) — a published sidecar must keep validating.
+6. Verify against real audio, not only synthetic fixtures, wherever a spec says so.
+7. Build nothing from the deferred lists (plan §0.8, §6, plus each spec's own "explicitly
+   deferred" section). Flag instead of guessing it's fine to build early.
 
 ---
 
-## 4. Layer 2 musical understanding (СИНТЕЗА) — the moat, in detail
+## 4. Resume / operating mode
 
-*(This section is `SINTEZA_UNDERSTANDING.md`, folded in near-verbatim as the detailed spec behind
-§3.7's new backlog items above. It assumes §2's current architecture — Layer 1 worklet, Layer 2
-brain/`StructureSource` sidecar fusion — already exists; it does not re-describe them.)*
+**Where things stand** (see §5 for the dated detail): **R0/R1/R2/R3/R4/R5 and workstream A have all
+landed** (R2/R3/R4/R5/A via parallel subagents in one session, R0/R1 the session before). Workspace:
+199 tests green (`hyst-core` 8, `hyst-audio` 40, `hyst-render` 44, `hyst-script` 22, `hyst-choreo`
+37, `hyst-output` 18 — plus 30 in `scripts/` TS via vitest), `cargo clippy -D warnings` clean
+workspace-wide, TS `npm run typecheck`/`vitest` still green (untouched). A real audio-driven render
+(Julia + memory field + bloom/composite + beam, 512×512/24fps/45s, driven by `hyst-audio` reading a
+real WAV) was produced and sent to the user — R2's done-when is met (no browser exists to diff
+against; flagged, not faked).
 
-### 4.0 The thesis (why this layer is the whole product)
+**Critical path now**: **Phase 2** — R6 (Julia autopilot → Lua, needs R2+R3, both done), R7
+(choreography compiler, needs workstream A + R4, both done — A's beat grid is the causal fallback,
+not allin1, see below), R9 (previz, only needs R4's types per the plan's own dependency note — pull
+it forward into this phase rather than waiting for R7/R8's wave).
 
-Anyone can render a Julia set and send Art-Net. Almost nobody exposes *musical understanding*
-with memory and structure — beat phase that survives silence, novelty against the recent past,
-section structure, salience of prominent elements. That understanding is the differentiator (the
-"moat"). So this layer is not plumbing for the renderer; it is the thing worth building, and
-everything visual is a *consumer* of it.
+**allin1 (workstream A's preferred beat/boundary source) is NOT wired in — deliberately, not
+forgotten.** Two real attempts: first hit a slow-pip-resolver hang on PyTorch's CUDA matrix; a
+retry fixed that (pin `torch` CPU wheel first) and got further, but hit a second, different, real
+blocker — `natten` (an allin1 model dependency) has no prebuilt wheel for this Python/torch ABI and
+needs a from-source C++/CUDA-extension build (a real hour+ compile, not a resolver issue). User
+chose to keep the fallback rather than spend that budget. The causal-beat-grid fallback (in
+`scripts/ssm.ts`/`repetition.ts`) is real, tested against 3 real tracks, and was deliberately
+designed beat-grid-source-agnostic — swapping in allin1 later (if `natten` ever gets a wheel, or
+someone's willing to eat the compile) touches nothing in the SSM/repetition-map math itself.
 
-The organizing principle, because it decides what is buildable:
+**Real-time-safety debt, flagged not fixed**: `hyst-audio`'s cpal callback (`playback.rs`)
+allocates per callback and runs the full feature extractor synchronously on the audio thread —
+fine for this pass, but a glitch-free installation build needs this off the audio thread before a
+real show. No resampling — `Playback::new` requires the source WAV's sample rate to exactly match
+the output device's. `hyst-render`: no pipeline/bind-group caching (rebuilds every pass call — fine
+offline, not real-time), no reference-orbit perturbation (deep Julia zoom will lose precision,
+untested), bloom is single-level not mip-cascaded. `hyst-script`: instruction budget
+(2,000,000/frame) is untuned, never profiled against a real script; a fault wipes a script's
+persistent state (same tradeoff the TS original made, flagged for R6 to reconsider if it bites).
 
-> **Structure & novelty are cheap, robust, and can run live. Source identity ("that's the vocal
-> / the lead synth") is expensive and is only tractable the way this project actually needs it:
-> OFFLINE, in the sidecar, for your own tracks.**
-
-This is the same live-vs-sidecar split already adopted for drops (§2's `DropDetector` vs.
-sidecar-primary drop gating), pushed one level deeper. Every ambition below is sorted into
-**LIVE-CAPABLE** (runs in the worklet, works on unknown audio at the party) or **SIDECAR-ONLY**
-(precomputed, look-ahead, own-tracks, hand-correctable). Do not try to make a sidecar-only
-capability run live.
-
-### 4.1 What the field actually does (grounded)
-
-**Structure = novelty, homogeneity, repetition, read off a Self-Similarity Matrix (SSM)**: a
-feature per time-unit, compared to every other unit (cosine/centered-cosine/RBF) — structure
-appears as blocks (homogeneous sections) and diagonal paths (repetitions). The Foote (2000)
-lineage, still the backbone of state-of-the-art unsupervised methods.
-
-**Boundaries = checkerboard-kernel novelty.** Correlate a checkerboard kernel along the SSM
-diagonal; peaks = section boundaries. Kernel size sets the timescale — small kernel → phrase-
-level ("a fill happened"), large kernel → section-level ("the chorus started"). Expose both
-scales, not one.
-
-**Beat-synchronous features are the pro move.** Aggregate to the beat grid before building the
-SSM — tempo-invariance, denoises everything.
-
-**EDM-specific, a studied problem.** DJ-mix cue-point/switch-point detection research finds the
-most predictive features for a structural transition are: novelty in signal energy, novelty in
-timbre, number of drum onsets, and harmony — drum-onset-density called out explicitly. This
-independently validates §2's fullness/onset-density-jump drop-detector redesign, and that padding
-loudness novelty with zeros at the track start (vs. the no-data value) is what makes intros
-behave.
-
-**Modern (optional, heavy) ceiling.** SOTA MSA uses learned SSM features, demixed-audio structure
-models, LLM/embedding zero-shot labeling. Flagged as the ceiling for the sidecar path, not
-required — none of this repo's ML-free heuristics attempt to reach it.
-
-### 4.2 LIVE-CAPABLE understanding
-
-Everything here is cheap enough for realtime, correct-enough causally. Runs at the party and on
-ambient/line-in input.
-
-- **Already built** (§2): bands, centroid, flatness, spectral-flux novelty, beat/tempo PLL,
-  build/break/tension, `familiarity`.
-- **Online SSM + multi-scale novelty** (new, §3.7): a ring buffer of beat-synchronous feature
-  vectors over the last N beats; each new beat, similarity of the current vector against the
-  buffer → a running novelty curve at **two timescales** — `noveltyLocal` (small kernel,
-  phrase-scale: a fill, a new element entering) and `noveltySection` (large kernel, section-scale:
-  breakdown→drop, verse→chorus). `familiarity` is the same computation read the other way — high
-  familiarity = low novelty = a loop repeating. Cost: a bounded ring buffer, a few dot products
-  per beat — trivially realtime, and the single highest-value live addition.
-- **Drum-onset density & fullness, exposed as real bus signals** (new, §3.7): onset events/sec +
-  a fullness signal (energy sustained continuously over a multi-second window, crest-factor-
-  penalized) — both already computed inside `DropDetector` but never exposed generally. A drop =
-  onset-density AND fullness jump together after a span low on both = a large `noveltySection`
-  spike.
-- **Chroma/harmonic signals** (new, §3.7): a chromagram (12-bin pitch-class energy) — cheap,
-  standard, currently entirely missing from the pipeline. Enables harmonic novelty (key/chord
-  changes as a boundary cue, one of the EDM switch-point predictors), a "harmonic tension" proxy,
-  and a genuinely new visual driver (pitch-class → hue/rotation). Bass-band chroma alone
-  approximates root/bassline movement.
-- **NOT live-capable, don't attempt online**: naming sections (needs the whole track), tracking a
-  *specific* source (needs separation, §4.3), anything needing real look-ahead (a drop is defined
-  by contrast with the build *before* it — live gets a fallback, sidecar gets it right).
-
-### 4.3 "Track prominent elements" — honestly scoped
-
-The want: track the vocal, the main synth, per-section prominent elements. This is source
-separation + salience, heavier than structure.
-
-**Feasibility.** Offline separation (HTDemucs v4, ~9dB SDR on 4 stems: drums/bass/vocals/other) is
-solved and excellent, runs in Python, is a solved dependency, not research. Real-time low-latency
-separation exists but is research-grade and weak (HS-TasNet ~4.6-5.6dB SDR at 23ms — far below
-offline quality, nothing drop-in for a web app today). **Conclusion: do not attempt live stem
-separation.** "other" is a bucket, not an instrument — even offline, "the main synth" specifically
-is approximate (it's whatever's loudest/most sustained inside `other`, alongside pads/FX).
-
-**The design that delivers it: SIDECAR-ONLY, stem-wise structure.** For your own tracks: (1)
-offline, in `scripts/analyze.ts`'s pipeline, run separation once (Demucs, shelled out to the
-Python CLI — see §3.8's open question on this) → stems vocals/drums/bass/other; (2) per stem,
-compute a presence/energy envelope across the whole track — not "what note is the vocal" but "is
-the vocal present, and how prominent, right now," which is exactly what "track the prominent
-element" visually needs; (3) bake it into the sidecar as new signal lanes
-(`vocalPresence`/`drumsPresence`/`bassPresence`/`otherPresence`), schema bump; (4) at playback,
-`StructureSource` exposes these as bus signals exactly like existing structure — "vocal enters →
-this element blooms," "bass drops out → the field thins," without any live separation.
-
-**Salience within a stem** (optional, harder): a per-section peak-tracker on the `other` stem's
-spectrum — the loudest *sustained* band-limited component per section approximates "the lead."
-Approximate, a refinement to attempt after stem-presence works.
-
-**Explicit non-goals**: no live vocal/lead tracking (sidecar-only); no pitch-accurate
-transcription/MIDI extraction (presence/salience envelopes, not notes); no lyric alignment/word
-tracking.
-
-### 4.4 The signal taxonomy this layer adds to the bus
-
-Time/pulse, energy/timbre (LIVE, mostly already have) — unchanged, see §2.
-
-**Rhythmic activity (LIVE, new):** `onsetDensity`, `fullness`.
-
-**Harmony (LIVE, new):** `chroma` (pass-through 12-vector, like `scope`), `harmonicNovelty`,
-`chromaRootHue`.
-
-**Structure/memory:** `noveltyLocal`, `noveltySection` — LIVE, new. Section boundaries (precise),
-labels — SIDECAR (heuristic labeler, new). Repetition map ("this section = that earlier one") —
-SIDECAR, not attempted (needs a full offline SSM this plan doesn't build).
-
-**Source presence (SIDECAR-ONLY, new):** `vocalPresence`, `drumsPresence`, `bassPresence`,
-`otherPresence`, `leadPresence` (approximate, within `other`).
-
-### 4.5 Build order (as actually executed this session)
-
-1. Online SSM + multi-scale novelty + beat-synchronous aggregation (one implementation slice —
-   the beat-sync push is the same call site the multi-scale trackers use).
-2. `onsetDensity`/`fullness` exposed as real, generally-routable bus signals.
-3. Chromagram + harmonic novelty.
-4. Schema-3 sidecar: stem-presence via offline Demucs (Python CLI subprocess).
-5. Heuristic sidecar section labeling (deterministic rules, not ML — no LLM/embedding infra
-   exists in this repo and the doc itself flags learned labeling as an optional heavy ceiling).
-6. Lead salience within `other` (approximate, rides on step 4's separated stems).
-
-### 4.6 Feasibility summary (the one-screen answer to "can we track the vocal")
-
-| Ambition | Live? | Sidecar? | Verdict |
-|---|---|---|---|
-| Beat/tempo, phase through silence | ✅ have | ✅ | done |
-| Novelty / self-similarity / familiarity | ✅ cheap | ✅ better | build first |
-| Section *boundaries* | ⚠️ causal, approx | ✅ precise | live-approx + sidecar-exact |
-| Section *labels* (verse/chorus/drop) | ❌ | ✅ heuristic | sidecar only, deterministic |
-| Drop/build/break | ⚠️ fallback only | ✅ primary | existing §2 design |
-| Harmony/chroma | ✅ cheap | ✅ | build (new sense) |
-| Vocal present & how prominent | ❌ | ✅ Demucs offline | sidecar only, viable |
-| Drums/bass presence | ❌ live | ✅ | sidecar, clean |
-| "The main synth" specifically | ❌ | ⚠️ approx | sidecar, approximate |
-| Note-level transcription | ❌ | ❌ | out of scope |
-| Live stem separation | ❌ research-grade, weak | n/a | do not attempt |
+**Operating mode** (unchanged in spirit from the TS era, `docs/LEGACY_TS.md` §5):
+- Gap-analysis first every time you resume — diff the plan's workstream table against what's
+  actually in `crates/`, don't assume where the last session left off.
+- One coherent workstream slice per session where possible; a workstream's own "done when" is the
+  bar, not "some progress."
+- Append a dated/titled §5 entry per session — what changed, what's verified vs. not (cargo
+  test/clippy is not the same as a real-audio/real-hardware check), what's explicitly deferred.
+- Respect plan §0.8/§6's non-goals as hard scope boundaries.
+- If a decision genuinely needs the user's input (an old spec's specifics, anything expensive to
+  reverse, a crate-boundary crossing), ask; don't guess and proceed.
 
 ---
 
-## 5. Resume / operating mode
-
-Non-negotiable constraints, in priority order:
-
-1. **Never break the live production path.** The renderer runs 24/7 unattended on a real site.
-   Every commit leaves `npm run typecheck`, `npm test`, `npm run build`, and `npm run build:lib`
-   green. If a feature can't be added without regressing this, stop and say so.
-2. **Legibility over feature count.** Every UI surface touched must be as usable/readable as the
-   patchbay editor's current state — dark theme, clear hierarchy, no dead/hidden controls, real
-   labels not ids.
-3. **Ship working slices, not partial scaffolding.** Definition of done: does the real thing
-   end-to-end, is tested, and is verified (real browser check when visual/interactive — flag
-   clearly when browser access isn't available, per §6's many "not verified in a browser" notes).
-4. **Protect extensibility.** Prefabs/built-ins must be built *through* the same extension
-   mechanism a user would use, never a hardcoded special case beside a thinner "real" API. Ask:
-   could a user replace/extend this the same way I just built it?
-
-**Where things stand**: all 7 §3.5 protocols have real landed work; the two biggest recurring
-gaps (physical fixtures editor-tool-only, MIDI/OSC not routable in the graph) are closed —
-`FixtureOutput` runs in production, `midiCc`/`oscIn` are real graph node kinds, the editor
-dogfoods the production fixture API. §4's Layer 2 understanding build order (all 6 steps) also
-landed — the Signal Bus now carries `noveltyLocal`/`noveltySection`/`fullness`/`onsetDensity`/
-`harmonicNovelty`/`chromaRootHue`/`chroma`/the 5 sidecar-only presence signals — and every one of
-those (including the `--stems` Demucs path) has now been verified against a real 5:40 track, not
-just synthetic fixtures (see the "headless real-audio test run" §6 entry). **As of the Layer 2
-default-route session**: the 6 live (non-sidecar) signals are now real `screen.*` targets
-(`screen-only.ts`'s `identityRoutes`), with `chromaRootHue`/`fullness` specifically also wired
-into a native composite (hueShift, flowStrength) — see that session's own §6 entry for exactly
-which two and why only those two. The 5 sidecar-only stem-presence signals are still unrouted, and
-the fixture side is untouched — both real follow-up work. §3.7's checklist is the source of truth
-for what's next — don't assume any older list (§3.5's protocol order) still dictates priority,
-it's exhausted.
-
-**Standing caveat across almost everything in §6**: most of it has never been verified against
-real hardware or a real browser (no MIDI controller, no external OSC sender, no Art-Net/sACN
-receiver, no laser DAC, no browser access in most of these sessions) — typechecked and
-unit-tested at the logic layer only. Closing that loop for any one protocol, when real
-hardware/browser access is available, is higher-value than starting new scope.
-
-**As of the `HYSTERESIS_SCRIPT` execution engine session**: "the big one" — the single largest
-piece of remaining scope this whole roadmap has been pointing at since Phase 0 — is now real. The
-engine (a sandboxed nested Worker, `src/render/worker/scenes/isf/script-runtime/`), the format's
-`scriptOutput`/`scriptTexture` extensions, and the actual Julia autopilot port
-(`examples/isf/julia-autopilot.hyst`) all landed in one session — see §6's dated entry for the
-full design and what's still deferred (editor authoring UX for `HYSTERESIS_SCRIPT`, fine constant
-tuning against live visual feedback). The two other standing candidates from the prior session are
-unchanged and still open: (1) wire the still-unused Layer 2 signals (`noveltyLocal`/`fullness`/
-`harmonicNovelty`/stem-presence/...) into a real default route — small, contained, real value;
-(2) verify `midiCc`/the envelope-attack/release-override feature against a real physical MIDI
-controller (the user has one) — closes a real, standing, never-tested gap rather than adding more
-untested surface.
-
-**Operating mode**:
-- Gap-analysis first, every time you resume — diff §3.7's checklist against what's actually in
-  the repo, don't assume where the last session left off.
-- One coherent slice per session; update §3.7's checkboxes as items land.
-- Append a dated/titled §6 entry per session — what changed, what's verified vs. not, what's
-  explicitly deferred. This is how continuity survives repeated context clears.
-- Respect §3.2's non-goals as hard scope boundaries.
-- If a decision genuinely needs the user's input (§3.8's open questions, or anything expensive to
-  reverse), ask; don't guess and proceed.
-
----
-
-## 6. Session history (appendix — chronological, detailed, trust this over any summary above)
-
-## Signal bus / patchbay / output refactor (this session, per the then-separate `SINTEZA_SIGNAL_BUS.md`)
-
-`Choreographer`→`ParamBus`→`Scene` (one hardwired consumer) is now `Conductor`→`SignalBus`→`Patchbay`→`VizOutput[]` (peers behind an interface, pull model). Implemented all 6 build-order steps from the spec in one pass:
-
-- **New layout**: `src/render/conductor/` — `Conductor.ts` (widened Choreographer, output-blind — grep-checkable per R1), `types.ts` (`SignalBus`/`TimescaleTag`/`SIGNAL_TAGS`/`VizOutput`), `familiarity.ts` (the online self-similarity signal), `patchbay/` (`Patchbay.ts` evaluator + `curves.ts` + `configs/screen-only.ts` default config + `configs/servo-targets.ts` SPEC ONLY), `outputs/ScreenOutput.ts` (owns the render pipeline moved in from `render-worker.ts` — Scene, memory field/persistence/bloom/composite passes; `Scene`/`SceneContext` themselves are unchanged). `src/render/choreography/` now holds only `spring-damper.ts` (still used standalone by `JuliaScene` for its own `c`-position spring — untouched).
-- **Nonlinear composites** (`flowStrength`, `symmetry`, `fieldDecay` — each a `max()`/multi-signal formula, not a 1:1 route): deliberately computed in `patchbay/screen-composites.ts`'s `ScreenParamAssembler` (pure, GL-free, unit-tested directly in `tests/unit/conductor.spec.ts`) rather than forced into the patchbay's 1-signal-in/1-target-out route model. Documented as an intentional deviation from "patchbay owns all routing logic," not an oversight — see that file's header comment.
-- **New continuous/beat/bar bus signals**: `bandTilt`, `beatPulse`, `downbeatPulse`, `dropImpulse`, `onsetImpulse`, `familiarity` — `dropImpulse` in particular replaces the old one-frame-true `DropTrigger` push for routing purposes (ScreenOutput edge-detects a rise in it to reconstruct the same one-shot spring-impulse/symmetry-hold behavior, staying pull-model/R2-compliant); the discrete `DropTrigger` still exists as Conductor-internal state per the spec's explicit allowance.
-- **Groove reactivity** (step 3): bands/`bandTilt` bias the memory field's curl-noise drift axis (`MemoryFieldParams.flowDirection`, new optional field, no shader/GLSL changes needed — just a JS-side drift-ratio bias), `beatPulse` adds a modest throb into `flowStrength`, `barPhase` adds a subtle sinusoidal "breathing" into `fieldDecay`. Detector-disable acceptance test: new `MainToWorklet` message `debugSetDetectorsEnabled` (main thread → live AudioWorklet, a channel that didn't exist before — `AudioEngine.setDetectorsEnabled()`), gates `feature-worklet.ts`'s build/drop/break detector calls. **Not automated** — verify by hand via `npm run dev` + the debug toggle; screen should stay visibly reactive with detectors off.
-- **`familiarity`**: time-bucketed (not fixed-count — frame rate varies under adaptive quality) buffer of `[sub,low,mid,presence,air,centroid,flatness]` vectors, cosine similarity against ~16-32 recent samples. Routed into `symmetry`'s composite as a gentle organization gain, distinct from the drop's snap.
-- **Drop detector fix** (`drop-detector.ts`): replaced the fast-minus-slow-energy-jump primitive (conflated "louder" with "sparse→full", false-positived on pulsing reverb-tail sparse intros, missed drops after already-loud builds) with a conjunction of **fullness** (multi-second sustained energy, crest-factor-penalized), **onset-density jump**, and **novelty contrast** (own `src/audio/worklet/brain/novelty.ts` — `cosineSimilarity`/`NoveltyRingBuffer`, the same algorithm `familiarity.ts` reuses, but a *separate instance* since they run on different threads/cadences: audio worklet hop-rate vs. render-frame-rate). Removed the never-resetting cumulative `grooveSec` leak entirely. Confirmation/refractory/startup-grace/beat-snap-lookahead mechanics unchanged. `tests/unit/drop-detector.spec.ts` rewritten for the new primitive (5 tests, same behavioral intents as before — see file for the exact synthetic feature-vector fixtures; tuning these constants (`FULLNESS_THRESHOLD`, `ONSET_JUMP_MIN`, `NOVELTY_WINDOW_SEC`=4 (short, on purpose — independent of familiarity's own ~12s window), `NOVELTY_HOLD_SEC`) against **real audio** hasn't happened yet, only synthetic fixtures — flag as the next thing to sanity-check against real tracks).
-- **Sidecar-primary drop gating** (partial): the "true offline whole-track segmentation" half of this was **not** built — `scripts/structure.ts` still replays the (now-fixed) causal `DropDetector` hop-by-hop offline rather than doing genuine look-ahead segmentation; that's real remaining work if the fixed causal primitive isn't good enough replayed offline. What *was* wired: `src/index.ts` now calls `engine.setDetectorsEnabled(false)` whenever a sidecar loads (reusing the same toggle groove-reactivity needed) and `true` on `trackchange`'s clear — since `StructureSource.fuse()` already discards live build/drop/break detector output wholesale whenever a sidecar is active, this stops that output from being computed and thrown away every hop, and removes the live drop detector's false-positive/miss risk for own tracks entirely (sidecar timeline is authoritative).
-- **Patchbay test coverage**: `tests/unit/patchbay.spec.ts` — curves, gain/offset/invert, sum-then-clamp multi-route combine, passThrough, and the timescale-tag rejection path validated against `servo-targets.ts`'s declarations (screen accepts every tag, so rejection can't be exercised against it — this is the concrete proof the interface generalizes to a second, physically-constrained output without building one).
-- **Explicitly not built**: no `ServoOutput` runtime code, no serial/GPIO transport, no patchbay editor UI, no device manager beyond the literal `const outputs: VizOutput[] = [screenOutput]` array, no `full-physical`/`calm`/`idle` patchbay config variants (only `screen-only` exists).
-- **Not covered by a test**: the sidecar→`setDetectorsEnabled(false)` wiring itself lives in `src/index.ts`, which is DOM/Worker-dependent and outside this repo's existing (Node-environment, DOM-free) vitest conventions — no test harness for `index.ts` exists at all, before or after this session. Verify by hand if this specific wiring is ever suspected of a regression.
-
-## Fold seam / Julia zoom follow-up (this session, after the signal-bus refactor above)
-
-User feedback on the live render after the refactor, addressed in three iterations — recorded in full because the first two attempts were each visibly wrong in a way worth not repeating:
-
-- **Kaleidoscope fold seam** (`memory-field.frag.glsl`): reported as a bad-looking horizontal line through the center plus a ~30° wedge that never "smeared." Root cause: the textbook `abs(mod(theta,wedge)-wedge/2)` fold is a 2-to-1 map — exactly half of every wedge sits in the canonical half and maps to itself (`folded(theta) == theta`) *regardless of `uMirrorStrength`*, so that whole half never organizes while its mirrored twin does. First attempt (smoothing the triangle wave into a cosine tent + a quarter-wedge phase offset) only softened the derivative kink; it didn't touch this deeper asymmetry, and the user saw the seam persist (especially on the left, where the wide-aspect canvas stretches that ray across most of the screen). **Actual fix**: sample `uPrev` twice — once raw, once fully folded — and cross-fade the two *colors* by `uMirrorStrength`, uniformly across the whole screen, instead of blending the angle before a single sample. No privileged always-identity region, no seam from the blend itself, and every wedge keeps a real share of its own history even at high symmetry. **Not yet verified in a browser** — reasoned through and typechecked/tested (no GL test coverage exists), but this file has already needed two follow-up passes based on live feedback, so don't assume the third is necessarily right either.
-- **Julia zoom rate** (`JuliaScene.ts`): reported as imperceptible — "just changing colors in the center." First attempt 3x'd `ZOOM_RATE_BASE` (0.018→0.054) and *loosened* `ZOOM_SEEK_MIN_FACTOR` (0.6→0.75); that made the zoom visible but broke the balance between how fast the view narrows and how much real wall-clock time `updateNavigation` gets to steer pan toward genuine boundary detail at its own unchanged speed (`NAV_PAN_SPEED`) — reported back as the dive drifting past/outside the fractal's detail, exactly the "zoom outracing navigation" failure `ZOOM_SEEK_MIN_FACTOR` exists to prevent. **Landed at**: 2x instead of 3x (`ZOOM_RATE_BASE` = 0.036, ~6.4min idle dive vs. the original ~13min) and `ZOOM_SEEK_MIN_FACTOR` restored to its original 0.6. `ZOOM_RATE_WINDUP_GAIN`/`ZOOM_RATE_ENERGY_GAIN` scaled by the same 2x to keep their relative contribution unchanged. This also roughly doubles the `ZOOM_MIN` reset frequency vs. the original estimate below (was ~13-22min idle, now ~6.5-11min idle) — still infrequent, not disruptive. (An independent review of this session's commits caught the comments in `JuliaScene.ts` itself understating these dive-duration figures by ~30% — `ln(ZOOM_START_MAX/ZOOM_MIN)/rate` is the actual formula, fixed in-code; the "13-22min"/"6.5-11min" figures here and below were already right.)
-- **"Not enough variety, just looks psychedelic"** — flagged by the user as a real, unresolved complaint, explicitly *not* something to keep guessing at with more constant tweaks. The color cross-fade above should help some (real per-wedge history now survives even under high symmetry, instead of everything-but-one-wedge becoming a pure copy of its neighbor), but whether that's enough, or whether the actual issue is palette/hue range, the Julia `c`-parameter's motion (dives looking similar to each other), or the symmetry effect being overused generally, is an open design question — ask before further tuning here rather than assuming which one it is.
-- **Julia dive "missing the fractal completely, going into mostly void"** — reported again after the zoom-rate walk-back above, so the zoom-vs-navigation balance wasn't the whole story. Root cause found: `c` (`thetaSweep` via `cardioidPoint`) drifts at a fixed **real-time** rate (`THETA_SPEED_BASE` etc.), completely independent of the current zoom depth — "θ only ever advances, there is no reset" is deliberate (the "never repeats" guarantee) but means over one ~6.4min dive `c` can traverse ~3 radians of the cardioid boundary, a huge parameter-space move. At normal zoom that's a gentle morph; deep in a dive (zoom shrunk many orders of magnitude), the visible field is so narrow that this same absolute drift relocates or destroys the fine structure navigation is aimed at, faster than local re-probing (`updateNavigation`'s periodic 8-direction check) can recover from — the view ends up staring at now-unrelated/empty structure. Fixed by scaling both `thetaSweep`'s and `radialPhase`'s per-frame advance by `max(THETA_ZOOM_FLOOR=0.03, min(1, zoom))` — full speed at normal/wide zoom, nearly frozen once genuinely deep, back to full speed the instant a new dive resets zoom near 1-2. **Not yet verified in a browser** — same caveat as the fold/zoom items above.
-
-## Patchbay/patch-graph editor tool + a real bug-fixing pass (this session, later)
-
-Built a dev-only editor tool per user request, then spent most of the rest of the session chasing real bugs the user found while testing against it and the real site. Recording all of it since several fixes only worked on the second or third try.
-
-**The editor** (`tools/patchbay-editor/`, `npm run patchbay`, own Vite config/tsconfig, React as a devDependency scoped to this tool only — never touches the shipped package): drives a **real** render-worker instance (not a mock), lets you live-edit the screen's `Patchbay` config (hot-swapped via new dev-only `debugSetPatchbayConfig`/`debugSetSignalBusStream` worker messages, inert unless this tool sends them) and see the change immediately. Data model: `patchbay/editor/patch-document.ts` (pure add/update/remove/reorder ops over routes, stable ids) is deliberately separate from a **second, new system**, `render/conductor/patchgraph/` — a small operator graph (signal/const/threshold-with-hysteresis/envelope/logic-and-or-not/combine/curve/map/target nodes, topologically evaluated with per-node persistent state) built specifically for physical outputs (servos/LEDs/lasers), since the screen's flat 1-signal-in/1-target-out route model can't express "LED on only when energy is high AND the low end is present" — deliberately NOT unifying this with the screen's `Patchbay`, which stays untouched/working. `patchgraph/fixture-document.ts` lets a user add/name/remove fixture instances (dimmer/RGB/servo/mover types), each instance's channels becoming real routable targets live, no code change. Only a vertical slice of UI exists (one route, one demo fixture, live debug readouts) — the full route table and a graph-building canvas are still unbuilt (see "Outstanding" below).
-
-**Real bugs found and fixed, in the order they surfaced** (several are `JuliaScene.ts`/`memory-field.frag.glsl` fixes affecting the real site, not just the editor tool):
-
-- **Canvas double-transfer crash**: React 18 StrictMode's dev-mode double-invoke of effects (mount→cleanup→mount) collided with `canvas.transferControlToOffscreen()`, a genuine one-shot browser API with no undo. Removed StrictMode from the editor's `main.tsx`; also cached `RuntimeBridge` instances by canvas element (a `WeakMap`) so Vite Fast Refresh reuses the existing bridge instead of re-transferring.
-- **View "vanishes"/goes dark, heals briefly on resize, non-deterministic**: several real, independent gaps found in sequence — (1) the editor's own resize handling had no debounce (the exact bug already fixed in `src/index.ts`'s `RESIZE_DEBOUNCE_MS`, just never carried over when building this tool's resize handling from scratch — fixed); (2) **no WebGL context-loss handling existed anywhere in this codebase** — without a `webglcontextlost` listener calling `preventDefault()`, the browser won't even attempt to restore a lost context, so `powerPreference: 'high-performance'` (a real trigger on hybrid-graphics laptops) could kill the canvas permanently — added both listeners to `render-worker.ts`'s `init` handler, reusing the still-valid `caps.gl` reference to re-run `screenOutput.init()` on restore; (3) **no error handling existed anywhere in the render loop** — any uncaught exception meant the recursive `requestAnimationFrame` call never happened and the loop died silently forever, freezing on whatever was last drawn (plausible if that landed mid-flash during the — now more frequent, post zoom-speedup — zoom-floor reset) — split `loop()` into an outer try/catch wrapper (always reschedules regardless) and `tick()` (the actual per-frame work); added `console.log` around the zoom-floor reset trigger and context-restore for next time. **The actual root cause turned out to be none of these** — see next item.
-- **"Black shaders growing... like the GPU is dying"** (the real root cause of the above): a NaN/Infinity value entering `MemoryFieldPass`'s ping-pong buffer, which is a **float** FBO and does NOT clamp on write (unlike an 8-bit texture) — once one bad pixel exists, every subsequent frame's advection sampling spreads it to neighboring pixels, visually reading as corruption growing across the screen; a resize reallocates that exact buffer from scratch, which is why that "healed" it. **Confirmed fixed** (user-verified) by sanitizing in `memory-field.frag.glsl`'s `main()`: `isnan()`/`isinf()` fall back to the current frame's fresh content, plus a generous finite clamp (64). The upstream source of the bad value was never identified — this stops it from persisting/spreading regardless of cause, which turned out to be sufficient.
-- **Drop detection never fires on a softer ambient "drop"**: confirmed in code — the rewrite earlier this session requires `fullness AND onsetJump AND noveltyPeak`, all three, so a pad/drone swelling into fullness with no percussion structurally could never qualify (no rhythm to jump). Added a second qualifying path (fullness + novelty, no onset requirement) in `drop-detector.ts` — safe against the original false-positive case since that's rejected by fullness's own crest-factor penalty independent of onset activity. First attempt used a *stricter* novelty threshold for this path; measured that this can't work (fullness ramps up over ~1.3s, by which point novelty has typically already decayed most of the way from its post-transition peak — true for the *existing* rhythmic path too, which passes with novelty barely above 0.3 at the moment fullness clears) — landed on reusing the same `NOVELTY_THRESHOLD` instead.
-- **Julia "spins/moves too fast," worst near max zoom before reset**: `THETA_SPEED_WINDUP_GAIN`/`THETA_SPEED_ENERGY_GAIN` (c's sweep-speed build/energy gains) key off the same signals as the zoom rate's own build/energy gains AND screen-composites.ts's flowStrength/symmetry build/tension gains — a build moment accelerated the shape morph, the zoom, the turbulence, and the kaleidoscope fold all at once. The zoom-freeze fix from earlier this session only meaningfully damps this once zoom is already fairly deep, so a build early/mid-dive got the full unthrottled morph speed regardless. Halved both gains.
-- **"Too psychedelic/bright/illegible sometimes"**: root-caused but **not yet fixed**, still an open plan the user hasn't signed off on implementing — see "Outstanding" below.
-- **`tension`/`buildProgress`/`suspension` "make no sense"**: not a bug — explained to the user (`tension`/`suspension` are the same raw `BreakDetector` "is the mix thin/collapsed" signal at two different smoothing time-constants, not independent concepts; `buildProgress` only tracks a *rising trend* in centroid/sub, not general energy). All three were designed around dynamic build→drop→break song structure and are expected to sit near-inert on continuous ambient material — that's the gap `energy`/`familiarity` exist to cover. User left the naming as-is for now ("I don't know your choice") — worth a rename for clarity if it comes up again, not urgent.
-- Also fixed during an independent code review of the day's earlier commits (before this bug-hunting pass): a dead `windupSpring.setTarget(0)` call in `Conductor.ts` that never did anything, a misleading comment in `types.ts` about `dropTrigger` being consumed downstream (it isn't), a Patchbay type-safety gap where a typo'd route `from` silently produced `NaN` every frame instead of failing at construction, and ~30%-understated dive-duration figures in `JuliaScene.ts`'s own comments.
-
-## Repo rename status
-
-Not yet renamed on GitHub — still `stcksmsh/hysteresis`. The site's `projects.manifest.json` and this package's own `io-page` branch `meta.json` already declare the eventual slug `sinteza-viz`; the manifest's fetch-source `repo` field is deliberately still pointed at `stcksmsh/hysteresis` (the real, reachable name) until the actual rename happens. **When the rename happens: flip that one line back in the site repo, nothing else needs to change** (the resulting page path stays `/projects/sinteza-viz` either way, since that comes from `meta.json`'s `slug`, not the manifest's `repo` field).
-
-## Position-only sync mode (the site's actual integration)
-
-The site embeds SoundCloud via iframe — cross-origin, no AnalyserNode reachable, ever. `StructureSource.synthesize(positionSec)` builds a complete `StateFrame` purely from a schema-2 sidecar (`src/shared/sidecar.ts`), driven by an rAF loop in `src/index.ts` whenever a sidecar is loaded and no live audio has attached. `idle: true` is set *deliberately* in this mode even though music is genuinely playing — it's the existing lever (`JuliaScene.idleClockSec`) that keeps the beam animating its idle Lissajous figure, since there's no real waveform to trace offline. Every other field (`buildProgress`, `tension`, bands, onsets, energy, centroid, flatness) carries real per-track structure.
-
-**Generating a sidecar**: `npm run analyze -- /path/to/master.wav output.sidecar.json` (wraps `scripts/analyze.ts`, needs the *original* WAV — the hand-rolled `scripts/wav.ts` reader only handles RIFF/WAVE PCM 16/24/32-bit or 32-bit float, no compressed formats). Output is schema-2 JSON: `bandEnvelope` (5 bands × ~20Hz samples), `centroidEnvelope`/`flatnessEnvelope`/`energyEnvelope`, `beats[]`, `sections[]` (build/break spans only — everything outside a matched section defaults to `buildProgress`/`tension` = 0), `events[]`, `onsets[]`. Runs fine on the *original* full-fidelity WAV directly — no need to downsample for this script's sake (downsampling only matters if you need to physically transfer the file somewhere with a size limit).
-
-**Currently wired up** (as of this session): SIGSEGV, 0xC000021A, Hysteresis, Sampling Drift, Triple Pendulum — all five real tracks on the site now have real sidecars driving the visualizer (published to the site repo's `public/sidecars/`, referenced via each track's `sidecar` content field). Confirmed empirically (simulated `player:transport` sequences, diffed rendered output at a detected build-section position vs. a plain groove position) that this actually changes what renders, not placebo.
-
-## Known/accepted limitations (don't "fix" these without reason to)
-
-- The beam never shows a real waveform in position-only mode — always the idle Lissajous figure. Sidecar section detection is currently sparse for most tracks (e.g., SIGSEGV: 2 sections across ~6 minutes) — `buildProgress`/`tension` default to 0 for a large majority of most tracks' runtime. `energy` (see below) now fills most of that gap for the continuous/ambient motion; buildProgress/tension are still what drives the big, rare, structural reactions (drops, builds) specifically. **The new §4 signals (`noveltyLocal`/`noveltySection`/`fullness`/`onsetDensity`/chroma) are the real, live-capable fix for this same gap going forward** — they're alive every frame, not section-gated.
-- `ZOOM_MIN` (JuliaScene) is deliberately capped — going deeper needs actual perturbation-orbit rebasing (not implemented), and past attempts at a lower floor introduced visible blocky artifacts. Don't lower it without implementing rebasing.
-- The Julia scene's perpetual zoom dive periodically resets when it hits `ZOOM_MIN` (a designed, not-a-bug beat, now with a slower/smoother 1.6s reveal — see below). Cadence is now somewhat shorter than the original idle-only ~13-22min estimate since `ZOOM_RATE_ENERGY_GAIN` also feeds it, but was kept conservative specifically to avoid pushing this too far — if it's ever reported as "too frequent" again, check real `energy`/`windup` values before assuming the rate math is wrong.
-- Onset particles were removed (this session, user's explicit call after being asked to choose between toning down / repositioning / removing). Don't re-add a similar effect without addressing *why* it was disliked: it wasn't "a transient/granular layer is bad", it was specifically that particles spawned in a way that visually read as erupting from the fractal shape's own position.
-
-## Fixes landed this session
-
-- **Flash pacing** (`JuliaScene.ts`, `POST_FLASH_SEC`): was 0.28s, now 1.6s. The zoom-floor reset's fade-to-black (`PRE_FLASH_LOG_WINDOW`) takes ~28s at idle rate — a near-instant 0.28s fade back in was a ~100x pacing mismatch that read as a stutter/glitch regardless of how rare the actual reset event is.
-- **Energy coupling** (`Choreographer.ts`, `JuliaScene.ts`): `frame.energy` (RMS loudness, continuously available for a track's *entire* runtime, unlike section-gated `buildProgress`/`tension`) was computed and threaded through `ParamBus` but never consumed by anything — dead data. Now smoothed (`DtSmoother`, 0.25s) and fed as an *additional* term into flow strength, theta-sweep speed, and zoom rate, gains kept modest relative to the existing build/drop dynamics. This is the real fix for "doesn't work with the music enough" — verified visually, same track/accent, two positions with very different energy (0.96 vs 0.21) both outside any structural section, clearly different field turbulence/beam character.
-- **Resize debounce** (`src/index.ts`, `RESIZE_DEBOUNCE_MS = 150`): the canvas's `ResizeObserver` had zero debouncing. On mobile, a scroll gesture crossing the point where the browser's address bar finishes collapsing changes the *dynamic* viewport height mid-gesture, firing the observer repeatedly — each firing was a full pipeline reallocation, and `MemoryFieldPass.resize()` specifically deletes+recreates its ping-pong buffers from scratch, wiping all accumulated trail history. This was the actual "stutter when scrolling past half the screen" bug — not a JS scroll listener (there isn't one), a resize side-effect of mobile browser chrome. Debounced so rapid-fire observations coalesce into one reallocation.
-- **Onset particles removed**: see the limitations note above. Also removed `ParamBus.onsetPulses`/`OnsetPulse` and Choreographer's `spectralHits`→pulses conversion (existed solely to feed particles); `StateFrame.spectralHits`/`SpectralHit` itself was left alone as general Layer-2 data.
-
-**Process note for any future fix here**: this package is consumed by the site via `github:stcksmsh/hysteresis#master`, but `stcksmsh.github.io`'s `package-lock.json` pins a *resolved commit SHA*, not just the branch. Merging a fix to this repo's `master` does **not** automatically reach the deployed site — you also need to go into the site repo and run `npm install sinteza-viz@github:stcksmsh/hysteresis#master` to re-resolve the lockfile, then commit that lockfile change. Every fix above required this as a separate, necessary follow-up step.
-
-## Sandbox/environment notes (for whoever's running this next in a similar constrained environment)
-
-- `w.soundcloud.com` and generic Google/Drive domains are blocked by egress policy in Claude Code's sandboxed sessions — can't test real SoundCloud playback or fetch from Drive links there. `raw.githubusercontent.com` and normal git push/fetch against `github.com` do work.
-- `api.github.com` (plain REST, e.g. the `contents` listing endpoint the site's `federate.ts` script calls) also 403s in that sandbox even though `raw.githubusercontent.com` doesn't — this is a real, pre-existing limitation of `federate.ts`'s GitHub-API dependency in that specific sandbox, not a bug in the script; it works fine in real CI (GitHub Actions) which isn't behind the same egress policy.
-
-## The "step back and fix everything" pass (this session, later still)
-
-User feedback after the fixes above: drop detection *still* never fires (`dropImpulse` reads a flat 0 on real audio), Julia navigation has been retuned across many sessions and still doesn't reliably find interesting structure, and — the important reframe — the psychedelic-ness is fine *if* it's controllable/automatable (palette control in the patchbay), and responsiveness is present but shallow (wants specific salient elements followed, not just overall energy). Explicit instruction: stop patching reactively, take a real step back.
-
-- **Drop detector internals exposed live**, not tuned blind again: `DropDetector.getDebug()` (fullness/onsetJump/noveltyPeak/armed) threaded through as an optional `StateFrame.dropDebug` field and the patchbay editor's signalBus stream, shown in a new "drop detector internals" panel. Next real-track test through the editor shows directly which condition is failing, instead of guessing at thresholds again.
-- **Julia vortex-search extracted into its own tested module** (`vortex-search.ts`) — `sampleOrbit`/`clusterScore`/`findVortexTarget` had ZERO test coverage before, across all the prior sessions' worth of hand-tuning against live feedback alone. Investigated one concrete, mathematically-grounded hypothesis with real data instead of another guess: `c` always sits on the Mandelbrot cardioid's boundary, which has parabolic (neutral) dynamics that converge polynomially, not geometrically — the existing iteration caps (60/90) seemed like a plausible source of systematic blindness near real boundary detail. Empirically measured this is a real but MODEST effect (raising the cap does change which candidate gets picked, sometimes substantially, and finds a few more genuinely diverse candidates — but the search already found *something* even at the old cap, it wasn't dramatically blind). Raised the caps anyway (90→400, 60→200 — both cheap, one runs once per dive) since it's a real, verified, zero-risk improvement, but this is honestly NOT confirmed as THE fix for "misses every iteration" — the deeper issue is more likely in the ongoing pan/zoom convergence behavior, which needs actual visual iteration to diagnose properly (10 new tests, all passed first write).
-- **Palette is now genuinely routable** — checked, and there was previously no way to control/automate it at all: `hueShift`/`paletteMix` were hardcoded formulas inside `ScreenParamAssembler`, never a bus signal or a target. Moved hue auto-drift onto the bus as `hueDrift` (computed in Conductor.ts), added `screen.hueShift`/`screen.paletteMix` targets, and the default `screen-only.ts` config now reproduces the old formulas as real routes (`hueDrift` + `centroid`\*0.1 summed into `screen.hueShift` — the patchbay's existing sum-then-clamp combine mode, no new mechanism needed; `buildWindup` → `screen.paletteMix` passthrough). New conductor.spec.ts tests cover both (neither had any test before, hardcoded or otherwise).
-- **Built the real route table UI** (`tools/patchbay-editor/src/RouteTable.tsx`) replacing the single hardcoded energy-gain slider — every non-passthrough route in the live screen config is now editable in place (from/to/curve/gain/offset/invert), with add/remove and live inline validation. This is what makes the palette routing above actually *usable* right now, not just wired at the data layer.
-- **Finished in a follow-up pass, same session**: the physical patch-graph builder UI (`GraphEditor.tsx` — structured, every node kind's fields inline, `graph-draft.ts` is the seam that keeps a future node-graph canvas additive rather than a rewrite), fixture instance management (`FixtureManager.tsx`), simulated fixture visuals (`FixtureVisuals.tsx` — dimmer glow/RGB swatch/servo needle/mover crosshair), save-to-file (`serialize-config.ts` + a small Vite dev-middleware in `vite.patchbay-editor.config.ts`, restricted to one directory, filename-validated, live-verified including two rejected path-traversal attempts), and a visual-polish pass (real CSS classes replacing scattered inline styles — see `styles.css`). The patchbay editor's original task list is now fully built.
-- **Still not done, deliberately** — the "follow salient/singled-out elements" responsiveness idea was explicitly flagged back to the user as a hard, real DSP problem needing its own design conversation, not something to build blind. **This is what §4 above is the actual answer to.**
-- **Patchbay editor layout overhaul** (after user feedback: "clunky, difficult (ugly, bad UX, and barely legible, need a fullscreen option or move it below the demo or something)"): the original layout was a fixed 520px sidebar of tiny (11-12px) panels squeezed next to the canvas regardless of window size — that was the actual problem, not colors. Replaced with: canvas as a top preview strip (`min(46vh, 520px)` tall) with a fullscreen toggle button (Escape also exits) that switches it to `position:fixed; inset:0` without recreating the canvas DOM node — important because `transferControlToOffscreen()` is one-shot, so the existing per-canvas `RuntimeBridge` cache in `App.tsx` had to keep working across the fullscreen state change, not just across Fast Refresh; editor panels moved into a full-width responsive grid below (`repeat(auto-fit, minmax(360px, 1fr))`, the patch-graph panel spans full width via `.panel-section-wide`) instead of one narrow vertical stack. Base font bumped 13px→14px, most panel-internal text 11-12px→12-13px. Verified: typecheck clean, dev server serves/transforms all changed modules with no console errors, full test suite (107 tests) passes. Not yet verified in an actual browser click-through — no browser access in this session.
-- **Fixed a real bug from that overhaul**: the fullscreen toggle broke the sim entirely (stayed black forever), and the canvas preview also read as too squeezed. Root cause of the black-screen bug — the JSX rendered `canvasBlock` (the `<canvas>` element) at two DIFFERENT tree positions depending on `canvasFullscreen` (`{!canvasFullscreen && canvasBlock}` inside `.app-body`, `{canvasFullscreen && canvasBlock}` after it). React sees that as a different element identity at each position, so toggling fullscreen unmounted the old canvas and mounted a brand-new one — fatal here because `transferControlToOffscreen()` is one-shot per canvas and the effect that calls it has no unmount cleanup, so the old worker/offscreen-canvas pairing was orphaned mid-render while a new bridge tried to start fresh, leaving it black. Fixed by rendering the canvas block exactly once, at a single fixed JSX position, and doing fullscreen purely via CSS class toggle (`.canvas-block-fullscreen` → `position:fixed;inset:0`) — same DOM node the whole time, no remount. Also bumped the default preview height `min(46vh,520px)` → `min(72vh,900px)` per the "squeezed" complaint. Typecheck + full test suite (107) verified again after this fix; still no real browser click-through.
-- **Panels below the sim are now reorderable and resizable** (user's next ask after the layout overhaul: "the individual windows should take up the space better and fill it up better, many things should be reorderable/resizable"). Switched the panel area from a uniform CSS grid to `display:flex; flex-wrap:wrap` (`.panel-flow`) so panels pack against their own natural sizes instead of forcing every panel into the same column width — a route table and a 3-line debug readout no longer waste the same footprint. Each panel got: (1) a real per-panel resize handle via the browser's native `resize: both` (deliberately not a JS resize library — free, familiar, zero new dependency for a dev-only tool); (2) drag-to-reorder via native HTML5 drag-and-drop (`Panel.tsx`'s draggable header, no library) — order is tracked as a plain id array in `use-panel-order.ts` and persisted to `localStorage` so a customized layout survives a reload, merging in any new panel ids that get added later rather than resetting. `App.tsx`'s 8 panels are now data (`{id, title, hint, wide, width, height, content}`) mapped over the persisted order, instead of hardcoded JSX `<section>`s in a fixed sequence — same content as before, just re-arrangeable. Verified: typecheck clean, dev server transforms the two new modules with no errors, full suite (107) passes. Still not verified in a real browser — in particular the actual drag feel and whether native `resize` interacts oddly with the `RouteTable`'s internal horizontal scroll container need an eyes-on check.
-- **Seeded all 4 fixture types by default**, not just the dimmer: `App.tsx`'s initial `fixtureDoc` now adds "Demo Dimmer" / "Demo RGB" / "Demo Servo" / "Demo Laser" (`mover` type — there's no separate "laser" fixture type, `mover`'s pan/tilt/intensity channels are what a laser/moving-light needs) up front, so opening the editor immediately shows every `FixtureVisuals` widget kind and gives the graph editor's target dropdown a channel from each type to route to, without the user needing to know to add them manually first.
-- **Caught immediately by the user: the new demo fixtures "were not wired up in a working way."** Correct — the original `seedNodes` only ever wired the FIRST target in the catalog (energy→threshold→target), so the 7 other new demo channels sat at their default value with nothing driving them. Fixed properly, not just patched: extracted the seeding logic out of `App.tsx` into its own pure module (`tools/patchbay-editor/src/seed-graph.ts`, no React/RuntimeBridge imports, so it's cheap to unit test) and rewrote it to wire EVERY target in the catalog — the first keeps the original threshold-gated chain (still the clearest single demo of a threshold node), every other channel gets a signal picked from a rotating list of continuous-tagged signals (`energy/low/mid/presence/air/centroid/pan/familiarity` — continuous-only deliberately, since validate.ts's servo-safety warning flags a transient signal fed straight into a servo/mover with no smoothing). Also fixed a second, subtler instance of the SAME bug class the rewrite would otherwise still have: `evaluateNode`'s `target` case is a pure passthrough (nothing auto-scales a 0-1 signal into a target's real range), so a servo (range `[0,180]`) or any non-[0,1]-range target getting a raw signal would visually barely move at all even though it "has wiring" — every chain now inserts a `map` node into the target's real range when it isn't already [0,1], including the first/threshold chain (a servo landing in the "first" slot was still stuck in 0-1 space before this second fix). New tests (`tests/unit/seed-graph.spec.ts`): one builds all 4 demo fixture types and asserts `validatePatchGraph` returns zero issues and every target resolves to a finite value; the other specifically catches the range-mapping regression (a lone servo target must resolve well above 1, not just 0 or 1). Full suite now 109 tests, all passing; dev-server transform check clean.
-
-## Outstanding (as of the session before the docs merge)
-
-- **The "too psychedelic/bright/illegible sometimes" fix — implemented, not yet verified in a browser.** User confirmed both complaints were real. Mechanism: the composite pass already Reinhard-tonemaps (`c/(1+c)`), so nothing literally clips to white, but once the memory field's accumulated brightness gets large, Reinhard's compression crushes local contrast so everything reads as a washed-out bright mush — and `symmetry` (kaleidoscope strength) and `decay` (memory-field persistence, hence brightness) both scale up off the *same* `tension`/`buildProgress`/`suspension` signals, so a build/break moment got simultaneously more mirrored and more washed-out at once, for as long as that section ran. Landed: (1) `uCurGain` in `memory-field.frag.glsl`/`memory-field-pass.ts` scales the fresh-frame contribution by `(1-decay)/(1-DECAY_REFERENCE)` so steady-state brightness (`cur/(1-decay)`) stays constant regardless of decay — `DECAY_REFERENCE` matches today's resting decay (`FIELD_DECAY_GROOVE`=0.86) so the look at rest is unchanged, every higher decay tier now holds the same brightness longer instead of a brighter one; (2) `SYMMETRY_AMBIENT_CEILING`=0.72 in `screen-composites.ts` caps ambient (tension/build/flatness/familiarity-driven) symmetry below full mirror — the drop's brief snap-to-1 hold is untouched, since that's a deliberate earned punch, not the thing reported as overused. Did NOT lower `FIELD_DECAY_BREAK_MAX` as a separate backstop — (1) already fully decouples brightness from decay mathematically, so that would only be a persistence-*duration* tuning choice now, not a brightness fix, and wasn't asked for.
-- **Patchbay/patch-graph editor tool is now feature-complete** including a real visual node-graph canvas (see "Visual node-graph canvas + 24/7 reliability audit" below) — the old "vertical slice only" note is stale.
-- Needs a real-browser check still, in priority order: (1) the still-unverified-by-eye items from earlier in this session (the fold cross-fade, zoom-rate change) — GL/shader behavior has zero automated coverage in this repo, though several rounds of real bug reports since then didn't surface anything wrong with these two specifically; (2) the detector-disable acceptance test and the drop-detector constants (`FULLNESS_THRESHOLD`/`ONSET_JUMP_MIN`/`NOVELTY_WINDOW_SEC`/`NOVELTY_HOLD_SEC`, now also the soft-drop path) — still only checked against synthetic fixtures + this session's live spot-testing via the patchbay editor, never a systematic pass against multiple real tracks.
-- `tension`/`buildProgress`/`suspension`'s confusing naming (see above) — left alone, revisit if it comes up again.
-- Position-only sync is real end-to-end for all 5 live tracks, flash pacing and resize-triggered stutter/reset are fixed, energy actually drives the visual, onset particles are gone per user request — none of that has regressed across this session's changes (verified by the full test suite passing throughout, and no reports pointing at any of it).
-- Still real remaining work, not urgent: `scripts/structure.ts`'s offline sidecar path still replays the causal drop detector hop-by-hop rather than true look-ahead segmentation — only matters if the fixed causal primitive (including tonight's soft-drop path) proves insufficient replayed offline. Also still worth a real mobile-device check of the resize-debounce fix and real SoundCloud playback generally — both were only reasoned/simulated, never literally exercised (sandboxed sessions can't reach `w.soundcloud.com` or trigger a real mobile address-bar collapse).
-
-## Visual node-graph canvas + 24/7 reliability audit (this session)
-
-User asked for a "beautiful and intuitive graph based UI for the patchbay" and for the production visualizer to be crash-proof for unattended 24/7 operation. Scoped via explicit questions first: the graph UI meant a real drag/wire node canvas (not more form polish), and the reliability ask was about the production renderer (the site-wide background), not the dev editor tool.
-
-**Visual node-graph canvas** (`tools/patchbay-editor/src/PatchGraphCanvas.tsx`, replaces the old form-only `GraphEditor.tsx`, which is deleted): drag a node's header to reposition it, drag from a node's output circle to another node's input circle to wire them, click a filled input circle to disconnect (also picks the wire back up for immediate rewiring — same gesture as a fresh connection, just pre-detached), click a node to select it and edit its typed params in a side inspector (`node-fields.tsx`'s `NodeFields`, extracted out of the old `GraphEditor.tsx` so both a future alternate view and this canvas can share it without duplication), Delete/Backspace removes the selected node (guarded against firing while a form field has focus — Backspace while editing a number must edit the number). No pan/zoom yet — the canvas is a large fixed-coordinate-space div inside a scrolling container (plain addition for every position calculation, no transform-matrix math), which trades "scroll to reach far-apart nodes" for real implementation simplicity; add zoom later if graphs outgrow this — `graph-draft.ts`'s `x`/`y` fields don't need to change for that. `layout.ts`'s `computeAutoLayout`/`withAutoLayout` seed positions (topological-depth columns, left-to-right following actual evaluation order) for any node that doesn't have one yet — freshly seeded nodes, a loaded file, or a just-added node — without disturbing nodes the user already dragged. Verified: typecheck clean, full suite (109 tests) still passes, dev server transforms all new/changed modules with no errors (checked via direct HTTP fetch of each module's Vite-transformed output, grepped for real thrown errors vs. React's compiler-inserted exhaustive-switch guards — no real errors). **Not verified in an actual browser** — no browser access this session, so the drag/wire feel itself is unconfirmed, same caveat as several earlier layout passes.
-
-**24/7 reliability audit of the production renderer** (not the editor tool) found and fixed three real gaps, all confirmed by reading the actual code paths rather than guessing:
-
-- **`visibilitychange` was never wired up.** `render-worker.ts` already has a `'visibility'` message that calls `stop()`/`start()` on the render loop — built, tested by nothing sending it, ever. `src/index.ts` now listens for `document.visibilitychange` and forwards it (plus an initial check in case the page starts out already backgrounded), cleaned up in `destroy()`. Without this, a backgrounded/minimized tab kept rendering at full tilt indefinitely — not something to depend on browser rAF throttling to fix uniformly, and directly relevant to "24/7 unattended, must be fast" since sustained unnecessary GPU load is exactly the kind of thing that compounds into driver instability over a long unattended run.
-- **`loadSidecar`'s `fetch`/`res.json()` had no error handling**, called as `void loadSidecar(...)` from `onTransport` (can't await a DOM event handler) — any network hiccup or malformed response was an unhandled promise rejection, silently leaving that one track without sidecar-driven structure with zero visible symptom. Now wrapped in try/catch (`res.ok` also checked explicitly), logs and falls back cleanly.
-- **The real one**: `tryAttachAudio()` called `engine.attach(ctx, workletUrl, analyser)` (async — `addModule()` fetches+compiles the worklet script) as fire-and-forget, then *unconditionally* stopped the synth/idle fallback loop and cleared the audio poll interval on the very next line — regardless of whether `attach()` actually succeeded. A transient failure (script fetch hiccup, or `ctx` closed between the poll's check and the call) meant: no live audio attached, AND the poll that would've retried was already cleared, AND the fallback loop that would've kept the visual moving was already stopped. Permanently silent and dead for the rest of that page load — exactly the kind of failure a 24/7-unattended requirement can't tolerate. Fixed by only clearing the poll / stopping the fallback inside `attach()`'s `.then()` (confirmed success), with a `.catch()` that just logs — the still-running poll interval naturally retries on failure instead of being told to stop early.
-
-Verified: typecheck clean, full suite (109 tests, unaffected — `index.ts` has no test harness per the existing DOM/Worker-dependent note above) still passes after these changes.
-
-**Not done, out of scope for this pass**: no pan/zoom on the canvas, no browser click-through verification of either the canvas or the reliability fixes (no browser access this session — same standing caveat as prior sessions' GL/layout work), no deeper audit of the audio-worklet/detector internals beyond the three items above (they were the concrete, verified gaps found; didn't go looking for hypothetical ones beyond that).
-
-## Unify screen + physical patch graphs (this session, after the canvas above)
-
-User's ask, scoped via a planning pass first (since "the screen is going to be used as a projector too... total control, shared behavior for screen and outside stuff, driven by same signal" plus "elevate to production level" touches the live 24/7 render path, not just the dev tool): replace the screen's flat `Patchbay`/`Route` engine with the same `PatchGraph` node-graph engine physical fixtures already use, so one authored graph can drive both — plus give nodes real renameable names instead of `n1, n2, ...`. Summary:
-
-- **Safety net built before touching production**: `migrateRouteConfigToGraph()` (`patchgraph/migrate-route-config.ts`) converts any `Route[]`-based `PatchbayConfig` into an equivalent `PatchGraph`, and `tests/unit/migrate-route-config.spec.ts` proves it numerically matches `Patchbay.resolve()` across 200 random synthetic bus states/dt values plus dedicated edge-case tests (gain+offset, invert, invert+gain/offset, non-linear curve, multi-route summing, passThrough separation, unknown-signal rejection) — this is what made swapping the live engine defensible without a browser to eyeball the result against.
-- **Production swap**: `render-worker.ts` now runs `PatchGraphEvaluator` against `configs/screen-graph.ts` (the migrated default graph) instead of `Patchbay` against `screen-only.ts`. `resolve-screen-targets.ts` is the direct successor to `Patchbay.resolve()`'s contract (default-fills unrouted targets, copies `idle`/`scope` straight from the bus since those can't be graph nodes at all — scalar-only node type). The hot-swap message is now `debugSetScreenGraph` (was `debugSetPatchbayConfig`), same reject-bad-edit-keep-previous behavior, just on the new engine's construction-time validation.
-- **A real, independent bug found and fixed along the way**: `PatchGraphEvaluator`'s `target` node case never clamped to the target's declared range at all (unlike `Patchbay.resolve()`, which always did) — a genuine safety gap affecting fixture targets too, not something this migration introduced. Fixed in `PatchGraphEvaluator.evaluate()`.
-- **Deliberately NOT touched**: the three nonlinear screen composites (`flowStrength`/`symmetry`/`fieldDecay`, spring/damper + edge-triggered impulse dynamics, `patchbay/screen-composites.ts`) stay exactly as hand-written — reimplementing hand-tuned, multi-session-tuned motion math as generic graph nodes with no browser access to re-verify it was judged too risky for this pass. `Patchbay`/`Route`/`screen-only.ts` are kept in the tree (still tested) as the migration's source of truth and reference oracle, just no longer wired into the live render path.
-- **Editor tool**: one unified `DraftNode[]` graph now, seeded from both `screen-graph.ts`'s default and the fixture demo chains, validated against a merged catalog (`SCREEN_TARGETS` ∪ live fixture catalog) — a target node can point at either domain in the same canvas, which is the concrete "one signal drives both a screen effect and a servo" the user asked for. Sent to the live worker only after pruning to the screen-relevant subgraph (new `patchgraph/prune.ts`'s `pruneGraphToTargets`, cycle-safe upstream-closure trim) so the worker never has to know a fixture half exists. `RouteTable.tsx`/`patchbay/editor/patch-document.ts` (the old flat route-table UI) are **deleted**, not deprecated — the node canvas supersedes them outright, and `patch-document.ts` had zero remaining callers once `RouteTable.tsx` was gone.
-- **Node naming**: `label?: string` added to the real `PatchGraphNode` (`patchgraph/types.ts`) and the editor's `DraftNode`, separate from each node's stable wiring `id`. Canvas: double-click a node's header to rename inline; inspector has the same field; a toolbar "find a node" input with a native `<datalist>` autocompletes by label and scrolls/selects on Enter. `PatchTargetDecl.label` had to become optional (was required) so the screen's plain `TargetDecl` — which never had a display label — stays structurally assignable where a `PatchTargetDecl[]` is expected; display code falls back to `.id` when absent.
-- **Verification**: typecheck clean, full suite (112 tests — net down from before this session's earlier work because `patch-document.spec.ts` was deleted along with its now-dead subject, but up overall from the 12 new tests this pass added), `npm run build` and `npm run build:lib` (what the site actually consumes) both succeed, dev server transforms every changed/new module with no errors (checked via direct HTTP fetch + grep, same method as the canvas work earlier this session).
-- **Not done / explicitly out of scope this pass**: no real browser verification that the screen still looks the same post-migration — this is the biggest remaining risk. The equivalence tests prove the *routing* math is identical; they can't prove a visual regression didn't sneak in through something the tests don't cover. **Do a real-browser side-by-side check (or at minimum `npm run patchbay` and eyeball it) before treating this migration as fully proven** — same standing caveat this file has carried for GL/layout changes across several prior sessions.
-
-## Patchbay editor UI overhaul, round 2 (this session, after the demo/edit split above)
-
-User feedback on the demo/edit split from the previous pass: the patch graph is "the main thing" and wasn't reading as central, Fixtures/Fixture Visuals needed to be visually secondary (a side rail), debug panels should be an overlay rather than more inline panels, and the graph itself needed to "take up space while keeping legibility" — plus a general high-bar visual pass ("supposed to be a project I'm proud to present"). Planned explicitly before implementing (two concrete UX questions asked and answered: rail on the right, debug as a slide-in panel over the canvas, not a full modal).
-
-- **Workspace hierarchy, not a flat panel flow**: `App.tsx`'s old `panel-flow` (every panel equal-weight, drag-to-reorder) is gone. New `.workspace` is two zones — `.workspace-main` (the patch graph, full height, dominant) and a fixed `.workspace-rail` (320px, Fixtures + Fixture Visuals, right side) — with a real background-depth difference (`--bg-0` vs `--bg-1`, 1px divider) so "primary vs. supporting" reads at a glance, not just from relative size. Drag-reorder/native-resize (`Panel.tsx`, `use-panel-order.ts`) is **deleted**, not kept dormant — it existed for a loose list of equal-weight windows, which the new hierarchy doesn't have anymore (only ever 2 items in the rail).
-- **Debug panels are now a real overlay**: `SectionCard.tsx` replaces `Panel.tsx` for static chrome (title/hint/content, no drag/resize). The 🐞 Debug button opens a right-edge slide-in drawer (`.debug-drawer`, backdrop, Escape/backdrop-click/toggle-again to close) containing all 4 diagnostic panels — never inline in the main flow.
-- **The graph canvas got real pan/zoom** (`PatchGraphCanvas.tsx`): mouse-wheel zoom-to-cursor (native non-passive `wheel` listener — React's synthetic `onWheel` is passive by default, so `preventDefault()` there is silently ignored, a real gotcha worth remembering next time), drag-empty-background to pan, a "⊡ Fit" button plus auto-fit-once-on-load (frames every node with padding). Switched from native-scroll positioning to a CSS `transform: translate() scale()` on the content layer — node positions (`DraftNode.x/y`) still live in the same plain "canvas space" they always did; only the render/hit-test math changed. Wire-drop hit-testing (`document.elementFromPoint`) needed no changes at all since it already worked in real screen coordinates, transform-agnostic by construction.
-- **Auto-layout got measurably denser** (`layout.ts`): previously packed rows into a fixed-height slot regardless of a node's actual size, wasting space in mixed graphs. Now accumulates real per-node height per column (via the new shared `node-box.ts`). Column width is also now the actual max node width in that column, not a fixed pitch.
-- **Node width now flexes with label length** (`node-box.ts`'s `nodeBoxWidth`, clamped 150-260px) instead of a fixed 190px that truncated longer descriptive names — directly addresses the "should be smarter, same for names" ask, since renaming (added earlier this session) is pointless if the result just gets ellipsis-truncated.
-- **A real layout bug caught and fixed before it shipped**: the fixed-position corner preview (screen demo PiP, edit mode) was originally still bottom-right, same corner as the new rail — since the rail scrolls and the preview is `position: fixed`, any rail content scrolled up would render *underneath* the preview, permanently obscured. Moved the preview to the *top* of the rail instead and gave `.workspace-rail` real reserved top padding (270px) for it, rather than just visually avoiding the overlap — content can never scroll under a fixed overlay if space for it is reserved in the flow.
-- Verification: typecheck clean, full suite (112 tests, none of this touches production code so the count is unchanged from the previous pass), dev server transforms every new/changed module with no errors (same HTTP-fetch-and-grep method as prior passes). **Not verified in an actual browser** — no browser access this session — same standing caveat as everything else UI-shaped in this file. The pan/zoom feel, the corner-preview reserved-space fix, and the debug drawer's animation are the highest-value things to eyeball first if picking this up.
-
-## ISF import (this session — first slice under the then-separate `hysteresis-master-prompt.md`)
-
-First session working from the new `hysteresis-master-prompt.md`/`NEXT_SESSION_PROMPT.md` docs (both new at the time, now merged into this file) rather than the (then-separate) signal-bus/viz docs directly — those two describe a broader "drive anything" instrument the current signal-bus/patchgraph/canvas work is a real foundation for, not yet a superset of. Gap analysis found: the signal bus, unified patchgraph, and node canvas (all prior sessions above) satisfy the master-prompt's pipeline-target reasonably well; **zero** protocol work from the priority order (ISF, OSC, Art-Net/sACN, DMX-serial, MIDI, ILDA, WLED/E1.31) existed anywhere in the repo. Picked ISF (priority #1, first unchecked backlog item).
-
-**Real architectural constraint found before writing code**: the visualizer's own package-shape section and `scenes/registry.ts`'s own comment both state "one fixed visual identity, no scene picker in the package API" — the production site is deliberately not scene-pluggable. The master prompt's "wire signals to anything: a built-in fractal renderer, a user-written shader" is a real identity shift from that. Rather than guess which way to resolve this, scoped ISF import to the **patchbay editor tool only** (a sandbox/authoring environment) — a real, working, end-to-end capability that doesn't touch constraint #1 (never break the live production path), while deliberately leaving "should the real site ever be scene-pluggable" as an open decision for the user, not decided unilaterally. Confirmed with the user up front that docs should live in an in-repo `docs/` folder, not a separate GitHub Wiki repo (avoids a second push target this session had no need to touch).
-
-- **`src/isf/`** (new, framework-agnostic — no render-worker/React imports): `types.ts` (`IsfDocument`/`IsfInput` variants, `IsfParseError`/`IsfUnsupportedFeatureError`), `parse-isf.ts` (real subset parser: float/bool/long/color/point2D inputs; rejects multi-pass, `PERSISTENT` buffers, `IMPORTED` images, and `image`/`audio`/`audioFFT`/`event` inputs with a specific message naming exactly what's unsupported — not a stub, everything accepted renders for real), `translate-isf-glsl.ts` (textual translation from ISF's GLSL ES 1.00-style built-ins to this repo's GLSL ES 300/WebGL2 convention: `gl_FragColor`→a real `out vec4`, `texture2D`/`textureCube`→`texture`, `isf_FragNormCoord` injected as a local inside `main()` since GLSL forbids a non-constant global initializer referencing `gl_FragCoord`), `isf-targets.ts` (`isfInputsToTargets`/`resolvedTargetsToIsfUniforms` — the two-way bridge between a shader's declared inputs and the patch graph's scalar-only node model; color/point2D expand into r/g/b/a or x/y scalar targets, `isf.`-prefixed to avoid catalog collisions).
-- **`IsfScene`** (`src/render/worker/scenes/isf/IsfScene.ts`): implements the existing `Scene` interface (same one `JuliaScene`/`MandelbulbScene` implement — not a special-cased second render path) by compiling the translated shader against the existing `fullscreen.vert.glsl`. Deliberately does NOT read `ParamBus` for its inputs — `ParamBus` is a fixed, Julia-shaped struct (`screen-composites.ts`'s `ScreenParamAssembler`); an arbitrary shader's inputs have arbitrary names, so a new optional `Scene.setInputValues?()` hook (added to `Scene.ts`, harmless no-op for every existing scene) is what `ScreenOutput.update()` calls with typed uniform values reassembled from that frame's raw resolved targets, bypassing the Julia-specific assembler for this scene only.
-- **`ScreenOutput.setIsfScene(doc)`/`resetToDefaultScene()`** (new): hot-swaps the active scene and widens/restores `targets` (now a mutable field, was `readonly` — the `VizOutput` interface's own `readonly` only restricts the *interface* view, so this is safe) to include/exclude the loaded shader's own generated targets. Both are purely additive — production's `init()` path never calls either, so the default-scene behavior byte-for-byte matches before this session.
-- **Wire-up**: new `debugSetIsfShader`/`isfShaderResult` message pair (`shared/types.ts`, mirrors `debugSetScreenGraph`/`patchbayConfigResult`'s existing shape), handled in `render-worker.ts` via a new `rebuildScreenGraphEvaluator()` helper — tracks `currentScreenGraph` separately from the hardcoded default `screenGraph` specifically so loading/clearing a shader reconstructs the evaluator against the editor's *actual* authored graph, not silently resetting it to the default.
-- **Editor UI**: `IsfPanel.tsx` (load-by-file-picker or drag-and-drop, status readout, "Revert to Julia") in a new rail `SectionCard`; `App.tsx`'s `mergedCatalog`/`screenTargetIds` now include the loaded shader's targets; `runtime-bridge.ts` gets `setIsfShader()`/`onIsfResult`.
-- **Tests**: `tests/unit/parse-isf.spec.ts`, `tests/unit/isf-targets.spec.ts`, `tests/unit/translate-isf-glsl.spec.ts`. 25 new tests, all passing; full suite now 137.
-- **Verified**: typecheck clean (all 4 tsconfigs), full suite passes, `npm run build`/`build:lib` both succeed, dev server (`npm run patchbay`) transforms every new/changed module with no errors.
-- **Not verified in a browser**: whether a real ISF file from the wild ecosystem actually loads/renders correctly end-to-end (no browser access this session) — GLSL compilation itself has zero automated coverage in this repo. **Test against a handful of real downloaded `.fs` files from the ISF ecosystem before trusting this beyond the fixture shapes here.**
-- **Explicitly deferred, not started**: the ISF superset (exposing `novelty`/`familiarity`/section-confidence as inputs a shader could declare it wants — see §4 above for the underlying signals this now needs); making ISF a swappable scene on the live production site; Shadertoy→ISF import helper; every other protocol (OSC next per priority order, then Art-Net/sACN, DMX-serial, MIDI, ILDA, WLED/E1.31) — none started.
-
-## ISF as real public API (same session, immediate follow-up)
-
-User feedback on the slice above: wanted ISF "runnable" beyond the editor tool, and floated (explicitly "perhaps eventually," not now) converting Julia itself to run through the ISF pipeline. Confirmed scope before coding: (1) add a real, opt-in method to the shipped `VizInstance` — not just the editor's dev-only channel — so any embedding host *could* use it; (2) leave the Julia→ISF dogfood conversion for a later, dedicated session. User also explicitly authorized continuing autonomously through the rest of the master-plan roadmap step by step after this, stopping only when everything's done or the session runs out of budget — so if you're reading this mid-roadmap, that's why work kept going past one slice.
-
-- **Renamed** the render-worker message from `debugSetIsfShader` to `setIsfShader` — it's no longer editor-only, so the `debug` prefix would have been actively misleading.
-- **`src/index.ts`**: new `VizInstance.loadIsfShader(source, onResult?)`/`clearIsfShader()`, plus an exported `IsfShaderResult` type. Purely additive — no existing call site calls either method, so nothing about current behavior changes; a host has to opt in.
-- **Dev harness** (`src/main.ts`, `npm run dev`): added a file input + "Clear ISF" button proving the real public API path end-to-end through `init()`, not through the editor's separate `RuntimeBridge`.
-- **Verified**: typecheck clean, full suite (137, unchanged) passes, `npm run build`/`build:lib` both succeed, `dist/index.d.ts` confirmed to actually contain `loadIsfShader`/`clearIsfShader`/`IsfShaderResult` after the lib build.
-- **Not verified in a browser**: no browser access this session, so `npm run dev`'s new file input hasn't actually been clicked.
-
-## OSC out (same session, next priority slice — user authorized continuing through the roadmap autonomously)
-
-Second protocol slice, per priority order (ISF done above, OSC next). Real OSC almost always rides UDP, which browsers categorically cannot do — so this is genuinely a two-half feature: a browser-side WebSocket sender (real code, ships today) plus a tiny local relay process that actually reaches UDP (a real, working, narrowly-scoped seed of the Hysteresis Bridge daemon — OSC only).
-
-- **`src/osc/`** (new, framework-agnostic): `osc-codec.ts` — a real OSC 1.0 wire-format codec, supporting float/int/string/bool args and bundles (fixed `1n` "immediate" time tag). `bus-to-osc.ts` — `signalBusToOscMessages()` maps every `SIGNAL_TAGS`-routable bus signal to one `/hysteresis/bus/<name>` float message; `scope`/`idle`/`dropTrigger` excluded. `osc-out-bridge.ts` — `OscOutBridge`, wraps the Worker-global `WebSocket`, sends an encoded bundle per call, reports connect/disconnect/error via a status callback.
-- **Wire-up**: new (real feature, not `debug`-prefixed) message pair `setOscOut`/`oscOutStatus`, handled in `render-worker.ts` (throttled to 20Hz). `oscOutStatus` is NOT one-shot — `src/index.ts` keeps a persistent `oscOutStatusCallback` rather than a fire-once one.
-- **Real public API**: `VizInstance.setOscOut(wsUrl, onStatus?)`.
-- **`scripts/osc-relay.ts`** (new, Node-only, `ws`/`@types/ws` devDependencies): `createOscRelay({wsPort, udpHost, udpPort})` forwards each WebSocket message byte-for-byte to one UDP datagram via `dgram`. New `npm run osc-relay` script.
-- **Tests**: `tests/unit/osc-codec.spec.ts`, `tests/unit/bus-to-osc.spec.ts`, and **`tests/unit/osc-relay.spec.ts`: a real integration test** — a real `ws` WebSocket client sends real OSC bytes to a real relay instance, a real loopback UDP socket asserts the same bytes arrive. First thing in this whole arc that's actually end-to-end verified rather than typechecked+unit-tested-in-isolation-unverified-live.
-- **Dev harness**: OSC URL input + connect/disconnect buttons.
-- **Verified**: typecheck clean, full suite (150, up from 137) passes, `npm run build`/`build:lib` both succeed (`ws`/`@types/ws` confirmed NOT pulled into `dist/render-worker.js`).
-- **Not verified in a browser**: the WebSocket-in-a-Worker path itself — the relay integration test proves the *relay* half works for real, but nothing has actually opened a real browser tab and watched real UDP packets land in TouchDesigner/VCV Rack.
-- **Explicitly deferred, not started**: OSC in; every remaining protocol (Art-Net/sACN next, then DMX-serial, MIDI, ILDA, WLED/E1.31).
-
-## Art-Net / sACN out (same session, third priority slice)
-
-Immediately resolved the open question the OSC slice raised ("one growing relay vs. separate processes per protocol") in favor of one generic relay: `scripts/osc-relay.ts` **renamed to `scripts/udp-relay.ts`** and generalized to carry two message shapes on the same WebSocket server — binary frames forward verbatim to the relay's fixed default UDP target (OSC's need), text frames are parsed as a `{host,port,bytes}` JSON envelope and forwarded to *that* per-message destination instead (Art-Net/sACN's need, since both address by universe — broadcast/multicast, a different target per universe). `npm run osc-relay` renamed to `npm run udp-relay`.
-
-A real architectural finding drove scope here: **there is no production fixture patch graph anywhere in the shipped render worker** — `fixtureEvaluator.evaluate(bus, dt)` (App.tsx) had always been ephemeral browser-side React state, evaluated only for the editor's own simulated `FixtureVisuals`. So unlike ISF/OSC, Art-Net/sACN output had nothing real to feed it in production yet. Scoped this slice to the **patchbay editor tool**, same proportional-scope precedent the ISF slice set, and flagged the production `DmxOutput` VizOutput as real, separate, larger future work — not decided here (closed in a later session, see "Wire the fixture patch graph into production" below).
-
-- **`src/dmx/`** (new, framework-agnostic): `artnet.ts` — real Art-Net 4 ArtDMX packet encoding. `sacn.ts` — real ANSI E1.31 Data Packet encoding. `render-dmx-universe.ts` — `renderDmxUniverses()` scales each DMX-patched fixture's resolved channel value onto a real 0..255 DMX byte at its patched address. `dmx-out-bridge.ts` — `DmxOutBridge`, sends one packet per universe over a WebSocket to the relay's JSON-envelope path.
-- **`fixture-document.ts`**: new optional `FixtureInstance.dmxPatch?: {universe, startAddress}` + `setFixtureDmxPatch()` mutator.
-- **Editor UI**: `FixtureManager.tsx` gained a `DMX: [universe] @ [address]` field per fixture row. New `DmxOutPanel.tsx`.
-- **Tests**: `tests/unit/artnet.spec.ts`, `tests/unit/sacn.spec.ts`, `tests/unit/render-dmx-universe.spec.ts`, and — replacing the deleted `osc-relay.spec.ts` — **`tests/unit/udp-relay.spec.ts`: real end-to-end integration tests** for both relay paths. Full suite now 178 (was 150).
-- **Verified**: typecheck clean, full suite passes, `npm run build`/`build:lib` both succeed and are byte-identical in size to before this slice (confirming `src/dmx/`/`ws` are genuinely not reachable from the production bundle).
-- **Not verified**: no real Art-Net/sACN receiver has actually confirmed these packets — spot-checkable against a known-good tool's own output if this is ever suspected of being subtly wrong.
-- **Explicitly deferred, not started**: production `DmxOutput` VizOutput; OSC in; 16-bit/fine-channel DMX support; fixture-profile import; DMX-serial, MIDI, ILDA, WLED/E1.31.
-
-## DMX512 via USB-serial (same session, fourth priority slice)
-
-The one protocol in this whole arc that turned out NOT to need a relay/Bridge daemon at all: Web Serial gives the browser real, direct serial-port access, and Enttec's DMX USB PRO "Widget API" puts the actual DMX signal/break generation inside the *dongle's own firmware* — the host only ever sends an ordinary framed serial write at a fixed baud rate.
-
-- **`src/dmx/enttec-usb-pro.ts`**: `encodeEnttecDmxPacket()` — real Widget API "Output Only Send DMX Packet" (Label 6) framing.
-- **`src/dmx/dmx-serial-output.ts`**: `DmxSerialOutput` wraps a real `navigator.serial` `SerialPort` — `connect()` calls `requestPort()` (must run inside a user-gesture handler) then `open({baudRate: 250000})`; `isWebSerialSupported()` feature-detects.
-- **A real type-availability snag, found and fixed properly**: `SerialPort`/`navigator.serial` aren't part of TypeScript's bundled `lib.dom.d.ts`. Added `@types/w3c-web-serial` — but this repo's tsconfigs pin an explicit `"types": [...]` allowlist, which disables automatic `@types/*` inclusion entirely, so `"w3c-web-serial"` had to be added to that allowlist too, in both `tsconfig.json` and `tsconfig.patchbay-editor.json`. Worth remembering for any future `@types/*` addition in this repo.
-- **Editor UI**: `DmxOutPanel.tsx`'s mode select gained "USB (Enttec-protocol dongle)".
-- **Tests**: `tests/unit/enttec-usb-pro.spec.ts`. The `DmxSerialOutput`/Web Serial path itself has **zero automated coverage** — no fake/mock serial port available, and `requestPort()` requires a real user gesture by design — genuinely unverifiable here at any level beyond typecheck.
-- **Verified**: typecheck (after the allowlist fix) clean, full suite (183) passes, `npm run build`/`build:lib` both succeed and remain byte-identical in size.
-- **Explicitly deferred, not started**: MIDI, ILDA, WLED/E1.31; DMX-serial as a production feature; anything for the raw "Open DMX USB" dongle family (structurally unreachable from Web Serial).
-
-## MIDI in (same session, fifth priority slice)
-
-Another genuinely browser-native leg (Web MIDI), same story as DMX-serial's Web Serial: no relay/Bridge daemon needed, and no new `@types/*` package needed either — Web MIDI's types are already part of TypeScript's bundled `lib.dom.d.ts`.
-
-Scoped deliberately narrower than a full "MIDI routes into the patch graph" feature, said so up front: wiring a CC into the patch graph would mean adding a new node kind to `patchgraph/types.ts` with no real MIDI consumer to justify touching it yet at the time. Built the real parsing/tracking/mapping logic fully, end-to-end, proved it via a live diagnostic panel — the patch-graph integration (`midiCc` node kind) landed in a later session (see "MIDI CC + OSC-in" below).
-
-- **`src/midi/`** (new, framework-agnostic): `midi-messages.ts` — real MIDI 1.0 parsing. `midi-clock.ts` — `MidiClockTracker`, 24-tick/quarter-note timing → live BPM + beat/bar phase; Start resets phase/tempo, Continue resumes without resetting. `midi-cc-input.ts` — `MidiCcInput`, normalizes 0..127 to 0..1, plus `learnNext()`/`cancelLearn()`. `midi-input.ts` — `MidiInput`, real Web MIDI wiring, attaches to every connected input port, re-attaches on hotplug.
-- **Editor UI**: `MidiPanel.tsx` — Connect/Disconnect, live clock readout, a rolling log of the last 8 distinct CCs touched.
-- **Tests**: `tests/unit/midi-messages.spec.ts`, `tests/unit/midi-clock.spec.ts`, `tests/unit/midi-cc-input.spec.ts`. 18 new tests; full suite now 201.
-- **Verified**: typecheck clean, full suite passes, `npm run build`/`build:lib` both succeed and remain byte-identical in size.
-- **Not verified**: the real `MidiInput`/Web MIDI wiring itself — no real browser + real MIDI device available.
-- **Explicitly deferred, not started** (at the time): a `midiCc` patch-graph node kind; wiring `MidiClockState` into the Conductor's own tempo tracking; SysEx; MIDI output; ILDA, WLED/E1.31.
-
-## WLED/E1.31 on-ramp (same session, sixth priority slice)
-
-The fastest slice of this whole arc: WLED devices already speak real sACN/Art-Net natively, so the Art-Net/sACN work earlier this session already reaches them. What was actually missing was the "friendly" half — a hobbyist point at their WLED device without thinking about universes/sACN at all. WLED's own native realtime UDP protocol is that on-ramp.
-
-- **`src/dmx/wled.ts`** (new): `encodeWledDrgb()` — WLED's "DRGB" protocol. `encodeWledWarls()` — the "WARLS" variant, spec-completeness even though nothing currently produces sparse LED data.
-- **The actual reuse, not just "another encoder"**: `DmxOutBridge.send()` gained a `'wled-drgb'` protocol option that takes the SAME per-universe `Uint8Array(512)` buffer `render-dmx-universe.ts` already produces from DMX-patched `rgb`-type fixtures and feeds it straight into `encodeWledDrgb()` — no new fixture/pixel model needed.
-- **Editor UI**: `DmxOutPanel.tsx` mode select gained "WLED (UDP realtime)".
-- **Tests**: `tests/unit/wled.spec.ts`. 3 new tests; full suite now 204.
-- **Verified**: typecheck clean, full suite passes, `npm run build`/`build:lib` both succeed and remain byte-identical in size.
-- **Status after this slice**: 6 of 7 protocols real — only **ILDA** remained, flagged as needing real laser-DAC protocol research.
-
-## ILDA / laser DAC protocol layer (same session, seventh and final priority slice this pass)
-
-Explicitly the one protocol flagged to the user as needing real research rather than a from-memory guess, since a wrong binary laser format looks done but silently fails to load — the user confirmed: research it properly, then implement. Used WebSearch + direct `raw.githubusercontent.com` fetches of real reference implementations — this caught a real error before it shipped: an AI-summarized read of the official Ether Dream protocol page said the `DacStatus` struct was 18 bytes; cross-checking against two independent real implementations (`tgreiser/etherdream` Go, `echelon/etherdream.rs` Rust) showed it's actually 20 bytes (response/broadcast packets 22/36 bytes, not 20/34) — both agreed with each other and disagreed with the summarized page text.
-
-- **`src/ilda/ilda-format.ts`**: the real ILDA Image Data Transfer Format (`.ild` files) — sourced from the ILDA Technical Committee's own IDTF spec, cross-checked against `nannou-org/ilda-idtf`. `encodeIldaHeader`/`decodeIldaHeader`, `encodeIldaPoints`/`decodeIldaPoints` for all defined point formats (0/1/4/5) plus format 2's palette, `encodeIldaFile`/`decodeIldaFile` for a complete multi-frame file. **A real bug caught by the tests, not shipped**: format 5's point-record size was written as 7 bytes; the actual layout is 8 — a round-trip test caught the silent corruption.
-- **`src/ilda/ether-dream.ts`**: the real Ether Dream live-streaming DAC protocol. `DacStatus`/`DacBroadcast`/`DacResponse` decoders, `DacPoint` encode/decode (18 bytes, little-endian — confirmed different from the ILDA file format's big-endian), command encoders for Prepare/Begin/Data/Stop/EmergencyStop(0xFF, not 0x00 — also corrected via the cross-check)/ClearEStop/Ping. One command (`encodeQueueRateChangeCommand`) is explicitly flagged lower-confidence — neither reference implementation actually implements it.
-- **`scripts/tcp-relay.ts`** (new, Node-only, `npm run tcp-relay`): duplexes one WebSocket connection with one TCP connection, zero protocol interpretation. **Real, end-to-end tested**: `tests/unit/tcp-relay.spec.ts` uses a real `net.createServer()` standing in for the DAC and a real `ws` client.
-- **Tests**: `tests/unit/ilda-format.spec.ts` (12), `tests/unit/ether-dream.spec.ts` (7), `tests/unit/tcp-relay.spec.ts` (2). 21 new tests; full suite now 225.
-- **Verified**: typecheck clean, full suite passes, `npm run build`/`build:lib` both succeed and remain byte-identical in size.
-- **Explicitly deferred, not started**: a browser-side `EtherDreamClient` driving the actual prepare→data→begin command sequence; a patch-graph concept of "a stream of laser points" at all; real-hardware verification.
-
-## Full production reliability audit + fixes (same session, user-requested "/ultrareview"-style pass)
-
-`/ultrareview` itself couldn't run (the uncommitted diff — this whole session's 7-protocol arc plus prior sessions' history — exceeded its size limit: 75 files/8,888 lines vs. its 500-file/8,000-line ceiling). Substituted two sequential read-only audit forks instead, scoped explicitly to the production 24/7 render path first, plus a lighter UI/UX pass on the editor. Every finding below was verified against the actual code before fixing and every fix is covered by the existing or a new test.
-
-**Critical (fixed):**
-- **WebGL context-loss recovery reused dead GL objects — the single most important finding.** `ScreenOutput.init()` is re-run on every `webglcontextrestored` event, reusing the same `ScreenOutput` instance. Its `allocatePipeline()` only calls `new Xxx(...)` for a pass whose field is still `null` — after a restore, every pass field already holds a pre-loss JS wrapper object, so it took the "already exists, just `resize()`" branch, and `resize()` on every pass only recreates FBOs, never the program/VAO/texture created solely in each pass's constructor; `compositePass` specifically was never reconstructed past the very first init at all. Net effect: a real context loss left the screen black/frozen **permanently** on an unattended 24/7 background — the exact failure the loss/restore listeners were built to prevent, silently defeated by the pass-reuse logic underneath them. **Fixed**: `ScreenOutput.init()` now disposes the current scene and nulls every pass field before calling `allocatePipeline()`, forcing full reconstruction on every call. Also preserves an active ISF scene across a restore. **Not covered by an automated test** — GL object lifecycle across a real context-loss event has zero test coverage in this repo; the fix is verified by code inspection + typecheck/build only.
-- **`AudioEngine.attach()` had a real re-entrancy race that could leave two live AudioWorklet pipelines running forever.** `index.ts`'s `tryAttachAudio()` polls every 300ms, guarded only by `engine.attached` — which stays `false` until `attach()` fully resolves, including `await ctx.audioWorklet.addModule(workletUrl)`. On a slow first load, that await can outlast 300ms, letting a second `attach()` start before the first finishes; each creates and wires its own `AudioWorkletNode` into the same shared `listeners` Set, so both stay alive indefinitely. **Fixed**: `AudioEngine` now tracks its own in-flight `attachPromise` and returns it to a concurrent caller instead of starting a second attach.
-
-**Moderate (fixed):**
-- **`OscOutBridge` never reconnected after a drop.** Fixed: auto-reconnects after 2s unless `disconnect()` was called explicitly.
-- **`StructureSource`'s event/onset cursors could permanently skip a sidecar event if `positionSec` ever briefly regressed without going through `resyncTo()`.** Fixed: both `fuse()` and `synthesize()` now call a new `healPositionRegression()` internally at entry. New test: `tests/unit/structure-source.spec.ts`'s "self-heals a brief backward position jitter" case.
-- **`evaluate-node.ts`'s `smoothstep` curve silently clamped bipolar signals' entire negative half to zero**, inconsistent with `exp`/`log`. Fixed to be sign-preserving. Had to fix the legacy `patchbay/curves.ts` identically in the same pass (the migration equivalence test cross-checks exactly this curve against the bipolar `bandTilt` signal). New test: `tests/unit/evaluate-node.spec.ts`.
-- **A diverging Julia perturbation reference orbit was unguarded at the source.** `updateReferenceOrbit()` now checks `Number.isFinite` each iteration and, on divergence, holds the last finite point for the remainder of the texture instead of uploading `Infinity`/`NaN`.
-
-**Polish:**
-- Removed a "temporary… remove once confirmed" diagnostic `console.log` in `JuliaScene.ts`'s zoom-floor reset path.
-- Added a `:focus-visible` outline rule to the patchbay editor's global styles.
-- Considered but declined: extracting three panels' inline `style={{}}` usage into named CSS classes — checked first, established files use inline styles MORE, not less, so this is already the editor's actual convention.
-
-**Verified overall**: typecheck clean, full suite (229, up from 225) passes, `npm run build`/`build:lib` both succeed.
-
-**Explicitly not covered by this audit pass**: a full read of `render-worker.ts`'s adaptive-quality heuristics, the GL passes' shader math beyond the memory-field NaN guard already covered by a prior session, and the DMX/MIDI/ILDA modules' own internal correctness beyond the spot-checks already covered in each protocol's own session entry above.
-
-**Status after this pass: all 7 protocols have real, tested work landed** — though several stay intentionally scoped to editor-tool/protocol-layer-only rather than full production pipelines. The natural next arc: either closing specific gaps (OSC in, a `midiCc` patch-graph node, a production `DmxOutput`/`EtherDreamClient`, a laser point-source concept), or moving on to other backlog areas entirely — a fresh gap-analysis pass against the full backlog is the right way to pick, not assuming protocol order continues to dictate priority now that it's fully covered.
-
-## Wire the fixture patch graph into production (this session)
-
-Closed the recurring gap flagged across the previous session's Art-Net/sACN/DMX-serial/WLED entries: every DMX-shaped protocol was editor-tool-only, with fixture-graph evaluation living entirely as ephemeral React state in the patchbay editor. A host embedding this package had no way to actually drive physical fixtures — only the dev tool could.
-
-- **New `FixtureOutput`** (`src/render/conductor/outputs/FixtureOutput.ts`) — a worker-resident counterpart to `DmxOutPanel`'s browser-side logic: holds the current `FixtureDocument`, derives its target catalog, owns a `DmxOutBridge` connection. `send(resolved)` renders DMX universes and forwards them over the same WebSocket relay OSC uses. Deliberately does NOT cover USB/Web Serial — `DmxSerialOutput.connect()` needs a main-thread user-gesture `requestPort()` call a background worker can never trigger, so that leg stays editor-tool-only with no obvious production path.
-- **`render-worker.ts` wiring**: a `fixtureGraphEvaluator` (nullable — no sane default graph exists for an unpatched install) evaluates every frame, throttled to ~25Hz for the actual wire send. Three new message kinds: `setFixtureDocument`, `setFixtureGraph` (construction-time-validated), `setFixtureOut`.
-- **Real public API** on `VizInstance`: `setFixtureDocument()`, `setFixtureGraph()`, `setFixtureOut()` — opt-in/additive. Re-exports `FixtureDocument`/`FixtureInstance`/`DmxPatch`/`PatchGraph`/`FixtureOutConfig`.
-- **Not done this session**: the patchbay editor itself still ran its own separate ephemeral evaluation rather than dogfooding the new production API (closed in the next session below). Also unchanged: 16-bit/fine-channel support, fixture-profile import, USB production wiring.
-- Verification: typecheck clean, full suite (229, unchanged — pure wiring/glue), `npm run build`/`build:lib` both succeed. **Not verified against a real Art-Net/sACN receiver or in a browser.**
-
-## MIDI CC + OSC-in patch graph routing, and dogfooding the fixture API in the patchbay editor (this session)
-
-Continuation of the previous session's "wire the fixture patch graph into production" work — user asked to do all three of the natural-next-slices flagged there in one pass: OSC-in routing, a `midiCc` patch-graph node, and dogfooding the new fixture production API inside the patchbay editor itself.
-
-- **Two new patch-graph node kinds** (`patchgraph/types.ts`): `MidiCcNode` (`ccKey`) and `OscInNode` (`address`) — both zero-input, external-state-reading nodes shaped exactly like `SignalNode`. `PatchGraphEvaluator.evaluate()` gained an optional third `external: { midiCc?, oscIn? }` parameter. A `midiCc`/`oscIn`-fed target is exempt from the servo-safety "unsmoothed transient" warning, since neither has a bus timescale tag at all.
-- **`OscInBridge`** (`src/osc/osc-in-bridge.ts`) — the "OSC in" half OSC out never got: decodes real inbound OSC packets into a `Map<address, number>` a patch graph reads from. `scripts/udp-relay.ts` gained an optional `--osc-in-port` (forwards every inbound datagram to every connected browser tab as a binary WS frame — opt-in).
-- **Production API**: `VizInstance.connectMidiIn()`/`disconnectMidiIn()` and `setOscIn()` — both opt-in/additive.
-- **Fixture API dogfooded in the editor**: `App.tsx` no longer runs its own `PatchGraphEvaluator` copy for fixtures — it now calls `bridgeRef.current?.setFixtureDocument()`/`setFixtureGraph()`, the exact same messages `VizInstance` sends, and reads the worker's own evaluation back via a new `fixtureValues` field on the dev-only `signalBus` debug-stream message. `DmxOutPanel` now delegates Art-Net/sACN/WLED to `setFixtureOut()` — kept its own send loop **only** for USB (Web Serial genuinely can't run inside a worker).
-- **Not done this session**: no address-pattern matching for `oscIn` (exact address match only), no live-value-log UI for OSC-in, MIDI clock sync is still not wired into the Conductor's tempo tracking, no macro/sub-patch blocks, graph versioning/undo.
-- Verification: typecheck clean throughout, full suite grew from 229 → 242, `npm run build`/`build:lib` both succeed, both dev servers transform every new/changed module with no errors. **Not verified**: no real MIDI device, no real external OSC sender, no real Art-Net/sACN receiver, no browser at all.
-
-## Layer 2 musical understanding + docs consolidation (this session)
-
-User uploaded `SINTEZA_UNDERSTANDING.md` (a research-grounded design doc for the Feature Engine's
-temporal/structural features — multi-scale novelty, harmony, "track prominent elements") and
-asked for two things: implement its full 7-step build order, and first consolidate the scattered
-AI-facing docs (this file + `SINTEZA_VIZ.md` + `SINTEZA_SIGNAL_BUS.md` +
-`hysteresis-master-prompt.md` + `NEXT_SESSION_PROMPT.md`) into one file, keeping `docs/*.md`
-separate since those are real per-protocol references for human users too.
-
-**Docs consolidation**: done first, this file is the result — §1-§3 synthesize what those five
-docs said (resolving real drift, e.g. `SINTEZA_SIGNAL_BUS.md`'s retired flat Patchbay/Route
-model vs. its own addendum), §4 is `SINTEZA_UNDERSTANDING.md` folded in close to verbatim, §5 is
-`NEXT_SESSION_PROMPT.md` trimmed, and this §6 is the untouched chronological history all five
-docs used to disagree around. `SINTEZA_VIZ.md`, `SINTEZA_SIGNAL_BUS.md`,
-`hysteresis-master-prompt.md`, `NEXT_SESSION_PROMPT.md` are deleted — fully absorbed.
-`README.md`'s two references to `SINTEZA_VIZ.md` now point here instead.
-
-## Layer 2 musical understanding — implementation (same session, immediate follow-up)
-
-All 6 of §4.5's build-order steps landed (the doc's 7 numbered ambitions collapse to 6
-implementation slices — beat-synchronous aggregation shares a call site with multi-scale
-novelty, so it isn't a separate slice). Grounded in the real current code first (novelty.ts's
-`cosineSimilarity`/`NoveltyRingBuffer`, familiarity.ts's tracker, Conductor.ts's beat-boundary
-edge-detection pattern already used for `downbeatPulse`, `drop-detector.ts`'s internal
-fullness/onset-jump math, `scripts/structure.ts`'s direct reuse of the browser worklet modules)
-before writing anything.
-
-- **Multi-scale novelty + beat-sync aggregation** (`src/render/conductor/familiarity.ts`,
-  `Conductor.ts`): generalized `FamiliarityTracker` into `SimilarityTracker` (window size now a
-  constructor param; `FamiliarityTracker` kept as an alias at the original ~12s default — zero
-  behavior change for `familiarity` itself). Conductor now runs two instances — the existing one
-  (`noveltySection = 1 - familiarity`) and a new short (~5s) one (`noveltyLocal`) — both pushed
-  only on a beat-boundary edge (the same `beatPhase < lastBeatPhase - 0.5` wraparound check
-  `beatPulse`/`downbeatPulse` already used), not every render frame, per the doc's "beat-
-  synchronous features are the pro move" §4.1. **A real bug caught by a new test, not shipped**:
-  `noveltyLocalValue`'s pre-first-sample default was initially 0 (copy-pasted from
-  `familiarityValue`'s default) — wrong, since it stores novelty directly (1 - similarity), not
-  similarity; "nothing to compare against yet" should read as maximally novel (1), not 0. Fixed
-  before commit. New `tests/unit/novelty-multiscale.spec.ts` (4 tests) drives a Conductor through
-  a real click-train of beat-boundary crossings (a naive fixed-`beatPhase` test never triggers a
-  push at all — worth remembering, a second self-caught test bug: an early draft's A/B/A motif
-  test called the beat-driving helper three separate times, each resetting its own local `t=0`,
-  silently breaking every window-eviction time calculation across phases — fixed by driving the
-  whole multi-phase sequence through one continuous call).
-- **`onsetDensity`/`fullness` as real bus signals** (new `src/audio/worklet/brain/activity.ts`):
-  extracted `FullnessTracker`/`OnsetDensityTracker` out of `DropDetector`'s inline envelope
-  followers — same math, delegated, `tests/unit/drop-detector.spec.ts`'s existing 6 tests confirm
-  zero behavioral drift from the extraction. `feature-worklet.ts` now owns its own separate
-  instances (same "separate instance per consumer" precedent `novelty.ts`'s header already
-  documents), computed **unconditionally every hop** — moved the contrast-preserving
-  `dropEnergyEnvelope`/`dropEnergyNormalizer` calculation outside the `detectorsEnabled` gate so
-  these two are genuinely always-alive, not gated behind the same toggle the sparse section
-  detectors are. New `tests/unit/activity.spec.ts` (7 tests: the trackers in isolation, plus
-  Conductor pass-through/clamping/defaulting).
-- **Chromagram + harmonic novelty** (new `src/audio/worklet/chroma.ts`): a 12-bin pitch-class
-  energy vector (MIDI-mod-12 convention, bins outside C1-C8 skipped), computed every hop from the
-  same mono magnitude spectrum `feature-worklet.ts` already has. Exposed on the bus as a raw
-  pass-through (`chroma`, same treatment as `scope`) plus two derived scalars: `harmonicNovelty`
-  (a *third* `SimilarityTracker` instance, own ~6s window, same beat-boundary gating) and
-  `chromaRootHue` (argmax pitch class → 0..1, recomputed every frame, not beat-gated — cheap, no
-  tracker needed). New `tests/unit/chroma.spec.ts` (8 tests): synthetic pure-tone spectra
-  (A4=440Hz → pitch class 9, C4 → pitch class 0) prove the bin-folding math directly, plus
-  Conductor-level tests proving `harmonicNovelty` spikes on a real key change after settling low.
-- **Schema-3 sidecar + Demucs stem-presence** (`src/shared/sidecar.ts`, new `scripts/demucs.ts`,
-  `scripts/structure.ts`, `scripts/analyze.ts --stems`): **deliberately deviated from the design
-  doc's own stated versioning convention** ("bump the literal + guard + every consumer together,
-  no migration path") — that would make `isSidecar()` reject the 5 real schema-2 sidecars already
-  published to the live site, a direct violation of this file's own §5 rule #1 ("never break the
-  live production path"), which overrides a doc's stated convention when they conflict. Landed
-  instead as a **backward-compatible** bump: `SIDECAR_SCHEMA_VERSION = 3` is what `analyze.ts`
-  writes for any newly-generated sidecar, but `isSidecar()` accepts `schema === 2 || schema ===
-  3`, and the new `stemPresence`/`SidecarSection.label` fields are optional — a schema-2 sidecar
-  keeps validating and working exactly as before, zero risk to the deployed tracks. User's
-  explicit choice for the separation runtime: shell out to the real Python Demucs CLI (not an
-  ONNX bundle) — `runDemucsSeparation()` spawns `python3 -m demucs -n htdemucs -o <tmpdir>
-  <input.wav>`, reads back the 4 stem WAVs Demucs' own fixed output layout produces, fails loudly
-  with a clear "pip install demucs" message if the subprocess isn't found (correct here — this is
-  a manual, per-track, offline tool, never part of CI/the shipped browser bundle: confirmed
-  `npm run build`/`build:lib` stay byte-for-byte on the render-worker/lib output size, i.e.
-  `scripts/demucs.ts`/`scripts/structure.ts`'s stem code is genuinely unreachable from either).
-  `computeStemPresence()` computes vocals/drums/bass/other as RMS-per-hop envelopes
-  (envelope-followed + adaptively normalized against each stem's own dynamic range — deliberately
-  simpler than the main mix's full FFT/band pipeline, since "is this stem present" only needs
-  broadband loudness) at the exact same `envelopeRate`/hop-grid the rest of the sidecar's
-  envelopes use, so `StructureSource.sampleEnvelope()` needed zero changes to consume them.
-  `StructureSource.fuse()`/`synthesize()` expose `vocalPresence`/`drumsPresence`/`bassPresence`/
-  `otherPresence`/`leadPresence` on `StateFrame` when a sidecar has `stemPresence`, `undefined`
-  otherwise (Conductor is what actually defaults the bus signal to 0) — the same accepted
-  sidecar-only-signal precedent `buildProgress`/`tension` already set. New
-  `tests/unit/sidecar.spec.ts` (7 tests, including the explicit "still accepts an already-
-  published schema-2 sidecar" regression guard), extended `tests/unit/structure-source.spec.ts`
-  (4 new tests), extended `tests/unit/analyze.spec.ts` with `computeStemPresence` tests against
-  synthetic per-stem audio (a loud/sustained stem reads high, a silent one low; a sustained tone
-  outlasts a louder-but-transient competitor in `leadPresence`'s envelope-followed reading). **The
-  Demucs subprocess call itself is not exercised by any automated test** — genuinely can't be
-  without a real Python + `demucs` environment, absent in this session's own sandbox — but it
-  *was* verified by hand, once real Python access became available, in an immediate follow-up
-  session; see that session's own §6 entry below for the real-track run.
-- **Heuristic sidecar section labeling** (`scripts/structure.ts`'s `labelSections()`,
-  deterministic — no LLM/embedding infra exists in this repo, and the design doc itself flags
-  learned zero-shot labeling as an optional, heavy "ceiling"): existing `build`/`break`-kind
-  sections get a plain label (`'build'`/`'breakdown'`); genuinely new value is synthesizing
-  `'intro'`/`'outro'` spans from whatever's *not* covered by any detected section/event — the
-  track's start-to-first-structure and last-structure-to-end gaps, otherwise silently unlabeled
-  even though they're real, common structure for this project's typically section-sparse
-  sidecars. Takes an optional `stemPresence` parameter to raise confidence (skips a positionally-
-  plausible intro/outro if the mix is actually loud throughout that span — not a real intro then)
-  — used by `analyzeMix()` itself without presence data (called before `--stems` ever runs, so
-  every schema-3 sidecar gets best-effort positional labels regardless), available for a caller
-  to re-invoke with real presence data but **not currently re-invoked that way** — `analyze.ts`
-  does not call it a second time after computing `stemPresence`, so real presence data doesn't
-  actually refine an already-decided label in the current wiring; flagged here rather than left
-  as a silent gap between the doc comment's intent and the actual call graph. New
-  `tests/unit/section-labels.spec.ts` (7 tests).
-- **Lead salience within `other`** (`scripts/structure.ts`'s `computeLeadPresenceEnvelope()`,
-  part of the same `--stems` pass as stem presence above, per the design doc's own simpler
-  suggested approach §3.3): a per-hop FFT on the separated `other` stem, tracking the *sustained*
-  peak-bin magnitude (a slower 400ms release than presence's 200ms is the actual "sustained, not
-  instantaneous" distinction) rather than a real isolated-lead-instrument signal — approximate,
-  documented as such everywhere it's surfaced (`SidecarStemPresence`'s doc comment,
-  `StateFrame.leadPresence`'s doc comment, `SignalBus.leadPresence`'s doc comment).
-- **Deliberately not done, explicitly out of scope for this pass**: none of the 12 new bus
-  signals (`noveltyLocal`/`noveltySection`/`fullness`/`onsetDensity`/`harmonicNovelty`/
-  `chromaRootHue`/`chroma`/the 5 presence signals) are wired into any default screen or fixture
-  patch-graph route — this pass's definition of done was "the signal exists, is correct, is
-  tested," not "the screen visibly reacts to it," per the plan's own stated scope (Part B's
-  context note). Wiring them into `configs/screen-graph.ts`'s default routes is real, natural
-  follow-up work, not started. Also not done: no repetition map ("this section = that earlier
-  one," needs a full offline SSM the design doc itself calls out as not attempted here); no ISF-
-  superset input types exposing these new signals to a loaded shader (§3.7's own note already
-  flagged this as a separate step); the `labelSections()`/`stemPresence` re-invocation gap noted
-  above.
-- **Verified**: `npm run typecheck` (all 4 tsconfigs), `npm test` (281 tests, up from 242 at the
-  start of this session — 39 new across 6 new test files plus extensions to 3 existing ones),
-  `npm run build`, and `npm run build:lib` all green throughout, checked after every one of the 6
-  steps above, not just at the end. **Not verified this session**: no real browser (none of this
-  touches the GL/render path at all, so lower-risk than this file's usual GL caveats, but still
-  genuinely unclicked), and the Demucs `--stems` path had never actually separated a real track —
-  **both the live-signal pipeline and the Demucs path were verified against a real track in an
-  immediate follow-up session**, see its own §6 entry below.
-
-## Headless real-audio verification of the whole Layer 2 arc (immediate follow-up session)
-
-User asked for the previous session's whole build order to be run headlessly against a real
-track — a Daft Punk "Instant Crush" MP4 already sitting in `~/Downloads`. Closes the two
-"not verified" gaps flagged at the end of the previous entry.
-
-- **Audio extraction**: `ffmpeg -i <mp4> -ac 2 -ar 48000 -sample_fmt s16 <wav>` — a real 5:40
-  (339.8s) 48kHz stereo WAV, `scripts/wav.ts`'s hand-rolled RIFF reader (16-bit PCM) confirmed to
-  decode it with no changes needed.
-- **Core pipeline (no `--stems`)**: `npm run analyze` produced a real schema-3 sidecar — 110.3bpm
-  (Instant Crush's actual tempo is ~117bpm; a live PLL locking onto a plausible harmonic/
-  neighboring tempo on a synth-heavy track is a known, acceptable category of drift, not a bug),
-  615 beats, 155 events, 917 onsets, all envelopes genuinely varying (6367/6371 energy samples
-  nonzero) — confirms `scripts/structure.ts`'s existing pipeline still works end-to-end on a real
-  MP4-sourced WAV, unaffected by this arc's changes.
-- **The actual new-signal verification**: a throwaway diagnostic script (written directly in
-  `scripts/`, deleted immediately after use — never committed) replayed the same real audio
-  through the exact hop-by-hop primitives `feature-worklet.ts` uses live (`WindowedFFT`,
-  `computeChroma`, `FullnessTracker`/`OnsetDensityTracker`, `BeatTracker`/`BarTracker`) plus a
-  real `Conductor` instance, logging min/max/mean for every one of this arc's new bus signals
-  across all ~31,855 real hops. **Zero non-finite (NaN/Infinity) values across the entire real
-  track** — the concrete thing synthetic fixtures can't prove (real audio has far messier
-  transients/silence/clipping than hand-picked test vectors). Every signal showed genuine
-  variation, not a flat/degenerate reading: `fullness` 0–0.72 (mean 0.56), `onsetDensity` 0–1
-  (mean 0.48), `chromaRootHue` spanning 0–0.92 (real harmonic movement, not stuck on one pitch
-  class), `noveltyLocal`/`noveltySection` mostly low with real spikes to 1 (a heavily
-  loop-based track reading as mostly-familiar, exactly as expected, with real novelty at genuine
-  transitions), `harmonicNovelty` similarly low-mean/real-spikes, `familiarity` mean 0.98 (a
-  Daft Punk track being extremely repetitive is a real, correct reading, not a bug).
-- **Demucs**: installed for real in an isolated venv (`python3 -m venv` + `pip install demucs` —
-  pulled in a full CUDA-enabled PyTorch stack despite CPU-only execution, ~4.8GB; `torch.cuda.is_available()`
-  confirmed `False`, ran on CPU throughout). **A real, previously-undiscovered gap found and
-  fixed on the spot**: `demucs`'s own declared dependencies didn't pull in `numpy`/`soundfile` in
-  this environment — `python3 -m demucs --help` failed with `ModuleNotFoundError: No module named
-  'numpy'` before either could be installed; fixed by `pip install numpy soundfile` alongside
-  `demucs` itself. Worth remembering for `docs/`-level guidance if this ever gets written up for
-  end users: `pip install demucs` alone was not sufficient in this environment.
-  `scripts/analyze.ts --stems` (unmodified from the previous session — no code changes were
-  needed) then ran the real thing: `python3 -m demucs -n htdemucs` separated the full 5:40 track
-  in ~1:45 wall-clock on CPU, all 4 stem WAVs written to Demucs' own fixed output layout exactly
-  as `scripts/demucs.ts` expected, `computeStemPresence()` consumed them with zero errors,
-  producing a real schema-3 sidecar with `stemPresence` populated: `vocals` mean 0.674, `drums`
-  mean 0.481, `bass` mean 0.685, `other` mean 0.785, `leadPresence` mean 0.803 — all spanning
-  close to the full 0..1 range, not degenerate. **Confirmed through the real production consumer
-  path, not just raw JSON inspection**: `isSidecar()` accepted the real output, and
-  `StructureSource.synthesize()` at six sampled positions across the track (t=10s..300s) returned
-  distinct, real, time-varying `vocalPresence`/`drumsPresence`/`bassPresence`/`otherPresence`/
-  `leadPresence` values at each — including `drumsPresence` dropping to 0.016 by t=300s, which
-  lines up with this track's real stripped-down/vocal-heavy ending.
-- **Section labeling on this real track**: only one section detected/labeled (`{start:0, end:2.592,
-  kind:'break', label:'breakdown'}`) — consistent with this file's long-standing "sidecar section
-  detection is currently sparse" known limitation, not a regression from this arc's changes; the
-  heuristic intro/outro synthesis in `labelSections()` didn't fire here because the earliest
-  structural boundary (a `breakStart` event at t=0) already sits at the very start, leaving no
-  gap for an intro span to occupy.
-- **Not done**: no code changes were needed or made this session — this was purely a
-  verification run. The venv and downloaded model weights live in this session's job-scratch
-  directory (cleaned up automatically when the job is deleted), not committed anywhere.
-- **Verified**: `npm run typecheck`/`npm test` (281, unchanged) still pass after this session's
-  activity (git status showed nothing unexpected touched in the repo — only tmp/scratch
-  directories were used for the audio/venv/sidecar files), confirming the whole Layer 2 arc from
-  the previous session is real and correct against genuine audio, not just synthetic fixtures.
-  **Still not done**: none of the new signals are wired into any default screen/fixture route
-  (unchanged from the previous session — still real, separate follow-up work); no browser
-  verification (this arc never touched the GL/render path, so this is a pre-existing, not new,
-  gap).
-
-## Real bug found and fixed: SimilarityTracker leaked forever across a position loop/seek (same session, immediate follow-up)
-
-User reframed the priority explicitly: the deployed background **must play for days unattended
-without breaking** — non-negotiable. Before proposing next steps, ran a read-only, code-level
-audit of this whole session's arc specifically for multi-day-runtime risk (unbounded growth,
-NaN propagation, interaction with the earlier "24/7 reliability audit" session's fixes). Found
-one real, high-priority bug, fixed immediately rather than just reported.
-
-- **The bug**: `SimilarityTracker.sample()` (`src/render/conductor/familiarity.ts`) evicts its
-  `{t, vec}` buffer with `while (buffer[0].t < cutoff) buffer.shift()`, which silently assumes
-  `t` only ever increases. It doesn't — `StructureSource.synthesize()` feeds `t: positionSec`
-  straight from the host's own position feed, and **position-only sync is this package's actual
-  production integration** (this file's own "Position-only sync mode" section), where `t`
-  genuinely moves backward on every loop repeat or seek. The instant that happens, `buffer[0].t
-  < cutoff` can go permanently false (`cutoff` shrinks below the stale entries' `t`), eviction
-  silently stops working, and the buffer grows roughly one entry per beat, forever, across every
-  subsequent loop cycle. `Conductor` is one long-lived instance for the life of the render worker
-  — never reconstructed on trackchange/seek — so this compounds without bound across days of
-  unattended looped playback, hitting all three `SimilarityTracker` instances this session added
-  (`familiarityTracker`/`localNoveltyTracker`/`chromaNoveltyTracker`). **This is the exact bug
-  class `StructureSource`'s own `healPositionRegression()` already exists to fix** (a prior
-  session's own regression test literally proved the same failure mode for event/onset cursors)
-  — it was just never applied to this newer tracker.
-- **The fix**: `sample()` now detects a backward jump (`t < lastEntry.t - 1e-6`, the same epsilon
-  `healPositionRegression()` uses) and clears the buffer entirely rather than resyncing a cursor
-  — a similarity window has no sane partial recovery from a jump (the "recent past" it held is
-  genuinely gone), so a full reset is the correct self-heal, not a resync. New regression test in
-  `tests/unit/familiarity.spec.ts`: drives the tracker through 20s of playback, records the buffer
-  size, then simulates 50 loop cycles (a real multi-day run would do this thousands of times) and
-  asserts the buffer stays bounded to roughly one window's worth of entries instead of growing to
-  ~51 loops' worth (~30,600 entries, what the unfixed version would have leaked).
-- **Audit also confirmed safe** (no changes needed): `FullnessTracker`/`OnsetDensityTracker` are
-  pure fixed-size scalar state, no arrays. `chroma.ts`'s buffer is pre-allocated once and reused
-  every hop (no per-hop GC pressure) — only the beat-gated `Array.from(frame.chroma)` push into
-  `chromaNoveltyTracker` allocates, and that's the same low-frequency, bounded pattern the fix
-  above now also covers. `NoveltyRingBuffer` (`DropDetector`'s own primitive) is genuinely
-  fixed-capacity/count-indexed, immune to this bug class entirely. `chroma.ts`'s `Math.log2` is
-  guarded by the `MIN_HZ`/`MAX_HZ` range filter before it ever runs — no unguarded log/division
-  found anywhere in this session's new code. This session's changed files have zero overlap with
-  the files the earlier "24/7 reliability audit" session fixed (`render-worker.ts`/
-  `ScreenOutput.ts`/`AudioEngine.ts`/`src/index.ts` — confirmed via `git diff --stat`, all
-  untouched). Moving `dropEnergyEnvelope`/`dropEnergyNormalizer` outside the `detectorsEnabled`
-  gate (an earlier step this session) is just the same "always compute" pattern
-  bands/centroid/flatness already used unconditionally — no new risk class. No new
-  timers/listeners/subscriptions were added anywhere in this session's code (grepped for
-  `setInterval`/`setTimeout`/`addEventListener` across every changed/new file — zero matches).
-- **Verified**: `npm run typecheck`, `npm test` (282, up from 281 — the one new regression test),
-  `npm run build`, `npm run build:lib` all green.
-- **Not done / explicitly deferred**: no broader sweep of the *pre-existing* Conductor/detector
-  state for the same backward-`t` bug class beyond what this audit specifically checked (the
-  audit was scoped to this session's new code, per the actual ask) — `BeatTracker`/`BarTracker`/
-  `BuildDetector`/`BreakDetector`/`DropDetector` all predate this session and were not
-  re-audited for the same failure mode here; worth a dedicated pass if "days without breaking" is
-  being taken further. Also still not done: the signal-routing/screen-wiring and browser
-  verification gaps noted in every entry above.
-- **The dedicated pass above happened immediately, same session**: checked every pre-existing
-  Layer 1/2 class (`BeatTracker`/`BarTracker`/`BuildDetector`/`BreakDetector`/`DropDetector`) for
-  the identical bug class. **All immune, most by construction, one structurally unreachable
-  reason common to all of them**: `StructureSource.synthesize()` — the only place `t` can move
-  backward — never calls into any of these five classes at all; it derives beat/bar phase itself
-  via the pure, stateless `beatPositionAt()` against the sidecar's static `beats[]` array. All
-  five are worklet-only, constructed once in `feature-worklet.ts`, fed exclusively by
-  `currentTime` (the `AudioWorkletGlobalScope` clock — spec-guaranteed monotonic, never reachable
-  from the position-only path). `BeatTracker`/`BarTracker` use fixed-size, count-indexed
-  `Float32Array`s (no `.push()`, immune regardless); `BuildDetector`/`BreakDetector` hold no
-  arrays at all; `DropDetector`'s novelty term already uses the fixed-capacity `NoveltyRingBuffer`
-  (immune). One minor, non-urgent note: `DropDetector`'s scalar `tNow`-comparison fields
-  (`refractoryUntil`/`armedAt`/`startedAt`) could theoretically stay suppressed/stuck-armed longer
-  than intended after a backward jump *if* it were ever reachable that way — it isn't, so this is
-  informational only, not a fix. `Conductor`'s own decay math uses `dt` sourced from a
-  `requestAnimationFrame` timestamp in `render-worker.ts` (spec-monotonic), so it can't go
-  negative and invert `Math.exp(-dt/TAU)` into growth either. **The `SimilarityTracker` fix above
-  was the only real gap in the whole pipeline for this bug class — closed.**
-
-## The Hysteresis format, Phase 0/1: `hysteresisSignal` inputs + reserving stateful scripts (same session, immediate follow-up)
-
-User asked for a phased roadmap toward two things: (1) a real "Hysteresis format" — a superset of
-ISF letting a shader declare it wants a live Feature Engine signal, the master-prompt's own
-stated differentiator (§4.5) — built to a genuinely solid state, then (2) eventually porting the
-built-in Julia scene itself onto that format instead of staying hardcoded native TypeScript, per
-the project's own design principle (§3.6: *"if the built-in Julia fractal can't be forked/edited
-the same way a user's custom ISF script can, the extensibility story is fake"*).
-
-Scoped explicitly before writing anything (via a real plan-mode pass, grounded in the actual
-code): `JuliaScene.ts` itself only reads 9 fields directly off `ParamBus` — the other ~13 of the
-full 22-field `ParamBus` drive the surrounding memory-field/composite pipeline, not Julia's own
-navigation. Its autopilot (vortex-search, perturbation orbits, spring-damper `c`-drift) is 1011
-lines of stateful per-frame JS logic, something a single GLSL fragment shader categorically
-cannot express — ISF's own model ("shader + JSON header") has no concept of persistent JS state
-at all. User confirmed directly that an optional, per-file JS state-script companion is a real,
-wanted part of the format's architecture, not just a nice-to-have ("we need state, that's the
-whole idea") — so this pass's scope was widened to include *reserving* that concept at the file-
-format level now (recognized, clearly rejected), even though the actual execution engine is
-later work, so a future Julia-port file's shape doesn't need a breaking change when that engine
-lands.
-
-**The roadmap, for whoever picks this up next:**
-0. Spec the extension mechanism — done this session.
-1. Build it — done this session.
-2. Prove it standalone. **Headless half done, same session, immediate follow-up** — see that
-   session's own entry below: a real downloaded ISF ecosystem shader (not a self-authored
-   fixture) parses/translates cleanly, and an augmented copy with a `hysteresisSignal` input
-   proved end-to-end against real analyzed audio. **Still not done**: loading it through the
-   editor and confirming it's visibly reactive in a real browser — no browser access in either
-   session, same standing caveat as every other GL/visual slice in this file.
-3. Design the compact signal set for Julia specifically — a real design conversation with the
-   user once this mechanism exists to design against, not mechanical work. **Not done.**
-4. The actual port + the state-script execution engine, designed against Julia's autopilot as
-   the concrete motivating case (not guessed at in the abstract). **Not done**, the big one.
-
-**This session covers Phase 0/1 only:**
-
-- **`hysteresisSignal`** (`src/isf/types.ts`/`parse-isf.ts`/`isf-targets.ts`): a new ISF input
-  `TYPE` alongside the existing `float`/`bool`/`long`/`color`/`point2D`. Declared as `{ "NAME":
-  "novelty", "TYPE": "hysteresisSignal", "SIGNAL": "noveltyLocal" }` — `SIGNAL` validated at parse
-  time against `SIGNAL_TAGS` (`src/render/conductor/types.ts`, the same ~35-name set the patch
-  graph's own `signal` node already reads from), rejected with the full valid-name list in the
-  error message if unknown. **Deliberately minimal new mechanism**: it becomes a perfectly
-  ordinary routable `TargetDecl`, exactly like every other ISF input already is — no implicit
-  auto-wiring, no second reading path that bypasses the patch graph. This keeps R2 (`VizOutput`
-  never sees the raw `SignalBus`, only resolved targets — confirmed still true by reading
-  `ScreenOutput.update()`'s actual signature before designing this) and R4 ("routing is data")
-  intact; the only real difference from a plain `float` input is self-documentation (the shader
-  states which bus signal it's shaped for) and a signal-appropriate default range (`0..1`
-  unipolar, `-1..1` for the known bipolar signals `bandTilt`/`pan` — a small explicit lookup
-  table in `isf-targets.ts`, not a general solve). `translate-isf-glsl.ts`'s `glslType()` maps it
-  to a plain `float` uniform, same as the standard `float` type — the `TYPE` distinction only
-  matters at the routing layer, not to the shader itself.
-- **`HYSTERESIS_SCRIPT` reserved, not executed**: `parseIsf()` now throws
-  `IsfUnsupportedFeatureError` if a shader's header declares a non-empty `HYSTERESIS_SCRIPT`
-  string — same "reject clearly rather than silently mis-render" discipline already applied to
-  multi-pass/`PERSISTENT`/`IMPORTED`/unsupported-input-type shaders. Costs almost nothing to add
-  now and buys real value later: a Julia-port file's shape is stable from day one.
-- **Tests**: `tests/unit/parse-isf.spec.ts` extended (valid `hysteresisSignal` parse, unknown-
-  `SIGNAL` rejection with the full valid list in the message, missing-`SIGNAL` rejection,
-  `HYSTERESIS_SCRIPT` rejection, empty-`HYSTERESIS_SCRIPT` NOT rejected), `tests/unit/isf-targets.spec.ts`
-  extended (target generation for both a unipolar and the bipolar case, uniform round-trip) — a
-  separate small fixture, not the shared one, so the existing suite's exact-target-count
-  assertion stays untouched. 11 new tests; full suite now 292 (was 282).
-- **`docs/isf-shaders.md`**: two new sections — `hysteresisSignal`'s exact JSON shape and the
-  real signal-name list's location, and `HYSTERESIS_SCRIPT`'s reserved-but-not-yet-functional
-  status, framed honestly as "planned," not "coming soon."
-- **Explicitly not done, per the plan's own stated scope**: no demo/test shaders, no editor UI
-  changes, no browser verification (Phase 2); no redesign of Julia's actual signal set (Phase 3);
-  no state-script execution engine, no `ScreenOutput.update()` signature change, no `IsfScene.ts`
-  change (Phase 4) — `HYSTERESIS_SCRIPT` is rejected, not run, on purpose. Zero change to
-  production behavior — `src/index.ts`/`render-worker.ts`'s default path never loads a shader at
-  all, same posture every prior ISF slice shipped with.
-- **Verified**: `npm run typecheck` (all 4 tsconfigs, including catching two exhaustive-switch
-  compile errors in `isf-targets.ts`/`translate-isf-glsl.ts` that needed a `hysteresisSignal` case
-  added — `tsc` itself caught both, not manual review), `npm test` (292, up from 282), `npm run
-  build`, `npm run build:lib` all green. No browser verification needed or attempted — this slice
-  never touches GL/render-path files at all.
-
-## Real-ecosystem-shader verification of `hysteresisSignal` (same session, immediate follow-up)
-
-User pointed at a real `.fs` file already sitting in `~/Downloads` (`InnerDimensionalMatrix.fs`,
-by mojovideotech, CC BY-NC-SA 3.0, based on Martijn Steinrucken's "The Universe Within") and asked
-to use it — this is genuinely valuable: every existing ISF test fixture in this repo (parse-isf/
-isf-targets/translate-isf-glsl specs) is self-authored, so this closes a real, previously-flagged
-gap (`docs/isf-shaders.md`/AGENTS.md's own standing note: *"test against a handful of real
-downloaded `.fs` files from the ISF ecosystem before trusting this beyond the fixture shapes
-here"* — never actually done until now).
-
-- **The unmodified real shader, run through the real importer** (a throwaway script, deleted
-  after use — not committed): `parseIsf()` succeeds on it (10 real inputs, all `float`/`bool`,
-  real min/max/default values with irregular tab-indented JSON formatting — a real-world
-  formatting quirk no self-authored fixture had). `translateIsfFragmentShader()` produces
-  structurally sound GLSL ES 300: `#version 300 es` correctly first, no `gl_FragColor`/
-  `texture2D` survive, and — genuinely new territory versus the existing test suite — the real
-  shader's `#ifdef GL_ES`/`#define S(a,b,t) ...` preprocessor macros, nested nine-sample nested
-  loops, and a `for(float i=...)` float-typed loop counter all pass through the purely textual
-  translation untouched and correctly. (No GL context in this sandbox — this confirms the
-  translation is textually sound, not that it compiles on a real GPU; that's still a real-browser
-  check, same standing caveat as everything else visual in this file.)
-- **The actual `hysteresisSignal` proof**: made a local, uncommitted, attribution-preserving
-  derivative (`InnerDimensionalMatrix.hysteresis.fs`, kept in this session's job-scratch
-  directory only — deliberately not added to the repo given the shader's non-commercial license,
-  same judgment call as not baking third-party ISF content into committed test fixtures) adding
-  one real input — `{ "NAME": "drive", "TYPE": "hysteresisSignal", "SIGNAL": "energy" }` — wired
-  into the shader's own output (`col *= 1.0 + drive * 1.5`, brightening the whole field on top of
-  its existing procedural pulsing). Then ran the **entire real pipeline** end to end, no
-  synthetic data anywhere: the real Instant Crush sidecar from this session's earlier real-audio
-  verification → `StructureSource.synthesize()` → a real `Conductor` → a real one-node
-  `PatchGraphEvaluator` graph (`signal:energy → target:isf.drive`, the exact wiring a user would
-  make in the editor) → `resolvedTargetsToIsfUniforms()`. Sampled at 6 real timestamps across the
-  track (5s/60s/120s/180s/240s/300s): the shader's `drive` uniform tracked `bus.energy` exactly
-  at every point (0.5723, 0.5550, 0.5767, 0.5747, 0.5738, 0.5508) — the full chain from real
-  analyzed audio to a real downloaded shader's own declared uniform genuinely works.
-- **Not done**: no browser click-through (loading either shader through the patchbay editor,
-  confirming actual GL compilation and visible reactivity) — no browser access this session,
-  same standing caveat. The derivative `.fs` file lives only in this session's scratch directory,
-  not the repo — if this augmented demo is wanted as a committed fixture later, its license needs
-  a real decision first (§3.8's open licensing question), not an assumption.
-- **Verified**: the two throwaway verification scripts were deleted after use; `git status`
-  confirmed a clean tree (nothing added to the repo by this pass) before and after.
-
-## `render-video`: a real offline video renderer (same session, immediate follow-up)
-
-User's ask, reframed explicitly as wanting a genuine, reusable capability ("a good thing to have
-right?"), not a one-off script: render a full song through the real production pipeline, driven
-by a precomputed sidecar by default, with the new `hysteresisSignal`-augmented ISF shader loaded,
-plus two overlay panels for a single comprehensive test video — live signal debug readouts on the
-left, simulated physical-fixture visuals on the right, both at reduced opacity in a wide/
-landscape-phone aspect so the center visualizer stays the main attraction. Planned via a real
-plan-mode pass (two Explore forks grounding the render-worker's actual frame loop and the
-existing debug/fixture data pipeline) before writing anything — see that plan for the full design
-reasoning; summarizing what actually shipped here.
-
-- **`render-worker.ts` — real production file, extra care taken**: `init` gained an optional
-  `startLoop?: boolean` (default `true` — every existing caller omits it, zero behavior change).
-  `tick()`'s per-frame body (drain events, evaluate the screen graph, `ScreenOutput.update`,
-  fixture-graph evaluation) was extracted verbatim into a shared `renderStep(effectiveFrame, dt)`
-  — called by both the unchanged live rAF `loop()` (still wall-clock `dt`) and a new
-  `renderFrame` message (caller-supplied `StateFrame` + `dt`), which is the concrete guarantee
-  the live path's behavior can't have changed: same function, same code, different `dt` source.
-  Throttled/live-only side effects (the signalBus debug stream, OSC-out send, the real fixture
-  DMX send, adaptive quality reacting to wall-clock render time) deliberately stay OUTSIDE
-  `renderStep` and only run from `tick()` — an offline batch render doesn't want a real network
-  send, and wall-clock-reactive quality scaling would make an as-fast-as-possible render
-  nondeterministic. The `renderFrame` handler replies with the composited frame as a transferred
-  `ImageBitmap` (`OffscreenCanvas.transferToImageBitmap()` — no manual `gl.readPixels`/format
-  handling needed) bundled with that exact frame's `bus`/`dropDebug`/`fixtureValues`, synchronized
-  to the frame instead of racing the existing 20Hz debug-stream timer.
-- **No direct unit test for `renderStep`'s behavior-preservation**: `render-worker.ts` isn't
-  importable in this repo's `vitest` environment (`environment: 'node'`, no `self` global —
-  `typeof self.requestAnimationFrame` at module scope throws) — the same standing gap already
-  documented for `src/index.ts`. `renderStep` is a verbatim extraction with zero new computation,
-  composing only already-unit-tested functions (`Conductor.update`, `PatchGraphEvaluator.evaluate`
-  via `resolveScreenTargets`, `ScreenParamAssembler` — all covered by `conductor.spec.ts`), so
-  behavior-preservation is provable by inspection rather than a new runnable test; the real
-  end-to-end render below is what actually proves it live.
-- **`tools/render-video/`** (new, own Vite config `vite.render-video.config.ts`, same posture as
-  `tools/patchbay-editor/` — never reachable from `npm run build`/`build:lib`): `harness.ts`, no
-  UI, driven entirely by `window.__render*` functions a Puppeteer driver calls. No DOM `<canvas>`
-  anywhere — `new OffscreenCanvas(w,h)` is itself transferable via `postMessage`, sidestepping
-  `transferControlToOffscreen()` and a visible canvas element entirely. Reuses the exact same
-  render-worker.ts the shipped package uses (imported by relative URL, same pattern
-  `tools/patchbay-editor/src/runtime-bridge.ts` already established) — the rendered output is the
-  real production pipeline, not a mock. `overlay-debug.ts` draws the left panel (a genuinely more
-  complete signal readout than the patchbay editor's own debug drawer has ever had — every signal
-  from this session's earlier Layer 2 arc, confirmed via that session's own exploration to be
-  entirely absent from the editor UI, is drawn here for the first time). `overlay-fixtures.ts`
-  draws the right panel — canvas reimplementations of `FixtureVisuals.tsx`'s four widget types
-  (that component is DOM/CSS/SVG, confirmed not directly reusable for a canvas-composited video
-  frame) — but the *wiring* is reused verbatim, not reimplemented: the same 4 demo fixture types
-  `tools/patchbay-editor/src/App.tsx` already seeds, and `seed-graph.ts`'s `seedNodes()` (cross-
-  tool import, confirmed dependency-clean — no React) to auto-wire them to rotating real bus
-  signals, imported directly rather than duplicated.
-- **A real Vite gotcha found and worked around**: a static `vite build` of the harness
-  mis-bundles the `new Worker(new URL('...render-worker.ts', import.meta.url))` reference as a
-  raw, unexecutable `.ts` file in the output (confirmed by inspecting `dist-render-video/` after
-  a trial static build) — Rollup's worker-detection apparently doesn't handle this specific
-  variable-split pattern the same way the dev server's on-the-fly transpilation does. Fixed by
-  always driving the harness through Vite's own dev server (`vite --config
-  vite.render-video.config.ts`, spawned as a child process by the driver) instead of a static
-  build — the exact same proven pattern `tools/patchbay-editor/` already relies on (that tool has
-  also never been statically built, only ever run via `npm run patchbay`'s dev server).
-- **`scripts/render-video.ts`** (the real CLI, `npm run render-video --`): sidecar-driven by
-  default (runs `analyzeMix()` — already-real, already-tested — if `--sidecar` isn't given, same
-  as `scripts/analyze.ts` does); extracts audio via `ffmpeg` when the input is an `.mp4`; spawns
-  the harness's dev server, launches headless Chrome via `puppeteer-core` pointed at the system's
-  already-installed `/usr/bin/google-chrome` (`--use-gl=angle --use-angle=swiftshader` for
-  software WebGL2 — no real GPU needed); loads the sidecar (passed as a structured-cloned JS
-  object via `page.evaluate()`, not fetched over the network — sidesteps needing to serve the
-  file at all) and, if `--isf` is given, the shader plus one real route
-  (`signal:<--hysteresis-signal, default energy> -> target:isf.drive`) added on top of — not
-  replacing — the real default screen graph, since the memory-field/bloom pipeline's own required
-  routes still need to be live under a loaded ISF scene too. Then steps `t` from `0` to
-  `sidecar.duration` in `1/fps` increments, calling `__renderFrame` each time (fully
-  deterministic, no real-time wait — runs as fast as the machine allows), writes each returned
-  PNG to a frame sequence, and muxes with the real audio via one `ffmpeg` call at the end.
-  `--no-debug-overlay`/`--no-fixture-overlay` are real flags — this is meant to also produce a
-  clean, overlay-free render later, not just this test video.
-- **End-to-end proof, immediately, on the first real attempt**: an 8s/640×360/5fps smoke-test
-  render against a real Instant Crush clip with the augmented `hysteresisSignal` shader produced
-  a genuinely correct composited frame — the ISF shader's own procedural pattern visibly
-  rendering center-frame, the debug panel's full signal-label list rendering left, and all 4 demo
-  fixture widgets (dimmer glow, RGB swatch, servo needle, mover crosshair) rendering right, all
-  from one real headless-Chrome run of the actual production pipeline. **This is also the first
-  real browser verification `hysteresisSignal` has ever had** — every prior verification this
-  session was Node-side pipeline plumbing (real data flowing through real functions), never an
-  actual GL-rendered pixel; this closes that specific, previously-flagged gap. Then launched the
-  real deliverable: the full 5:40 Instant Crush MP4 at 1920×1080/30fps (~10,195 frames) against
-  the schema-3 stems sidecar (exercising the vocal/drums/bass/other/lead presence overlay rows
-  too, not just the core signals) — see below for the outcome once it finished.
-- **A real performance bug found and fixed, same session, on the user's own "this is really
-  slow, is this stupid" pushback**: the first full-song attempt above was on pace for ~5-6 hours
-  — genuinely too slow, and the user was right to question it. Root cause: `puppeteer.launch()`
-  was passed `--use-gl=angle --use-angle=swiftshader`, forcing **software** (CPU) WebGL
-  rendering — a full memory-field/bloom/composite GL pipeline, software-rendered per pixel at
-  1080p, is exactly as expensive as that sounds. This machine has a real Intel Iris Xe iGPU at
-  `/dev/dri/renderD128` (confirmed via `glxinfo`) that was simply never being used. Switched to
-  `--use-gl=angle --use-angle=gl-egl --enable-gpu-rasterization` (ANGLE's OpenGL-over-EGL backend
-  against the real Mesa driver) — measured directly, same 8s/1920×1080/30fps clip with the
-  `hysteresisSignal` shader: **34 seconds wall-clock total** (including ~10s of Chrome/Vite
-  startup), vs. the pace the software-rendered version was on track for — roughly a 20x
-  real-world speedup. Confirmed the output is still visually correct at this point (not just
-  fast-but-broken): inspected an extracted frame directly — the ISF shader's own procedural
-  pattern rendering in full 1080p detail, every debug-overlay row populated with real, distinct
-  values (`energy` 0.468, `bandTilt` -0.282, `familiarity` 0.977, `harmonicNovelty` 1.000, ...),
-  all 4 fixture widgets live. Killed the still-running slow (software-rendered) full attempt and
-  the various leftover dev-server/Chrome processes from earlier smoke tests (confirmed via `ps
-  aux` cleanup) before relaunching the real deliverable with the fixed flags.
-- **A real cleanup bug found and fixed, same session, without touching the in-flight full render**:
-  the harness's Vite dev-server child process didn't reliably die when `render-video.ts` exited
-  (`devServer.kill()` didn't reach the actual `vite` process — spawned via `npx vite ...`, and
-  `npx`'s own child-process layer doesn't reliably forward signals to what it execs). The
-  full-song render above only started successfully in the first place because it silently reused
-  a leftover dev server still bound to the port from the earlier smoke test — worked by luck
-  (identical content being served), not by design. Fixed properly, verified on a *second*,
-  independent smoke test on a freshly randomized port (deliberately not touching the in-flight
-  full render's own dev server/port): spawn the local `node_modules/.bin/vite` binary directly
-  instead of through `npx` (removes the extra process layer entirely), `detached: true` +
-  `process.kill(-devServer.pid, 'SIGTERM')` (the whole process group, not just the immediate
-  child — `vite` itself can spawn further children a plain `.kill()` never reached) on exit, and
-  a randomized port per invocation instead of a fixed one (so two concurrent runs of this tool
-  never collide in the first place). Confirmed via `ps aux` after the second smoke test: only the
-  original, still-legitimately-in-use full-render dev server remained — the second run's own
-  server was gone, no leak.
-
-## `render-video` finished, a real mistake made and disclosed, and the `.hyst` multi-pass/resource format (same session, immediate follow-up, 2026-08-24)
-
-The full Instant Crush render from the previous entry completed successfully (5:39.8, 1920×1080,
-real audio) after two more real fixes: JPEG intermediate frames instead of PNG (measured PNG's
-DEFLATE encode as the dominant per-frame cost, not GL rendering itself — live rendering hits
-45-60fps with neither an encode nor a base64/CDP round-trip at all; JPEG cut per-frame cost
-~2.7x further, ~50x total vs. the original software-rendered PNG version), and a 5-attempt retry
-loop around each frame's `page.evaluate()` call after a rare `NotReadableError` Blob flake
-surfaced at frame 90/10195 (never in short smoke tests) — plus a disk-full failure fixed with a
-`--work-dir` flag (redirect the tool's temp frame-sequence directory off a nearly-full `/`
-partition) and a `try/finally`-wrapped cleanup so a *failed* run's temp directory gets removed
-too, not just a successful one (previously leaked several GB per failed attempt).
-
-**A real mistake, disclosed at the time**: a cleanup command during this debugging used a broad
-`ps aux | grep -i chrome | ... | xargs kill` pattern that matched and killed every Chrome process
-on the system, including the user's own real browser session — not just the headless automation
-instances. Immediately disclosed; the user said no harm was done but asked to remember this for
-future sessions (saved as a persistent feedback memory: never use a bare product-name substring
-for a kill pattern, scope to something unique to the process actually started, e.g. a specific
-flag or a captured PID).
-
-The finished 227MB 1080p file exceeded the 30MB file-delivery limit; delivered instead as a
-960×540/450kbps re-encode (~24MB) since a direct-to-Drive/WeTransfer browser-automation upload
-turns out to hit the *same* 10MB cap the file-delivery tool does — not a Drive-specific limit.
-Added real `--video-bitrate`/`--audio-bitrate` flags to `scripts/render-video.ts` so a size budget
-can be hit directly at the shader's actual render resolution in one encode pass, instead of
-rendering at 1080p and downscale-recompressing afterward (the latter measurably hurt legibility of
-fine detail like the debug-overlay text and fixture icons — user feedback: "couldn't see
-laser/numbers well").
-
-Two more renders followed against a real user track (`SIGSEGV.wav`, their own unreleased
-MAXIMAVELIANISM/A2-BASELINE project, 6:43.7, 135.5bpm auto-detected — no sidecar/stems given, so
-`analyzeMix()` ran cold): the first close to identical settings, the second after user feedback
-that led to three real changes — (1) the `InnerDimensionalMatrix` shader was only ever driven by
-one signal (`energy→drive`) despite declaring 12 total ISF inputs; extended it to 7 live-signal-
-driven parameters (`beatFlash`, `buildZoom`, `hueCentroid`, `lowRate`, `dropPunch`,
-`suspensionGlow` added alongside `drive`), which required generalizing the render tool's
-single-hardcoded-route wiring (`harness.ts`'s `setScreenGraphWithHysteresisRoute` → plural
-`setScreenGraphWithHysteresisRoutes`) into auto-deriving routes from every `hysteresisSignal`
-input a loaded shader actually declares, via `parseIsf()` run directly in the Node driver; (2)
-demo fixture wiring (`tools/patchbay-editor/src/seed-graph.ts`) fed raw audio-rate bus signals
-straight into servo/mover targets with only a range remap, no smoothing — added a real `envelope`
-node (already existed in the graph engine, just never used here) ahead of any continuous-only
-target, 0.15s attack / 0.7s release; (3) the screen's drop shockwave/mirror-hold read as too
-brief against a full track (`screen-composites.ts`: `FLOW_STRENGTH_DAMPING` 9→6,
-`SYMMETRY_DROP_HOLD_SEC` 2.0→3.5).
-
-### Porting the built-in Julia scene, and a real bug it surfaced
-
-User asked to port the built-in Julia fractal scene (`JuliaScene.ts`) into a standalone shader —
-this repo's own AGENTS.md roadmap already flagged this as Phase 3/4, "the big one," not yet done.
-Scoped honestly: the substrate (`julia.frag.glsl`'s escape-iteration + palette, `boundary.ts`'s
-exact cardioid parametrization `c(θ)=e^{iθ}/2−e^{2iθ}/4`) is real GLSL, portable as-is. The
-autopilot (vortex-search navigation, perturbation-orbit deep zoom, spring-damped `c`-drift) is
-~1000 lines of stateful per-frame JS a single-pass shader categorically cannot hold — that's the
-still-not-built `HYSTERESIS_SCRIPT` engine. First pass ported the substrate only: θ/zoom as
-closed-form functions of `TIME` that live signals (`buildWindup`/`energy`/`tension`/`suspension`/
-`dropImpulse`/`centroid`/`beatPulse`) nudge additively, not an accumulated integral of a
-time-varying rate.
-
-User then asked for the oscilloscope beam too, and specifically not as a one-off bolt-on — a real
-step back to design the format itself first (see below). Before that redesign, though: **a real,
-previously-undetected bug was found and fixed while reading `IsfScene.ts`**. Its per-frame
-uniform-binding `switch` over input types was missing a `case 'hysteresisSignal'` entirely —
-every `hysteresisSignal`-typed uniform (all 7 in `InnerDimensionalMatrix`, all 7 in the Julia
-substrate port) was **never actually being set per-frame**, silently sitting at GL's
-zero-initialized default the whole render regardless of what the debug overlay showed the real
-signal doing. `float`/`bool`/`color`/`point2D` inputs were unaffected — only this one type, added
-in a later slice than the original switch. No test caught it (there's no GL-level test coverage
-for `IsfScene` at all, the same standing "no browser access for automated tests" gap this repo
-carries everywhere GL-shaped), and this session's own "verification" of the earlier renders never
-actually zoomed into a frame closely enough to catch it either — a real process gap, disclosed to
-the user directly rather than glossed over. One-line fix (`gl.uniform1f(loc, ...)` for the missing
-case). Practical effect: the InnerDimensionalMatrix and first Julia-substrate renders' "driven by
-N signals" framing was not accurate — those shaders were running on static defaults the whole
-time. Confirmed the fix visually afterward (palette/hue visibly differs between two frames at
-different track positions, which a `hueShift` formula with a `centroidIn*0.1` term could only do
-if that uniform were actually being set).
-
-### The `.hyst` format: real, versioned, scoped multi-pass
-
-Design done via an explicit plan-mode pass (see the session's plan file) before writing code, per
-the user's own ask to "concretely design and future-proof" the format rather than add another
-one-off. Grounded in what already existed: `ScreenOutput.ts` already manages multiple GL
-passes/FBOs (`createFbo`/`deleteFbo`, `src/render/worker/gl/fbo.ts`) and `Scene` already has a
-second `renderForeground?()` hook — a "multi-pass hysteresis format" formalizes something the
-native pipeline already does, not a foreign concept. A naive "loop over all 1024 waveform samples
-per pixel in a single fragment shader" approach for the beam was costed out and rejected (~2
-billion segment evals/1080p-frame vs. the beam's actual real-hardware-instanced-quad cost, which
-is close to free) before any code was written.
-
-- **`HYSTERESIS_VERSION`** (`src/isf/types.ts`/`parse-isf.ts`): a top-level header field, currently
-  only `1` recognized — an unrecognized version is rejected clearly, same "reject clearly, never
-  silently mis-render" discipline every other unsupported ISF feature here already follows. Absent
-  entirely = today's plain single-pass model, zero behavior change (confirmed by a dedicated test:
-  a version-less/`PASSES`-less file still gets the implicit `[{ kind: 'fullscreen', target: '' }]`
-  single pass). A stock ISF ecosystem shader declaring real multi-pass `PASSES` *without*
-  `HYSTERESIS_VERSION` is still rejected with the exact original message — this extension doesn't
-  change that case at all.
-- **Real, scoped `PASSES`**, typed by `KIND`: `'fullscreen'` (today's exact model, the default) and
-  a new `'lineTrace'` — draws an open polyline from a named `resource` input using the same
-  GPU-instanced-quad technique `beam.vert.glsl`/`beam.frag.glsl` already implement (real hardware
-  line rasterization, not a fragment-shader loop). A pass's `TARGET` becomes a real
-  `uniform sampler2D <target>` automatically available to the shared fullscreen body
-  (`translate-isf-glsl.ts`) — a `lineTrace` pass always renders full-brightness white shape only
-  (never tinted/blended itself); the fullscreen pass's own GLSL decides color/blend/warp entirely.
-  This is the actual mechanism that makes "the beam is part of the shader" real. Explicitly NOT
-  built: `PERSISTENT`/cross-frame feedback buffers (still rejected, even under
-  `HYSTERESIS_VERSION`), pass kinds beyond `fullscreen`/`lineTrace` — no motivating shader yet.
-- **`resource` inputs** (`IsfResourceInput`): the general answer to "not every live thing is a
-  scalar." Deliberately **not** a routable patch-graph target (the graph stays scalar-in/
-  scalar-out throughout, unchanged) — bound automatically by name, the same category `TIME`/
-  `RENDERSIZE` already are, just opt-in per shader. `RESOURCE` validated against a small explicit
-  `KNOWN_RESOURCES` list (`scope` only today — the one non-scalar live signal that actually
-  exists, `SignalBus.scope`), same discipline as `hysteresisSignal`'s `SIGNAL` validation.
-- **`IsfScene.ts`** generalized from "one program, one draw" to running a real `lineTrace` pass
-  (its own program/VAO/instanced buffers, reusing `beam.vert.glsl`/`beam.frag.glsl` verbatim,
-  rendered into a real FBO via the existing `createFbo`/`deleteFbo`) before the fullscreen pass,
-  which then samples every earlier pass's FBO texture by its declared uniform name. The beam's
-  point data (real waveform via `ParamBus.scope` when playing, the exact same idle Lissajous
-  fallback `JuliaScene`'s own beam uses when `params.idle`/no scope — `lissajous.ts` reused
-  directly, not reimplemented) is computed once per frame in `update()`, shared across however
-  many `lineTrace` passes reference the `scope` resource.
-- **Naming**: user confirmed `.hyst` as the real extension for files using these extensions,
-  explicitly accepting a known collision — an unrelated, older, retired tool's `song.hyst` files
-  already exist in the user's own SIGSEGV project folder (a completely different per-track event/
-  tone schema) — deemed acceptable since that tool will never open a file from this pipeline.
-- **Tests**: `parse-isf.spec.ts` (version parsing/rejection, real `lineTrace`+`fullscreen` PASSES
-  parsing, unknown `KIND`/`RESOURCE`/POINTS-cross-reference rejection, `PERSISTENT` still rejected
-  under a version, backward-compat confirmed), `translate-isf-glsl.spec.ts` (sampler2D uniform
-  auto-wiring, resource inputs never become uniforms), `isf-targets.spec.ts` (resource inputs
-  produce zero routable targets). 14 new tests; suite now 306 (was 292).
-- `julia-hysteresis.fs` extended with the real `lineTrace` beam pass and renamed `julia.hyst` —
-  end-to-end verified: a 20s smoke render at 960×540 shows the beam (idle Lissajous, since
-  `StructureSource.synthesize()`'s position-only mode always sets `idle: true`/`scope: null` —
-  the same real, documented, intentional behavior the production Julia scene already has in any
-  no-live-audio embed) glowing against the substrate, tinted by the same accent color the
-  substrate's own palette uses, genuinely reading as one visual identity rather than two
-  unrelated layers. Full 1920×1080 SIGSEGV re-render launched to confirm at scale — see whether a
-  further session entry follows for its outcome.
-- **Verified**: `npm run typecheck` (all 4 tsconfigs), `npm test` (306 passing), `npm run build`,
-  `npm run build:lib` all green throughout.
-
-**Not done, explicitly deferred** (tracked in the session's plan, not silently dropped): more
-`resource` kinds beyond `scope` (FFT bins, a future perturbation reference orbit), pass kinds
-beyond `fullscreen`/`lineTrace` (particles, etc.), `PERSISTENT`/feedback buffers, the
-`HYSTERESIS_SCRIPT` execution engine itself (still real, separate, unaffected by this work), and
-patchbay-editor UX for authoring multi-pass `.hyst` files by hand (today's editor only has a
-load-a-file flow). A knob/MIDI-CC-driven node-*parameter* modulation feature (e.g. a live control
-driving an `envelope` node's attack/release, not just a target's value) was discussed and
-deliberately deferred until after this format work and its own render landed.
-
-## Live knob/OSC control of an envelope's attack/release, and a `.hyst` example (same session, immediate follow-up)
-
-User feedback on the `.hyst` Julia port render: the palette washed the deep interior and the
-actual near-boundary filament detail into nearly the same flat violet (the original
-`julia.frag.glsl`-derived `palette()` saturated to one hue past `t≈0.625`, so both cases read
-almost identically), and fractal tracking wasn't great — the latter a known, disclosed limitation
-shared with the real built-in scene (this repo's own history already documents "Julia navigation
-... still doesn't reliably find interesting structure" as feedback on the *production* scene, not
-something this port regressed). Fixed the palette: real multi-cycle escape-time banding (`bands =
-t * 5.0`, several color wraps across the escape range instead of one) reveals the actual
-spiral/filament structure, and the never-escaping interior is now a deliberately flat, distinct
-dark case instead of blending into the boundary coloring. User confirmed the beam/signal "piping"
-itself reads well — the positive signal to keep building on this architecture.
-
-Then, the explicitly-deferred knob feature from earlier: a physical MIDI/OSC control driving a
-node's *parameter* (e.g. an `envelope`'s attack/release time), not just a target's *value*.
-`midiCc`/`oscIn` nodes already existed and could already drive any target directly — what was
-missing was a node parameter itself being live-controllable.
-
-- **`EnvelopeNode.inputs`** (`patchgraph/types.ts`) widened from a fixed 1-tuple to a fixed
-  3-tuple: `[value, attackOverride, releaseOverride]`, where `''` in slot 1/2 means "not
-  connected" (a real, valid value — not a dangling reference) and the static `attackSec`/
-  `releaseSec` fields apply exactly as before. Deliberately kept as extra **input slots** rather
-  than separate fields so the existing generic dependency-walk (`topo-sort.ts`'s
-  `for (const inputId of node.inputs)`, `PatchGraphEvaluator`'s `node.inputs.map(...)`) picks them
-  up automatically — zero special-casing needed for "this node kind has more than one
-  dependency", the same mechanism `combine`/`logic`'s N-input case already relies on.
-  `evaluate-node.ts`'s `envelope` case reads `inputValues[1]`/`[2]` only when the corresponding
-  `node.inputs` slot is actually wired, otherwise falls back to the static field — zero behavior
-  change for every graph that doesn't use this. A `midiCc`/`oscIn` node's value is always 0..1;
-  rescaling into a real seconds range is just the ordinary `map` node, no envelope-specific
-  remapping needed.
-- **A real, pre-existing UI bug found and fixed while wiring the editor side**: `PatchGraphCanvas
-  .tsx`'s `disconnectInput` did `inputs.splice(index, 1)` — correct for variable-arity nodes
-  (`combine`/`logic`, where slot order never carried meaning) but wrong for a fixed-arity node
-  with position-*significant* slots (this envelope case): disconnecting slot 1 would silently
-  reindex a connected slot 2 into slot 1, swapping "release override" into "attack override"
-  without any error. Every prior fixed-arity node had exactly one slot, so this never manifested
-  before. Fixed by keeping the slot's position (`inputs[index] = ''`) for fixed-arity nodes,
-  splicing only for variable-arity ones (`fixedInputSlotCount(n) !== null` already existing and
-  reused, not reinvented). `connectInput` had the mirror bug (a plain `.push()` would land a
-  connection at the wrong position if slots were wired out of order) — fixed by padding with `''`
-  up to the target index first.
-- **Editor UX**: `envelope` nodes now show 3 input nubs (was 1) with real per-slot tooltips
-  ("value" / "attack override (optional)" / "release override (optional)" — a new
-  `inputSlotLabel()` helper, `null` for every other node kind so nothing else changes), and the
-  node summary shows `(live)` next to attack/release whenever an override is actually wired.
-  `docs/patchbay-editor.md` gained a real usage section.
-- **Tests**: `patchgraph.spec.ts` — a live midiCc-driven attack override measurably speeds up the
-  envelope vs. its static field (routed through an ordinary `map` node, `0..1 → 0.01..2` seconds,
-  same pattern as any other knob-to-target route), an unconnected-overrides graph behaves
-  identically to before this feature existed, `validatePatchGraph` accepts `''` override slots as
-  valid (not a dangling reference) while still flagging a real bad reference in one, and still
-  enforces the new "always exactly 3" arity. 5 new tests; suite now 311 (was 306).
-- `examples/isf/` (new): `julia.hyst` (the Julia-port shader — substrate + `lineTrace` beam pass,
-  with the palette fix above) and a short README pointing back to `docs/isf-shaders.md`. First
-  real example shader committed to the repo — every prior ISF test fixture was inline in a spec
-  file or a scratch/job-tmp file, never a real, loadable, checked-in `.fs`/`.hyst` file.
-- **Verified**: `npm run typecheck` (all 4 tsconfigs), `npm test` (311 passing), `npm run build`,
-  `npm run build:lib` all green.
-
-**Not done**: a full 1080p re-render with the palette fix was in progress in the background when
-this feature work started and failed mid-render (frame 6748/12111, apparently a Chrome
-tab/page-level reload — `[vite] connecting...` followed by `no sidecar loaded` on every retry,
-not a shader/format bug) — not re-run as part of this slice per explicit instruction to finish
-the code/commit work first rather than wait on/babysit another ~15min render.
-
-## render-video crash/reload recovery (same session, immediate follow-up)
-
-User asked whether headless Chrome was really the right renderer, given the earlier mid-render
-crash. Real answer, not a reflexive defense: `headless-gl` (the standard non-browser WebGL-in-
-Node approach) is WebGL1-only, and this codebase's render pipeline uses WebGL2 throughout
-(instancing, `texelFetch`, `#version 300 es`, float textures) — dropping the browser would mean
-rewriting the whole render stack down to WebGL1, not a quick swap. Chrome+Puppeteer for "real
-WebGL2 offscreen" is the standard approach (the same trick tools like Remotion use), so the fix
-that actually matched the real failure was resilience, not a different architecture.
-
-- **`harness.ts`**: new `__renderReady()` — deliberately more specific than the existing
-  `__ready` (which only means "this harness script executed at all", true again moments after
-  *any* reload even one that wiped every other piece of state). `__renderReady` checks
-  `structureSource !== null`, the exact condition `__renderFrame` itself guards on.
-- **`render-video.ts`**: extracted the whole load/init/sidecar/shader/fixtures sequence into
-  `initPageState(page)` so it can be re-run, not just executed once. Before each retry attempt
-  (not the first), checks `__renderReady()` (itself wrapped in `.catch(() => false)`, since even
-  that call can throw against a truly dead page); if not ready, re-runs `initPageState` before
-  retrying the frame instead of retrying the same doomed `__renderFrame` call. If re-init itself
-  fails (a real crash, not just a reload — the page object itself is dead), opens a fresh page via
-  `browser.newPage()` and re-inits that instead of giving up.
-- Verified: a real short render still completes cleanly with this in place (no regression to the
-  non-crash path), `npm run typecheck`/`npm test` (311, unchanged)/`npm run build` all green. The
-  actual crash-recovery path itself couldn't be verified against a real repro (the original
-  failure never reliably reproduced in a short smoke test either, only after ~6700 frames of a
-  full-song run) — a full re-render was launched in the background to exercise it for real at
-  scale, same as the original failure's conditions.
-
-## The `HYSTERESIS_SCRIPT` execution engine + the real Julia autopilot port (2026-08-24)
-
-"The big one" — flagged since Phase 0 as the single largest piece of remaining `.hyst`-format
-scope (AGENTS.md's own §5). Did a real plan-mode design pass first (per the format's own prior
-session's convention), grounded directly in `JuliaScene.ts`/`vortex-search.ts`/`boundary.ts` (the
-actual autopilot being ported, not a re-guess of it) and in the real render-worker/ISF code
-(`IsfScene.ts`, `ScreenOutput.ts`, `parse-isf.ts`) before writing anything. Confirmed two
-architectural forks with the user before finalizing: script source lives **inline** in the
-`.hyst` header (matches the field's already-reserved `string` contract), and execution happens in
-a **sandboxed nested Worker** talking async `postMessage` (not same-thread `eval`) — explicitly
-because uptime was named the primary constraint, and a same-thread hang/throw would otherwise take
-the whole render worker down with it.
-
-**The format's two new extensions** (`src/isf/types.ts`/`parse-isf.ts`):
-- **`HYSTERESIS_SCRIPT`** is now parsed, not rejected, when `HYSTERESIS_VERSION` is declared (same
-  version-gating discipline `PASSES` already uses) — `IsfDocument.hysteresisScript?: string`.
-- **`scriptOutput` inputs** (`{ "TYPE": "scriptOutput", "KIND": "float"|"bool"|"point2D"|"color" }`)
-  — a value the script computes every frame instead of the patch graph. Never a routable target
-  (`isfInputsToTargets` returns `[]` for it, same treatment as `resource`) — no ambiguity about
-  which mechanism owns a given uniform.
-- **`scriptTexture` passes** (`{ "KIND": "scriptTexture", "TARGET", "SOURCE", "LENGTH" }`) — the
-  non-scalar counterpart, generalizing the exact mechanism `lineTrace` already established (a pass
-  produces a named `uniform sampler2D`, the fullscreen body decides what to do with it) to a THIRD
-  source of pixel data: a `Float32Array`-shaped field in the script's own per-frame output, not GPU
-  geometry rasterization. RG32F, height 1, `LENGTH` texels (`REF_ORBIT_LENGTH`'s exact shape) —
-  the concrete motivating case is the perturbation reference orbit `JuliaScene.ts`'s
-  `updateReferenceOrbit`/`uRefOrbit` already compute/use in production.
-- Both require `HYSTERESIS_SCRIPT` to be declared (parse-time rejected otherwise, same "reject
-  clearly" discipline every other unsupported combination here already follows).
-
-**The engine itself** (`src/render/worker/scenes/isf/script-runtime/` + `src/isf/script-runtime/contract.ts`):
-- **`contract.ts`** (real TS, host-side): `HysteresisScriptFrameInput { dt, time, idle, inputs }` /
-  `HysteresisScriptFrameOutput { uniforms, textures }` — `inputs` is exactly the shader's own
-  resolved patch-graph values (same as its GLSL uniforms get), never the raw `SignalBus` (keeps
-  R2 — a `VizOutput` never sees it directly — intact even though the script executes as part of
-  `IsfScene`/`ScreenOutput`); `idle`/`time` are supplied the same non-patch-graph way `IsfScene`
-  already reads `params.idle`/`params.scope` off `ParamBus`, a small precedented exception, not a
-  new one. `buildScriptOutputContract(doc)` derives the plain, JSON-serializable "what shape is
-  this script's output allowed to be" contract from a document's declared `scriptOutput`/
-  `scriptTexture` shapes.
-- **`engine-source.js`/`script-worker-entry.js`** (deliberately **plain JavaScript, not
-  TypeScript**) — the actual runtime that `Function`-evaluates a script's source and validates/
-  coerces its per-frame output against the contract (wrong-typed values, non-finite numbers, a
-  wrong-length texture array all fall back to their declared default) BEFORE it's ever handed back
-  across the trust boundary. **A real bug caught by writing the first unit test for this, before
-  ever reaching a browser**: Vite's `?raw` import returns UNPROCESSED file bytes — it does not
-  transpile TypeScript — so a `.ts` file's type annotations would have reached the runtime
-  (both the nested-Worker Blob AND a `Function`-eval in a test) as literal, invalid syntax. The fix
-  was authoring these two files as plain JS from the start, not a wrapper/transpile step. Their own
-  header comments document why they carry no `tsc` coverage — real unit-test coverage of the exact
-  runtime text matters more here than static typing of a small, self-contained file, and
-  `tests/unit/hysteresis-script-runtime.spec.ts` `?raw`-imports and evaluates the SAME text a
-  production Worker runs, not a parallel reimplementation.
-- **`script-host.ts`** (`HysteresisScriptHost`, real TS, owned by `IsfScene`) — spawns the nested
-  Worker from a **Blob** (`?raw`-inlined trusted source text; the shader's own untrusted script
-  source is sent as plain string DATA in the first `'load'` message, never concatenated into the
-  Blob's static text), NOT a normal Vite-bundled `new Worker(new URL(...))` entry — found and
-  confirmed during design that the render worker's own build
-  (`vite.render-worker.config.ts`) is a deliberately single-file, no-code-splitting bundle (so the
-  package stays portable wherever it's installed), and a second statically-detected worker entry
-  would have broken that invariant. Classic (non-module) Worker — the two Blob files have no
-  import/export at all, nothing to opt a module scope in for. Every frame: `postUpdate()` is
-  fire-and-forget, `getLatestOutput()` always returns the last completed reply — one frame of
-  async latency at most, imperceptible at these signals' real timescales (springs settle over
-  100ms+, nav re-checks every 250ms, zoom dives run minutes). A hang (no reply within 800ms) OR an
-  explicit `'error'` reply (a synchronous throw inside `update()` does NOT kill the Worker or stop
-  it receiving future messages, so a script that throws every frame needs an immediate error reply
-  to be detected at all — a hang-timeout-only design would never catch that case) both count as a
-  fault: terminate + restart, rendering continuing on frozen last-known values throughout. After 5
-  consecutive faults, stops retrying and reports once via `onFault` — never throws back into the
-  render loop either way. "Sandboxed" here means fault/crash isolation, not a security boundary
-  (documented honestly in `docs/isf-shaders.md` — the Worker still has `fetch`/`XMLHttpRequest`).
-- **`IsfScene.ts`** wiring: constructs the host in `init()` when `doc.hysteresisScript` is set,
-  posts the frame in `update()`, binds `scriptOutput` uniforms and uploads `scriptTexture` data
-  (`texSubImage2D`, generalizing the existing lineTrace-only texture-bind loop) in `render()`,
-  terminates the host in `dispose()` — called out explicitly during implementation since a
-  worker leak on hot-swap is a real, previously-found bug class in this codebase's own history
-  (canvas double-transfer/context-loss), not a hypothetical one.
-
-**The actual port** (`examples/isf/julia-autopilot.hyst`, new — `examples/isf/julia.hyst` kept
-as-is, the deliberately-partial first-pass substrate+beam port): a direct, faithful port of
-`JuliaScene.ts`'s real autopilot, not a re-derivation — same constants, same structure.
-`cardioidPoint`/`sampleOrbit`/`clusterScore`/`findVortexTarget` ported near-verbatim from
-`vortex-search.ts`/`boundary.ts` (pure math, zero framework deps); the spring-damped `c`-drift
-inlined directly (`spring-damper.ts`'s own accel/velocity/value integration, small enough not to
-need the whole module); `updateNavigation`/`updateZoom`/`updateZoomOut`'s full state machine
-(target-pull-weighted heading, local re-search on empty, zoom-out reveal, blackout-flash reset);
-`updateReferenceOrbit`'s float64 orbit walk feeding the new `scriptTexture` pass. One real,
-necessary adaptation: the script only ever sees the shader's declared `hysteresisSignal` inputs
-(continuous values), never the discrete internal `DropTrigger` event `JuliaScene.ts` reads
-directly off `ParamBus` — so a drop is reconstructed via edge-detecting a rise in the continuous
-`dropImpulse` signal past a threshold, the same "reconstruct a one-shot event from a continuous
-bus signal" pattern `ScreenOutput.ts`'s own `dropImpulse` handling already uses elsewhere in this
-codebase, not a new invention. `hueShift`/`paletteMix` stay ordinary closed-form GLSL fed by live
-signals (no reason to move logic into the script that GLSL already expresses fine — same posture
-`julia.hyst` v1 takes); the GLSL body's perturbation iteration (`iterateDirect`/`iteratePerturbed`/
-`cMul`) is an unmodified port of `julia.frag.glsl`'s own, reading the new `refOrbit` sampler
-instead of `uRefOrbit`.
-
-**Tests**: `parse-isf.spec.ts` (`scriptOutput` KIND parsing/validation, `scriptTexture` pass
-parsing/validation, both requiring `HYSTERESIS_SCRIPT`, `HYSTERESIS_SCRIPT` now requiring
-`HYSTERESIS_VERSION` instead of unconditional rejection, scriptless-doc regression),
-`isf-targets.spec.ts`/`translate-isf-glsl.spec.ts` (`scriptOutput` never a target, correct GLSL
-type per `KIND`, `scriptTexture` sampler2D auto-wiring), `hysteresis-script-runtime.spec.ts` (new —
-loads and evaluates the REAL `engine-source.js` text: closure state persists across frames, a
-missing `update` is a clear load error, malformed/non-finite/wrong-length output falls back to
-declared defaults, a diverging texture value holds the last finite entry, a throw inside `update()`
-propagates), `hysteresis-script-host.spec.ts` (new — mocks the global `Worker`: normal round trip,
-stale-reply rejection, hang-timeout terminate+restart with last-known-value preserved, an explicit
-error reply faulting immediately rather than waiting out a timeout, the consecutive-fault cap
-giving up cleanly, a `loadError` being permanent). 26 new tests; suite now 337 (was 311).
-
-**Verified**: `npm run typecheck && npm test && npm run build && npm run build:lib` all green
-throughout (checked after each increment, not just at the end) — confirmed via `grep` on the built
-`public/render-worker.js` that the `?raw`-inlined engine text actually landed inline in the single
-bundled file, not as a separate chunk, before ever reaching a browser. **Real end-to-end
-verification via `render-video`** against a short synthesized smoke WAV (25s, `ffmpeg`-generated —
-no real track needed for this check): `julia-autopilot.hyst` loads, parses, and renders through
-real headless Chrome with no errors/hangs; two output frames several seconds apart show genuinely
-different substrate structure/color (flat background → rich fractal detail), confirming the script
-is actually driving `c`/`pan`/`zoom`/the ref-orbit texture frame to frame — not silently sitting at
-declared defaults, the exact class of bug the prior session's `hysteresisSignal` uniform-binding
-miss turned out to be. The reference-orbit/perturbation path specifically (only reachable once zoom
-drops below `DIRECT_ZOOM_THRESHOLD`) was separately confirmed via a longer simulated run of the
-pure script runtime (not the full GL render): zoom crosses the threshold at ~24s simulated at max
-windup/energy, and `refOrbit` becomes real, finite, non-zero data at that point, not all zeros.
-
-**Not done, explicitly deferred**: fine hand-tuning of the ported constants against live visual
-feedback (this session had no interactive browser access for the kind of iterative tuning
-`JuliaScene.ts`'s own history shows was needed multiple times even for the original code — the
-port targets behavioral fidelity to the real algorithm, not a re-tuned feel); patchbay-editor UI
-for authoring/hot-reloading a `HYSTERESIS_SCRIPT` (today's editor only has a load-a-file flow,
-unaffected either way); `scriptOutput` `KIND: "long"` (no motivating shader needs it);
-`scriptTexture` formats beyond RG32F; a full-length, real-track `render-video` render (the smoke
-render above was a short synthetic-audio clip, sufficient to prove the mechanism works, not a
-"does this look good over a real song" check — that's real follow-up work, same as every other
-`.hyst`/Julia-tuning session in this file's history has needed more than one visual pass).
-
-## Real-track verification of the Julia autopilot port, and Layer 2 signals wired into a real default route (same day, immediate follow-up)
-
-Closed two of the three standing candidates the prior session's own entry left open (§5), per the
-user's explicit "do everything" — the third (verifying `midiCc` against a real physical MIDI
-controller) needs hardware in the user's hands, not something this session could do unattended,
-and is called out below as still genuinely blocked rather than silently skipped.
-
-**Full-length real-track render of `julia-autopilot.hyst`** — the prior session's own render-video
-verification used a short synthesized WAV; this one used a real 39-minute track
-(`~/Music/Albums/MAXIMAVELIANISM/test.wav`, the same album the earlier `SIGSEGV.wav`
-end-to-end-verification session used), rendered at 960×540/30fps for its first 5 minutes in real
-headless Chrome. Completed cleanly (9000 frames, no errors/hangs/timeouts) — the debug overlay
-confirms `noveltyLocal`/`noveltySection`/`fullness`/`onsetDensity`/`harmonicNovelty`/
-`chromaRootHue` are all genuinely alive against real audio (not synthetic-fixture-only), and
-frames spread across the render show real, continuously-evolving fractal structure/color, closing
-the "full-length render" item the prior session's own entry explicitly deferred.
-
-**Layer 2 signals wired into a real default route** (AGENTS.md §3.7/§5's own standing note: these
-6 live signals have been real and on the bus for a while, never wired into anything a user would
-actually see):
-
-- **All 6** (`noveltyLocal`/`noveltySection`/`fullness`/`onsetDensity`/`harmonicNovelty`/
-  `chromaRootHue`) now have real `screen.*` targets (`screen-targets.ts`) and a default 1:1 route
-  into them (`screen-only.ts`'s `identityRoutes`) — immediately routable/patchable from the editor
-  even before any native composite reads them, the same "real target, not magic" treatment every
-  other bus signal already gets.
-- **Two, deliberately only two, also drive a native composite**: `chromaRootHue` sums into the
-  same `screen.hueShift` target `hueDrift`/`centroid` already feed (gain 0.15 — §4.2's own framing,
-  "pitch-class → hue," now real), and `fullness` adds a modest term (gain 0.5, about half of
-  `energy`'s own) into `flowStrength`'s spring target (`screen-composites.ts`).
-- **`noveltyLocal`/`noveltySection`/`harmonicNovelty`/`onsetDensity` deliberately NOT wired into
-  `symmetry`**, even though novelty-as-organization-spike is a natural-sounding pairing: this
-  codebase's own history (the "fold seam / Julia zoom follow-up" and later sessions) already
-  records real user feedback that symmetry reads as overused/"too psychedelic" when too many
-  signals feed it, and `SYMMETRY_AMBIENT_CEILING` exists specifically because of that. Adding more
-  contributors to an already-flagged-as-sensitive composite without the ability to watch it live
-  and get real feedback would be guessing, not engineering — left as pure default routes instead,
-  a real capability increase (routable/patchable/inspectable today) without a new guess about
-  "how much is too much." A genuine open question for the user to weigh in on, not an oversight.
-- **Tests**: `conductor.spec.ts` — all 6 signals resolve as real `screen.*` values (not just
-  internal `SignalBus` state) through a full `Conductor → Patchbay(screen-only) → composites`
-  pipeline tick; `chromaRootHue`'s exact hueShift contribution; `fullness`'s flowStrength increase;
-  a regression guard proving the 4 deliberately-unwired signals don't move `symmetry` even at
-  max value. 4 new tests; suite now 341 (was 337).
-- **Verified**: `npm run typecheck && npm test && npm run build && npm run build:lib` all green.
-  A short `render-video` smoke render of the **native production default scene** (no `--isf`, the
-  actual code path these changes touch — the julia-autopilot render above exercises the separate
-  `.hyst`/ISF path, which doesn't consume these routes at all) confirms no regression: renders
-  cleanly, real fractal output, no errors. The synthetic smoke audio used for that specific check
-  has almost no chroma/fullness variation of its own, so it doesn't visually demonstrate the new
-  hue/flow effect distinctly — the unit tests above are what actually prove the effect's existence
-  and bounds; a real-track native-scene render to SEE the effect is real further follow-up, not
-  done here.
-
-**Not done**: `midiCc`/envelope-attack-release-override verification against a real physical MIDI
-controller — the user has the hardware, this environment doesn't, so this is genuinely blocked on
-the user plugging a controller in and driving the editor themselves, not something to fake or
-skip past. Wiring the 5 sidecar-only stem-presence signals into any route (they need a
-`--stems`-analyzed track to ever be nonzero, a different, narrower case than the 6 live signals
-above). Any fixture/DMX-side default routing for these same 6 signals (`fixture-document.ts`/
-`FixtureOutput` untouched this session — screen-only).
-
-## Patchbay editor redesign: navigation shell, design system, and a real shader-authoring screen (2026-08-25)
-
-User asked for the editor's UI to be genuinely finished-feeling ("spotless... noone will see it
-and think anything bad") across three axes confirmed up front: visual/interaction polish,
-navigation/information architecture, and a real new screen for authoring `.hyst`/
-`HYSTERESIS_SCRIPT` shaders — which had **zero** in-editor support before this (file-picker load
-only, no text editor, no `.hyst` awareness at all). Also asked to "expand" the tool to catch up
-with what's landed since it was last touched. Did a real plan-mode design pass first, grounded in
-a dedicated Explore-agent inventory of the entire existing tool (every file, the actual render
-tree, every panel's real interaction model) before designing anything. `claude-in-chrome` was
-checked twice (start of session, and again the next day) and was not connected either time — same
-standing "never verified in a real browser" caveat this tool's whole history carries; everything
-below is typechecked + dev-server-transform-verified + a real HTTP round-trip test of both save
-endpoints, not eyeballed.
-
-**Navigation**: replaced the single dense workspace (graph hero + a permanent 320px rail + an
-overlay debug drawer) with 4 real screens behind a persistent nav bar — **Patch Graph** (now full
-width, no rail competing for it), **Shaders** (new), **Output** (Fixtures + Fixture Visuals +
-DMX/OSC/MIDI, consolidated — MIDI moved here from its old home buried inside the debug drawer,
-since connecting a controller is I/O setup, not a diagnostic), **Diagnostics** (the same 4
-debug-drawer panels, promoted from a slide-in overlay to a real screen). The canvas + transport
-bar keep their exact prior DOM position/CSS-class-swap mechanism (`App.tsx`'s `canvasBlock`
-comment) — `transferControlToOffscreen()` is still one-shot, that constraint didn't change.
-
-**Design system** (`tools/patchbay-editor/src/ui/`): `Button`/`IconButton`/`Select`/`TextInput`/
-`Toggle`/`Badge`/`Card`, plus a hand-authored inline-SVG icon set (`icons.tsx`) replacing the raw
-emoji (🐞⤢✕⊡▶⏸📁) every panel used before. `FixtureManager`/`DmxOutPanel`/`OscInPanel`/
-`MidiPanel` — the four panels the redesign's own inventory flagged as the biggest visual
-inconsistency (ad hoc inline styles vs. the graph canvas's shared classes) — retrofit onto these
-primitives; internal logic/state untouched, presentation only, to keep the risk of breaking real
-WebSerial/WebMIDI wiring low. `NumberInput` adds real click-and-drag-to-scrub (the Figma/After-
-Effects-style number field gesture) on top of the native input — a plain click still focuses it
-for typing, only real horizontal movement past a small threshold engages the drag — the concrete
-"usable, easily navigable" win for gain/offset/threshold/cut fields that only ever accepted typed
-values before. `node-fields.tsx`'s `curve` node also gained a small inline SVG sparkline preview
-next to its KIND select, driven by `evaluate-node.ts`'s real `applyCurve()` (newly exported for
-exactly this — so the preview can never drift from what actually runs), and `envelope`'s live
-attack/release-override state (previously only visible via a nub tooltip) now shows as a `Badge`
-in the inspector too.
-
-**Shaders screen** (`tools/patchbay-editor/src/shaders/`, new) — the actual centerpiece. Added
-**CodeMirror 6** as a devDependency (real syntax highlighting/bracket-matching/undo — the one
-deliberate new dependency this pass adds, confirmed with the user first, since unlike
-`resize`/drag-and-drop this tool already reaches for natively, there's no browser primitive for
-real code editing). A `.hyst` file is edited as three tabs — Header (JSON), GLSL, and, genuinely
-new, **Script** (`HYSTERESIS_SCRIPT`'s JS edited unescaped in its own pane, not hand-escaped
-JSON-string text) — via `hyst-source.ts`'s `splitHystSource`/`buildHystSource`, a pure text
-reshape, **not** a second parser: the real `parseIsf()` stays the sole authority on validity, both
-for live debounced parse feedback while typing and for the Apply button, which is gated only on
-the header actually being well-formed JSON (the minimum needed to construct any source text at
-all) — a header that's valid JSON but semantically wrong still gets sent, and the worker's own
-real rejection is what's authoritative, exactly like every other loading path in this tool already
-works. Apply calls the exact same `bridge.setIsfShader()` path the old file-picker-only `IsfPanel`
-used; the always-visible canvas becomes the live preview the instant it succeeds, no second canvas
-needed. Template gallery seeded from the two real, checked-in example shaders
-(`examples/isf/julia.hyst`, `julia-autopilot.hyst`, pulled in via Vite `?raw` imports) — both
-existed as files reachable from nowhere in the tool before this. Save extends the existing
-dev-only Vite middleware pattern (`serialize-config.ts`'s `saveToFile`/`patchbaySavePlugin`) with
-a sibling endpoint (`save-shader.ts`/`patchbaySaveShaderPlugin`) scoped to `examples/isf/`, same
-restricted-prefix + no-path-separators + resolved-path-must-stay-under-dir discipline — verified
-directly with a real HTTP POST (wrote and cleaned up a throwaway file) and a real rejected
-path-traversal attempt (`../../src/evil.hyst` → 400), not just read from the code. `IsfPanel.tsx`
-is deleted, not kept alongside the new screen — its one capability (load-by-file/drag-drop)
-is subsumed into the Shaders screen's own file list.
-
-**Verified**: `npm run typecheck` (all 4 tsconfigs) and `npm test` (341, unchanged — this redesign
-touches no logic the suite covers) green throughout. `npm run patchbay`'s dev server: every
-new/changed module (30 files) fetched and transformed with no errors, both save endpoints
-round-tripped for real over HTTP. `npm run build`/`build:lib` confirmed byte-identical in output
-size to before this session (this tool has never been reachable from either, and stays that way).
-The editor's own real production build (`vite build --config vite.patchbay-editor.config.ts`,
-rarely exercised but real) also still succeeds with CodeMirror bundled in (810kB, a real chunk-size
-warning but not an error — a dev-tool-only bundle, not a shipping concern). Its output directory
-(`dist-patchbay-editor/`) was untracked and not gitignored before this session — added to
-`.gitignore`, a real small gap this pass happened to surface.
-
-**Not done, explicitly deferred**: minimap/multi-select/copy-paste/undo-redo/node-grouping on the
-graph canvas (real gaps, no motivating urgency this pass — flagged in the plan, not silently
-dropped); a structured drag-and-drop header-field builder for the Shaders screen (add/remove
-`INPUTS` via UI controls) — scoped out from the start as a materially bigger, separate project,
-text editing is the real deliverable here; a live browser click-through of any of this (the
-standing caveat above) — ask for one directly, or say if `claude-in-chrome` gets connected and a
-follow-up session should use it instead of the typecheck/dev-server/HTTP-round-trip fallback this
-one had to rely on.
+## 5. Session history (append-only, newest last)
+
+### R0 foundation — Cargo workspace + hyst-core (2026-09-05)
+
+First Rust session. Scaffolded the workspace per plan §2 (`crates/hyst-{core,audio,render,script,
+choreo,compile,output,hw,previz}` + `hyst-cli`'s `hyst` binary) — every crate but `hyst-core` is
+an intentional one-line stub so the workspace checks/clippies/tests clean from commit one, per §3
+rule 3, without pretending unstarted workstreams have content.
+
+`hyst-core` (`crates/hyst-core/src/`):
+- `signal.rs` — `TimescaleTag`, `SignalBus` (every field from the TS `SignalBus`, `snake_case`d),
+  `signal_tag()` (a match, not a `HashMap`, replacing the TS `SIGNAL_TAGS` const — same coverage,
+  unit-tested that every routable field has a tag and `scope`/`chroma`/`idle` don't), `TargetDecl`,
+  `ResolvedTargetValue`/`ResolvedTargets`, the `VizOutput` trait (`update(&mut self, dt, &
+  ResolvedTargets)`, `dispose`).
+- `sidecar.rs` — `Sidecar`/`SidecarSection`/`SidecarEvent`/`SidecarOnset`/`SidecarBandEnvelope`/
+  `SidecarStemPresence` ported field-for-field from `src/shared/sidecar.ts` (schema 2/3, real,
+  verified against the TS file read in full). Schema-4 additions (`SidecarRepeat`,
+  `noveltyLocalEnvelope`/`noveltySectionEnvelope`, `SidecarSection.boundaryConfidence`) ported from
+  `SINTEZA_OFFLINE_SSM.md` §2 — **explicitly flagged in the module doc comment as directional**,
+  since that spec is older and nothing in `tools/` emits schema 4 yet. All schema-3/4 fields are
+  `Option`, matching the additive-only precedent (rule 5). `SidecarSchemaVersion` round-trips
+  through `u8` via `TryFrom`/`Into` so an unknown version (e.g. `99`) is a real parse error, not a
+  silent default.
+- `project.rs` — **new, no TS precedent** (the browser package had no project container at all —
+  a track was just a URL). Designed minimal: `project.json` manifest (`name`, `format_version`,
+  optional `audio`/`sidecar` relative paths) at a directory's root. `Project::load_dir` reads and
+  validates it (rejects an unknown/future `format_version`, does *not* eagerly check that
+  `audio`/`sidecar` paths exist — a caller opening one gets a real io error naming the actual
+  missing path). `Project::export_zip` walks the directory (`walkdir`) and stores every file's raw
+  bytes under its relative path — no re-serialization, no line-ending normalization, so the
+  `.hystproj` is byte-faithful per plan §0.6. `Project::load_hystproj` extracts into a caller-given
+  directory (via the `zip` crate, `enclosed_name()` guards path traversal) then delegates to
+  `load_dir`. Round-trip test (`hystproj_export_and_reload_round_trips_byte_faithfully`) confirms
+  a `.wav`-like binary file and a `.hyst`-like text file both survive export→reload with identical
+  bytes.
+- `error.rs` — `HystError` (`thiserror`), `Io`/`Json` variants carry the offending path so a
+  failure names a real file, not just "something went wrong."
+
+**Verified**: `cargo check --workspace`, `cargo test --workspace` (8 tests, all in `hyst-core` —
+every other crate is a stub with none yet), `cargo clippy --workspace --all-targets -- -D
+warnings`, all clean. `npm run typecheck` on the existing TS tree re-run and confirmed still green
+(nothing there was touched). Added `/target/` to `.gitignore`.
+
+**Not done / explicitly deferred to R1+**: no audio, no rendering, no script runtime — R0 is
+foundation types only, as scoped. The project manifest shape (`project.json`) is a first cut, not
+finalized — later workstreams (`.hyst` assets, Lua scripts, Choreography Scores) will likely add
+fields to it; keep additions additive per the same schema precedent, don't redesign it from
+scratch when that need arrives.
+
+**This session also restructured AGENTS.md itself**: the full TS-era content (architecture,
+target-architecture backlog, Layer 2 spec, and the entire prior session-history appendix) moved
+verbatim to `docs/LEGACY_TS.md` (frozen, header added). This file was rewritten lean and
+Rust-facing, per user request, now that the TS system is reference-only.
+
+### R1 — `hyst-audio`: playback, clock, live analysis (2026-09-05, same day as R0)
+
+Second Rust session, same day. Full R1 scope from the plan's named list landed: "FFT, bands,
+centroid, flatness, flux, chroma, onset density, fullness) + the beat PLL", plus playback/clock/
+latency-compensation. **Deliberately not in this pass** (not named in the plan's R1 item, flagged
+rather than silently skipped): `BuildDetector`/`DropDetector`/`BreakDetector` (so `buildProgress`/
+`tension`/`dropImpulse`/etc. stay at `SignalBus::default()`'s zero), per-band stereo placement/pan,
+the oscilloscope `scope` beam, `harmonicNovelty`/`familiarity`/`noveltyLocal`/`noveltySection`
+(need `novelty.ts`'s ring-buffer machinery, not named in R1), and any resampling (source WAV
+sample rate must exactly match the output device's).
+
+`hyst-audio` (`crates/hyst-audio/src/`):
+- `clock.rs` — `AudioClock`: atomics-based, `logical_position_secs()` (sample-accurate, advanced
+  by the audio callback) and `audible_position_secs()` (logical minus the configurable output
+  latency, clamped ≥0) — the literal mechanism plan §4 R1 asks for ("audio can be delayed a few ms
+  to compensate servo travel time... make it expressible from day one").
+- `delay_line.rs` — `DelayLine`: a fixed-capacity interleaved ring buffer. The callback writes
+  undelayed samples in for the clock/analysis to see immediately, while what actually reaches the
+  device is read `delay_frames` behind — silence until enough frames have ever been written, not a
+  wraparound read of stale data. Pure logic, no device needed, unit-tested directly (zero-delay
+  passthrough, multi-call persistence, stereo-channel independence, over-capacity clamping).
+- `dsp/` — `fft.rs` (`WindowedFft`, Hann window ported bit-for-bit from `fft.ts`, `realfft` standing
+  in for `fft.js`'s `realTransform` — its `size/2+1` bin convention already matches exactly, no
+  reinterpretation needed), `bands.rs`, `envelope.rs` (`EnvelopeFollower`/`AdaptiveNormalizer`),
+  `spectral.rs` (centroid/flatness), `onset.rs` (`SpectralFlux`), `chroma.rs`, `activity.rs`
+  (`FullnessTracker`/`OnsetDensityTracker`) — all ported faithfully from
+  `src/audio/worklet/{fft,bands,envelope,spectral,onset,chroma,brain/activity}.ts`, each with its
+  own synthetic-signal unit tests (pure tone → correct FFT bin, A440 → pitch class 9, flat noise →
+  high spectral flatness, etc.) since none of these need a real device to verify their math.
+- `beat.rs` — `BeatTracker`/`BarTracker`, ported line-for-line from
+  `src/audio/worklet/brain/beat-tracker.ts` ("port the working PLL first" — plan §4 R1). The exact
+  three tests from `tests/unit/beat-tracker.spec.ts` (120 BPM click-train lock-on, 90 BPM
+  lock-on, beat-phase free-running smoothly through a silent gap) are mirrored here and pass.
+- `features.rs` — `FeatureExtractor`: glues the above into a per-hop `analyze()` matching
+  `feature-worklet.ts`'s ring-buffer-accumulate-then-hop structure exactly (2048-sample FFT window,
+  512-sample hop, the same "ring must wrap once before any hop fires" gate — verified by a test
+  that deliberately checks 1, not 0 or 4, hops fire crossing that exact boundary). Populates a
+  `hyst_core::SignalBus` (which gained a `#[derive(Default)]` this session, a small additive
+  follow-up to R0, so a partial producer has a sane zeroed starting point).
+- `wav_source.rs` — `WavSource::load` via `hound` (int and float WAV, no TS precedent — the browser
+  package never decoded audio itself, the host's `<audio>`/`AudioContext` did).
+- `playback.rs` — `Playback::new` opens the real default output device via `cpal`, requires the
+  source's sample rate to match it exactly (mismatch is a named, clear error — resampling flagged
+  as follow-up, not silently wrong), maps mono/stereo/other channel counts sensibly, and wires
+  `AudioClock` + `DelayLine` + `FeatureExtractor` together in the output callback. Exposes
+  `latest_bus()` and `set_output_latency_ms()`. **Flagged, not fixed**: the callback allocates and
+  runs the full extractor synchronously on the audio thread — real-time-safety hardening is
+  explicitly deferred, not attempted this pass.
+- `examples/play.rs` — a real, kept manual-verification tool (`cargo run -p hyst-audio --example
+  play -- file.wav [latency_ms]`), deliberately outside `cargo test`/CI since it opens a real audio
+  device and produces real sound.
+
+**Verified against real hardware, not just synthetic fixtures** (asked the user first, given this
+session runs as a background job and playing audio is an audible, real-world action) — this is
+the first workstream in the Rust rewrite to clear that bar. Generated a short (4s), moderate-volume,
+faded-envelope 440Hz beep track at 120 BPM matching the real default output device's config
+(44100 Hz, stereo, f32, queried live via `cpal`), played it through `examples/play.rs` with 30ms
+output latency configured, and confirmed by reading the printed log (not by ear alone): tempo
+locked to 120 BPM matching the true click rate; `sub`/`low` band energy tracked the beeps and
+dropped to ~0 after the track ended; `audible_position_secs` stayed consistently ~30ms behind
+`logical_position_secs` throughout — the output-latency compensation lever works end-to-end, not
+just in the `DelayLine`'s own unit tests. All three of R1's stated done-when criteria (sample-
+accurate position, live bus signals populate, configurable output latency demonstrably applied)
+are now real, not just unit-tested in isolation. The two throwaway diagnostic examples used to get
+here (`device_info.rs`, `gen_test_tone.rs`) were deleted afterward — not real deliverables.
+
+**Verified (automated)**: `cargo check`/`test`/`clippy -D warnings` clean workspace-wide (48 tests:
+8 `hyst-core` + 40 `hyst-audio`). `npm run typecheck` reconfirmed green (TS tree untouched, per
+rule 2). No cpal device is opened by the automated test suite — that stays a deliberate, human-
+gated action (this session's real-hardware run was explicitly confirmed with the user first, per
+the project's action-care guidelines around audible/real-world side effects).
+
+**Not done / explicitly deferred**: no resampling; no real-time-safety hardening on the audio
+callback (both flagged above); the sidecar-caching-after-first-playthrough item plan §4 R1 calls
+"optional, nearly free, worth doing" was not attempted this session — genuinely optional per the
+plan's own wording, not silently dropped.
+
+### R2 (partial) — `hyst-render`: `.hyst` parsing + `wgpu` bootstrap (2026-09-05, same day as R0/R1)
+
+Third Rust session, same day, continuing straight from R1. **This is a deliberately partial slice
+of R2** — the two most independent, well-scoped "Do" items landed; the render passes and Julia
+substrate (the bulk of the workstream, and R2's actual done-when: "Julia substrate + memory field
++ beam render, visually diffable against the frozen browser build") remain open, flagged below
+rather than claimed done.
+
+**`.hyst` format parser** (`crates/hyst-render/src/hyst_format/`): ported `src/isf/types.ts` +
+`src/isf/parse-isf.ts` field-for-field — `IsfInput` (float/bool/long/color/point2D/
+hysteresisSignal/resource/scriptOutput, each with its real fields, as a Rust enum rather than a
+TS discriminated union), `IsfPass` (fullscreen/lineTrace/scriptTexture), `IsfDocument`,
+`IsfParseError`. `parse_hyst()` mirrors `parseIsf()`'s exact behavior: header-comment extraction,
+`HYSTERESIS_VERSION` gating (absent = plain ISF, unrecognized version = a specific rejection,
+current version unlocks real multi-pass/script extensions), `PERSISTENT`/multi-pass/`IMPORTED`
+rejection with the same specific messages, `hysteresisSignal`'s `SIGNAL` validated against
+`hyst_core::ROUTABLE_SIGNAL_NAMES` (a small, justified R0 follow-up addition — `hyst_core::signal`
+gained this exported const, alongside the existing `signal_tag()` lookup, so a second consumer
+doesn't need to duplicate the name list), lineTrace/scriptTexture cross-validation against declared
+inputs, and scriptOutput/scriptTexture requiring a real `HYSTERESIS_SCRIPT`. **Every one of the 33
+tests in `tests/unit/parse-isf.spec.ts` was ported 1:1** (same fixtures, same rejection messages
+asserted via substring match on `Display`) and **passed on the first run, no fixture adjustments
+needed** — the strongest port-fidelity signal so far this rewrite.
+**Deliberately not ported this session**: `translate-isf-glsl.ts` (the GLSL-body translation from
+ISF's browser-flavored built-ins to valid shader source) — `IsfDocument.body` is carried through
+verbatim, untranslated, unusable by any renderer as-is yet. Flagged as necessary follow-up work,
+not forgotten.
+
+**`wgpu` bootstrap** (`crates/hyst-render/src/gpu.rs`): `GpuContext` (instance/adapter/device/queue,
+headless — no window/surface, matching the render-worker's own `OffscreenCanvas`-only architecture
+in the TS original) and `OffscreenTarget` (a fixed-size RGBA8 render-to-texture target, a hardcoded
+fullscreen-triangle vertex shader in the classic `@builtin(vertex_index)` style, a
+`render_fragment_shader()`/`read_pixels()` pair). **Verified against this machine's real GPU, not
+mocked or skipped**: confirmed a real Vulkan adapter/device exists (`vulkaninfo`, `/dev/dri`) before
+writing any code, then wrote a test that requests a real adapter, renders an actual horizontal-
+gradient WGSL fragment shader to a 64×64 texture, reads it back via the real buffer-copy/map-async
+path, and asserts the readback shows a genuine left-to-right gradient (near-0 red at x=0, near-max
+at x=63, monotonic in between) — not just "did it not crash." This is a real, repeatable
+`cargo test` (no manual/human-gated step needed here, unlike R1's audio playback — reading pixels
+back to a buffer has no audible/visible side effect on the user's machine, so no confirmation was
+needed before running it). **Deliberately not built yet**: any actual render pass (memory field,
+persistence, bloom, composite, beam), the Julia substrate shader, and the GLSL(ISF)-to-WGSL
+translation layer that would let a real `.hyst` fragment body actually compile and run through this
+pipeline — `OffscreenTarget::render_fragment_shader` only accepts hand-written WGSL today. Also not
+addressed: general (non-64px-aligned) readback padding — `read_pixels` explicitly errors rather than
+silently misreading if `width * 4` isn't already a multiple of 256, a real render pass will need
+that padding handled, not just documented as a caller's constraint.
+
+**Verified**: `cargo check`/`test`/`clippy -D warnings` clean workspace-wide (82 tests: 8 + 40 + 34,
+`hyst-render`'s 34 includes the one real GPU-hardware test above). `npm run typecheck` reconfirmed
+green. `hyst_core::signal`'s new `ROUTABLE_SIGNAL_NAMES` export is covered by the existing tag-
+coverage test (updated to iterate it instead of a second hardcoded list, removing a duplication that
+existed only because R0 predated this need).
+
+**Not done / explicitly deferred to the rest of R2**: the render passes, the Julia substrate, ISF-
+GLSL-to-WGSL translation, general (non-64px) texture readback, and wiring `.hyst` multi-pass into an
+actual renderer that consumes it (today `parse_hyst()` produces structured data nothing downstream
+reads yet). R2's own stated done-when ("Julia substrate + memory field + beam render, visually
+diffable against the frozen browser build") is NOT met by this session's slice — don't read the 82
+green tests as R2 being complete.
+
+### Post-Phase-1 fix — memory-field exposure/wash-out (2026-09-05, same day)
+
+User reported the fixed-palette render was "still smudged" after the earlier palette fix. Root
+cause was two compounding issues, found by actually rendering and looking (tests didn't catch
+either — see the note above about visual review being necessary here):
+1. `memory_field.rs`'s `cur_gain` was a caller-supplied constant (0.25 in the demo), not derived
+   from `decay` — the real spec (`memory-field-pass.ts`) computes
+   `cur_gain = max(0, (1-decay)/(1-DECAY_REFERENCE))`, `DECAY_REFERENCE=0.86`, specifically so
+   raising decay doesn't ALSO multiply steady-state brightness by the same factor. Fixed:
+   `cur_gain` is no longer a `MemoryFieldParams` field at all — computed internally, matching spec.
+   This formula normalizes steady-state gain to a **constant ~7.14x regardless of decay**, by
+   design — worth remembering before "fixing" it again.
+2. That normalized ~7x gain needs real exposure headroom before Reinhard tonemap, which this
+   fresh (non-ported, R2's own) composite/bloom pipeline didn't have — a long-running (45s, 1000+
+   frame) feedback loop compounded past Reinhard's knee into a washed-out near-white smudge, and
+   the Julia palette was feeding color into the accumulator from almost the entire exterior (any
+   pixel escaping in as few as 1-2 iterations still got partial color), not just real boundary
+   detail — most of what was compounding.
+   Fixed: `composite.rs`'s `render_composite` gained a real `exposure: f32` parameter (pre-tonemap
+   scale, `1.0` default = no change, existing tests use `1.0`; the demo now uses `0.08`) —
+   `renderer.rs::FrameParams` carries it through. `julia.rs`'s color ramp narrowed from
+   `smoothstep(0,6,smoothIter)` to `smoothstep(4,24,smoothIter)` so true background stays
+   near-black and only the real boundary halo feeds color into the accumulator.
+   Confirmed by rendering and inspecting frames at multiple points across the full 45s (not just
+   the first few seconds) — contrast holds steady late into the clip, doesn't drift back toward
+   saturation. All 44 `hyst-render` tests still pass unmodified through every step of this fix.
+
+### Post-Phase-1 fix #2 — beam/symmetry/composition demo tuning (2026-09-05, same day)
+
+User: better, still not good enough — beam "just blinks to beat", plus (asked directly, multi-
+select) blurry/soft overall, kaleidoscope repetitive/artificial, composition/framing boring. All
+demo-level tuning in `examples/audio_driven_render.rs` (+ one small, justified `julia.rs` change),
+no new correctness bugs found this round:
+- **Beam**: was a single static `Segment` whose only reactivity was brightness pulsing on the
+  beat — `hyst-audio` doesn't expose real waveform/scope data yet (R1 scope), so there was nothing
+  else to trace. Real design intent per `lissajous.ts`: an idle 3:2 Lissajous curve. Added
+  `lissajous_segments()` (96-segment polyline, amplitude breathing with `energy`, phase drifting
+  with `t`) — a legitimate stand-in matching the actual spec, not an arbitrary demo choice.
+- **Kaleidoscope "repetitive/artificial"**: the demo held `mirror_strength` at a flat `0.5` the
+  entire clip — this directly violates the project's own stated design principle (`docs/
+  LEGACY_TS.md`/AGENTS-era thesis: "earned symmetry... rises with tension/energy, snaps to full
+  only on an event, never a constant filter"). Now `0.15 + 0.5*energy` — the demo was quietly
+  breaking its own inherited design rule, not a hyst-render bug.
+- **"Too blurry/soft"**: `decay` was held near its max (`0.85-0.95`) for the full 45s — trail
+  length scales ~`1/(1-decay)`, so this compounded into ever-softening blur with no real "memory
+  fades" moment. Lowered to `0.55-0.75`. (Distinct from the earlier exposure/wash-out fix — that
+  was brightness saturation, this is trail length/softness; both were real, separate problems.)
+- **"Composition/framing boring"**: `JuliaNavState::driven_by_time` (still explicitly R6's
+  placeholder, not real autopilot) held `zoom`/`pan`/`hue_shift` at fixed defaults the whole time —
+  only `c` orbited. Added slow zoom breathing, pan drift, hue drift — cheap, still clearly a
+  stand-in, but no longer a frozen centered frame.
+All 44 `hyst-render` tests still pass unmodified. Confirmed by rendering and inspecting multiple
+frames across the clip (not just eyeballing one) before sending.
+
+### Post-Phase-1 fix #3 — real zoom dive + rarer kaleidoscope (2026-09-05, same day)
+
+User, third round: still not good enough — kaleidoscope "too frequent and shitty", and the
+fractal has no zoom-in. Two real fixes:
+- **No zoom-in**: `driven_by_time`'s zoom only *breathed* (oscillated `1.6±0.6`) from the previous
+  round, never actually dove in. Replaced with a real exponential zoom-in cycle (`ZOOM_START=2.5`
+  → `ZOOM_FLOOR`, rate `0.12`/s, resets and dives again) — matches the project's own actual thesis
+  (XaoS-style continuous dive, `docs/LEGACY_TS.md`'s zoom-rate history). **A real bug surfaced
+  fixing this, not just tuning**: zooming into a *fixed* point (this placeholder has no vortex-
+  search toward genuine boundary detail — that's explicitly R6's job) frequently drifted into the
+  Julia set's uniformly-featureless interior well before any float-precision limit — confirmed by
+  rendering and inspecting frames at multiple points in the dive, not assumed. Fixed by keeping pan
+  drift small (was `0.25/0.2`, now `0.04/0.03`) and choosing `ZOOM_FLOOR=0.6` (was tried at `0.15`
+  first — went empty; `0.6` keeps real detail in frame the whole cycle). This is still a
+  placeholder centered zoom, not real navigation — R6 replaces it for real.
+- **Kaleidoscope "too frequent"**: previous round's `0.15+0.5*energy` meant symmetry was visible
+  most of the time (real tracks spend a lot of time above a low energy threshold). Changed to a
+  hard-gated `smoothstep(0.65, 0.9, energy) * 0.55` — near-zero below 65% energy, only appearing
+  in genuinely loud moments. "Shitty"-looking wasn't separately chased this round — rarity was the
+  concrete, actionable part of the complaint; if it still looks bad only in the rare loud moments
+  once frequency is fixed, that's the next thing to isolate.
+All 44 `hyst-render` tests still pass unmodified; each change verified by rendering and inspecting
+multiple real frames (not assumed from formulas alone) before sending.
+
+### Post-Phase-1 fix #4 — seamless dot↔void zoom cycle, tempo-gated beam (2026-09-05, same day)
+
+User now at the machine — **stop sending files, render full quality locally instead** (this
+session's `SendUserFile` use for this render ends here; future review is local file inspection).
+Two real, substantive requests, not just tuning:
+- **"No cuts" on the zoom reset**: previous round's reset (`ZOOM_FLOOR` back to `ZOOM_START`) was
+  a visible jump between two populated-with-detail frames. Redesigned per the user's own idea:
+  the dive now runs from `ZOOM_DOT=60` (whole set reads as a tiny dot) all the way down to
+  `ZOOM_VOID=0.03` (deep enough the frame is solid interior color), *then* resets — and the
+  interior "void" color and the far-background (near-instant-escape) color were unified into one
+  shared `VOID_COLOR` constant specifically so both ends of the cut are the same color, making the
+  reset itself invisible. The visible effect: zoom in from a dot, grow into full boundary detail,
+  keep zooming past it into featureless void, cut (unnoticeable), reappear as a tiny dot again —
+  echoes the fractal's own real self-similarity rather than faking it. Not perfectly seamless on
+  inspection (a faint residual texture from the memory field's own lingering accumulation is
+  visible for a couple seconds right after reset — flagged, not hidden) but a real, large
+  improvement over a hard cut.
+- **Beam "tries to glow to the BPM before the kick starts and misses"**: the local demo pulse
+  (added in an earlier round, since `hyst-audio` doesn't compute `beat_pulse` yet) triggered on
+  any `beat_phase` wraparound regardless of confidence — during a quiet intro, `BeatTracker`'s
+  phase free-runs from a low-confidence/default estimate, so the pulse was visibly guessing wrong
+  before real tempo lock. Gated on `bus.tempo_confidence > 0.2` — no pulse at all until the
+  tracker actually locks onto a real beat. User does NOT want the Lissajous beam removed, just
+  fixed — kept, not touched otherwise.
+- Also bumped to real quality for review: 1024×1024, 30fps, 90s (was 512×512/24fps/45s) — renders
+  in ~34s on this machine's GPU, still fast. Output path (not sent, inspect locally):
+  `crates/hyst-render/test-output/audio_driven_render_with_audio.mp4`.
+All 44 `hyst-render` tests still pass unmodified; verified by rendering and inspecting frames
+specifically at the dot/void/reset transition points (not just spot-checking arbitrary frames)
+before reporting back.
+
+### Post-Phase-1 fix #5 — boundary-probe pan target, closer opening shot (2026-09-05, same day)
+
+User: zoom shouldn't target a fixed center, it should aim at "interesting regions"; opening shot
+shouldn't be the far-away dot, should start closer. Both real, implemented (not just tuned):
+- **`find_interesting_pan(c)`** (new, `julia.rs`): a cheap, deterministic stand-in for real
+  vortex-search (still R6's actual job) — grid-searches a 24×24 neighborhood of the origin (radius
+  0.9) for the point with the *highest finite* escape-iteration count via `escape_iters`, which
+  mirrors `JULIA_GLSL`'s own escape loop exactly (same `MAX_ITER=192`, same bailout). The insight
+  that makes this correct rather than approximate: the screen center always samples `z0 = pan`
+  regardless of zoom (`uv=(0,0)` at center, `z = pan + uv*zoom`), so probing candidate `pan` values
+  directly at this reference scale finds a real point in the complex plane, not a UV/zoom-relative
+  guess. A point near the boundary (without being captured by the interior) takes the longest to
+  escape, so maximizing finite escape count hugs genuine detail. `c` itself is now discrete-per-
+  cycle (golden-angle spread across `cycle_index`, was continuous rotation) specifically so each
+  dive lands on a different probed region — real cycle-to-cycle variety, confirmed by rendering
+  multiple cycles and comparing (dendrite detail spread asymmetrically across frame, not a
+  recurring centered blob).
+- **Opening shot too far away**: `driven_by_time` started exactly at `t_in_cycle=0` (`zoom=
+  ZOOM_DOT=60`, the tiny-dot extreme). Added `START_OFFSET_SECS=21.0` added to `t` before deriving
+  `cycle_index`/`t_in_cycle`, landing the very first frame already at a moderately-zoomed, detail-
+  populated view instead of a nearly-invisible dot.
+All 44 `hyst-render` tests still pass unmodified. Per user's prior instruction, this render was
+**not** sent — verified locally by extracting and inspecting frames across multiple cycles, output
+left at `crates/hyst-render/test-output/audio_driven_render_with_audio.mp4` for the user's own
+local review.
+
+### Post-Phase-1 additions — perturbation deep zoom + Mandelbulb (2026-09-05, same day)
+
+User asked two real technical questions ("what stops us zooming forever," "could we use a better
+fractal now we're not WebGL2-limited") and green-lit both as parallel subagent builds.
+
+**Julia perturbation-orbit deep zoom** (`passes/julia.rs`, new `render_julia_perturbed` alongside
+the untouched `render_julia`): CPU computes an `f64` reference orbit once per frame at the view
+center, uploads it as an `Rg32Float` height-1 texture (reusing the `.hyst` format's own
+`scriptTexture` convention), and each pixel iterates only its small float32 delta from that orbit.
+**Real, honestly-reported numbers**: direct iteration degrades from plausible (719 distinct colors
+at a 64×64 test render) to fully degenerate (1 color) between `zoom=1e-6` and `1e-8`; perturbation
+holds 500-1100+ distinct colors through `1e-9` — three orders of magnitude deeper. Perturbation's
+own breakdown at `1e-10` turned out to be a *different* mechanism than hypothesized going in (the
+shader's `full = Zi + delta` float32 addition losing `delta` near `Zi`'s O(1) magnitude, not the
+reference orbit's own f64 precision) — found and reported honestly rather than assumed. Not yet
+wired into the demo's zoom cycle (which only goes to `zoom=0.03`, nowhere near needing this) —
+real integration is R6's job once real deep-zoom navigation exists.
+
+**Mandelbulb** (`passes/mandelbulb.rs`, new, standalone): power-8 raymarched 3D fractal ported
+from the frozen TS tree's never-shipped `MandelbulbScene.ts`/`mandelbulb.frag.glsl`.
+`MandelbulbNavState` (camera distance/rotation/power/max_steps/accent) + `render_mandelbulb`,
+matching `JuliaNavState`/`render_julia`'s shape. **Not wired into `renderer.rs`'s pipeline** —
+open question flagged by the agent itself: does the 2D memory-field ping-pong/fold concept even
+apply to a 3D raymarched scene, or does Mandelbulb need its own composite path. Own standalone
+example (`examples/mandelbulb_render.rs`) proves it renders real shaded fractal surface (confirmed
+by rendering and inspecting a frame — a real lobed power-8 bulb with glow, not blank/garbage).
+
+Both: full `cargo check/test/clippy --workspace` clean (173 tests total). Neither sent to the user
+(per the earlier "stop sending, I'm at the machine" instruction) — rendered/verified locally.
+
+### Mandelbulb quality pass + beam fixes (2026-09-05, same day)
+
+User rendered both fractals against the real Downloads mp4 song ("Instant Crush") and reported
+Mandelbulb "too low-res, jittery, looks like a mess... doesn't zoom in at all, undetailed, looks
+like a 3d print" — a real quality gap, delegated to a subagent given its size.
+
+**Mandelbulb** (`passes/mandelbulb.rs`): real DE-gradient surface normals (central-difference) +
+Lambertian diffuse + a cheap 5-step ambient-occlusion approximation (was flat/glow-only shading —
+this is what actually caused the "3D print" look, exactly as hypothesized). 9x supersampling to
+fight power-8 boundary aliasing. Tightened surface epsilon (0.0015→0.0006), raised step budget
+(160→220). A real continuous zoom-in dolly (cosine breathe cycle — no hard-cut reset attempted,
+since a 3D camera has no free "void-colored" transition point the way Julia's 2D zoom does).
+**Found and fixed a real bug** in the demo: `mandelbulb_state` was overwriting the whole zoom-dive
+distance every frame with an unsmoothed `3.2 - 0.9*energy`, silently discarding the dive entirely
+— fixed with exponential energy smoothing layered on top of the dive instead of a hard override.
+**Verified, not assumed**: determinism check (identical state twice → byte-identical output, ruling
+out raymarch-noise as a jitter source), frame-to-frame diff across a full clip (median ~3.9%, worst
+~37.5% at the deepest/loudest moment — real, disclosed, only partially solved: 512×512+9xSSAA isn't
+enough resolution to fully resolve power-8 detail that close), and direct visual inspection of 7
+frames across the clip confirming real depth/shading and a genuine zoom progression. Cost: 15.9-
+17.3ms/frame at 512×512 (was ~2.8ms pre-quality-pass) — a real, disclosed tradeoff, not profiled at
+the demo's actual 1024×1024/90s target by the subagent (done by the orchestrator next, see below).
+
+**Beam ("lissajous isn't high-res enough... should look like a perfectly rounded neon light, no
+visible seams/turns/vertices")** — done directly, not delegated (touches the shared `beam.rs` pass
+both fractals use). Root cause: `render_beam`'s segments are flat-capped rectangular quads with no
+join geometry — any angle between consecutive segments leaves a visible notch. Added
+`render_beam_joints` (round discs at every polyline vertex) to `passes/beam.rs`, wired into
+`renderer.rs`'s frame loop automatically after `render_beam`. **Two real follow-up bugs found by
+actually rendering and looking, not assumed fixed on the first pass**:
+1. First attempt's joint falloff profile (`smoothstep(1.0,0.75,d)`, solid core to 75% radius then
+   a hard cutoff) was harder-edged than the segments' own falloff — read as a visible bead/pearl
+   chain, not a smooth tube. Fixed by matching the segment's exact falloff shape.
+2. Still beaded after that — the REAL cause: standard alpha blending compounds every time a joint
+   disc overlaps an already-lit segment (nearly everywhere, for a dense near-straight polyline),
+   re-brightening every vertex into a bump. Fixed with `Max` blending on the joint pass (`BlendOperation::Max`,
+   factors `One`/`One`) — a disc can only raise a pixel darker than itself (the actual notch), never
+   re-brighten one the segment already covers.
+3. Still visibly beaded even after both fixes — the ACTUAL remaining cause was purely geometric,
+   not a shading/blending bug: at line half-width 0.02 (~20px at 1024px) and 240 polyline points,
+   segment spacing (~9px) was *shorter* than the line's own width — a round join's disc always
+   bulges past a short rectangle's parallel sides, independent of blend mode. Fixed by *reducing*
+   point count (240→72) and thinning the line (half-width 0.02→0.012) — round joins already handle
+   arbitrary angles fine on their own; the fix was fewer, longer segments, not more, shorter ones.
+Real test added (`joint_disc_fills_the_notch_two_angled_segments_leave`) — a known notch point
+proven unlit by segments alone, then proven lit once joints are drawn. All `hyst-render` tests pass
+(52), full workspace clean.
+
+### Beam joints reverted; Mandelbulb phase-warp bug fixed (2026-09-05, same day)
+
+User rendered the "fixed" beam and reported it looked *worse* — "balls connected together chain
+shit" — and separately that Mandelbulb now "rotates/zooms, then snaps back, then again and again."
+
+**Beam**: the round-joint-disc approach (previous entry) was fundamentally the wrong tool for a
+dense, near-straight polyline — a disc's circular silhouette always bulges past a short
+rectangle's parallel sides, independent of falloff/blend tuning, reading as a bead chain at any
+point density high enough to look smooth otherwise. **Reverted**: `renderer.rs` no longer calls
+`render_beam_joints` (the function/test stay in `beam.rs`, unused — a real primitive for sharp
+corners elsewhere, just wrong for this smooth curve). Back to segments-only, but with enough
+points (72→220) and a thin enough line (half-width 0.012) that flat-cap notches at the tiny bend
+angle between consecutive segments are genuinely imperceptible — "invisible vertices/bends"
+without needing join geometry at all, matching what the user actually asked for.
+
+**Mandelbulb**: real bug, not a tuning issue. `examples/mandelbulb_render.rs`'s `mandelbulb_state`
+fed `driven_by_time(t * (0.6 + 0.8 * bus.sub))` — scaling the phase argument itself by a per-hop
+audio value. `t` always increases, but `t * factor` does NOT stay monotonic frame-to-frame when
+`factor` swings on every bass hit (e.g. `t=10,factor=0.6→6` then `t=10.1,factor=1.4→14.1`, a
+forward jump far exceeding one frame's real elapsed time) — exactly the reported "snap." Fixed:
+`driven_by_time(t)` — the plain elapsed time, letting `MandelbulbNavState`'s own cosine breathe
+cycle stay smooth as designed; audio now only modulates `distance`/`accent`, never the phase
+argument driving the deterministic cycle. Verified by re-rendering and comparing consecutive
+frames (100/101/102) directly — no jump. General lesson worth remembering for R6 (the real
+autopilot, which will modulate motion parameters from audio far more): **never scale a monotonic
+time/phase argument by a value that itself isn't monotonic** — modulate rate via integration
+(accumulate a phase variable by `dt * rate` each frame) or modulate a separate parameter, never
+multiply elapsed time directly by a jittery signal.
+
+Both re-rendered against the full real target track ("Instant Crush," 90s/1024×1024) and visually
+confirmed fixed before reporting. `cargo check/test/clippy --workspace` clean throughout.
+
+### Phase 1 completion — R2/R3/R4/R5/A via parallel subagents (2026-09-05, same day)
+
+User asked for phase/section-parallel subagent execution against the full plan. Launched 5
+parallel subagents against Phase 1 (everything blocked only on R0/R1, per the plan's own wave 1):
+R2 continuation, R3, R4, R5, workstream A. Each worked only inside its own crate/`scripts/`,
+none touched `AGENTS.md`/root `Cargo.toml`/each other. All 5 landed clean; full detail below is
+condensed from each subagent's own final report (available in this session's history if more depth
+is ever needed).
+
+**R2 (`hyst-render`)** — done-when met: `isf_translate.rs` (ISF-flavored GLSL → real GLSL, using
+`wgpu`'s `naga` GLSL frontend directly — much less work than a hand-rolled GLSL→WGSL text
+translator, verified end-to-end against a real `.hyst` fixture through `parse_hyst()` →
+translate → render → readback); `gpu.rs` gained a generic GLSL fullscreen-pass driver + fixed a
+real fullscreen-quad Y-flip bug found via a two-pass test; `passes/` — `julia.rs` (substrate,
+`JuliaNavState` as the externally-settable seam R6 will drive), `memory_field.rs` (curl-noise +
+kaleidoscope fold, **using the documented cross-fade-by-color fix, not the naive angle-blend that
+caused the original fold-seam bug**), `persistence.rs`, `bloom.rs`, `composite.rs`, `beam.rs` (real
+instanced-quad line rasterization), `noise_texture.rs`; `renderer.rs` wires all of it into one real
+frame loop. A real ping-pong bug (double-bookkeeping cancelling itself out, frame 100 silently
+identical to frame 0) was caught by a test, not eyeballing. `examples/audio_driven_render.rs`:
+real WAV → `hyst_audio::FeatureExtractor` → driven render → mp4 via `ffmpeg`. 44 tests (was 34).
+Deviations: GLSL is Vulkan-flavored (`#version 450 core`, forced by `naga`), no perturbation-orbit
+deep-zoom precision, bloom single-level not mip-cascaded, beam alpha-blended onto final output
+rather than fed through `composite.frag.glsl` as a sampled input. No pixel-diff against the (now
+nonexistent-without-a-browser) frozen build — flagged honestly, not fakeable.
+
+**R3 (`hyst-script`)** — `mlua` 0.12 (lua54+vendored). `contract.rs`/`frame.rs`/`lua_bridge.rs`/
+`shared_state.rs`/`runtime.rs`/`engine.rs`. Real fault-isolation test: script errors on frame 5,
+frame 5's exposed value asserted equal to frame 4's (not zero, no panic); real infinite-loop
+script interrupted via `mlua`'s instruction-count hook (wall-clock-asserted <2s); persistent
+cross-call Lua state asserted against an exact closed-form decay (`0.9^7`), proving real state
+survival, not reset-per-call; wrong-length `scriptTexture` output coerced to declared length
+*before* ever leaving the sandbox. 22 tests. `ScriptContract` is its own type, not shared with
+`hyst-render`'s `IsfScriptOutputKind` — R2/R3 are parallel workstreams, shapes match by contract
+not by dependency; translating a parsed `.hyst` into a `ScriptContract` is future glue for R6.
+
+**R4 (`hyst-choreo`)** — `curve.rs` (real Penner/easings.net formulas, exact closed-form test per
+family, `Bezier(0.0)` provably collapses to exact `Linear`), `effort.rs` (Time/Weight/Space only,
+no Flow), `moves.rs`, `generator.rs` (hand-rolled xorshift64\* RNG — avoided adding `rand` as a
+dependency), `topology.rs`, `formation.rs` (unison/canon/call-and-response/breathe/affine/scatter,
+composable `mirror`, ordering-source as one parameter not two formation types). **The mandatory
+acceptance test is real and exact**: N=1 is provably a no-op for every formation mode (same
+formula, no special case), N=6/N=12 canon offsets assert the exact `i*(duration/n)` formula, not
+just "differs from agent 0". 37 tests. All formation modes return one uniform `AgentInstruction`
+struct (unused fields at neutral default) — this uniformity is *why* N=1-no-op falls out
+structurally rather than needing a branch.
+
+**R5 (`hyst-output`)** — `cadence.rs`/`diff.rs`/`failure.rs` (generic, reusable by any future
+output), `field.rs` (`FieldSource` trait + synthetic `BilinearGradient`/`Checkerboard`/
+`MovingGaussianBlob` — no dependency on `hyst-render` actually being finished, per instruction),
+`array_topology.rs`, `field_output.rs` (`FieldOutput: VizOutput`, ~15Hz cadence, diff-only
+transmission, `mark_element_failed` freezes one element without touching any other). **Mandatory
+acceptance test real and exact**: N=100 grid, exact bilinear expected value per element, 8
+scattered failures injected mid-run, field then changes — asserts failed elements frozen while
+every other element tracks the new field exactly, no panic/stall. 18 tests. `ChoreographyOutput`
+(needs R7) and real hardware transport correctly out of scope this session.
+
+**Workstream A (offline SSM pipeline, `scripts/`)** — corrected the plan's own misnamed directory
+(it's `scripts/`, not `tools/` — fixed in this file's rule 2 above). `ssm.ts` (beat-sync features,
+z-score normalized; `buildSSM`; `checkerboardNovelty`/`pickPeaks` promoted from
+fallback-only-per-spec to **load-bearing**, since allin1 was infeasible this session — see below);
+`repetition.ts` (orchestrates into a full schema-4 sidecar); `schema4.ts` (new additive TS types,
+field-for-field matching `crates/hyst-core/src/sidecar.rs`'s Rust schema-4 shape — defined in
+`scripts/`, never touching the frozen `src/shared/sidecar.ts`). Synthetic SSM test: two-identical-
+halves cross-block similarity 0.95+ vs. <0.3 for a shuffled control. **Real-track verification,
+reported honestly, not fabricated**: `hysteresis.wav`/`afterimage.wav` each found one plausible
+intro-recurs-near-outro repeat (sim 0.72/0.45); `panicspiral.wav` found 9 repeats, one clean
+(sim 0.76, same bookend shape) but several weak (0.17–0.3) explicitly flagged as marginal/
+unconfirmed by ear — no hard assertion was written for the weak cases, per the brief's own
+instruction not to assert unverified numbers. 351 TS tests total (schema-2/3/4 fixtures unmodified
+and green). `analyze.ts`'s CLI has no `--repeats` flag yet — `computeSchema4Sidecar` is library-only.
+
+**allin1 retry (separate follow-up subagent, same day)**: user asked why allin1 (the plan's
+originally-preferred beat/boundary source) couldn't be used, given the first attempt's "pip hung"
+verdict looked like it might just need patience. Retried properly: pinned a CPU-only `torch` wheel
+first (the actual fix — avoids pip's resolver considering the full CUDA wheel matrix), which
+worked; `allin1` itself then installed; `madmom` (an allin1 dependency) needed 3 known, mechanical
+Python-3.12/numpy-2 compatibility patches, applied and confirmed importable. **Real, different,
+new blocker found**: `natten` (a neighborhood-attention CUDA/C++ extension allin1's model needs)
+has no prebuilt wheel for this Python/torch ABI, and its from-source build re-downloads and
+rebuilds a full `torch` copy just to read its own build requirements — a real hour+ compile, not
+a resolver hang. Killed after a bounded budget rather than let run unbounded; user chose to keep
+the existing causal-beat-grid fallback rather than spend that budget (§4 above). No leftover venv/
+cache (routed to `/secondary`, ~4.1G freed after cleanup — root `/` only had 1.3G free, correctly
+avoided). `scripts/README.md`'s "Known limitations" section documents the real current state
+(torch/allin1 install path now works; `madmom`'s patch; `natten` as the specific remaining
+blocker) — read that before re-attempting rather than repeating this session's diagnosis.
+
+**A real audio-driven render was produced and sent to the user** — first with the demo's own
+6s/256×256 clip (no audio, per the example's original scope), then, after the user asked for a
+longer clip with a "frame of reference," bumped to 45s/512×512/24fps and the real `hysteresis.wav`
+audio muxed in via `ffmpeg` (video: `-c:v copy`, audio: `pcm→aac`). Also fixed in the demo (not in
+`hyst-audio` itself, which hasn't built this signal yet — flagged in §4): `SignalBus.beat_pulse` is
+never populated by `hyst-audio`'s `FeatureExtractor` (R1 scope never included it), so the beam
+never actually pulsed on the beat in the first render — the demo now computes a local decaying
+pulse from `beat_phase` wraparound detection instead. This is a demo-local fix, not a real
+`hyst-audio` fix — `beat_pulse` staying unpopulated in the actual `SignalBus` is still a real,
+un-fixed gap worth closing in a future `hyst-audio` session.
+
+**Real bug found from the sent render, fixed same session**: user reported the first render
+"illegible" — correctly. `passes/julia.rs`'s `palette()` normalized color against
+`smoothIter/MAX_ITER` with a single linear crossfade: exterior pixels needed near-MAX_ITER escape
+time to show any color at all (most of the frame stayed near-black), while the *interior*
+(never-escapes) region got the one fully-saturated color — backwards from standard escape-time
+convention, and it produced exactly the flat, blobby, boundary-detail-free look reported. Fixed:
+color now bands cyclically off the *absolute* smooth escape count (real escape-time coloring,
+contour rings visible well before MAX_ITER) and the true interior is forced dark instead of
+bright. All 44 `hyst-render` tests still pass unmodified; re-rendered and visually confirmed real
+fractal detail/banding/bloom now show up. Worth remembering: **a green test suite did not catch
+this** — the existing tests check pixel-level mechanics (does color change, is symmetry real) not
+whether the image is actually legible/attractive. Visual review of an actual render remains
+necessary for anything user-facing here, tests alone aren't sufficient signal for render quality.
+
+### Julia reacts to music + dynamic IQ-cosine palettes on both fractals (2026-09-06)
+
+User: Julia "too static... doesn't react to music", Mandelbulb "bad, should zoom in deep", both
+palettes "very bad and illegible... make dynamic too". Two subagents, in parallel.
+
+**Julia (`passes/julia.rs`)** — added `JuliaDriver`, a stateful `dt`-integrated driver replacing
+`JuliaNavState::driven_by_time(t)` (kept, unused by the demo now, still backing its own tests) as
+what `audio_driven_render.rs` actually drives with: owns `zoom_log`/`c_angle`/circular
+`hue_smoothed` EMA of `chroma_root_hue`/`color_phase`; zoom-rate and c-orbit-rate integrated via
+`dt * rate(audio)` (energy/onset_density-modulated) — never scaling the phase itself by audio (see
+this file's own prior "snap" bug entries). Golden-angle region jumps stay gated to discrete
+zoom-cycle-reset events only, since those are one-shot, not continuous. Palette in both
+`JULIA_GLSL`/`JULIA_PERTURBED_GLSL` rebuilt on the IQ cosine-gradient formula
+(`a + b*cos(2pi*(c*t+d))`), hue from `chroma_root_hue`, accent from `centroid`, mix from
+`flatness`. New tests: adversarial jittering-audio snap check, silence-still-evolves check,
+real-multi-hue-variety check.
+
+**Mandelbulb (`passes/mandelbulb.rs`)** — added `MandelbulbDiveDriver`: real deep dive (log-distance
+integration down to `DIST_NEAR=1.2`, DIST_FAR=4.6 unchanged), same safe rate-integration shape as
+`JuliaDriver`. `DIST_NEAR` picked from a real empirical sweep (see the struct's own doc for the full
+table) — first choice `0.75` looked safe at one baseline rotation angle but a full rendered clip
+caught single-frame flash-pops at ~20/32 sampled angles (camera embedded in solid material,
+angle-dependent, not just distance-dependent); `1.2` swept clean at 0/240 angles. A second real bug
+(also only caught by diffing a full rendered clip, not by the angle sweep) — a ray grazing tangent
+to the surface near the recede phase could blow up the glow-accumulator's clamped floor into a
+single all-magenta frame — fixed by raising that floor. Palette rebuilt on the same IQ
+cosine-gradient formula, input `t` from a real smooth escape-iteration count (an orbit-trap input
+was tried first and rejected — stayed too flat across a visible surface patch, see `mandelbulbDE`'s
+doc) plus `chroma_root_hue`. Adaptive surface epsilon added (scales with camera distance) so a
+fixed epsilon isn't wrong at both ends of the now-much-larger dive range. This subagent's task
+process hit a rate-limit error before delivering its final report; its actual work was still fully
+committed, compiling clean, and all tests passing — verified directly rather than trusted blind.
+
+**Verification, both**: `cargo clippy --workspace --all-targets -- -D warnings` clean.
+90s/1024×1024 real-audio (`instant_crush.wav`, extracted from the user's own YouTube download)
+renders for both. Mandelbulb: 0/2700 frames show the historical flash-pop signature (byte-diff
+sweep across every adjacent pair). Julia: mean frame RGB checked at 6 points across the clip, shows
+real drift (e.g. blue-dominant early → red/purple mid → balanced late), not a static frame; only
+1/2700 adjacent-frame pairs shows a large jump, consistent with a real beat-flash rather than a
+snap bug. Rendered outputs: `crates/hyst-render/test-output/audio_driven_render.mp4` (Julia),
+`/home/stcksmsh/.claude/jobs/4f2df065/tmp/out_mandelbulb/mandelbulb_render.mp4` (Mandelbulb, kept
+outside the shared `test-output/` dir via the `MANDELBULB_OUT_DIR` env var to dodge the
+parallel-render race documented above). Both awaiting user's own lookthrough before R6.
+
+### Julia: real continuous deep zoom, depth-tied `c`, contrast fix, oscilloscope beam (2026-09-06)
+
+User, verbatim, on the previous entry's Julia work: "the julia also looks bad... changing the C...
+to the beat/tune of something... would make it more dynamic as we zoom in, also the perturbation
+doesnt seem to work, what we get is zoom in, then the snapback to fully zoomed out then back in,
+its in the same loop it was in before... the visuals should look good on their own." Separately, on
+the Lissajous beam: "keep the current lissajous shape, but make the line move a bit like an
+osciloscope line." Four tasks, one subagent, `passes/julia.rs`/`renderer.rs`/
+`examples/audio_driven_render.rs`/this file only (Mandelbulb handled in parallel by a sibling
+subagent, no file overlap).
+
+**Root cause of "perturbation doesn't work," confirmed exactly as hypothesized going in**:
+`render_julia_perturbed` existed, was tested, but `renderer.rs::render_frame` only ever called
+plain `render_julia` — dead code. Separately, `JuliaDriver`'s dive floor was `ZOOM_VOID=0.03`, a
+depth so shallow perturbation was never needed to reach it — the real reason the whole cycle read
+as short and repeating regardless. **Fixed**: `renderer.rs` now always calls
+`render_julia_perturbed` (it's an exact algebraic reformulation of the same recurrence at shallow
+zoom too, not an approximation, so it degrades gracefully — no depth-gated switch needed);
+`JuliaDriver`'s floor is now `ZOOM_FLOOR=1e-9` (within `render_julia_perturbed`'s own doc'd proven
+range, 500+ distinct colors at that depth), so the cycle now takes ~25.8 natural-log-units instead
+of ~7.6 to complete — at this driver's rate range, longer than a typical clip. The reset event
+itself is unchanged in shape (still a discrete golden-angle jump + fresh `find_interesting_pan`, a
+real "cut to a new dive"), just far rarer. **Verified against the real target track**
+(`instant_crush.wav`, 90s/1024x1024): a standalone CPU-only trace of `JuliaDriver` driven by the
+track's real `SignalBus` hops (no GPU needed) shows zoom decreasing monotonically for the entire
+clip, 2.56 → 1.75e-7 (7.5 orders of magnitude), **0 resets across 2700 frames**. Full rendered-clip
+adjacent-frame byte-diff (2699 pairs, `>10`-per-channel-changed pixel count): mean 2.86%, 17 pairs
+>40% — cross-checked against the zero-reset trace (ruling out the reported bug specifically) and
+attributed to two real, disclosed, non-bug causes: a global `chroma_root_hue`-driven palette
+recolor sweeping the memory field's whole accumulated trail at once, and the fractal boundary's
+genuine chaotic sensitivity to `c` at deep zoom (amplified on purpose by the next fix). Not chased
+to zero — both are legitimate consequences of "make it reactive," not artifacts of the old bug.
+
+**`c` tied to zoom depth**: added a second, tonal `c`-orbit (driven directly by `chroma_root_hue`,
+at its own angle) alongside the existing beat/energy orbit, and scaled *both* orbits' radius (plus
+the beat orbit's angular speed) by `depth_frac = zoom_log / cycle_log_len` — 0 at the top of a dive,
+1 at `ZOOM_FLOOR`. `c` now visibly moves more, and reads more tonally, the deeper the dive goes,
+tying zoom and `c` into one system rather than two independent sliders. New test:
+`c_orbit_becomes_more_pronounced_as_zoom_deepens` (measures real per-frame `c` displacement early
+vs. late in a dive under identical audio; had to warm up the "early" driver 10 frames first — the
+first couple of frames' `hue_smoothed` EMA convergence transient was initially swamping the actual
+depth-based signal being tested, a real methodology bug caught by the test's own first failing run,
+not shipped unnoticed).
+
+**Palette/contrast ("visuals should look good on their own")**: a real luminance-histogram probe
+(256x256, several timepoints, both raw substrate and full pipeline) found real low contrast — full
+pipeline luminance std as low as ~19/255, floor never dropping below 38/255 across a synthetic
+90-frame run. Two separate real causes, both fixed: (1) `palette()`'s `fwidth`-based anti-alias fade
+was unfloored, damping most on-screen fractal detail (genuinely high-derivative, self-similar
+territory) toward flat mid-gray — floored at 0.35 (`0.35 + 0.65/(1+6*fwidth(...))`, both
+`JULIA_GLSL`/`JULIA_PERTURBED_GLSL`). New regression test: `palette_keeps_real_contrast_not_a_flat_
+wash`. (2) `audio_driven_render.rs`'s bloom/exposure (`threshold=0.3, strength=0.4-1.2,
+exposure=0.08`) let bloom spread from nearly every pixel above a low bar, compounding with the
+memory field's documented fixed ~7x steady-state gain into a persistent haze; retuned to
+`threshold=0.55, strength=0.2-0.7, exposure=0.035`, measured (same synthetic probe) floor drop
+38→24/255. Honest disclosure: `memory_field.rs`'s own gain formula wasn't touched (out of scope,
+and documented as intentional) — a real, tunable-later tradeoff remains, not eliminated.
+
+**Beam oscilloscope jitter**: `lissajous_segments` keeps its exact base 3:2 Lissajous formula
+unchanged (per the user's explicit "keep the current lissajous shape") and adds a small
+**perpendicular** wobble per point, driven by the demo's own real per-hop mono sample buffer
+(nearest-index resampled down to the curve's point count) — genuine waveform values, not an
+amplitude/RMS stand-in — using the curve's own analytic tangent (not a finite-difference
+approximation) to find each point's true perpendicular direction. `JITTER_AMP=0.03` keeps the
+wobble subtle enough the base shape stays the dominant, recognizable read.
+
+**Verification**: `cargo check/test/clippy --workspace` clean throughout — 58 `hyst-render` tests
+(was 55, +3: the depth-tied-`c` test, the no-reset-loop-over-a-full-clip test, the contrast-floor
+test). Rendered the real target track end to end (`instant_crush.wav`, 90s/1024x1024, 2700 frames,
+muxed to mp4 via `ffmpeg`) to `/home/stcksmsh/.claude/jobs/4f2df065/tmp/out_julia2/` (a session-local
+`JULIA_OUT_DIR` env var override added to the demo, mirroring the sibling Mandelbulb demo's
+`MANDELBULB_OUT_DIR`, specifically to avoid any risk of the two concurrent renders' `.ppm` frame
+files colliding in the shared `test-output/` dir — in the end both demos write different filenames
+there anyway, so the collision risk was never real, but kept the override since it cost nothing).
+Verified numerically throughout (histogram/mean/diff-percentage scripts), never by opening a
+rendered image, per this session's own standing instruction.
+
+### R9 first slice — single-arm motion preview (2026-09-23)
+
+User requested simple arm simulation. `hyst-previz` now contains dependency-free
+Rust forward kinematics and three authored, beat-driven motion studies, exported
+as self-contained HTML through `cargo run -p hyst-previz --example arm_preview`.
+Preview supports play/pause, tempo, seeking, study selection, and optional synthetic
+click track. Three illustrative links show shoulder/elbow/wrist coordination,
+preparation, reach, follow-through, recovery, and hold. Frozen TS tree untouched.
+
+Verified: targeted crate check/test/clippy, three motion/geometry/continuity tests,
+and generated JavaScript syntax. Browser visual inspection unavailable; aesthetic
+quality remains for user review. This is synthetic choreography, not music analysis,
+physics, hardware validation, score playback integration, or dense-array preview.
+Full R9 remains incomplete. Coding verification delegated to gpt-5.6-luna at user request.
+
+### R9 music synchronization slice (2026-09-24)
+
+`hyst-previz` preview accepts optional track URL and sidecar JSON. Audio
+`currentTime` drives authored 16-beat motif; whole-track play/pause/seek, study
+changes, provisional detected grid, manual BPM/beat-zero, and grid offset work.
+Detected mode disables manual-only controls. Synthetic mode remains available.
+Frozen TS tree untouched; coding delegated, parent handled approval integration.
+
+Used user's Downloads Instant Crush video: lossless AAC extraction and existing
+analyzer produced 617 beats at ~109.96 BPM. Grid contains startup anomalies and
+remains unverified by listening. This is music-synchronized authored motion, not
+autonomous musical choreography or hardware/physics validation.
+
+Verified: targeted Rust tests/clippy, generated JS syntax, timing helper regression
+checks, and headless Chrome real playback/pause/60-second seek/study/manual-offset/
+synthetic/mobile-overflow checks; no JS errors. Screenshot inspected. Browser
+seeking initially failed with Python static server (seekable range 0..0); range-
+capable local media server fixed it. Assets remain outside repo in task output.
+
+### Song-conditioned single-arm slice — 2026-09-24
+
+Implemented compiler, absolute RMS enrichment, cue JSON export, song-default browser
+previz + shared visual panel. Full track219 cues; content selects gestures/rests;
+quintic constrained transitions replace repeating16-beat study on song path.
+Targeted8 Rust tests, JS regressions and workspace check pass. Real track analytical
+limits + sampled floor clearance pass; browser play/pause/seek inspected. Full
+workspace GPU test running at allowance checkpoint; see docs/DANCE_HANDOFF.md for
+logs, remaining limits and launch. No commit, frozen trees untouched. This does not
+claim full R7/R9 or perceptually finished dance. Account allowance reached100%.
+
+### Song slice follow-up — exact arrivals + shared visual timing (2026-09-24)
+
+Hit/coil arrival knots now match chosen onset timestamp; unschedulable accents
+become truthful groove. Added optional arrivalAnchor, strict RMS validation,
+whole-score audit CLI, matching visual pulse and Next accent inspection. Real track
+222 cues/56 exact anchors; constraints +120Hz floor check pass (min29.26cm).
+Compiler8/previz4 tests and targeted clippy/JS pass; workspace CPU tests pass.
+Full clippy blocked by existing julia.rs modulo warnings; GPU probe timed out45s,
+/dev/dri absent. Browser play/pause/seek/delay+anchors pass, no console errors.
+Updated docs/DANCE_HANDOFF.md + previz README. No commit or frozen-tree changes.

@@ -1,0 +1,7 @@
+[package]
+name = "hyst-output"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+hyst-core.workspace = true

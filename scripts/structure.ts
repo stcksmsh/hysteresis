@@ -157,7 +157,25 @@ export function labelSections(
 // than being estimated live from a cold start (SINTEZA_VIZ.md §6). Single WAV
 // master in, no stems or DAW project required — the simpler model §6 asks
 // for, trading away the per-stem precision the old REAPER-based pipeline had.
+// Same as analyzeMix() but also exposes the per-hop raw arrays/hopSec/
+// dropTimes that the SSM pass (scripts/ssm.ts, scripts/repetition.ts) needs
+// and analyzeMix()'s own frozen Sidecar-shaped return doesn't carry.
+// analyzeMix() itself stays byte-for-byte the same (schema 3, same shape,
+// same tests) — this is a pure refactor, not a behavior change.
+export interface AnalyzeMixDetailed {
+  sidecar: Sidecar
+  bandRaw: Record<BandName, Float32Array>
+  centroidRaw: Float32Array
+  flatnessRaw: Float32Array
+  hopSec: number
+  dropTimes: number[]
+}
+
 export function analyzeMix(wav: DecodedWav): Sidecar {
+  return analyzeMixDetailed(wav).sidecar
+}
+
+export function analyzeMixDetailed(wav: DecodedWav): AnalyzeMixDetailed {
   const { sampleRate, channels } = wav
   const frameCount = channels[0]?.length ?? 0
   const duration = frameCount / sampleRate
@@ -315,18 +333,25 @@ export function analyzeMix(wav: DecodedWav): Sidecar {
   onsets.sort((a, b) => a.t - b.t)
 
   return {
-    schema: SIDECAR_SCHEMA_VERSION,
-    duration,
-    tempo: finalTempo,
-    beats,
-    sections,
-    events,
-    onsets,
-    energyEnvelope,
-    bandEnvelope,
-    centroidEnvelope,
-    flatnessEnvelope,
-    envelopeRate: ENVELOPE_RATE_HZ,
+    sidecar: {
+      schema: SIDECAR_SCHEMA_VERSION,
+      duration,
+      tempo: finalTempo,
+      beats,
+      sections,
+      events,
+      onsets,
+      energyEnvelope,
+      bandEnvelope,
+      centroidEnvelope,
+      flatnessEnvelope,
+      envelopeRate: ENVELOPE_RATE_HZ,
+    },
+    bandRaw,
+    centroidRaw,
+    flatnessRaw,
+    hopSec,
+    dropTimes,
   }
 }
 

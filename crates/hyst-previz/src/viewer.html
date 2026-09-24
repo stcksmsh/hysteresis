@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hysteresis · Arm study</title>
+<style>
+  :root { color-scheme: dark; font-family: ui-sans-serif, system-ui, sans-serif; color: #e5e9ed; background: #101418; }
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  main { max-width: 1080px; margin: auto; padding: 32px 28px; }
+  header { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 24px; }
+  h1 { font-size: 25px; font-weight: 550; margin: 0; letter-spacing: -.6px; }
+  .eyebrow { color: #92a3ad; font-size: 11px; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 8px; }
+  .note { color: #97a3ad; font-size: 13px; line-height: 1.6; }
+  .stage { position: relative; background: #151b20; border: 1px solid #2c363f; border-radius: 16px; overflow: hidden; }
+  .visual { margin-top: 14px; padding: 16px 24px; background: #151b20; border: 1px solid #2c363f; border-radius: 16px; }
+  #visual { display: block; width: 100%; height: 116px; margin-top: 10px; }
+  #event { color: #b7edda; }
+  .stage-label { position: absolute; top: 22px; left: 24px; pointer-events: none; }
+  #phase { margin-top: 5px; font-size: 20px; font-weight: 500; }
+  #position { position: absolute; right: 24px; top: 24px; color: #a4b3bd; font-size: 13px; font-variant-numeric: tabular-nums; }
+  canvas { display: block; width: 100%; aspect-ratio: 960/440; }
+  .joints { display: flex; gap: 24px; flex-wrap: wrap; padding: 16px 24px; border-top: 1px solid #2c363f; font-size: 12px; color: #a4b3bd; }
+  .joints output { color: #e5e9ed; font-variant-numeric: tabular-nums; margin-left: 6px; }
+  .controls { margin-top: 22px; display: flex; gap: 20px; flex-wrap: wrap; align-items: end; }
+  button, select { font: inherit; font-size: 14px; border: 1px solid #3c4953; border-radius: 8px; background: #202a32; color: #e5e9ed; min-height: 42px; padding: 9px 15px; cursor: pointer; }
+  button:hover, select:hover { border-color: #87a6b8; }
+  button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid #79d5bf; outline-offset: 4px; }
+  #play { background: #b7edda; color: #142c24; border-color: #b7edda; min-width: 94px; }
+  label { display: flex; flex-direction: column; gap: 8px; font-size: 12px; color: #acb8c1; }
+  .tempo { min-width: 190px; flex: 1; }
+  input[type=range] { accent-color: #9de1cb; width: 100%; margin: 0; cursor: pointer; }
+  .tempo input { height: 42px; }
+  .music-only { display: none; }
+  body.music .music-only { display: flex; }
+  body.music #sound { display: none; }
+  .music-config { margin-top: 16px; gap: 16px; align-items: end; }
+  .music-config input[type=number] { width: 112px; min-height: 42px; padding: 8px; border: 1px solid #3c4953; border-radius: 8px; background: #202a32; color: #e5e9ed; }
+  .timeline { margin-top: 24px; }
+  .timeline label { flex-direction: row; justify-content: space-between; margin-bottom: 12px; }
+  .beats { display: grid; grid-template-columns: repeat(16,1fr); gap: 5px; margin: 12px 0; }
+  .beat { height: 22px; display: grid; place-items: center; font-size: 10px; color: #9cabb5; border-top: 2px solid #35424c; font-variant-numeric: tabular-nums; }
+  .beat.bar { border-color: #80939e; }
+  .beat.active { color: #b7edda; border-color: #b7edda; background: #1f3931; }
+  .beat.cue { border-color: #c08f59; color: #dcb37f; }
+  footer { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px; margin-top: 20px; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  @media(max-width:600px) { main { padding: 22px 14px; } h1 { font-size: 21px; } .stage-label { top: 15px; left: 15px; } #phase { font-size: 14px; } #position { top: 16px; right: 15px; font-size: 11px; } .joints { gap: 13px; padding: 13px 15px; font-size: 11px; } .controls { gap: 12px; } .tempo { flex-basis: 100%; } canvas { aspect-ratio: 960/560; } }
+</style>
+</head>
+<body>
+<main>
+  <header><div><div class="eyebrow">Hysteresis / movement lab</div><h1>One song. Moving form.</h1></div><span class="note">Side view · 3 rotating joints</span></header>
+  <section class="stage" aria-label="Animated arm preview">
+    <div class="stage-label"><div class="eyebrow">Movement</div><div id="phase">Sway + pulse</div></div>
+    <div id="position">Bar 1 · Beat 1</div>
+    <canvas id="arm" width="960" height="440" role="img" aria-label="Three-link arm samples song-conditioned score. Faint path traces its tip.">Three-link arm simulation. Use playback and timeline controls to inspect motion.</canvas>
+    <div class="joints"><span>Shoulder <output id="q0">—</output></span><span>Elbow <output id="q1">—</output></span><span>Wrist <output id="q2">—</output></span><span>Links 32 / 26 / 12 cm</span></div>
+  </section>
+  <section class="visual" aria-label="Score-driven visual output"><div class="eyebrow">Shared score visual</div><div id="event">Waiting for score</div><canvas id="visual" width="960" height="116" role="img" aria-label="Visual output reacts to same choreography score as arm."></canvas></section>
+  <div class="controls">
+    <button id="play" type="button">Pause</button>
+    <label>Motion source<select id="study"><option value="song">Song score</option><option value="2">Reference: groove + reach + pause</option><option value="1">Reference: groove</option><option value="0">Reference: pulse</option></select></label>
+    <label class="tempo"><span id="tempo-label">Tempo <output id="bpm-value">110 BPM</output></span><input id="bpm" type="range" min="50" max="180" step="0.01" value="110" aria-label="Tempo in beats per minute"></label>
+    <button id="next-accent" type="button" class="music-only">Next accent</button>
+    <button id="sound" type="button" aria-pressed="false">Click track off</button>
+  </div>
+  <div class="controls music-only music-config">
+    <label>Beat grid<select id="grid"><option value="detected">Detected grid (provisional)</option><option value="manual">Manual BPM + zero</option></select></label>
+    <label>Score delay (s)<input id="offset" type="number" value="0" step="0.01"></label>
+    <label>Beat zero (s)<input id="beat-zero" type="number" value="0" step="0.01"></label>
+  </div>
+  <p class="music-only note">Positive score delay shifts score later than audio. Beat correction changes readout/reference grid only; it does not recompile score.</p>
+  <audio id="track" preload="metadata"></audio>
+  <div class="timeline">
+    <label for="seek"><span id="timeline-label">16-beat phrase</span><output id="elapsed">0.0 / 8.7 s</output></label>
+    <input id="seek" type="range" min="0" max="16" value="0" step="0.001" aria-label="Scrub phrase in beats">
+    <div id="beats" class="beats" aria-hidden="true"></div>
+  </div>
+  <footer class="note"><span id="clock-label">Synthetic rhythm · authored motion · no music analysis</span><span>Song limits · assumed links 32/26/12 cm · speed ≤55/60/70°/s · acceleration ≤150/170/200°/s². Not hardware safety.</span></footer>
+  <p id="sound-error" role="status" class="note"></p>
+</main>
+<script>
+(() => {
+  'use strict';
+  const studies = __ARM_DATA__;
+  const loopBeats = __LOOP_BEATS__, sampleRate = __SAMPLES_PER_BEAT__;
+  const trackUrl = __TRACK_URL_JSON__, sidecarText = __SIDECAR_JSON_STRING__;
+  const song = __SONG_DATA__;
+  const $ = id => document.getElementById(id);
+  const canvas = $('arm'), ctx = canvas.getContext('2d'), media = $('track');
+  // ARM_TIMING_HELPERS_BEGIN
+  function cleanBeats(values) {
+    if (!Array.isArray(values) || values.length < 2) return [];
+    if (!values.every(value => typeof value === 'number' && Number.isFinite(value) && value >= 0)) return [];
+    for (let i = 1; i < values.length; i++) if (values[i] <= values[i - 1]) return [];
+    return values.slice();
+  }
+  function beatFromGrid(time, beats, tempo) {
+    if (beats.length < 2) return time * tempo / 60;
+    if (time <= beats[0]) return (time - beats[0]) / (beats[1] - beats[0]);
+    const n = beats.length;
+    if (time >= beats[n - 1]) return n - 1 + (time - beats[n - 1]) / (beats[n - 1] - beats[n - 2]);
+    let lo = 0, hi = n - 1;
+    while (hi - lo > 1) {
+      const mid = (lo + hi) >> 1;
+      if (beats[mid] <= time) lo = mid; else hi = mid;
+    }
+    return lo + (time - beats[lo]) / (beats[hi] - beats[lo]);
+  }
+  function manualBeat(time, tempo, zero) { return (time - zero) * tempo / 60; }
+  function gridBeat(time, mode, beats, tempo, zero, offset) {
+    const shifted = time - offset;
+    return mode === 'detected' && beats.length >= 2
+      ? beatFromGrid(shifted, beats, tempo) : manualBeat(shifted, tempo, zero);
+  }
+  function transportBeat(music, currentTime, syntheticBeat, mode, beats, tempo, zero, offset) {
+    return music ? gridBeat(currentTime, mode, beats, tempo, zero, offset) : syntheticBeat;
+  }
+  // ARM_TIMING_HELPERS_END
+  window.__ARM_TIMING__ = {cleanBeats, beatFromGrid, manualBeat, gridBeat, transportBeat};
+  function validSong(value) {
+    if (!value || typeof value !== 'object' || !Number.isFinite(value.duration) || value.duration <= 0 || !Array.isArray(value.frames) || !value.frames.length) return null;
+    const frames = value.frames.filter(frame => Array.isArray(frame) && frame.length >= 10 && frame.slice(0, 9).every(Number.isFinite) && typeof frame[9] === 'string');
+    return frames.length === value.frames.length ? {...value, fps: Number.isFinite(value.fps) && value.fps > 0 ? value.fps : 60, cues: Array.isArray(value.cues) ? value.cues : []} : null;
+  }
+  function sampleSong(score, seconds) {
+    if (!score) return null;
+    const t = Math.max(0, Math.min(score.duration, Number.isFinite(seconds) ? seconds : 0));
+    if (t === score.duration) return score.frames[score.frames.length - 1].slice();
+    const position = Math.min(score.frames.length - 1, t * score.fps), i = Math.floor(position);
+    const lastInterval = i === score.frames.length - 2 && score.duration < (i + 1) / score.fps;
+    const u = lastInterval ? (t - i / score.fps) / (score.duration - i / score.fps) : position - i;
+    const a = score.frames[i], z = score.frames[Math.min(i + 1, score.frames.length - 1)];
+    return a.slice(0, 9).map((x, index) => x + (z[index] - x) * u).concat(a[9]);
+  }
+  function cueAt(score, seconds) {
+    if (!score) return null;
+    return score.cues.find(cue => cue && Number.isFinite(cue.start) && Number.isFinite(cue.end) && seconds >= cue.start && (seconds < cue.end || (seconds === score.duration && cue.end === score.duration))) || null;
+  }
+  function shiftedScoreSeconds(rawSeconds, delay, duration) {
+    return Math.max(0, Math.min(duration, rawSeconds - delay));
+  }
+  function visualAt(score, seconds) {
+    const cue = cueAt(score, seconds);
+    if (!cue) return {energy:0, accent:0, arrival:null};
+    const index = score.cues.indexOf(cue), duration = Math.min(.3, (cue.end - cue.start) / 2);
+    const smooth = x => {x=Math.max(0,Math.min(1,x));return x*x*(3-2*x);};
+    const before = score.cues[index-1]?.energy ?? cue.energy;
+    const after = score.cues[index+1]?.energy ?? cue.energy;
+    let energy = Number(cue.energy)||0;
+    if(seconds < cue.start+duration) energy=(before+energy)/2+(energy-before)/2*smooth((seconds-cue.start)/duration);
+    if(seconds > cue.end-duration) energy=energy+(after-energy)/2*smooth((seconds-cue.end+duration)/duration);
+    const arrival=Number.isFinite(cue.arrivalAnchor)?cue.arrivalAnchor:null;
+    const accent=arrival===null?0:(Number(cue.accent)||0)*Math.exp(-Math.pow((seconds-arrival)/.14,2));
+    return {energy:Math.max(0,Math.min(1,energy)),accent,arrival};
+  }
+  window.__ARM_SCORE__ = {validSong, sampleSong, cueAt, shiftedScoreSeconds, visualAt};
+  let sidecar={};
+  try { const parsed=sidecarText ? JSON.parse(sidecarText) : {}; sidecar=parsed && typeof parsed==='object'?parsed:{}; } catch {}
+  const detectedBeats=cleanBeats(sidecar.beats);
+  let bpm=Number.isFinite(Number(sidecar.tempo)) && Number(sidecar.tempo)>0 ? Number(sidecar.tempo) : 110;
+  const score=validSong(song);
+  const music=Boolean(trackUrl);
+  let beat=0, selected=music && score ? 'song' : 2, last=performance.now(), sound=false, clickAudio=null, nextClick=0;
+  let playing=music ? false : !matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let activeOscillators=new Set();
+  if (music) {
+    document.body.classList.add('music'); media.src=trackUrl;
+    $('clock-label').textContent=score ? 'Song-conditioned score · audio time master · detector grid remains provisional' : 'Reference study · detected grid provisional · audio time master';
+    $('timeline-label').textContent='Track position';
+    $('seek').setAttribute('aria-label','Seek track in seconds');
+    $('grid').value=detectedBeats.length>1?'detected':'manual';
+    if (detectedBeats.length) $('beat-zero').value=detectedBeats[0].toFixed(4);
+  }
+  if (!score) {
+    const option=$('study').querySelector('option[value=song]'); option.disabled=true; option.textContent=music ? 'Song score unavailable' : 'Song score needs music';
+    $('event').textContent=music ? 'Score unavailable — reference study shown.' : 'Synthetic reference study.';
+  }
+  $('study').value=String(selected);
+  $('bpm').value=String(bpm); bpm=Number($('bpm').value);
+  $('bpm-value').textContent=`${music ? bpm.toFixed(2) : bpm.toFixed(0)} BPM`;
+  function syncGridControls() {
+    const detectedMode=music && detectedBeats.length>1 && $('grid').value==='detected';
+    $('bpm').disabled=detectedMode;
+    $('beat-zero').disabled=detectedMode;
+    $('tempo-label').firstChild.nodeValue=music?'Manual tempo ':'Tempo ';
+  }
+  syncGridControls();
+  const dots=Array.from({length:loopBeats},(_,i)=>{
+    const el=document.createElement('span');el.className='beat'+(i%4===0?' bar':'');
+    el.textContent=String(i%4+1);$('beats').append(el);return el;
+  });
+  function renderCueTimeline() {
+    if (!score) return;
+    $('timeline-label').textContent='Score cues · contrasting song sections';
+    dots.forEach((dot,i)=>{
+      const start=i*score.duration/loopBeats,end=(i+1)*score.duration/loopBeats;
+      const cues=score.cues.filter(cue=>cue && cue.start<end && cue.end>=start);
+      dot.classList.toggle('cue',cues.length>0);dot.textContent=cues[0]?.gesture?.slice(0,4) || String(i+1);
+      dot.title=cues.map(cue=>`${cue.gesture || 'gesture'}: ${cue.reason || 'planned'}`).join('\n') || `Score ${start.toFixed(0)}–${end.toFixed(0)} s`;
+    });
+  }
+  renderCueTimeline();
+  const mod=x=>((x%loopBeats)+loopBeats)%loopBeats;
+  function musicBeat(time) {
+    return gridBeat(time,$('grid').value,detectedBeats,bpm,Number($('beat-zero').value)||0,Number($('offset').value)||0);
+  }
+  function advance(now) {
+    beat=music ? musicBeat(media.currentTime||0) : beat+(playing?Math.max(0,now-last)/1000*bpm/60:0);
+    last=now;
+  }
+  function frameAt(b) {
+    const f=mod(b)*sampleRate,i=Math.floor(f),u=f-i,frames=studies[selected].frames,a=frames[i],z=frames[i+1];
+    return a.slice(0,9).map((x,j)=>x+(z[j]-x)*u).concat(a[9]);
+  }
+  function activeScore() { return music && selected === 'song' && score; }
+  function effectiveScoreSeconds(rawSeconds) { return shiftedScoreSeconds(rawSeconds, Number($('offset').value) || 0, score.duration); }
+  function scoreSeconds() { return effectiveScoreSeconds(media.currentTime || 0); }
+  function currentFrame() { return activeScore() ? sampleSong(score, scoreSeconds()) : frameAt(beat); }
+  function currentCue() { return activeScore() ? cueAt(score, scoreSeconds()) : null; }
+  function line(points,color,width) {
+    ctx.beginPath();points.forEach((p,i)=>i?ctx.lineTo(...p):ctx.moveTo(...p));
+    ctx.strokeStyle=color;ctx.lineWidth=width;ctx.lineCap='round';ctx.lineJoin='round';ctx.stroke();
+  }
+  function circle(x,y,r,fill,stroke) {
+    ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fillStyle=fill;ctx.fill();
+    if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=2;ctx.stroke();}
+  }
+  function drawVisual(frame, cue, seconds) {
+    const visual=$('visual'), vw=visual.clientWidth, vh=visual.clientHeight, dpr=Math.min(devicePixelRatio||1,2), vctx=visual.getContext('2d');
+    if (visual.width!==Math.round(vw*dpr)||visual.height!==Math.round(vh*dpr)){visual.width=Math.round(vw*dpr);visual.height=Math.round(vh*dpr);}
+    vctx.setTransform(dpr,0,0,dpr,0,0); vctx.clearRect(0,0,vw,vh);
+    const {energy,accent}=activeScore()?visualAt(score,seconds):{energy:0,accent:0};
+    const tipX=frame[4]/70, tipY=frame[5]/70, hue=165+Math.round(75*energy), cx=vw*(.5+tipX*.25), cy=vh*(.55-tipY*.28);
+    vctx.fillStyle='#0f171c';vctx.fillRect(0,0,vw,vh);
+    vctx.fillStyle=`hsla(${hue},75%,62%,${.12+.25*energy})`;vctx.beginPath();vctx.arc(cx,cy,12+55*energy+20*accent,0,Math.PI*2);vctx.fill();
+    vctx.strokeStyle=`hsla(${hue},80%,75%,${.25+.55*accent})`;vctx.lineWidth=2+5*accent;vctx.beginPath();vctx.moveTo(0,cy);vctx.quadraticCurveTo(cx,cy-24*tipY,vw,cy);vctx.stroke();
+    vctx.fillStyle='#d8f5e9';vctx.beginPath();vctx.arc(cx,cy,3+7*accent,0,Math.PI*2);vctx.fill();
+  }
+  function draw() {
+    if(music)beat=musicBeat(media.currentTime||0);
+    const w=canvas.clientWidth,h=canvas.clientHeight,dpr=Math.min(devicePixelRatio||1,2);
+    if(canvas.width!==Math.round(w*dpr)||canvas.height!==Math.round(h*dpr)){canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);}
+    ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);
+    const scale=Math.min(w/220,(h-62)/85),ox=w*.40,oy=h-35,point=(x,y)=>[ox+x*scale,oy-y*scale];
+    for(let x=-90;x<=130;x+=10)line([point(x,0),point(x,76)],'#26313a',1);
+    for(let y=0;y<=70;y+=10)line([point(-90,y),point(130,y)],'#26313a',1);
+    line([point(-90,0),point(130,0)],'#62727e',1);
+    const f=currentFrame(),cue=currentCue(),seconds=activeScore()?scoreSeconds():0,points=[point(0,0),point(f[0],f[1]),point(f[2],f[3]),point(f[4],f[5])];
+    const traceStart=activeScore()?Math.max(0,seconds-1.5):0;
+    for(let i=0;i<70;i++){const a=activeScore()?sampleSong(score,traceStart+i/70*(seconds-traceStart)):frameAt(beat-1.5+i/70*1.5),b=activeScore()?sampleSong(score,traceStart+(i+1)/70*(seconds-traceStart)):frameAt(beat-1.5+(i+1)/70*1.5);line([point(a[4],a[5]),point(b[4],b[5])],`rgba(239,182,116,${.04+.34*i/70})`,2);}
+    line([point(-6,-1),point(6,-1)],'#8899a4',7);line(points,'#0d1216',19);
+    line(points.slice(0,3),'#aad8ca',12);line(points.slice(2),'#efb674',10);
+    points.slice(0,3).forEach((p,i)=>{circle(...p,i===0?11:9,'#202d34','#b6c7ce');circle(...p,3,'#80939e');});
+    circle(...points[3],6,'#efb674');
+    const p=mod(beat),patternBar=Math.floor(p/4)+1,beatInBar=Math.floor(p%4)+1;
+    $('phase').textContent=f[9].replace(/([a-z])([A-Z])/g,'$1 $2');$('position').textContent=activeScore()?`Score ${seconds.toFixed(1)} s · beat ${beat.toFixed(1)}`:`Pattern bar ${patternBar} · Beat ${beatInBar}`;
+    $('event').textContent=cue ? `Cue ${cue.gesture || 'gesture'} · ${cue.reason || 'planned phrase'} · energy ${Math.round((Number(cue.energy)||0)*100)}% · accent ${Math.round((Number(cue.accent)||0)*100)}%` : (activeScore() ? 'Cue gap · no active cue' : 'Reference study · no score cue');
+    drawVisual(f,cue,seconds);
+    $('next-accent').disabled=!activeScore() || !score.cues.some(c=>Number.isFinite(c.arrivalAnchor)&&c.arrivalAnchor>seconds+.05);
+    for(let i=0;i<3;i++)$('q'+i).textContent=f[6+i].toFixed(0)+'°';
+    if(music){
+      const duration=Number.isFinite(media.duration)?media.duration:Math.max(Number(sidecar.duration)||0,1);
+      $('seek').max=String(duration);$('seek').value=String(media.currentTime||0);
+      $('seek').setAttribute('aria-valuetext',`${(media.currentTime||0).toFixed(2)} seconds, beat ${beat.toFixed(2)}`);
+      $('elapsed').textContent=`${(media.currentTime||0).toFixed(1)} / ${duration.toFixed(1)} s`;
+    }else{
+      $('seek').value=String(p);$('seek').setAttribute('aria-valuetext',`${p.toFixed(2)} beats, ${f[9]}`);
+      $('elapsed').textContent=`${(p*60/bpm).toFixed(1)} / ${(loopBeats*60/bpm).toFixed(1)} s`;
+    }
+    const activeIndex=activeScore()?Math.min(loopBeats-1,Math.floor(seconds/score.duration*loopBeats)):Math.floor(p);
+    dots.forEach((dot,i)=>dot.classList.toggle('active',i===activeIndex));
+  }
+  function stopClicks(){for(const osc of activeOscillators){try{osc.stop();}catch{}}activeOscillators.clear();nextClick=Math.ceil(beat);}
+  function scheduleClicks(){
+    if(music||!sound||!playing||!clickAudio||clickAudio.state!=='running'||document.hidden)return;
+    advance(performance.now());nextClick=Math.max(nextClick,Math.ceil(beat-.01));
+    while(nextClick<beat+.12*bpm/60){
+      const time=clickAudio.currentTime+Math.max(.002,(nextClick-beat)*60/bpm),osc=clickAudio.createOscillator(),gain=clickAudio.createGain();
+      osc.frequency.value=nextClick%4===0?1050:720;gain.gain.setValueAtTime(0,time);gain.gain.linearRampToValueAtTime(.10,time+.002);gain.gain.exponentialRampToValueAtTime(.001,time+.045);
+      osc.connect(gain);gain.connect(clickAudio.destination);activeOscillators.add(osc);
+      osc.onended=()=>{activeOscillators.delete(osc);osc.disconnect();gain.disconnect();};osc.start(time);osc.stop(time+.05);nextClick++;
+    }
+  }
+  $('play').onclick=async()=>{
+    if(music){
+      if(media.paused){try{await media.play();$('sound-error').textContent='';}catch{$('sound-error').textContent='Playback was blocked. Press Play again or check track URL.';}}
+      else media.pause();
+    }else{advance(performance.now());playing=!playing;stopClicks();}
+    $('play').textContent=playing?'Pause':'Play';draw();
+  };
+  $('bpm').oninput=()=>{advance(performance.now());bpm=Number($('bpm').value);$('bpm-value').textContent=`${music?bpm.toFixed(2):bpm.toFixed(0)} BPM`;stopClicks();draw();};
+  $('seek').oninput=()=>{
+    if(music){if(Number.isFinite(media.duration))media.currentTime=Math.min(Number($('seek').value),media.duration);}
+    else beat=Number($('seek').value);
+    last=performance.now();stopClicks();draw();
+  };
+  $('study').onchange=()=>{selected=$('study').value==='song'?'song':Number($('study').value);draw();};
+  $('grid').onchange=()=>{syncGridControls();draw();};
+  $('offset').oninput=()=>{draw();};$('beat-zero').oninput=draw;
+  $('next-accent').onclick=()=>{
+    if(!score)return;
+    const now=scoreSeconds(),next=score.cues.find(c=>Number.isFinite(c.arrivalAnchor)&&c.arrivalAnchor>now+.05);
+    if(next){media.currentTime=Math.max(0,next.arrivalAnchor+(Number($('offset').value)||0));draw();}
+  };
+  $('sound').onclick=async()=>{try{if(!clickAudio)clickAudio=new(window.AudioContext||window.webkitAudioContext)();await clickAudio.resume();sound=!sound;stopClicks();$('sound').textContent=sound?'Click track on':'Click track off';$('sound').setAttribute('aria-pressed',String(sound));$('sound-error').textContent='';}catch{$('sound-error').textContent='Click track unavailable. Motion preview still works.';}};
+  media.addEventListener('play',()=>{playing=true;$('play').textContent='Pause';});
+  media.addEventListener('pause',()=>{playing=false;$('play').textContent='Play';draw();});
+  media.addEventListener('ended',()=>{playing=false;$('play').textContent='Play';$('sound-error').textContent='Track ended.';draw();});
+  media.addEventListener('error',()=>{$('sound-error').textContent='Track could not be loaded. Check track URL and browser media support.';playing=false;$('play').textContent='Play';});
+  media.addEventListener('loadedmetadata',()=>{if(Number.isFinite(media.duration))$('seek').max=String(media.duration);draw();});
+  document.addEventListener('visibilitychange',()=>{advance(performance.now());if(document.hidden)stopClicks();});
+  $('play').textContent=playing?'Pause':'Play';setInterval(scheduleClicks,25);
+  window.__ARM_PREVIEW__={inspect(time){const rawMediaSeconds=Number.isFinite(time)?time:(media.currentTime||0),effectiveTime=score?effectiveScoreSeconds(rawMediaSeconds):null,usesScore=activeScore();return {frame:usesScore?sampleSong(score,effectiveTime):frameAt(beat),cue:usesScore?cueAt(score,effectiveTime):null,visual:usesScore?visualAt(score,effectiveTime):null,state:{music,score:!!score,selected,playing,beat,rawMediaSeconds,effectiveScoreSeconds:effectiveTime}};}};
+  function tick(now){advance(now);draw();requestAnimationFrame(tick);}requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>

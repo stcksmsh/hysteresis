@@ -1,0 +1,20 @@
+[package]
+name = "hyst-render"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+hyst-core.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+wgpu = { version = "22", features = ["glsl"] }
+pollster = "0.3"
+bytemuck = { version = "1", features = ["derive"] }
+
+# Dev-only: the audio-driven test render (examples/audio_driven_render.rs,
+# item 5 of R2's brief) needs real SignalBus frames from a real WAV. Not a
+# runtime dependency of the library itself — hyst-render's public API never
+# depends on hyst-audio. Path dep to a sibling crate, not a root
+# Cargo.toml/workspace.dependencies change (out of this workstream's bounds).
+[dev-dependencies]
+hyst-audio = { path = "../hyst-audio" }

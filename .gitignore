@@ -5,3 +5,7 @@ public/worklets/
 public/render-worker.js
 *.log
 .DS_Store
+
+# Rust (crates/)
+/target/
+crates/*/test-output/

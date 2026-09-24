@@ -1,0 +1,9 @@
+[package]
+name = "hyst-compile"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+hyst-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true

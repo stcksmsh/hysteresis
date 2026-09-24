@@ -1,0 +1,8 @@
+[package]
+name = "hyst-previz"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+hyst-compile = { path = "../hyst-compile" }
+serde_json.workspace = true
