@@ -152,3 +152,17 @@ transitions/posture, matched-tempo structure swap, exact anchors, short clip),
 JS timing incl. remote clock. Mutation check: disabling mirroring or gather
 fails tests. Workspace CPU tests green; clippy fails only on known julia.rs.
 Not done: native previz/output wiring of score (item 2); perceptual review.
+
+## Continuation — 2026-09-24 expressive phrase planner
+
+User on sections build video: "still doesn't look any good" (v1: tip box 31×20 cm,
+218 small cues returning to one home pose, limits 55–70°/s). Planner core
+replaced: bar-based phrases (peak 1 bar, mid 2, quiet 4), 8 full-range key poses
++ mirrors, anticipation → arrival on bar (or strong onset ±0.3s) → overshoot/
+settle → beat bounce/onset hits; quiet = slow sweep + breath; rest = frozen fold.
+Limits loosened to assumed servo class. Found + fixed smear bug: truncated lead
+let the limiter spread each move across the following beats (arrival was not the
+pose); lead now reserved, move shrinks if bar too short. Regression test proven
+by mutation. Real track: tip −65..63 cm × 8..70 cm, 98 cues, 97 exact arrivals,
+8.08 cm clearance, still ~16% of time. Videos rendered offline from score (PIL +
+ffmpeg, scratchpad render.py, not in repo). Perceptual verdict pending user.

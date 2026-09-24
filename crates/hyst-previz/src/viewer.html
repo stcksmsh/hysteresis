@@ -78,7 +78,7 @@
     <input id="seek" type="range" min="0" max="16" value="0" step="0.001" aria-label="Scrub phrase in beats">
     <div id="beats" class="beats" aria-hidden="true"></div>
   </div>
-  <footer class="note"><span id="clock-label">Synthetic rhythm · authored motion · no music analysis</span><span>Song limits · assumed links 32/26/12 cm · speed ≤55/60/70°/s · acceleration ≤150/170/200°/s². Not hardware safety.</span></footer>
+  <footer class="note"><span id="clock-label">Synthetic rhythm · authored motion · no music analysis</span><span>Song limits · assumed links 32/26/12 cm · assumed servo-class limits · speed ≤240/300/360°/s · acceleration ≤1500/1800/2400°/s². Not hardware safety.</span></footer>
   <p id="sound-error" role="status" class="note"></p>
 </main>
 <script>
@@ -266,10 +266,10 @@
     const w=canvas.clientWidth,h=canvas.clientHeight,dpr=Math.min(devicePixelRatio||1,2);
     if(canvas.width!==Math.round(w*dpr)||canvas.height!==Math.round(h*dpr)){canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);}
     ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);
-    const scale=Math.min(w/220,(h-62)/85),ox=w*.40,oy=h-35,point=(x,y)=>[ox+x*scale,oy-y*scale];
-    for(let x=-90;x<=130;x+=10)line([point(x,0),point(x,76)],'#26313a',1);
-    for(let y=0;y<=70;y+=10)line([point(-90,y),point(130,y)],'#26313a',1);
-    line([point(-90,0),point(130,0)],'#62727e',1);
+    const scale=Math.min(w/190,(h-62)/82),ox=w*.5,oy=h-35,point=(x,y)=>[ox+x*scale,oy-y*scale];
+    for(let x=-90;x<=90;x+=10)line([point(x,0),point(x,76)],'#26313a',1);
+    for(let y=0;y<=70;y+=10)line([point(-90,y),point(90,y)],'#26313a',1);
+    line([point(-90,0),point(90,0)],'#62727e',1);
     const f=currentFrame(),cue=currentCue(),seconds=activeScore()?scoreSeconds():0,points=[point(0,0),point(f[0],f[1]),point(f[2],f[3]),point(f[4],f[5])];
     const traceStart=activeScore()?Math.max(0,seconds-1.5):0;
     for(let i=0;i<70;i++){const a=activeScore()?sampleSong(score,traceStart+i/70*(seconds-traceStart)):frameAt(beat-1.5+i/70*1.5),b=activeScore()?sampleSong(score,traceStart+(i+1)/70*(seconds-traceStart)):frameAt(beat-1.5+(i+1)/70*1.5);line([point(a[4],a[5]),point(b[4],b[5])],`rgba(239,182,116,${.04+.34*i/70})`,2);}

@@ -39,19 +39,28 @@ ffmpeg -i song.mp4 -vn -ac 2 -ar 44100 -c:a pcm_s16le "$media/instant-crush-anal
 node --import tsx "$PWD/scripts/analyze.ts" "$media/instant-crush-analysis.wav" "$media/instant-crush.sidecar.json"
 ```
 
-## Sections, motifs, transitions
+## Sections, phrases, key poses
 
-Compiler first splits song into sections: z-scored loudness/5 bands/centroid/
-flatness, 4s before/after window distance, peaks above median+2·MAD, >=8s apart
-(sidecar sections used instead only when >=2 are >=8s). Level class
-(`quiet`/`mid`/`peak` from song-relative loudness, `rest` from absolute RMS)
-sets posture register and amplitude. Section whose feature mean lies near an
-earlier same-class section (RMS z-distance <0.3, or schema-4 repeat sim >=0.5)
-reuses its motif: same groove phrase order, mirrored on even recurrences,
-slightly smaller from third statement. Last cue before a louder section is
-`gather`, before a quieter one `settle`; recovery knot lands on next section
-posture. Score JSON `sections` + cue `section` expose these decisions; viewer
-shows `Section N level · motif C3`. Heuristic, not verse/chorus labels.
+Compiler splits song into sections (z-scored loudness/5 bands/centroid/flatness,
+4s before/after novelty, peaks above median+2·MAD, >=8s apart). Level class
+(`quiet`/`mid`/`peak` song-relative, `rest` from absolute RMS) sets phrasing:
+
+| level | new pose every | move | sustain |
+|---|---|---|---|
+| peak | 1 bar | 0.45s lead, anticipation, 10% overshoot | bounce every beat, onset hits |
+| mid | 2 bars | 0.8s lead, 7% overshoot | half-depth bounce, hits |
+| quiet | 4 bars | 1.8s sweep | one slow breath |
+| rest | section | fold to rest pose | frozen |
+
+Poses come from 8 full-range key poses (rise, reach, arc, fold, sweep, hook,
+coil, open) + mirrors; section motif = 4 poses alternating sides, chosen by
+timbre family. Similar later sections replay the motif mirrored. Moves arrive
+exactly on bar lines (downbeat phase = beat parity with most onset strength;
+provisional) or on a strong onset within 0.3s of the bar. Lead time is reserved
+before each arrival; if a bar is too short, the move shrinks rather than
+smearing past the beat. Strong onsets during a held bar become hits; accents
+inside a big move's wind-up are not hit separately (known gap). Every knot pose
+keeps >=8 cm floor clearance.
 
 ## Remote mode
 
@@ -77,8 +86,9 @@ cargo clippy -p hyst-compile -p hyst-previz --all-targets -- -D warnings
 node crates/hyst-previz/tests/timing.cjs crates/hyst-previz/src/viewer.html
 ```
 
-Geometry assumes planar 32/26/12 cm links. Joint constraints are illustrative,
-not measured actuators. No torque, dynamics, thermal model, self-collision solver,
+Geometry assumes planar 32/26/12 cm links. Joint limits assume servo-class
+actuators (±75/±150/±90°, 240/300/360°/s, 1500/1800/2400°/s²), derated guesses,
+not measured hardware. No torque, dynamics, thermal model, self-collision solver,
 hardware output or physical-safety guarantee. Song interpretation uses heuristics;
 watching/listening remains taste gate. Full ensemble R7/R9 remains separate scope.
 
@@ -102,8 +112,7 @@ ranges and analytic quintic speed/acceleration extrema. Floor clearance is sampl
 at 120Hz, not proven collision-free. Holds and deterministic random-access sampling
 are checked. Exported `instant-crush.audit.json` records supplied-track results.
 
-Current supplied track (re-extracted 2026-09-24 from user MP4): 19 sections,
-218 cues, 70 anchored arrivals, 6 holds. Max joint speeds 34.64/37.61/44.25
-degrees/s, minimum sampled floor clearance 27.84 cm. Audit logic lives in
+Current supplied track: 19 sections, 98 cues, 97 exact arrivals. Max joint
+speeds 240/300/338 degrees/s, minimum sampled floor clearance 8.08 cm. Audit logic lives in
 `hyst_previz::audit_score`, shared by CLI and acceptance tests.
 Human-quality dance remains unproven; the preview is ready for listening review.

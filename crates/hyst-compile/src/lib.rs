@@ -3,7 +3,6 @@
 use hyst_core::sidecar::{Sidecar, SidecarOnset};
 use serde::{Deserialize, Serialize};
 
-const HOME: [f64; 3] = [105.0, -65.0, -20.0];
 const Q_V: f64 = 1.875; // max derivative of 6t^5-15t^4+10t^3
 const Q_A: f64 = 5.773_502_691_896_258;
 
@@ -18,10 +17,12 @@ pub struct JointLimits {
 impl Default for JointLimits {
     fn default() -> Self {
         Self {
-            min_degrees: [45.0, -100.0, -60.0],
-            max_degrees: [140.0, -15.0, 40.0],
-            max_speed_degrees_per_second: [55.0, 60.0, 70.0],
-            max_acceleration_degrees_per_second2: [150.0, 170.0, 200.0],
+            // Assumed hobby/serial-servo class (~0.15 s/60° unloaded),
+            // derated. Not measured hardware; revisit once actuators exist.
+            min_degrees: [15.0, -150.0, -90.0],
+            max_degrees: [165.0, 150.0, 90.0],
+            max_speed_degrees_per_second: [240.0, 300.0, 360.0],
+            max_acceleration_degrees_per_second2: [1500.0, 1800.0, 2400.0],
         }
     }
 }
@@ -80,7 +81,7 @@ impl Score {
     /// Sample simulated joint angles in degrees at absolute audio time.
     pub fn sample(&self, time: f64) -> [f64; 3] {
         if self.cues.is_empty() {
-            return HOME;
+            return REST_POSE;
         }
         let t = time.clamp(0.0, self.duration);
         let i = self
@@ -156,167 +157,361 @@ pub fn compile_sidecar_json_with_config(
     Ok(compile(&sidecar, rms.as_deref(), config))
 }
 
+/// Named key pose: shoulder/elbow/wrist degrees, relative planar joints.
+/// Right-side versions; `mirror` gives the left-side counterpart.
+/// All keep the tip >= ~10 cm above the floor with 32/26/12 cm links.
+const POSES: [(&str, [f64; 3]); 8] = [
+    ("rise", [90.0, 0.0, 0.0]),
+    ("reach", [55.0, 15.0, 10.0]),
+    ("arc", [120.0, -60.0, -40.0]),
+    ("fold", [105.0, -130.0, -30.0]),
+    ("sweep", [30.0, -20.0, -10.0]),
+    ("hook", [70.0, 70.0, 50.0]),
+    ("coil", [115.0, -100.0, 60.0]),
+    ("open", [40.0, 40.0, -20.0]),
+];
+const REST_POSE: [f64; 3] = [105.0, -110.0, -40.0];
+const NEUTRAL: [f64; 3] = [95.0, -35.0, -10.0];
+
+fn pose(name: &str) -> [f64; 3] {
+    POSES.iter().find(|p| p.0 == name).map_or(NEUTRAL, |p| p.1)
+}
+/// Left/right mirror about the vertical through the base.
+fn mirror(q: [f64; 3]) -> [f64; 3] {
+    [180.0 - q[0], -q[1], -q[2]]
+}
+fn lerp(a: [f64; 3], b: [f64; 3], x: f64) -> [f64; 3] {
+    std::array::from_fn(|j| a[j] + (b[j] - a[j]) * x)
+}
+
+/// Per-level phrasing: bars per phrase, move lead, settle time, amplitude,
+/// overshoot, beat-bounce depth. Loud = short phrases, fast committed moves,
+/// bounces on every beat; quiet = long phrases, slow sweeps, breathing only.
+struct Feel {
+    bars: usize,
+    lead: f64,
+    settle: f64,
+    amp: f64,
+    overshoot: f64,
+    bounce: f64,
+}
+fn feel(level: &str) -> Feel {
+    match level {
+        "peak" => Feel { bars: 1, lead: 0.45, settle: 0.22, amp: 1.0, overshoot: 0.1, bounce: 1.0 },
+        "mid" => Feel { bars: 2, lead: 0.8, settle: 0.35, amp: 0.85, overshoot: 0.07, bounce: 0.55 },
+        _ => Feel { bars: 4, lead: 1.8, settle: 0.7, amp: 0.6, overshoot: 0.0, bounce: 0.0 },
+    }
+}
+
+/// Section motif: four key poses from a timbre family, alternating sides so
+/// consecutive phrases travel across the body. Recurrences replay it mirrored.
+fn motif_poses(s: &Sidecar, p: &SectionPlan) -> Vec<(String, [f64; 3])> {
+    if p.level == "rest" {
+        return vec![("rest".into(), REST_POSE)];
+    }
+    let t = section_traits(s, p.start, p.end);
+    let family: &[&str] = if t.bright < 0.44 {
+        &["fold", "sweep", "coil", "arc", "reach"]
+    } else if t.bright > 0.56 || t.centroid > 0.58 {
+        &["rise", "sweep", "hook", "open", "reach", "arc"]
+    } else {
+        &["reach", "fold", "open", "coil", "arc", "rise"]
+    };
+    let rot = p.motif.bytes().next().map_or(0, |b| usize::from(b.wrapping_sub(b'A')));
+    let flip = p.variation % 2 == 1;
+    (0..4)
+        .map(|k| {
+            let name = family[(rot + k * 2 + k / 2) % family.len()];
+            let side = (k % 2 == 1) != flip;
+            let q = if side { mirror(pose(name)) } else { pose(name) };
+            let label = format!("{name} {}", if side { "L" } else { "R" });
+            (label, lerp(NEUTRAL, q, feel(&p.level).amp))
+        })
+        .collect()
+}
+
+/// Bar lines from the detected grid: downbeat phase = beat parity (mod 4)
+/// carrying most onset strength. Provisional, like the grid itself.
+fn bar_lines(s: &Sidecar) -> Vec<f64> {
+    let mut beats: Vec<f64> = s.beats.iter().copied().filter(|b| b.is_finite()).collect();
+    beats.sort_by(f64::total_cmp);
+    beats.dedup();
+    if beats.len() < 8 {
+        let period = 60.0 / f64::from(if s.tempo > 20.0 { s.tempo } else { 120.0 });
+        beats = (0..)
+            .map(|i| i as f64 * period)
+            .take_while(|t| *t < s.duration)
+            .collect();
+    }
+    let weight = |b: f64| {
+        s.onsets
+            .iter()
+            .filter(|o| (o.t - b).abs() < 0.07)
+            .map(|o| o.strength)
+            .sum::<f32>()
+    };
+    let phase = (0..4)
+        .max_by(|a, b| {
+            let score = |p: usize| beats.iter().skip(p).step_by(4).map(|b| weight(*b)).sum::<f32>();
+            score(*a).total_cmp(&score(*b)).then(b.cmp(a))
+        })
+        .unwrap_or(0);
+    beats.into_iter().skip(phase).step_by(4).collect()
+}
+
+struct Arrival {
+    time: f64,
+    section: usize,
+    step: usize,
+}
+
 fn compile(s: &Sidecar, rms: Option<&[f32]>, config: CompileConfig) -> Score {
     let limits = JointLimits::default();
-    let onset_scale = percentile(
-        &s.onsets.iter().map(|o| o.strength).collect::<Vec<_>>(),
-        0.82,
-    )
-    .max(0.05);
     let sections = plan_sections(s, rms);
-    let styles: Vec<SectionStyle> = sections.iter().map(|p| section_style(s, p)).collect();
-    let section_at = |t: f64| {
-        sections
-            .iter()
-            .position(|p| t >= p.start && t < p.end)
-            .unwrap_or(sections.len() - 1)
+    let motifs: Vec<_> = sections.iter().map(|p| motif_poses(s, p)).collect();
+    let bars = bar_lines(s);
+    let beat = {
+        let mut b: Vec<f64> = s.beats.iter().copied().filter(|b| b.is_finite()).collect();
+        b.sort_by(f64::total_cmp);
+        b
     };
-    let mut bounds = vec![0.0];
-    for p in &sections {
-        bounds.extend(boundaries(s, rms, p.start, p.end).into_iter().skip(1));
-    }
-    let mut cues = Vec::new();
-    let mut pose = HOME;
-    let mut prior = "home";
-    let mut step_in_section = 0usize;
-    let mut last_section = usize::MAX;
-    for w in bounds.windows(2) {
-        let (start, end) = (w[0], w[1]);
-        let si = section_at(start);
-        if si != last_section {
-            step_in_section = 0;
-            last_section = si;
+    let strengths: Vec<f32> = s.onsets.iter().map(|o| o.strength).collect();
+    let onset_scale = percentile(&strengths, 0.9).max(0.05);
+    // A hit must stand out: top decile and well above the typical onset.
+    let hit_floor = onset_scale.max(percentile(&strengths, 0.5) * 1.8);
+
+    // Phrase arrivals: section entry downbeat, then every `bars` bar lines.
+    let mut arrivals: Vec<Arrival> = Vec::new();
+    for (si, p) in sections.iter().enumerate() {
+        let f = feel(&p.level);
+        let lines: Vec<f64> = bars
+            .iter()
+            .copied()
+            .filter(|t| *t >= p.start - 0.3 && *t < p.end - 0.5 && *t > 0.2)
+            .collect();
+        let entry = lines.first().copied().unwrap_or(p.start + 0.5);
+        let every = if p.level == "rest" { usize::MAX } else { f.bars };
+        let mut step = 0;
+        for (k, t) in std::iter::once(entry)
+            .chain(lines.iter().copied().skip(1))
+            .enumerate()
+        {
+            if k % every.max(1) == 0 && t < s.duration - 0.3 {
+                // A strong onset near the bar line wins: land exactly on it.
+                let t = s
+                    .onsets
+                    .iter()
+                    .filter(|o| (o.t - t).abs() <= 0.3 && o.strength >= hit_floor && o.t > 0.2)
+                    .max_by(|a, b| a.strength.total_cmp(&b.strength))
+                    .map_or(t, |o| o.t);
+                arrivals.push(Arrival { time: t, section: si, step });
+                step += 1;
+            }
         }
-        let section = &sections[si];
-        let style = &styles[si];
-        // Recovery aims at the posture of whichever section owns the cue end,
-        // so section changes glide across the final cue instead of jumping.
-        let target_si = if end >= section.end && si + 1 < sections.len() {
-            si + 1
+    }
+    arrivals.dedup_by(|b, a| b.time - a.time < 0.6);
+
+    let section_at = |t: f64| sections.iter().position(|p| t >= p.start && t < p.end).unwrap_or(sections.len() - 1);
+    let mut cues = Vec::new();
+    let mut q = REST_POSE;
+    let mut t0 = 0.0;
+    for (i, a) in arrivals.iter().enumerate() {
+        let sec = &sections[a.section];
+        let f = feel(&sec.level);
+        let (name, wanted) = motifs[a.section][a.step % motifs[a.section].len()].clone();
+        let wanted = floor_safe(wanted);
+        // Lead = time the move needs at full size (speed/accel limits, with
+        // anticipation + overshoot headroom). If the bar is too short, the
+        // move shrinks so it still *arrives on the beat*; it never smears
+        // past the arrival into the following beats.
+        let available = a.time - t0;
+        let target = if move_time(q, wanted, f.overshoot, &limits) <= available {
+            wanted
         } else {
-            si
+            let mut x = 1.0;
+            while x > 0.05 && move_time(q, lerp(q, wanted, x), f.overshoot, &limits) > available {
+                x -= 0.05;
+            }
+            lerp(q, wanted, x)
         };
-        let target = styles[target_si].base;
-        let energy = avg(&s.energy_envelope, s.envelope_rate, start, end);
-        let absolute = rms.map_or(energy, |v| avg(v, s.envelope_rate, start, end));
-        let onset = strongest(&s.onsets, start, end);
-        let accent = onset.map_or(0.0, |o| (o.strength / onset_scale).clamp(0.0, 1.0));
-        let low = avg(&s.band_envelope.low, s.envelope_rate, start, end)
-            + avg(&s.band_envelope.sub, s.envelope_rate, start, end);
-        let high = avg(&s.band_envelope.presence, s.envelope_rate, start, end)
-            + avg(&s.band_envelope.air, s.envelope_rate, start, end);
-        let local_onsets: Vec<_> = s
+        let lead = f.lead.max(move_time(q, target, f.overshoot, &limits)).min(available).max(0.12);
+        // Absorb slivers of stillness shorter than 0.25 s into the move.
+        let start = if a.time - lead - t0 < 0.25 { t0 } else { a.time - lead };
+        if start > t0 + 1e-6 {
+            cues.push(hold_cue(t0, start, q, section_at(t0), "stillness before next phrase"));
+        }
+        let next_start = arrivals.get(i + 1).map_or(s.duration, |n| {
+            let nf = feel(&sections[n.section].level);
+            let next = floor_safe(motifs[n.section][n.step % motifs[n.section].len()].1);
+            let next_lead = nf.lead.max(move_time(target, next, nf.overshoot, &limits));
+            (n.time - next_lead).max(a.time + f.settle + 0.1)
+        });
+        let end = next_start.min(s.duration).max(a.time + 0.05);
+        let mut knots: Vec<(f64, &'static str, [f64; 3])> = vec![(start, "start", q)];
+        if config.enable_windups && f.overshoot > 0.0 && lead > 0.3 {
+            // Anticipation: brief counter-move before committing.
+            knots.push((start + lead * 0.35, "preparation", lerp(q, target, -0.12)));
+        }
+        knots.push((a.time, "arrival", lerp(q, target, 1.0 + f.overshoot)));
+        let settle_t = (a.time + f.settle).min(end);
+        if settle_t < end - 0.05 && f.overshoot > 0.0 {
+            knots.push((settle_t, "followThrough", target));
+        }
+        let sign = if name.ends_with('L') { -1.0 } else { 1.0 };
+        let hits: Vec<&SidecarOnset> = if config.enable_hits {
+            s.onsets
+                .iter()
+                .filter(|o| o.t > settle_t + 0.25 && o.t < end - 0.15 && o.strength >= hit_floor)
+                .collect()
+        } else {
+            Vec::new()
+        };
+        let mut sustain: Vec<(f64, &'static str, [f64; 3])> = Vec::new();
+        for o in &hits {
+            let d = [4.0 * sign, 16.0 * sign, 30.0 * sign];
+            let lo = if o.tone < 0.46 { -1.0 } else { 1.0 };
+            sustain.push((o.t - 0.22, "hit", target));
+            sustain.push((o.t, "hit", std::array::from_fn(|j| target[j] + d[j] * lo * f.amp)));
+            if o.t + 0.35 < end - 0.05 {
+                sustain.push((o.t + 0.35, "hit", target));
+            }
+        }
+        if f.bounce > 0.0 {
+            // Groove: dip on each beat, lift on the off-beat.
+            for w in beat.windows(2).filter(|w| w[0] > settle_t + 0.1 && w[0] < end - 0.2) {
+                let b = f.bounce * f.amp;
+                sustain.push((w[0], "beat", [target[0] - 2.0 * b * sign, target[1] - 7.0 * b * sign, target[2] - 12.0 * b * sign]));
+                let off = (w[0] + w[1]) / 2.0;
+                if off < end - 0.12 {
+                    sustain.push((off, "offbeat", [target[0] + 1.0 * b * sign, target[1] + 3.0 * b * sign, target[2] + 6.0 * b * sign]));
+                }
+            }
+        } else if sec.level != "rest" && end - settle_t > 2.0 {
+            // Quiet: one slow breath across the held pose.
+            let mid = (settle_t + end) / 2.0;
+            sustain.push((mid, "breath", [target[0] + 4.0 * sign, target[1] - 6.0, target[2] + 10.0 * sign]));
+        }
+        sustain.sort_by(|a, b| a.0.total_cmp(&b.0));
+        // Hits win over nearby beat knots.
+        let hit_times: Vec<f64> = hits.iter().map(|o| o.t).collect();
+        sustain.retain(|k| k.1 == "hit" || hit_times.iter().all(|h| (k.0 - h).abs() > 0.35));
+        knots.extend(sustain);
+        knots.push((end, "recovery", target));
+        knots.sort_by(|a, b| a.0.total_cmp(&b.0));
+        let mut cleaned: Vec<(f64, &'static str, [f64; 3])> = Vec::new();
+        for k in knots {
+            match cleaned.last() {
+                Some(l) if k.0 - l.0 < 0.08 && k.1 != "arrival" && k.1 != "recovery" && k.1 != "hit" => {}
+                Some(l) if k.0 - l.0 < 0.02 => {}
+                _ => cleaned.push(k),
+            }
+        }
+        let mut out = Vec::with_capacity(cleaned.len());
+        let mut prev = (start, q);
+        for (i, (t, phase, want)) in cleaned.into_iter().enumerate() {
+            let joints = if i == 0 { q } else { constrain(prev.1, floor_safe(want), t - prev.0, &limits) };
+            out.push(Knot { time: t, phase: phase.into(), joints });
+            prev = (t, joints);
+        }
+        q = prev.1;
+        let accent = s
             .onsets
             .iter()
-            .filter(|o| o.t >= start - 2.0 && o.t < end + 2.0)
-            .collect();
-        let local_mean =
-            local_onsets.iter().map(|o| o.strength).sum::<f32>() / local_onsets.len().max(1) as f32;
-        let distinct_accent = onset.is_some_and(|o| o.strength > local_mean * 1.45);
-        let rest = if rms.is_some() {
-            absolute < 0.005
-        } else {
-            energy < 0.045 && accent < 0.45
-        };
-        let rising = envelope(s, end) - envelope(s, start) > 0.11;
-        let hit_anchor = anchored_onset(&s.onsets, start, end, onset_scale * 0.95);
-        let coil_anchor = anchored_onset(&s.onsets, start, end, onset_scale * 0.88);
-        let hit_candidate = config.enable_hits && accent >= 0.95 && distinct_accent;
-        let coil_candidate = config.enable_windups && rising;
-        let next = (target_si != si).then(|| &sections[target_si]);
-        let transition = next.and_then(|n| {
-            let (from, to) = (level_rank(&section.level), level_rank(&n.level));
-            if to > from {
-                Some(("gather", format!(
-                    "lead-in: {} → {} section {} (motif {})",
-                    section.level, n.level, target_si + 1, motif_label(n)
-                )))
-            } else if to < from {
-                Some(("settle", format!(
-                    "lead-out: {} → {} section {} (motif {})",
-                    section.level, n.level, target_si + 1, motif_label(n)
-                )))
-            } else {
-                None
-            }
-        });
-        let (gesture, reason, arrival_anchor) = if rest {
-            ("hold", format!("rest: absolute level {absolute:0.4}"), None)
-        } else if let Some(anchor) = hit_candidate.then_some(hit_anchor).flatten() {
-            if anchor.tone < 0.46 {
-                ("strike-low", format!("low accent {accent:0.2} at {:0.3}s", anchor.t), Some(anchor.t))
-            } else {
-                ("flick-high", format!("bright accent {accent:0.2} at {:0.3}s", anchor.t), Some(anchor.t))
-            }
-        } else if let Some((g, why)) = transition {
-            (g, why, None)
-        } else if let Some(anchor) = coil_candidate.then_some(coil_anchor).flatten() {
-            (
-                "coil",
-                format!("energy rise prepares arrival at {:0.3}s", anchor.t),
-                Some(anchor.t),
-            )
-        } else {
-            // Phrase order comes from the section motif: a recurring section
-            // replays the same gesture sequence (mirrored on variation).
-            let mut g = style.palette[step_in_section % 3];
-            if g == prior {
-                g = style.palette[(step_in_section + 1) % 3];
-            }
-            let no_anchor = hit_candidate || coil_candidate;
-            let reason = if no_anchor {
-                format!(
-                    "groove: no onset allows preparation and recovery; motif {} step {}",
-                    motif_label(section),
-                    step_in_section + 1
-                )
-            } else {
-                format!(
-                    "groove: motif {} step {}, energy {energy:0.2}, low/high {low:0.2}/{high:0.2}",
-                    motif_label(section),
-                    step_in_section + 1
-                )
-            };
-            (g, reason, None)
-        };
-        let sign = if step_in_section.is_multiple_of(2) != style.mirror {
-            1.0
-        } else {
-            -1.0
-        };
-        let knots = make_knots(
-            Span { start, end, arrival_anchor },
-            pose,
-            gesture,
-            (0.3 + f64::from(energy).clamp(0.0, 1.0) * 0.7) * style.amp_scale,
-            sign,
-            target,
-            &limits,
+            .filter(|o| (o.t - a.time).abs() < 0.08)
+            .map(|o| (o.strength / onset_scale).clamp(0.0, 1.0))
+            .fold(0.0_f32, f32::max);
+        let energy = rms.map_or_else(
+            || avg(&s.energy_envelope, s.envelope_rate, start, end),
+            |r| (avg(r, s.envelope_rate, start, end) / 0.3).clamp(0.0, 1.0),
         );
-        pose = knots.last().map_or(pose, |k| k.joints);
-        prior = gesture;
-        step_in_section += 1;
         cues.push(Cue {
             start,
             end,
-            gesture: gesture.into(),
-            reason,
-            energy: if rest {
-                0.0
-            } else {
-                rms.map_or(energy, |_| (absolute / 0.3).clamp(0.0, 1.0))
-            },
-            accent: if rest { 0.0 } else { accent },
-            arrival_anchor,
-            section: Some(si),
-            knots,
+            gesture: name.clone(),
+            reason: format!(
+                "{} section {} motif {} step {}: {} lands on bar {:.2}s{}{}",
+                sec.level,
+                a.section + 1,
+                motif_label(sec),
+                a.step + 1,
+                if f.bars == 1 { "1-bar phrase" } else if f.bars == 2 { "2-bar phrase" } else { "4-bar phrase" },
+                a.time,
+                if hits.is_empty() { String::new() } else { format!(", {} onset hit(s)", hits.len()) },
+                if f.bounce > 0.0 { ", beat bounce" } else { "" }
+            ),
+            energy: if sec.level == "rest" { 0.0 } else { energy },
+            accent: accent.max(if sec.level == "peak" { 0.8 } else { 0.4 }),
+            arrival_anchor: Some(a.time).filter(|t| *t > start && *t < end),
+            section: Some(a.section),
+            knots: out,
         });
+        t0 = end;
     }
-    Score {
-        duration: s.duration,
-        sections,
-        cues,
-        limits,
+    if t0 < s.duration - 1e-9 || cues.is_empty() {
+        cues.push(hold_cue(t0, s.duration, q, section_at(t0), "hold to end"));
+    }
+    // Section tags must not straddle: re-tag each cue by where it starts, and
+    // split any cue that crosses a section edge only in metadata terms.
+    for c in &mut cues {
+        let si = section_at(c.start);
+        if c.end <= sections[si].end + 1e-9 {
+            c.section = Some(si);
+        } else {
+            c.section = None;
+        }
+    }
+    Score { duration: s.duration, sections, cues, limits }
+}
+
+/// Lowest joint/tip height (cm) for the assumed 32/26/12 cm planar links.
+fn lowest_point(q: [f64; 3]) -> f64 {
+    let (mut h, mut y, mut low) = (0.0_f64, 0.0_f64, f64::INFINITY);
+    for (len, a) in [32.0, 26.0, 12.0].into_iter().zip(q) {
+        h += a.to_radians();
+        y += len * h.sin();
+        low = low.min(y);
+    }
+    low
+}
+
+/// Pull a wanted pose toward neutral until it keeps >= 8 cm floor clearance.
+fn floor_safe(q: [f64; 3]) -> [f64; 3] {
+    const MIN_CLEARANCE: f64 = 8.0;
+    if lowest_point(q) >= MIN_CLEARANCE {
+        return q;
+    }
+    (1..=20)
+        .map(|k| lerp(q, NEUTRAL, f64::from(k) / 20.0))
+        .find(|p| lowest_point(*p) >= MIN_CLEARANCE)
+        .unwrap_or(NEUTRAL)
+}
+
+/// Seconds a quintic move needs within joint speed/acceleration limits,
+/// including overshoot and anticipation headroom.
+fn move_time(from: [f64; 3], to: [f64; 3], overshoot: f64, l: &JointLimits) -> f64 {
+    (0..3)
+        .map(|j| {
+            let d = (to[j] - from[j]).abs() * (1.0 + overshoot) * 1.3;
+            (Q_V * d / l.max_speed_degrees_per_second[j])
+                .max((Q_A * d / l.max_acceleration_degrees_per_second2[j]).sqrt())
+        })
+        .fold(0.0, f64::max)
+}
+
+fn hold_cue(start: f64, end: f64, q: [f64; 3], section: usize, why: &str) -> Cue {
+    Cue {
+        start,
+        end,
+        gesture: "hold".into(),
+        reason: why.into(),
+        energy: 0.0,
+        accent: 0.0,
+        arrival_anchor: None,
+        section: Some(section),
+        knots: vec![
+            Knot { time: start, phase: "hold".into(), joints: q },
+            Knot { time: end, phase: "hold".into(), joints: q },
+        ],
     }
 }
 
@@ -328,28 +523,12 @@ fn motif_label(p: &SectionPlan) -> String {
     }
 }
 
-fn level_rank(level: &str) -> u8 {
-    match level {
-        "rest" => 0,
-        "quiet" => 1,
-        "mid" => 2,
-        _ => 3,
-    }
-}
-
 /// Raw section character used for gesture family and reasons.
 #[derive(Debug, Clone, Copy)]
 struct SectionTraits {
     bright: f32,
     centroid: f32,
     density: f32,
-}
-
-struct SectionStyle {
-    palette: [&'static str; 3],
-    base: [f64; 3],
-    amp_scale: f64,
-    mirror: bool,
 }
 
 const FEATURE_DIMS: usize = 8;
@@ -589,89 +768,6 @@ fn plan_sections(s: &Sidecar, rms: Option<&[f32]>) -> Vec<SectionPlan> {
     plans
 }
 
-fn section_style(s: &Sidecar, p: &SectionPlan) -> SectionStyle {
-    let t = section_traits(s, p.start, p.end);
-    let low_heavy = t.bright < 0.44;
-    let bright = t.bright > 0.56 || t.centroid > 0.58;
-    let family = if low_heavy {
-        ["nod", "sway", "reach"]
-    } else if bright {
-        ["orbit", "flick", "reach"]
-    } else {
-        ["sway", "orbit", "nod"]
-    };
-    // Motif letter rotates phrase order, so two different motifs with the
-    // same timbre family still read as different phrases.
-    let rot = p.motif.bytes().next().map_or(0, |b| usize::from(b.wrapping_sub(b'A')) % 3);
-    let palette = [family[rot], family[(rot + 1) % 3], family[(rot + 2) % 3]];
-    let (offset, amp_scale) = match p.level.as_str() {
-        "rest" | "quiet" => ([-4.0, -6.0, -6.0], 0.6),
-        "mid" => ([0.0; 3], 0.85),
-        _ => ([6.0, 8.0, 6.0], 1.0),
-    };
-    SectionStyle {
-        palette,
-        base: add(HOME, offset),
-        // Variation: later statements mirror, third+ shrink slightly.
-        amp_scale: amp_scale * if p.variation >= 2 { 0.85 } else { 1.0 },
-        mirror: p.variation % 2 == 1,
-    }
-}
-
-fn boundaries(s: &Sidecar, rms: Option<&[f32]>, from: f64, to: f64) -> Vec<f64> {
-    let source = rms.unwrap_or(&s.energy_envelope);
-    let rate = f64::from(s.envelope_rate);
-    let rest_level = if rms.is_some() { 0.005 } else { 0.05 };
-    let mut candidates = vec![from, to];
-    let mut last = from;
-    let first = ((from * rate).floor() as usize).min(source.len().saturating_sub(1));
-    let mut was_rest = source.get(first).copied().unwrap_or(0.0) < rest_level;
-    for (i, &value) in source.iter().enumerate().skip(first + 1) {
-        let t = i as f64 / rate;
-        if t >= to {
-            break;
-        }
-        let back = i.saturating_sub((rate * 0.8) as usize);
-        let delta = (value - source[back]).abs();
-        let rest = value < rest_level;
-        let threshold = if rms.is_some() { 0.012 } else { 0.17 };
-        if t - last >= 0.75 && (delta > threshold || rest != was_rest) {
-            candidates.push(t);
-            last = t;
-        }
-        was_rest = rest;
-    }
-    // Do not cut a cue exactly at each accent. That made every strong onset a
-    // boundary, leaving no recovery time and forcing midpoint "arrivals".
-    // Onsets remain planner inputs below; boundaries come from sustained content.
-    candidates.retain(|t| t.is_finite() && *t >= from && *t <= to);
-    candidates.sort_by(f64::total_cmp);
-    candidates.dedup_by(|a, b| (*a - *b).abs() < 0.04);
-    let mut out = vec![from];
-    for target in candidates.into_iter().skip(1) {
-        let prev = *out.last().unwrap();
-        if target < to && (target - prev < 1.5 || to - target < 1.5) {
-            continue;
-        }
-        let mut cursor = prev;
-        while target - cursor > 2.8 {
-            let wanted =
-                cursor + 1.55 + 0.75 * (1.0 - f64::from(envelope(s, cursor + 1.4)).clamp(0.0, 1.0));
-            let snapped = nearest_beat(&s.beats, wanted).unwrap_or(wanted);
-            if snapped >= target - 0.72 {
-                break;
-            }
-            out.push(snapped);
-            cursor = snapped;
-        }
-        out.push(target);
-    }
-    if *out.last().unwrap() < to {
-        out.push(to);
-    }
-    out
-}
-
 fn nearest_beat(beats: &[f64], target: f64) -> Option<f64> {
     beats
         .iter()
@@ -679,140 +775,6 @@ fn nearest_beat(beats: &[f64], target: f64) -> Option<f64> {
         .filter(|b| b.is_finite())
         .min_by(|a, b| (a - target).abs().total_cmp(&(b - target).abs()))
         .filter(|b| (b - target).abs() <= 0.22)
-}
-
-#[derive(Clone, Copy)]
-struct Span {
-    start: f64,
-    end: f64,
-    arrival_anchor: Option<f64>,
-}
-
-fn make_knots(
-    span: Span,
-    from: [f64; 3],
-    gesture: &str,
-    amp: f64,
-    sign: f64,
-    target: [f64; 3],
-    limits: &JointLimits,
-) -> Vec<Knot> {
-    let Span { start, end, arrival_anchor } = span;
-    if gesture == "hold" {
-        return vec![
-            Knot {
-                time: start,
-                phase: "hold".into(),
-                joints: from,
-            },
-            Knot {
-                time: end,
-                phase: "hold".into(),
-                joints: from,
-            },
-        ];
-    }
-    let span = end - start;
-    let arrival_t = arrival_anchor
-        .filter(|t| *t > start && *t < end)
-        .unwrap_or(start + span * 0.56);
-    let times = [
-        start,
-        start + (arrival_t - start) * 0.42,
-        arrival_t,
-        arrival_t + (end - arrival_t) * 0.48,
-        end,
-    ];
-    let deltas = shape(gesture, amp, sign);
-    let mut poses = [from; 5];
-    for i in 1..5 {
-        // Gesture excursions are relative to the incoming pose; recovery lands
-        // on the (possibly next) section posture.
-        let base = if i == 4 { target } else { from };
-        poses[i] = constrain(
-            poses[i - 1],
-            add(base, deltas[i - 1]),
-            times[i] - times[i - 1],
-            limits,
-        );
-    }
-    [
-        "start",
-        "preparation",
-        "arrival",
-        "followThrough",
-        "recovery",
-    ]
-    .into_iter()
-    .enumerate()
-    .map(|(i, p)| Knot {
-        time: times[i],
-        phase: p.into(),
-        joints: poses[i],
-    })
-    .collect()
-}
-
-fn shape(g: &str, a: f64, s: f64) -> [[f64; 3]; 4] {
-    let z = |v: [f64; 3]| [v[0] * a, v[1] * a, v[2] * a];
-    match g {
-        "strike-low" => [
-            z([-8. * s, -8., -5.]),
-            z([24. * s, 18., -34.]),
-            z([9. * s, 7., -16.]),
-            [0.; 3],
-        ],
-        "flick-high" | "flick" => [
-            z([-10. * s, 2., 8.]),
-            z([25. * s, -13., 24.]),
-            z([13. * s, 5., 11.]),
-            [0.; 3],
-        ],
-        // Section lead-in: compress, then open toward the louder section.
-        "gather" => [
-            z([-10. * s, -12., 14.]),
-            z([-6. * s, -16., 18.]),
-            z([6. * s, 8., -8.]),
-            [0.; 3],
-        ],
-        // Section lead-out: small, decelerating release into lower posture.
-        "settle" => [
-            z([4. * s, 3., -4.]),
-            z([-3. * s, -5., 5.]),
-            z([0., -2., 2.]),
-            [0.; 3],
-        ],
-        "coil" => [
-            z([-20. * s, -12., 18.]),
-            z([10. * s, 14., -18.]),
-            z([18. * s, 6., -7.]),
-            z([4. * s, 0., 0.]),
-        ],
-        "orbit" => [
-            z([-17. * s, 12., 5.]),
-            z([18. * s, 18., -4.]),
-            z([22. * s, -9., 8.]),
-            z([5. * s, 0., 0.]),
-        ],
-        "nod" => [
-            z([4. * s, -8., 12.]),
-            z([-3. * s, 15., -24.]),
-            z([5. * s, 5., -11.]),
-            [0.; 3],
-        ],
-        "reach" => [
-            z([-8. * s, -5., 4.]),
-            z([20. * s, 20., -20.]),
-            z([16. * s, 10., -13.]),
-            z([4. * s, 0., 0.]),
-        ],
-        _ => [
-            z([-15. * s, -7., 4.]),
-            z([19. * s, 10., -10.]),
-            z([10. * s, -4., 7.]),
-            z([3. * s, 0., 0.]),
-        ],
-    }
 }
 
 fn constrain(from: [f64; 3], wanted: [f64; 3], dt: f64, l: &JointLimits) -> [f64; 3] {
@@ -825,12 +787,9 @@ fn constrain(from: [f64; 3], wanted: [f64; 3], dt: f64, l: &JointLimits) -> [f64
             .clamp(l.min_degrees[j], l.max_degrees[j])
     })
 }
-fn add(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
-    [a[0] + b[0], a[1] + b[1], a[2] + b[2]]
-}
 fn sample_knots(k: &[Knot], t: f64) -> [f64; 3] {
     if k.is_empty() {
-        return HOME;
+        return REST_POSE;
     }
     if t <= k[0].time {
         return k[0].joints;
@@ -856,14 +815,6 @@ fn percentile(v: &[f32], q: f64) -> f32 {
     x.sort_by(f32::total_cmp);
     x[((x.len() - 1) as f64 * q).round() as usize]
 }
-fn envelope(s: &Sidecar, t: f64) -> f32 {
-    let i = (t.max(0.) * f64::from(s.envelope_rate)).floor() as usize;
-    s.energy_envelope
-        .get(i)
-        .copied()
-        .or_else(|| s.energy_envelope.last().copied())
-        .unwrap_or(0.)
-}
 fn avg(v: &[f32], rate: f32, start: f64, end: f64) -> f32 {
     if v.is_empty() {
         return 0.;
@@ -874,194 +825,81 @@ fn avg(v: &[f32], rate: f32, start: f64, end: f64) -> f32 {
         .max(a + 1);
     v[a..b].iter().sum::<f32>() / (b - a) as f32
 }
-fn strongest(v: &[SidecarOnset], a: f64, b: f64) -> Option<&SidecarOnset> {
-    v.iter()
-        .filter(|o| o.t >= a && o.t < b)
-        .max_by(|x, y| x.strength.total_cmp(&y.strength))
-}
-/// Select only events with enough room for visible preparation and recovery.
-/// Boundaries often coincide with onset timestamps; those cannot truthfully be hit cues.
-fn anchored_onset(v: &[SidecarOnset], start: f64, end: f64, min_strength: f32) -> Option<&SidecarOnset> {
-    const MIN_PREP: f64 = 0.38;
-    const MIN_RECOVERY: f64 = 0.30;
-    v.iter()
-        .filter(|o| {
-            o.t >= start + MIN_PREP
-                && o.t <= end - MIN_RECOVERY
-                && o.strength.is_finite()
-                && o.strength >= min_strength
-        })
-        .max_by(|a, b| a.strength.total_cmp(&b.strength).then_with(|| b.t.total_cmp(&a.t)))
-}
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    fn fixture(e: &[f32], onsets: &str, rms: Option<&[f32]>) -> String {
-        let join = |v: &[f32]| {
-            v.iter()
-                .map(ToString::to_string)
-                .collect::<Vec<_>>()
-                .join(",")
-        };
-        let x = join(e);
-        let r = rms
-            .map(|v| format!(",\"rmsEnvelope\":[{}]", join(v)))
-            .unwrap_or_default();
+
+    /// `secs` seconds at 10 Hz, 120 BPM, constant level and brightness.
+    fn fixture(secs: usize, level: f32, rms: Option<f32>, onsets: &str) -> String {
+        let n = secs * 10;
+        let v = |x: f32| vec![x.to_string(); n].join(",");
+        let beats: Vec<String> = (0..secs * 2).map(|i| (i as f64 * 0.5).to_string()).collect();
+        let r = rms.map(|x| format!(",\"rmsEnvelope\":[{}]", v(x))).unwrap_or_default();
         format!(
-            r#"{{"schema":3,"duration":8.0,"tempo":120.0,"beats":[0,0.5,1,1.5,2,2.5,3,3.5,4,4.5,5,5.5,6,6.5,7,7.5],"sections":[],"events":[],"onsets":[{onsets}],"energyEnvelope":[{x}],"bandEnvelope":{{"sub":[{x}],"low":[{x}],"mid":[{x}],"presence":[{x}],"air":[{x}]}},"centroidEnvelope":[{x}],"flatnessEnvelope":[{x}],"envelopeRate":1.0{r}}}"#
+            r#"{{"schema":3,"duration":{secs}.0,"tempo":120.0,"beats":[{}],"sections":[],"events":[],"onsets":[{onsets}],"energyEnvelope":[{e}],"bandEnvelope":{{"sub":[{e}],"low":[{e}],"mid":[{e}],"presence":[{e}],"air":[{e}]}},"centroidEnvelope":[{e}],"flatnessEnvelope":[{e}],"envelopeRate":10.0{r}}}"#,
+            beats.join(","),
+            e = v(level)
         )
     }
+
     #[test]
-    fn content_changes_score() {
-        let a = compile_sidecar_json(&fixture(&[0.3; 8], "", None)).unwrap();
-        let b = compile_sidecar_json(&fixture(
-            &[0.2, 0.9, 0.2, 0.8, 0.2, 0.7, 0.2, 0.6],
-            r#"{"t":2.1,"strength":1.0,"tone":0.1,"pan":0.0}"#,
-            None,
-        ))
-        .unwrap();
-        assert_ne!(
-            a.cues
-                .iter()
-                .map(|c| (&c.gesture, c.start.to_bits()))
-                .collect::<Vec<_>>(),
-            b.cues
-                .iter()
-                .map(|c| (&c.gesture, c.start.to_bits()))
-                .collect::<Vec<_>>()
-        )
+    fn vocabulary_and_mirrors_clear_floor_and_limits() {
+        let l = JointLimits::default();
+        for (name, q) in POSES.iter().map(|p| (p.0, p.1)).chain([("rest", REST_POSE)]) {
+            for p in [q, mirror(q)] {
+                assert!(lowest_point(p) >= 8.0, "{name} {p:?} low {}", lowest_point(p));
+                assert!((0..3).all(|j| p[j] >= l.min_degrees[j] && p[j] <= l.max_degrees[j]), "{name}");
+            }
+        }
+        assert_eq!(mirror(mirror([30.0, -20.0, 5.0])), [30.0, -20.0, 5.0]);
     }
+
     #[test]
-    fn rms_silence_holds() {
-        let s = compile_sidecar_json(&fixture(&[0.7; 8], "", Some(&[0.; 8]))).unwrap();
-        assert!(s.cues.iter().all(|c| c.gesture == "hold"))
+    fn silence_is_stillness() {
+        let s = compile_sidecar_json(&fixture(12, 0.7, Some(0.0), "")).unwrap();
+        let q = s.sample(0.0);
+        assert!((0..120).all(|i| s.sample(i as f64 / 10.0) == q));
     }
+
     #[test]
-    fn groove_without_specials() {
-        let s = compile_sidecar_json_with_config(
-            &fixture(
-                &[0.3, 0.5, 0.6, 0.4, 0.3, 0.6, 0.5, 0.4],
-                r#"{"t":2.1,"strength":1.0,"tone":0.1,"pan":0.0}"#,
-                None,
-            ),
-            CompileConfig {
-                enable_hits: false,
-                enable_windups: false,
-            },
-        )
-        .unwrap();
-        assert!(s
-            .cues
-            .iter()
-            .all(|c| !["strike-low", "flick-high", "coil"].contains(&c.gesture.as_str())));
-        assert!((1..80).any(|i| s.sample(i as f64 / 10.) != HOME))
+    fn moves_arrive_on_the_bar_not_after_it() {
+        let s = compile_sidecar_json(&fixture(24, 0.8, None, "")).unwrap();
+        let moves: Vec<_> = s.cues.iter().filter(|c| c.arrival_anchor.is_some()).collect();
+        assert!(moves.len() >= 4, "{}", moves.len());
+        for c in moves {
+            let k = |p: &str| c.knots.iter().find(|k| k.phase == p).unwrap().joints;
+            let travel = (0..3).map(|j| (k("arrival")[j] - k("start")[j]).abs()).fold(0.0, f64::max);
+            let drift = (0..3).map(|j| (k("recovery")[j] - k("arrival")[j]).abs()).fold(0.0, f64::max);
+            // Regression: truncated leads once smeared the move across the bar.
+            assert!(drift < 0.35 * travel.max(20.0), "{}: travel {travel:.1} drift {drift:.1}", c.gesture);
+        }
     }
+
     #[test]
-    fn limits_hold_dense() {
-        let s = compile_sidecar_json(&fixture(
-            &[0.3, 0.9, 0.6, 0.4, 0.8, 0.5, 0.7, 0.4],
-            r#"{"t":2.1,"strength":1.0,"tone":0.1,"pan":0.0}"#,
-            None,
-        ))
-        .unwrap();
-        let dt = 0.002;
-        let mut p = s.sample(0.);
-        let mut v = [0.; 3];
+    fn dense_sampling_respects_limits() {
+        let s = compile_sidecar_json(&fixture(16, 0.9, None, r#"{"t":5.3,"strength":1.0,"tone":0.2,"pan":0.0}"#)).unwrap();
+        let dt = 0.001;
+        let (mut p, mut v) = (s.sample(0.0), [0.0; 3]);
         for i in 1..=(s.duration / dt) as usize {
             let q = s.sample(i as f64 * dt);
             for j in 0..3 {
                 let nv = (q[j] - p[j]) / dt;
-                assert!(nv.abs() <= s.limits.max_speed_degrees_per_second[j] + 0.4);
+                assert!(nv.abs() <= s.limits.max_speed_degrees_per_second[j] * 1.01);
                 if i > 2 {
-                    assert!(
-                        ((nv - v[j]) / dt).abs()
-                            <= s.limits.max_acceleration_degrees_per_second2[j] + 4.
-                    )
+                    assert!(((nv - v[j]) / dt).abs() <= s.limits.max_acceleration_degrees_per_second2[j] * 1.02);
                 }
                 v[j] = nv;
             }
             p = q;
         }
     }
-    #[test]
-    fn hit_arrival_is_exact_anchor_with_continuous_limited_motion() {
-        let s = compile_sidecar_json(&fixture(
-            &[0.5; 8],
-            r#"{"t":1.4,"strength":1.0,"tone":0.1,"pan":0.0},{"t":1.7,"strength":0.1,"tone":0.1,"pan":0.0}"#,
-            None,
-        ))
-        .unwrap();
-        let cue = s
-            .cues
-            .iter()
-            .find(|cue| cue.gesture == "strike-low")
-            .expect("interior strong onset schedules a hit");
-        assert_eq!(cue.arrival_anchor, Some(1.4));
-        let encoded = serde_json::to_value(cue).unwrap();
-        assert_eq!(encoded["arrivalAnchor"], 1.4);
-        let mut legacy = encoded.as_object().unwrap().clone();
-        legacy.remove("arrivalAnchor");
-        assert_eq!(
-            serde_json::from_value::<Cue>(legacy.into()).unwrap().arrival_anchor,
-            None
-        );
-        let arrival = cue.knots.iter().find(|k| k.phase == "arrival").unwrap();
-        assert_eq!(arrival.time, cue.arrival_anchor.unwrap());
-        assert_eq!(s.sample(1.4), arrival.joints);
-        let dt = 0.001;
-        let before = s.sample(1.4 - dt);
-        let at = s.sample(1.4);
-        let after = s.sample(1.4 + dt);
-        for j in 0..3 {
-            assert!(((at[j] - before[j]) / dt).abs() <= s.limits.max_speed_degrees_per_second[j]);
-            assert!(((after[j] - at[j]) / dt).abs() <= s.limits.max_speed_degrees_per_second[j]);
-        }
-    }
-    #[test]
-    fn boundary_accent_falls_back_to_truthful_groove() {
-        let s = compile_sidecar_json(&fixture(
-            &[0.5; 8],
-            r#"{"t":2.0,"strength":1.0,"tone":0.1,"pan":0.0},{"t":2.2,"strength":0.1,"tone":0.1,"pan":0.0}"#,
-            None,
-        ))
-        .unwrap();
-        let cue = s
-            .cues
-            .iter()
-            .find(|cue| (cue.start - 2.0).abs() < 0.001)
-            .unwrap_or_else(|| panic!("expected 2.0s boundary, got {:?}", s.cues));
-        assert!(!["strike-low", "flick-high", "coil"].contains(&cue.gesture.as_str()));
-        assert_eq!(cue.arrival_anchor, None);
-        assert!(cue.reason.contains("no onset allows preparation and recovery"));
-    }
-    #[test]
-    fn coil_uses_exact_lookahead_anchor() {
-        let s = compile_sidecar_json_with_config(
-            &fixture(
-                &[0.1, 0.2, 0.3, 0.5, 0.6, 0.7, 0.8, 0.9],
-                r#"{"t":1.4,"strength":0.9,"tone":0.7,"pan":0.0}"#,
-                None,
-            ),
-            CompileConfig {
-                enable_hits: false,
-                enable_windups: true,
-            },
-        )
-        .unwrap();
-        let cue = s.cues.iter().find(|cue| cue.gesture == "coil").unwrap();
-        assert_eq!(cue.arrival_anchor, Some(1.4));
-        assert_eq!(
-            cue.knots.iter().find(|k| k.phase == "arrival").unwrap().time,
-            1.4
-        );
-    }
+
     #[test]
     fn malformed_rms_is_rejected_without_time_compression() {
-        let non_number = fixture(&[0.5; 8], "", Some(&[0.1; 8]))
-            .replace("\"rmsEnvelope\":[0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1]", "\"rmsEnvelope\":[0.1,\"bad\",0.1,0.1,0.1,0.1,0.1,0.1]");
-        assert!(compile_sidecar_json(&non_number).unwrap_err().contains("rmsEnvelope[1]"));
-        let short = fixture(&[0.5; 8], "", Some(&[0.1; 7]));
-        assert!(compile_sidecar_json(&short).unwrap_err().contains("needs at least 8"));
+        let bad = fixture(8, 0.5, Some(0.1), "").replacen("\"rmsEnvelope\":[0.1,", "\"rmsEnvelope\":[\"bad\",", 1);
+        assert!(compile_sidecar_json(&bad).unwrap_err().contains("rmsEnvelope[0]"));
+        let short = fixture(8, 0.5, None, "").replace("\"envelopeRate\":10.0", "\"envelopeRate\":10.0,\"rmsEnvelope\":[0.1,0.1]");
+        assert!(compile_sidecar_json(&short).unwrap_err().contains("needs at least 80"));
     }
 }

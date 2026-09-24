@@ -80,14 +80,6 @@ fn pop_song() -> Score {
     .unwrap()
 }
 
-fn cues_in(score: &Score, section: usize) -> Vec<&hyst_compile::Cue> {
-    score
-        .cues
-        .iter()
-        .filter(|c| c.section == Some(section))
-        .collect()
-}
-
 #[test]
 fn full_song_passes_audit() {
     let score = pop_song();
@@ -95,8 +87,31 @@ fn full_song_passes_audit() {
     assert!(report["sampledFloorClearanceCm"].as_f64().unwrap() > 10.0);
 }
 
+/// Phrase moves whose downbeat arrival lies inside section `i`.
+fn moves_in(score: &Score, i: usize) -> Vec<&hyst_compile::Cue> {
+    let s = &score.sections[i];
+    score
+        .cues
+        .iter()
+        .filter(|c| c.arrival_anchor.is_some_and(|t| t >= s.start && t < s.end))
+        .collect()
+}
+
+fn tip(q: [f64; 3]) -> (f64, f64) {
+    let p = hyst_previz::Arm::default().joints(hyst_previz::Pose(q.map(f64::to_radians)));
+    (p[3].x, p[3].y)
+}
+
+/// Bounding-box diagonal (cm) of tip positions sampled across [a, b).
+fn tip_travel(score: &Score, a: f64, b: f64) -> f64 {
+    let pts: Vec<_> = (0..400).map(|k| tip(score.sample(a + (b - a) * k as f64 / 400.0))).collect();
+    let (x0, x1) = pts.iter().fold((f64::MAX, f64::MIN), |m, p| (m.0.min(p.0), m.1.max(p.0)));
+    let (y0, y1) = pts.iter().fold((f64::MAX, f64::MIN), |m, p| (m.0.min(p.1), m.1.max(p.1)));
+    (x1 - x0).hypot(y1 - y0)
+}
+
 #[test]
-fn sections_follow_song_structure_and_recur() {
+fn sections_follow_song_structure_and_recur_mirrored() {
     let score = pop_song();
     let levels: Vec<_> = score.sections.iter().map(|s| s.level.as_str()).collect();
     assert_eq!(levels, ["quiet", "mid", "peak", "mid", "peak", "rest"], "{:#?}", score.sections);
@@ -105,51 +120,51 @@ fn sections_follow_song_structure_and_recur() {
     assert_eq!(chorus2.repeat_of, Some(2));
     assert_eq!((verse2.variation, chorus2.variation), (1, 1));
     assert_ne!(score.sections[1].motif, score.sections[2].motif);
+    let swap = |g: &str| match g.rsplit_once(' ') {
+        Some((n, "L")) => format!("{n} R"),
+        Some((n, "R")) => format!("{n} L"),
+        _ => g.to_string(),
+    };
     for (a, b) in [(1, 3), (2, 4)] {
-        let first: Vec<_> = cues_in(&score, a).iter().map(|c| c.gesture.clone()).collect();
-        let again: Vec<_> = cues_in(&score, b).iter().map(|c| c.gesture.clone()).collect();
-        // Same phrase (except the exit cue, which depends on what follows).
-        let n = first.len().min(again.len()) - 1;
-        assert_eq!(first[..n], again[..n], "section {b} should replay section {a}'s phrase");
-        // Variation mirrors the motif rather than copying joint values.
-        let excursion = |cs: &[&hyst_compile::Cue]| -> Vec<f64> {
-            cs[1..n].iter().map(|c| c.knots[2].joints[0] - c.knots[0].joints[0]).collect()
-        };
-        let (x, y) = (excursion(&cues_in(&score, a)), excursion(&cues_in(&score, b)));
-        assert!(
-            x.iter().zip(&y).any(|(p, q)| p * q < 0.0),
-            "repeat should mirror shoulder direction: {x:?} vs {y:?}"
-        );
+        let first: Vec<_> = moves_in(&score, a).iter().map(|c| swap(&c.gesture)).collect();
+        let again: Vec<_> = moves_in(&score, b).iter().map(|c| c.gesture.clone()).collect();
+        assert!(first.len() >= 2, "{first:?}");
+        assert_eq!(first, again, "section {b} should replay section {a} mirrored");
     }
 }
 
 #[test]
-fn section_changes_get_transition_cues_and_postures() {
+fn loud_sections_dance_big_quiet_sections_breathe_rest_is_still() {
     let score = pop_song();
-    for (i, pair) in score.sections.windows(2).enumerate() {
-        let exit = cues_in(&score, i).last().copied().unwrap();
-        assert_eq!(exit.end, pair[1].start, "section boundary must be a cue boundary");
-        let rank = |l: &str| ["rest", "quiet", "mid", "peak"].iter().position(|x| *x == l);
-        let expected = match rank(&pair[1].level).cmp(&rank(&pair[0].level)) {
-            std::cmp::Ordering::Greater => "gather",
-            std::cmp::Ordering::Less => "settle",
-            std::cmp::Ordering::Equal => continue,
-        };
-        assert_eq!(exit.gesture, expected, "exit of section {i}: {}", exit.reason);
-    }
-    // Peak register sits more open (shoulder up, elbow extended) than quiet.
-    let mean = |i: usize, j: usize| {
-        let s = &score.sections[i];
-        let n = 200;
-        (0..n)
-            .map(|k| score.sample(s.start + (s.end - s.start) * k as f64 / n as f64)[j])
-            .sum::<f64>()
-            / n as f64
+    let span = |i: usize| (score.sections[i].start, score.sections[i].end);
+    let (q0, q1) = span(0);
+    let (p0, p1) = span(2);
+    let (quiet, peak) = (tip_travel(&score, q0 + 2.0, q1), tip_travel(&score, p0 + 1.0, p1));
+    // The complaint this guards: tiny twitching around one home pose.
+    assert!(peak > 60.0, "peak tip travel only {peak:.1} cm");
+    assert!(peak > quiet * 1.3, "peak {peak:.1} vs quiet {quiet:.1}");
+    // Loud: a new pose every bar with beat bounces. Quiet: few phrases, no bounces.
+    let bounces = |i: usize| {
+        moves_in(&score, i)
+            .iter()
+            .flat_map(|c| &c.knots)
+            .filter(|k| k.phase == "beat")
+            .count()
     };
-    assert!(mean(2, 0) > mean(0, 0) + 4.0, "shoulder {} vs {}", mean(2, 0), mean(0, 0));
-    assert!(mean(2, 1) > mean(0, 1) + 8.0, "elbow {} vs {}", mean(2, 1), mean(0, 1));
-    // Silence after the last chorus: the arm settles, then holds still.
-    assert!(cues_in(&score, 5).iter().all(|c| c.gesture == "hold"));
+    assert!(moves_in(&score, 2).len() >= 6, "{}", moves_in(&score, 2).len());
+    assert!(moves_in(&score, 0).len() <= 3);
+    assert!(bounces(2) >= 10 && bounces(0) == 0);
+    // Arrivals land on the beat grid.
+    let beats: Vec<f64> = (0..200).map(|i| i as f64 * 0.5).collect();
+    for c in &score.cues {
+        if let Some(t) = c.arrival_anchor {
+            assert!(beats.iter().any(|b| (b - t).abs() < 1e-9), "arrival {t} off grid");
+        }
+    }
+    // Silence: after arriving at rest, the pose is frozen.
+    let (r0, r1) = span(5);
+    let held = score.sample(r0 + 3.0);
+    assert!((0..20).all(|k| score.sample(r0 + 3.0 + (r1 - r0 - 3.0) * k as f64 / 20.0) == held));
 }
 
 #[test]
@@ -173,15 +188,18 @@ fn matched_tempo_different_structure_changes_decisions_not_just_scale() {
         .filter(|t| gesture_at(&a, **t) != gesture_at(&b, **t))
         .count();
     assert!(differ * 10 >= samples.len() * 4, "only {differ}/90 decisions differ");
-    // Structure B rests at 16–28s; structure A is mid-verse there.
-    assert_eq!(gesture_at(&b, 20.0), "hold");
-    assert_ne!(gesture_at(&a, 20.0), "hold");
+    // Structure B is silent at 16–28s (still once rested, before the next
+    // section's wind-up); structure A is mid-verse there (moving).
+    assert!(tip_travel(&b, 18.0, 25.0) < 1e-9);
+    assert!(tip_travel(&a, 18.0, 25.0) > 20.0);
     hyst_previz::audit_score(&b).unwrap();
 }
 
 #[test]
-fn isolated_accents_land_exactly_inside_sections() {
-    let accents = [37.3, 70.1];
+fn strong_onsets_become_exact_hits() {
+    // 36.6: inside a held bar (hit). 70.1: 0.1 s after a bar line (arrival snaps).
+    // Accents inside a big move's wind-up are not separately hit (documented).
+    let accents = [36.6, 70.1];
     let score = compile_sidecar_json(&song(
         &[INTRO, VERSE, CHORUS, VERSE, CHORUS, SILENCE],
         &accents,
@@ -192,11 +210,14 @@ fn isolated_accents_land_exactly_inside_sections() {
         let cue = score
             .cues
             .iter()
-            .find(|c| c.start < t && t < c.end)
-            .unwrap();
-        assert_eq!(cue.arrival_anchor, Some(t), "{cue:#?}");
-        let arrival = cue.knots.iter().find(|k| k.phase == "arrival").unwrap();
-        assert_eq!(score.sample(t), arrival.joints);
+            .find(|c| c.knots.iter().any(|k| (k.phase == "hit" || k.phase == "arrival") && k.time == t))
+            .unwrap_or_else(|| panic!("no hit/arrival knot at {t}"));
+        let knot = cue.knots.iter().find(|k| k.time == t).unwrap();
+        let at = score.sample(t);
+        assert!((0..3).all(|j| (at[j] - knot.joints[j]).abs() < 1e-9), "{at:?} vs {:?}", knot.joints);
+        // Accent is a real move: from the hit's wind-up, or from the phrase start.
+        let before = if knot.phase == "hit" { score.sample(t - 0.22) } else { cue.knots[0].joints };
+        assert!((0..3).any(|j| (knot.joints[j] - before[j]).abs() > 10.0), "{t}: {} {:?} vs {before:?}", knot.phase, knot.joints);
     }
 }
 

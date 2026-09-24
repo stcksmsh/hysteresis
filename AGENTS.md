@@ -868,3 +868,12 @@ recurrence, transitions, structure-driven decisions, anchors. Viewer remote
 mode clock handoff fixed. Real track re-extracted from user MP4: 19 sections,
 218 cues, audit pass (27.84cm clearance). Browser smoke via Playwright/WAV.
 Heuristic phrasing; perceptual quality unreviewed. Details: docs/DANCE_HANDOFF.md.
+
+### Song slice — expressive phrase planner (2026-09-24)
+
+User rejected small-cue output. `hyst-compile` core now plans bar-based phrases
+between full-range key poses (+mirrors) per section level, arrivals exactly on
+bar lines/strong onsets, anticipation/overshoot, beat bounces, onset hits,
+frozen rests; floor guard >=8 cm; limits = assumed servo class. Fixed lead-
+truncation smear bug. Tests rewritten (compile 5, acceptance 6). Real track
+audit pass. Perceptual quality awaiting user review of rendered MP4.
