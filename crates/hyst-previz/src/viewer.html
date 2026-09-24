@@ -162,12 +162,14 @@
   const detectedBeats=cleanBeats(sidecar.beats);
   let bpm=Number.isFinite(Number(sidecar.tempo)) && Number(sidecar.tempo)>0 ? Number(sidecar.tempo) : 110;
   const score=validSong(song);
-  const music=Boolean(trackUrl);
-  let beat=0, selected=music && score ? 'song' : 2, last=performance.now(), sound=false, clickAudio=null, nextClick=0;
+  const music=Boolean(trackUrl), remoteMode=new URLSearchParams(location.search).get('remote')==='1';
+  let beat=0, selected=music && score ? 'song' : 2, last=performance.now(), sound=false, clickAudio=null, nextClick=0, remoteEpoch=performance.now();
+  function clockSeconds() { return remoteMode && media.paused ? (performance.now()-remoteEpoch)/1000 : (media.currentTime||0); }
   let playing=music ? false : !matchMedia('(prefers-reduced-motion: reduce)').matches;
   let activeOscillators=new Set();
   if (music) {
     document.body.classList.add('music'); media.src=trackUrl;
+    if (remoteMode) { media.muted=true; media.autoplay=true; media.play().catch(()=>{}); }
     $('clock-label').textContent=score ? 'Song-conditioned score · audio time master · detector grid remains provisional' : 'Reference study · detected grid provisional · audio time master';
     $('timeline-label').textContent='Track position';
     $('seek').setAttribute('aria-label','Seek track in seconds');
@@ -208,7 +210,7 @@
     return gridBeat(time,$('grid').value,detectedBeats,bpm,Number($('beat-zero').value)||0,Number($('offset').value)||0);
   }
   function advance(now) {
-    beat=music ? musicBeat(media.currentTime||0) : beat+(playing?Math.max(0,now-last)/1000*bpm/60:0);
+    beat=music ? musicBeat(clockSeconds()) : beat+(playing?Math.max(0,now-last)/1000*bpm/60:0);
     last=now;
   }
   function frameAt(b) {
@@ -217,7 +219,7 @@
   }
   function activeScore() { return music && selected === 'song' && score; }
   function effectiveScoreSeconds(rawSeconds) { return shiftedScoreSeconds(rawSeconds, Number($('offset').value) || 0, score.duration); }
-  function scoreSeconds() { return effectiveScoreSeconds(media.currentTime || 0); }
+  function scoreSeconds() { return effectiveScoreSeconds(clockSeconds()); }
   function currentFrame() { return activeScore() ? sampleSong(score, scoreSeconds()) : frameAt(beat); }
   function currentCue() { return activeScore() ? cueAt(score, scoreSeconds()) : null; }
   function line(points,color,width) {
@@ -240,7 +242,7 @@
     vctx.fillStyle='#d8f5e9';vctx.beginPath();vctx.arc(cx,cy,3+7*accent,0,Math.PI*2);vctx.fill();
   }
   function draw() {
-    if(music)beat=musicBeat(media.currentTime||0);
+    if(music)beat=musicBeat(clockSeconds());
     const w=canvas.clientWidth,h=canvas.clientHeight,dpr=Math.min(devicePixelRatio||1,2);
     if(canvas.width!==Math.round(w*dpr)||canvas.height!==Math.round(h*dpr)){canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);}
     ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);
@@ -263,9 +265,9 @@
     for(let i=0;i<3;i++)$('q'+i).textContent=f[6+i].toFixed(0)+'°';
     if(music){
       const duration=Number.isFinite(media.duration)?media.duration:Math.max(Number(sidecar.duration)||0,1);
-      $('seek').max=String(duration);$('seek').value=String(media.currentTime||0);
-      $('seek').setAttribute('aria-valuetext',`${(media.currentTime||0).toFixed(2)} seconds, beat ${beat.toFixed(2)}`);
-      $('elapsed').textContent=`${(media.currentTime||0).toFixed(1)} / ${duration.toFixed(1)} s`;
+      $('seek').max=String(duration);$('seek').value=String(clockSeconds());
+      $('seek').setAttribute('aria-valuetext',`${clockSeconds().toFixed(2)} seconds, beat ${beat.toFixed(2)}`);
+      $('elapsed').textContent=`${clockSeconds().toFixed(1)} / ${duration.toFixed(1)} s`;
     }else{
       $('seek').value=String(p);$('seek').setAttribute('aria-valuetext',`${p.toFixed(2)} beats, ${f[9]}`);
       $('elapsed').textContent=`${(p*60/bpm).toFixed(1)} / ${(loopBeats*60/bpm).toFixed(1)} s`;
@@ -291,6 +293,12 @@
     }else{advance(performance.now());playing=!playing;stopClicks();}
     $('play').textContent=playing?'Pause':'Play';draw();
   };
+  if (remoteMode && music) {
+    document.addEventListener('pointerdown',async()=>{
+      media.muted=false;
+      try { await media.play(); $('sound-error').textContent=''; } catch { $('sound-error').textContent='Click Play to start audio.'; }
+    },{once:true});
+  }
   $('bpm').oninput=()=>{advance(performance.now());bpm=Number($('bpm').value);$('bpm-value').textContent=`${music?bpm.toFixed(2):bpm.toFixed(0)} BPM`;stopClicks();draw();};
   $('seek').oninput=()=>{
     if(music){if(Number.isFinite(media.duration))media.currentTime=Math.min(Number($('seek').value),media.duration);}
