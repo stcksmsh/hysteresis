@@ -118,12 +118,19 @@
   function transportBeat(music, currentTime, syntheticBeat, mode, beats, tempo, zero, offset) {
     return music ? gridBeat(currentTime, mode, beats, tempo, zero, offset) : syntheticBeat;
   }
+  // Remote preview free-runs a wall clock only until audio first plays; after
+  // that media time owns the transport, so pause freezes instead of jumping.
+  function remoteClock(freeRun, paused, mediaTime, nowMs, epochMs, duration) {
+    if (!(freeRun && paused)) return mediaTime || 0;
+    const t = Math.max(0, (nowMs - epochMs) / 1000);
+    return Number.isFinite(duration) && duration > 0 ? Math.min(t, duration) : t;
+  }
   // ARM_TIMING_HELPERS_END
-  window.__ARM_TIMING__ = {cleanBeats, beatFromGrid, manualBeat, gridBeat, transportBeat};
+  window.__ARM_TIMING__ = {cleanBeats, beatFromGrid, manualBeat, gridBeat, transportBeat, remoteClock};
   function validSong(value) {
     if (!value || typeof value !== 'object' || !Number.isFinite(value.duration) || value.duration <= 0 || !Array.isArray(value.frames) || !value.frames.length) return null;
     const frames = value.frames.filter(frame => Array.isArray(frame) && frame.length >= 10 && frame.slice(0, 9).every(Number.isFinite) && typeof frame[9] === 'string');
-    return frames.length === value.frames.length ? {...value, fps: Number.isFinite(value.fps) && value.fps > 0 ? value.fps : 60, cues: Array.isArray(value.cues) ? value.cues : []} : null;
+    return frames.length === value.frames.length ? {...value, fps: Number.isFinite(value.fps) && value.fps > 0 ? value.fps : 60, cues: Array.isArray(value.cues) ? value.cues : [], sections: Array.isArray(value.sections) ? value.sections : []} : null;
   }
   function sampleSong(score, seconds) {
     if (!score) return null;
@@ -163,13 +170,26 @@
   let bpm=Number.isFinite(Number(sidecar.tempo)) && Number(sidecar.tempo)>0 ? Number(sidecar.tempo) : 110;
   const score=validSong(song);
   const music=Boolean(trackUrl), remoteMode=new URLSearchParams(location.search).get('remote')==='1';
-  let beat=0, selected=music && score ? 'song' : 2, last=performance.now(), sound=false, clickAudio=null, nextClick=0, remoteEpoch=performance.now();
-  function clockSeconds() { return remoteMode && media.paused ? (performance.now()-remoteEpoch)/1000 : (media.currentTime||0); }
+  let beat=0, selected=music && score ? 'song' : 2, last=performance.now(), sound=false, clickAudio=null, nextClick=0, remoteEpoch=performance.now(), freeRun=remoteMode;
+  function trackDuration() { return Number.isFinite(media.duration) ? media.duration : (score ? score.duration : Number(sidecar.duration)); }
+  function clockSeconds() { return remoteClock(freeRun, media.paused, media.currentTime, performance.now(), remoteEpoch, trackDuration()); }
+  function setClock(seconds) {
+    const t=Math.max(0,Math.min(seconds,trackDuration()||seconds));
+    if(Number.isFinite(media.duration))media.currentTime=t;
+    if(freeRun)remoteEpoch=performance.now()-t*1000;
+  }
+  // First gesture: carry free-run position into media, unmute, then play.
+  async function unlockAudio() {
+    if(freeRun&&media.paused)setClock(clockSeconds());
+    media.muted=false;
+    try { await media.play(); freeRun=false; $('sound-error').textContent=''; }
+    catch { $('sound-error').textContent='Playback was blocked. Press Play again or check track URL.'; }
+  }
   let playing=music ? false : !matchMedia('(prefers-reduced-motion: reduce)').matches;
   let activeOscillators=new Set();
   if (music) {
     document.body.classList.add('music'); media.src=trackUrl;
-    if (remoteMode) { media.muted=true; media.autoplay=true; media.play().catch(()=>{}); }
+    if (remoteMode) { media.muted=true; media.autoplay=true; media.play().catch(()=>{}); $('sound-error').textContent='Muted preview running · tap anywhere for sound.'; }
     $('clock-label').textContent=score ? 'Song-conditioned score · audio time master · detector grid remains provisional' : 'Reference study · detected grid provisional · audio time master';
     $('timeline-label').textContent='Track position';
     $('seek').setAttribute('aria-label','Seek track in seconds');
@@ -201,7 +221,7 @@
       const start=i*score.duration/loopBeats,end=(i+1)*score.duration/loopBeats;
       const cues=score.cues.filter(cue=>cue && cue.start<end && cue.end>=start);
       dot.classList.toggle('cue',cues.length>0);dot.textContent=cues[0]?.gesture?.slice(0,4) || String(i+1);
-      dot.title=cues.map(cue=>`${cue.gesture || 'gesture'}: ${cue.reason || 'planned'}`).join('\n') || `Score ${start.toFixed(0)}–${end.toFixed(0)} s`;
+      dot.title=cues.map(cue=>`${Number.isInteger(cue.section)?'§'+(cue.section+1)+' ':''}${cue.gesture || 'gesture'}: ${cue.reason || 'planned'}`).join('\n') || `Score ${start.toFixed(0)}–${end.toFixed(0)} s`;
     });
   }
   renderCueTimeline();
@@ -259,7 +279,9 @@
     circle(...points[3],6,'#efb674');
     const p=mod(beat),patternBar=Math.floor(p/4)+1,beatInBar=Math.floor(p%4)+1;
     $('phase').textContent=f[9].replace(/([a-z])([A-Z])/g,'$1 $2');$('position').textContent=activeScore()?`Score ${seconds.toFixed(1)} s · beat ${beat.toFixed(1)}`:`Pattern bar ${patternBar} · Beat ${beatInBar}`;
-    $('event').textContent=cue ? `Cue ${cue.gesture || 'gesture'} · ${cue.reason || 'planned phrase'} · energy ${Math.round((Number(cue.energy)||0)*100)}% · accent ${Math.round((Number(cue.accent)||0)*100)}%` : (activeScore() ? 'Cue gap · no active cue' : 'Reference study · no score cue');
+    const section=cue&&Number.isInteger(cue.section)?score.sections?.[cue.section]:null;
+    const sectionText=section?`Section ${cue.section+1} ${section.level} · motif ${section.motif}${section.variation>0?section.variation+1:''} · `:'';
+    $('event').textContent=cue ? `${sectionText}Cue ${cue.gesture || 'gesture'} · ${cue.reason || 'planned phrase'} · energy ${Math.round((Number(cue.energy)||0)*100)}% · accent ${Math.round((Number(cue.accent)||0)*100)}%` : (activeScore() ? 'Cue gap · no active cue' : 'Reference study · no score cue');
     drawVisual(f,cue,seconds);
     $('next-accent').disabled=!activeScore() || !score.cues.some(c=>Number.isFinite(c.arrivalAnchor)&&c.arrivalAnchor>seconds+.05);
     for(let i=0;i<3;i++)$('q'+i).textContent=f[6+i].toFixed(0)+'°';
@@ -288,20 +310,24 @@
   }
   $('play').onclick=async()=>{
     if(music){
-      if(media.paused){try{await media.play();$('sound-error').textContent='';}catch{$('sound-error').textContent='Playback was blocked. Press Play again or check track URL.';}}
+      // Muted remote autoplay: first press means "sound on", not pause.
+      if(media.paused||media.muted)await unlockAudio();
       else media.pause();
     }else{advance(performance.now());playing=!playing;stopClicks();}
     $('play').textContent=playing?'Pause':'Play';draw();
   };
   if (remoteMode && music) {
-    document.addEventListener('pointerdown',async()=>{
-      media.muted=false;
-      try { await media.play(); $('sound-error').textContent=''; } catch { $('sound-error').textContent='Click Play to start audio.'; }
-    },{once:true});
+    // Play button handles its own unlock; a second handler would start then pause.
+    const onGesture=event=>{
+      if(!freeRun&&!media.muted){document.removeEventListener('pointerdown',onGesture);return;}
+      if(event.target.closest&&event.target.closest('button,select,input'))return;
+      document.removeEventListener('pointerdown',onGesture);unlockAudio();
+    };
+    document.addEventListener('pointerdown',onGesture);
   }
   $('bpm').oninput=()=>{advance(performance.now());bpm=Number($('bpm').value);$('bpm-value').textContent=`${music?bpm.toFixed(2):bpm.toFixed(0)} BPM`;stopClicks();draw();};
   $('seek').oninput=()=>{
-    if(music){if(Number.isFinite(media.duration))media.currentTime=Math.min(Number($('seek').value),media.duration);}
+    if(music)setClock(Number($('seek').value));
     else beat=Number($('seek').value);
     last=performance.now();stopClicks();draw();
   };
@@ -311,10 +337,10 @@
   $('next-accent').onclick=()=>{
     if(!score)return;
     const now=scoreSeconds(),next=score.cues.find(c=>Number.isFinite(c.arrivalAnchor)&&c.arrivalAnchor>now+.05);
-    if(next){media.currentTime=Math.max(0,next.arrivalAnchor+(Number($('offset').value)||0));draw();}
+    if(next){setClock(Math.max(0,next.arrivalAnchor+(Number($('offset').value)||0)));draw();}
   };
   $('sound').onclick=async()=>{try{if(!clickAudio)clickAudio=new(window.AudioContext||window.webkitAudioContext)();await clickAudio.resume();sound=!sound;stopClicks();$('sound').textContent=sound?'Click track on':'Click track off';$('sound').setAttribute('aria-pressed',String(sound));$('sound-error').textContent='';}catch{$('sound-error').textContent='Click track unavailable. Motion preview still works.';}};
-  media.addEventListener('play',()=>{playing=true;$('play').textContent='Pause';});
+  media.addEventListener('play',()=>{playing=true;$('play').textContent='Pause';if(!media.muted)freeRun=false;});
   media.addEventListener('pause',()=>{playing=false;$('play').textContent='Play';draw();});
   media.addEventListener('ended',()=>{playing=false;$('play').textContent='Play';$('sound-error').textContent='Track ended.';draw();});
   media.addEventListener('error',()=>{$('sound-error').textContent='Track could not be loaded. Check track URL and browser media support.';playing=false;$('play').textContent='Play';});

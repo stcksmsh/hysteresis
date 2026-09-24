@@ -130,3 +130,25 @@ URL remains http://127.0.0.1:8766/song.html. Launch/audit commands in previz REA
 Interpretation still heuristic, shared visual simple canvas proof; native renderer,
 ensemble choreography, semantic repetition matching, physical actuator constraints
 remain outside this single-arm slice. No claim of perceptually finished dance.
+
+## Continuation — 2026-09-24 sections, motifs, remote clock
+
+Cloud session (no local asset dir). User uploaded MP4; audio re-extracted,
+analyzed (`scripts/analyze.ts`: 110.0 BPM, 612 beats, 956 onsets) + RMS enriched.
+Compiler gained section layer (multi-feature novelty), motif recurrence,
+gather/settle transitions, section posture register. Supplied track: 19 sections,
+9–37s; loud `D` blocks at 98–135, 218–265, 290–299s; verse-like `C` recurs 8×.
+Workstream A SSM repeats tried: similarity 0.23 only → not used as recurrence
+source (compiler accepts schema-4 repeats >=0.5 if later present).
+
+Remote viewer bugs fixed: pause jumped back to wall clock; first Play press
+started then paused audio; pre-gesture seek ignored. Playwright smoke with
+simulated blocked autoplay: free-run, seek 20s, Play joins at 21.1s unmuted,
+pause freezes, sections at 20/110/250/336s show B/D/D3/rest. Playwright
+Chromium lacks AAC → smoke used WAV; m4a unchecked in-container.
+
+Tests: compile 8, previz 4 + acceptance 6 (audit, recurrence+mirroring,
+transitions/posture, matched-tempo structure swap, exact anchors, short clip),
+JS timing incl. remote clock. Mutation check: disabling mirroring or gather
+fails tests. Workspace CPU tests green; clippy fails only on known julia.rs.
+Not done: native previz/output wiring of score (item 2); perceptual review.

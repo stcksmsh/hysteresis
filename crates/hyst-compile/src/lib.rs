@@ -44,12 +44,34 @@ pub struct Cue {
     /// Exact timestamp of a content event this hit/windup was planned to reach.
     #[serde(rename = "arrivalAnchor", default)]
     pub arrival_anchor: Option<f64>,
+    /// Index into `Score::sections`; absent in scores compiled before sections existed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub section: Option<usize>,
     pub knots: Vec<Knot>,
+}
+
+/// Coarse song section: sustained level/timbre regime, not verified verse/chorus.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SectionPlan {
+    pub start: f64,
+    pub end: f64,
+    /// `rest`, `quiet`, `mid` or `peak`.
+    pub level: String,
+    /// Motif label shared by sections judged to recur (`A`, `B`, ...).
+    pub motif: String,
+    /// 0 for first statement; later statements mirror/scale the motif.
+    pub variation: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repeat_of: Option<usize>,
+    pub reason: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Score {
     pub duration: f64,
+    #[serde(default)]
+    pub sections: Vec<SectionPlan>,
     pub cues: Vec<Cue>,
     pub limits: JointLimits,
 }
@@ -141,12 +163,40 @@ fn compile(s: &Sidecar, rms: Option<&[f32]>, config: CompileConfig) -> Score {
         0.82,
     )
     .max(0.05);
-    let bounds = boundaries(s, rms);
+    let sections = plan_sections(s, rms);
+    let styles: Vec<SectionStyle> = sections.iter().map(|p| section_style(s, p)).collect();
+    let section_at = |t: f64| {
+        sections
+            .iter()
+            .position(|p| t >= p.start && t < p.end)
+            .unwrap_or(sections.len() - 1)
+    };
+    let mut bounds = vec![0.0];
+    for p in &sections {
+        bounds.extend(boundaries(s, rms, p.start, p.end).into_iter().skip(1));
+    }
     let mut cues = Vec::new();
     let mut pose = HOME;
     let mut prior = "home";
-    for (n, w) in bounds.windows(2).enumerate() {
+    let mut step_in_section = 0usize;
+    let mut last_section = usize::MAX;
+    for w in bounds.windows(2) {
         let (start, end) = (w[0], w[1]);
+        let si = section_at(start);
+        if si != last_section {
+            step_in_section = 0;
+            last_section = si;
+        }
+        let section = &sections[si];
+        let style = &styles[si];
+        // Recovery aims at the posture of whichever section owns the cue end,
+        // so section changes glide across the final cue instead of jumping.
+        let target_si = if end >= section.end && si + 1 < sections.len() {
+            si + 1
+        } else {
+            si
+        };
+        let target = styles[target_si].base;
         let energy = avg(&s.energy_envelope, s.envelope_rate, start, end);
         let absolute = rms.map_or(energy, |v| avg(v, s.envelope_rate, start, end));
         let onset = strongest(&s.onsets, start, end);
@@ -155,7 +205,6 @@ fn compile(s: &Sidecar, rms: Option<&[f32]>, config: CompileConfig) -> Score {
             + avg(&s.band_envelope.sub, s.envelope_rate, start, end);
         let high = avg(&s.band_envelope.presence, s.envelope_rate, start, end)
             + avg(&s.band_envelope.air, s.envelope_rate, start, end);
-        let centroid = avg(&s.centroid_envelope, s.envelope_rate, start, end);
         let local_onsets: Vec<_> = s
             .onsets
             .iter()
@@ -174,6 +223,23 @@ fn compile(s: &Sidecar, rms: Option<&[f32]>, config: CompileConfig) -> Score {
         let coil_anchor = anchored_onset(&s.onsets, start, end, onset_scale * 0.88);
         let hit_candidate = config.enable_hits && accent >= 0.95 && distinct_accent;
         let coil_candidate = config.enable_windups && rising;
+        let next = (target_si != si).then(|| &sections[target_si]);
+        let transition = next.and_then(|n| {
+            let (from, to) = (level_rank(&section.level), level_rank(&n.level));
+            if to > from {
+                Some(("gather", format!(
+                    "lead-in: {} → {} section {} (motif {})",
+                    section.level, n.level, target_si + 1, motif_label(n)
+                )))
+            } else if to < from {
+                Some(("settle", format!(
+                    "lead-out: {} → {} section {} (motif {})",
+                    section.level, n.level, target_si + 1, motif_label(n)
+                )))
+            } else {
+                None
+            }
+        });
         let (gesture, reason, arrival_anchor) = if rest {
             ("hold", format!("rest: absolute level {absolute:0.4}"), None)
         } else if let Some(anchor) = hit_candidate.then_some(hit_anchor).flatten() {
@@ -182,6 +248,8 @@ fn compile(s: &Sidecar, rms: Option<&[f32]>, config: CompileConfig) -> Score {
             } else {
                 ("flick-high", format!("bright accent {accent:0.2} at {:0.3}s", anchor.t), Some(anchor.t))
             }
+        } else if let Some((g, why)) = transition {
+            (g, why, None)
         } else if let Some(anchor) = coil_candidate.then_some(coil_anchor).flatten() {
             (
                 "coil",
@@ -189,39 +257,45 @@ fn compile(s: &Sidecar, rms: Option<&[f32]>, config: CompileConfig) -> Score {
                 Some(anchor.t),
             )
         } else {
-            let choices = if low > high * 1.12 {
-                ["nod", "sway", "reach"]
-            } else if high > low * 1.12 || centroid > 0.58 {
-                ["orbit", "flick", "reach"]
-            } else {
-                ["sway", "orbit", "nod"]
-            };
-            let signature =
-                (energy * 11.0) as usize + (centroid * 7.0) as usize + (accent * 5.0) as usize + n;
-            let mut g = choices[signature % 3];
+            // Phrase order comes from the section motif: a recurring section
+            // replays the same gesture sequence (mirrored on variation).
+            let mut g = style.palette[step_in_section % 3];
             if g == prior {
-                g = choices[(signature + 1) % 3];
+                g = style.palette[(step_in_section + 1) % 3];
             }
             let no_anchor = hit_candidate || coil_candidate;
             let reason = if no_anchor {
-                format!("groove: no onset allows preparation and recovery; energy {energy:0.2}")
+                format!(
+                    "groove: no onset allows preparation and recovery; motif {} step {}",
+                    motif_label(section),
+                    step_in_section + 1
+                )
             } else {
-                format!("groove: energy {energy:0.2}, low/high {low:0.2}/{high:0.2}, centroid {centroid:0.2}")
+                format!(
+                    "groove: motif {} step {}, energy {energy:0.2}, low/high {low:0.2}/{high:0.2}",
+                    motif_label(section),
+                    step_in_section + 1
+                )
             };
             (g, reason, None)
         };
+        let sign = if step_in_section.is_multiple_of(2) != style.mirror {
+            1.0
+        } else {
+            -1.0
+        };
         let knots = make_knots(
-            start,
-            end,
+            Span { start, end, arrival_anchor },
             pose,
             gesture,
-            f64::from(energy),
-            arrival_anchor,
+            (0.3 + f64::from(energy).clamp(0.0, 1.0) * 0.7) * style.amp_scale,
+            sign,
+            target,
             &limits,
-            n,
         );
         pose = knots.last().map_or(pose, |k| k.joints);
         prior = gesture;
+        step_in_section += 1;
         cues.push(Cue {
             start,
             end,
@@ -234,31 +308,332 @@ fn compile(s: &Sidecar, rms: Option<&[f32]>, config: CompileConfig) -> Score {
             },
             accent: if rest { 0.0 } else { accent },
             arrival_anchor,
+            section: Some(si),
             knots,
         });
     }
     Score {
         duration: s.duration,
+        sections,
         cues,
         limits,
     }
 }
 
-fn boundaries(s: &Sidecar, rms: Option<&[f32]>) -> Vec<f64> {
+/// `C` for the first statement, `C2`, `C3`... for recurrences.
+fn motif_label(p: &SectionPlan) -> String {
+    match p.variation {
+        0 => p.motif.clone(),
+        v => format!("{}{}", p.motif, v + 1),
+    }
+}
+
+fn level_rank(level: &str) -> u8 {
+    match level {
+        "rest" => 0,
+        "quiet" => 1,
+        "mid" => 2,
+        _ => 3,
+    }
+}
+
+/// Raw section character used for gesture family and reasons.
+#[derive(Debug, Clone, Copy)]
+struct SectionTraits {
+    bright: f32,
+    centroid: f32,
+    density: f32,
+}
+
+struct SectionStyle {
+    palette: [&'static str; 3],
+    base: [f64; 3],
+    amp_scale: f64,
+    mirror: bool,
+}
+
+const FEATURE_DIMS: usize = 8;
+
+/// Per-frame z-scored features (loudness, five bands, centroid, flatness)
+/// with prefix sums, so any window mean is O(1).
+struct Features {
+    rate: f64,
+    prefix: Vec<[f64; FEATURE_DIMS]>,
+}
+
+impl Features {
+    fn new(s: &Sidecar, rms: Option<&[f32]>) -> Self {
+        let b = &s.band_envelope;
+        let dims: [&[f32]; FEATURE_DIMS] = [
+            rms.unwrap_or(&s.energy_envelope),
+            &b.sub,
+            &b.low,
+            &b.mid,
+            &b.presence,
+            &b.air,
+            &s.centroid_envelope,
+            &s.flatness_envelope,
+        ];
+        let rate = f64::from(s.envelope_rate);
+        let n = dims
+            .iter()
+            .map(|d| d.len())
+            .min()
+            .unwrap_or(0)
+            .min((s.duration * rate).ceil() as usize);
+        let stats: Vec<(f64, f64)> = dims
+            .iter()
+            .map(|d| {
+                let v = &d[..n];
+                let mean = v.iter().map(|x| f64::from(*x)).sum::<f64>() / n.max(1) as f64;
+                let var = v.iter().map(|x| (f64::from(*x) - mean).powi(2)).sum::<f64>()
+                    / n.max(1) as f64;
+                (mean, if var > 1e-12 { var.sqrt() } else { 1.0 })
+            })
+            .collect();
+        let mut prefix = vec![[0.0; FEATURE_DIMS]];
+        for i in 0..n {
+            let mut next = *prefix.last().unwrap();
+            for (k, d) in dims.iter().enumerate() {
+                let x = f64::from(d[i]);
+                next[k] += if x.is_finite() { (x - stats[k].0) / stats[k].1 } else { 0.0 };
+            }
+            prefix.push(next);
+        }
+        Self { rate, prefix }
+    }
+    fn len(&self) -> usize {
+        self.prefix.len() - 1
+    }
+    fn mean_idx(&self, a: usize, b: usize) -> [f64; FEATURE_DIMS] {
+        let (a, b) = (a.min(self.len()), b.min(self.len()));
+        if b <= a {
+            return [0.0; FEATURE_DIMS];
+        }
+        std::array::from_fn(|k| (self.prefix[b][k] - self.prefix[a][k]) / (b - a) as f64)
+    }
+    fn mean(&self, start: f64, end: f64) -> [f64; FEATURE_DIMS] {
+        let a = (start * self.rate).floor() as usize;
+        let b = ((end * self.rate).ceil() as usize).max(a + 1);
+        self.mean_idx(a, b)
+    }
+}
+
+fn distance(a: &[f64; FEATURE_DIMS], b: &[f64; FEATURE_DIMS]) -> f64 {
+    (a.iter().zip(b).map(|(x, y)| (x - y).powi(2)).sum::<f64>() / FEATURE_DIMS as f64).sqrt()
+}
+
+fn section_traits(s: &Sidecar, start: f64, end: f64) -> SectionTraits {
+    let low = avg(&s.band_envelope.low, s.envelope_rate, start, end)
+        + avg(&s.band_envelope.sub, s.envelope_rate, start, end);
+    let high = avg(&s.band_envelope.presence, s.envelope_rate, start, end)
+        + avg(&s.band_envelope.air, s.envelope_rate, start, end);
+    let count = s.onsets.iter().filter(|o| o.t >= start && o.t < end).count();
+    SectionTraits {
+        bright: high / (low + high).max(1e-6),
+        centroid: avg(&s.centroid_envelope, s.envelope_rate, start, end),
+        density: count as f32 / (end - start).max(1e-6) as f32,
+    }
+}
+
+/// Section cuts from multi-feature novelty: distance between 4s window means
+/// before/after each frame, peaks above median + 2·MAD, >=8s apart. Tuned on
+/// the supplied track (19 sections, 9–37s); heuristic, not verse/chorus labels.
+fn novelty_cuts(features: &Features, duration: f64) -> Vec<f64> {
+    const MIN_SECTION: f64 = 8.0;
+    let win = (4.0 * features.rate).round().max(1.0) as usize;
+    let n = features.len();
+    if n <= 2 * win {
+        return Vec::new();
+    }
+    let novelty: Vec<f64> = (0..n)
+        .map(|i| {
+            if i < win || i + win > n {
+                0.0
+            } else {
+                distance(&features.mean_idx(i - win, i), &features.mean_idx(i, i + win))
+            }
+        })
+        .collect();
+    let mut active: Vec<f64> = novelty.iter().copied().filter(|x| *x > 0.0).collect();
+    if active.is_empty() {
+        return Vec::new();
+    }
+    let median = |v: &mut Vec<f64>| {
+        v.sort_by(f64::total_cmp);
+        v[v.len() / 2]
+    };
+    let med = median(&mut active);
+    let mad = median(&mut active.iter().map(|x| (x - med).abs()).collect());
+    // Absolute floor keeps ripple inside homogeneous material from cutting.
+    let threshold = (med + 2.0 * mad).max(0.3);
+    let mut peaks: Vec<usize> = (win..=n - win)
+        .filter(|&i| {
+            novelty[i] > threshold
+                && novelty[i.saturating_sub(win)..(i + win + 1).min(n)]
+                    .iter()
+                    .all(|x| *x <= novelty[i])
+        })
+        .collect();
+    peaks.sort_by(|a, b| novelty[*b].total_cmp(&novelty[*a]));
+    let mut cuts: Vec<f64> = Vec::new();
+    for i in peaks {
+        let t = i as f64 / features.rate;
+        if t >= MIN_SECTION * 0.75
+            && t <= duration - MIN_SECTION * 0.75
+            && cuts.iter().all(|c| (c - t).abs() >= MIN_SECTION)
+        {
+            cuts.push(t);
+        }
+    }
+    cuts
+}
+
+/// Split the song into sustained regimes, then label recurrences.
+/// Uses sidecar sections only when they describe real structure (>=2 long
+/// sections); otherwise multi-feature novelty (see `novelty_cuts`).
+fn plan_sections(s: &Sidecar, rms: Option<&[f32]>) -> Vec<SectionPlan> {
+    const MIN_SECTION: f64 = 8.0;
+    let features = Features::new(s, rms);
+    let usable: Vec<_> = s
+        .sections
+        .iter()
+        .filter(|x| x.end - x.start >= MIN_SECTION)
+        .collect();
+    let cuts = if usable.len() >= 2 {
+        usable.iter().map(|x| x.start).collect()
+    } else {
+        novelty_cuts(&features, s.duration)
+    };
+    let mut cuts: Vec<f64> = cuts
+        .into_iter()
+        .map(|t| nearest_beat(&s.beats, t).unwrap_or(t))
+        .filter(|t| *t >= MIN_SECTION * 0.75 && *t <= s.duration - MIN_SECTION * 0.75)
+        .collect();
+    cuts.sort_by(f64::total_cmp);
+    cuts.dedup_by(|a, b| *a - *b < MIN_SECTION * 0.75);
+    let mut edges = vec![0.0];
+    edges.extend(cuts);
+    edges.push(s.duration);
+
+    let mut plans: Vec<SectionPlan> = Vec::new();
+    let mut vectors: Vec<[f64; FEATURE_DIMS]> = Vec::new();
+    let mut motifs = 0u8;
+    for w in edges.windows(2) {
+        let (start, end) = (w[0], w[1]);
+        let v = features.mean(start, end);
+        let t = section_traits(s, start, end);
+        // Loudness relative to this song (z-score), absolute RMS only for rest.
+        let silent = rms.map_or_else(
+            || avg(&s.energy_envelope, s.envelope_rate, start, end) < 0.045,
+            |r| avg(r, s.envelope_rate, start, end) < 0.005,
+        );
+        let class = if silent {
+            "rest"
+        } else if v[0] < -0.6 {
+            "quiet"
+        } else if v[0] > 0.35 {
+            "peak"
+        } else {
+            "mid"
+        };
+        let overlap = |a0: f64, a1: f64, b0: f64, b1: f64| (a1.min(b1) - a0.max(b0)).max(0.0);
+        let sidecar_repeat = s.repeats.iter().flatten().filter(|r| r.similarity >= 0.5).find_map(|r| {
+            (overlap(r.b_start, r.b_end, start, end) >= 0.5 * (end - start)).then(|| {
+                plans.iter().position(|p| {
+                    p.level == class
+                        && overlap(r.a_start, r.a_end, p.start, p.end) >= 0.5 * (p.end - p.start)
+                })
+            })?
+        });
+        let similar = plans
+            .iter()
+            .zip(&vectors)
+            .enumerate()
+            .filter(|(_, (p, _))| p.level == class && class != "rest")
+            .map(|(j, (_, u))| (j, distance(&v, u)))
+            .filter(|(_, d)| *d < 0.3)
+            .min_by(|a, b| a.1.total_cmp(&b.1));
+        let (repeat_of, why) = match (sidecar_repeat, similar) {
+            (Some(j), _) => (Some(j), format!("sidecar repeat of section {}", j + 1)),
+            (None, Some((j, d))) => (Some(j), format!("feature match section {} (d {d:.2})", j + 1)),
+            (None, None) => (None, "new material".to_string()),
+        };
+        let (motif, variation) = match repeat_of {
+            Some(j) => {
+                let m = plans[j].motif.clone();
+                let n = plans.iter().filter(|p| p.motif == m).count() as u32;
+                (m, n)
+            }
+            None if class == "rest" => ("rest".to_string(), 0),
+            None => {
+                let m = char::from(b'A' + motifs % 26).to_string();
+                motifs += 1;
+                (m, 0)
+            }
+        };
+        plans.push(SectionPlan {
+            start,
+            end,
+            level: class.into(),
+            motif,
+            variation,
+            repeat_of,
+            reason: format!(
+                "{why}; loudness z {:+.2}, bright {:.2}, onsets {:.1}/s",
+                v[0], t.bright, t.density
+            ),
+        });
+        vectors.push(v);
+    }
+    plans
+}
+
+fn section_style(s: &Sidecar, p: &SectionPlan) -> SectionStyle {
+    let t = section_traits(s, p.start, p.end);
+    let low_heavy = t.bright < 0.44;
+    let bright = t.bright > 0.56 || t.centroid > 0.58;
+    let family = if low_heavy {
+        ["nod", "sway", "reach"]
+    } else if bright {
+        ["orbit", "flick", "reach"]
+    } else {
+        ["sway", "orbit", "nod"]
+    };
+    // Motif letter rotates phrase order, so two different motifs with the
+    // same timbre family still read as different phrases.
+    let rot = p.motif.bytes().next().map_or(0, |b| usize::from(b.wrapping_sub(b'A')) % 3);
+    let palette = [family[rot], family[(rot + 1) % 3], family[(rot + 2) % 3]];
+    let (offset, amp_scale) = match p.level.as_str() {
+        "rest" | "quiet" => ([-4.0, -6.0, -6.0], 0.6),
+        "mid" => ([0.0; 3], 0.85),
+        _ => ([6.0, 8.0, 6.0], 1.0),
+    };
+    SectionStyle {
+        palette,
+        base: add(HOME, offset),
+        // Variation: later statements mirror, third+ shrink slightly.
+        amp_scale: amp_scale * if p.variation >= 2 { 0.85 } else { 1.0 },
+        mirror: p.variation % 2 == 1,
+    }
+}
+
+fn boundaries(s: &Sidecar, rms: Option<&[f32]>, from: f64, to: f64) -> Vec<f64> {
     let source = rms.unwrap_or(&s.energy_envelope);
     let rate = f64::from(s.envelope_rate);
-    let mut candidates = vec![0.0, s.duration];
-    let mut last = 0.0;
-    let mut was_rest =
-        source.first().copied().unwrap_or(0.0) < if rms.is_some() { 0.005 } else { 0.05 };
-    for i in 1..source.len() {
+    let rest_level = if rms.is_some() { 0.005 } else { 0.05 };
+    let mut candidates = vec![from, to];
+    let mut last = from;
+    let first = ((from * rate).floor() as usize).min(source.len().saturating_sub(1));
+    let mut was_rest = source.get(first).copied().unwrap_or(0.0) < rest_level;
+    for (i, &value) in source.iter().enumerate().skip(first + 1) {
         let t = i as f64 / rate;
-        if t >= s.duration {
+        if t >= to {
             break;
         }
         let back = i.saturating_sub((rate * 0.8) as usize);
-        let delta = (source[i] - source[back]).abs();
-        let rest = source[i] < if rms.is_some() { 0.005 } else { 0.05 };
+        let delta = (value - source[back]).abs();
+        let rest = value < rest_level;
         let threshold = if rms.is_some() { 0.012 } else { 0.17 };
         if t - last >= 0.75 && (delta > threshold || rest != was_rest) {
             candidates.push(t);
@@ -269,13 +644,13 @@ fn boundaries(s: &Sidecar, rms: Option<&[f32]>) -> Vec<f64> {
     // Do not cut a cue exactly at each accent. That made every strong onset a
     // boundary, leaving no recovery time and forcing midpoint "arrivals".
     // Onsets remain planner inputs below; boundaries come from sustained content.
-    candidates.retain(|t| t.is_finite() && *t >= 0.0 && *t <= s.duration);
+    candidates.retain(|t| t.is_finite() && *t >= from && *t <= to);
     candidates.sort_by(f64::total_cmp);
     candidates.dedup_by(|a, b| (*a - *b).abs() < 0.04);
-    let mut out = vec![0.0];
+    let mut out = vec![from];
     for target in candidates.into_iter().skip(1) {
         let prev = *out.last().unwrap();
-        if target < s.duration && target - prev < 1.5 {
+        if target < to && (target - prev < 1.5 || to - target < 1.5) {
             continue;
         }
         let mut cursor = prev;
@@ -291,8 +666,8 @@ fn boundaries(s: &Sidecar, rms: Option<&[f32]>) -> Vec<f64> {
         }
         out.push(target);
     }
-    if *out.last().unwrap() < s.duration {
-        out.push(s.duration);
+    if *out.last().unwrap() < to {
+        out.push(to);
     }
     out
 }
@@ -306,17 +681,23 @@ fn nearest_beat(beats: &[f64], target: f64) -> Option<f64> {
         .filter(|b| (b - target).abs() <= 0.22)
 }
 
-#[allow(clippy::too_many_arguments)] // Explicit local planning inputs; no persistent planner state.
-fn make_knots(
+#[derive(Clone, Copy)]
+struct Span {
     start: f64,
     end: f64,
+    arrival_anchor: Option<f64>,
+}
+
+fn make_knots(
+    span: Span,
     from: [f64; 3],
     gesture: &str,
-    energy: f64,
-    arrival_anchor: Option<f64>,
+    amp: f64,
+    sign: f64,
+    target: [f64; 3],
     limits: &JointLimits,
-    n: usize,
 ) -> Vec<Knot> {
+    let Span { start, end, arrival_anchor } = span;
     if gesture == "hold" {
         return vec![
             Knot {
@@ -342,12 +723,12 @@ fn make_knots(
         arrival_t + (end - arrival_t) * 0.48,
         end,
     ];
-    let amp = 0.3 + energy.clamp(0.0, 1.0) * 0.7;
-    let sign = if n.is_multiple_of(2) { 1.0 } else { -1.0 };
     let deltas = shape(gesture, amp, sign);
     let mut poses = [from; 5];
     for i in 1..5 {
-        let base = if i == 4 { HOME } else { from };
+        // Gesture excursions are relative to the incoming pose; recovery lands
+        // on the (possibly next) section posture.
+        let base = if i == 4 { target } else { from };
         poses[i] = constrain(
             poses[i - 1],
             add(base, deltas[i - 1]),
@@ -385,6 +766,20 @@ fn shape(g: &str, a: f64, s: f64) -> [[f64; 3]; 4] {
             z([-10. * s, 2., 8.]),
             z([25. * s, -13., 24.]),
             z([13. * s, 5., 11.]),
+            [0.; 3],
+        ],
+        // Section lead-in: compress, then open toward the louder section.
+        "gather" => [
+            z([-10. * s, -12., 14.]),
+            z([-6. * s, -16., 18.]),
+            z([6. * s, 8., -8.]),
+            [0.; 3],
+        ],
+        // Section lead-out: small, decelerating release into lower posture.
+        "settle" => [
+            z([4. * s, 3., -4.]),
+            z([-3. * s, -5., 5.]),
+            z([0., -2., 2.]),
             [0.; 3],
         ],
         "coil" => [

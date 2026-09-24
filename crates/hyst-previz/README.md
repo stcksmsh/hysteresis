@@ -31,6 +31,35 @@ match, and adds `rmsEnvelope` without changing published sidecar fields. Necessa
 because adaptive normalized energy may remain high during an almost silent fade.
 Compiler also accepts original sidecar without RMS, with less reliable silence detection.
 
+From a video instead (any ffmpeg with AAC decode; Playwright's bundled one lacks it):
+
+```sh
+ffmpeg -i song.mp4 -vn -c:a copy "$media/instant-crush.m4a"
+ffmpeg -i song.mp4 -vn -ac 2 -ar 44100 -c:a pcm_s16le "$media/instant-crush-analysis.wav"
+node --import tsx "$PWD/scripts/analyze.ts" "$media/instant-crush-analysis.wav" "$media/instant-crush.sidecar.json"
+```
+
+## Sections, motifs, transitions
+
+Compiler first splits song into sections: z-scored loudness/5 bands/centroid/
+flatness, 4s before/after window distance, peaks above median+2·MAD, >=8s apart
+(sidecar sections used instead only when >=2 are >=8s). Level class
+(`quiet`/`mid`/`peak` from song-relative loudness, `rest` from absolute RMS)
+sets posture register and amplitude. Section whose feature mean lies near an
+earlier same-class section (RMS z-distance <0.3, or schema-4 repeat sim >=0.5)
+reuses its motif: same groove phrase order, mirrored on even recurrences,
+slightly smaller from third statement. Last cue before a louder section is
+`gather`, before a quieter one `settle`; recovery knot lands on next section
+posture. Score JSON `sections` + cue `section` expose these decisions; viewer
+shows `Section N level · motif C3`. Heuristic, not verse/chorus labels.
+
+## Remote mode
+
+`song.html?remote=1` starts muted and free-runs a wall clock while browser
+blocks playback. First Play press or tap anywhere carries free-run position
+into audio, unmutes and plays; after that media time owns transport (pause
+freezes, seek moves). Seek/Next accent work before first gesture too.
+
 ## Synthetic reference
 
 ```sh
@@ -43,7 +72,7 @@ reference motions, distinct from song-conditioned score.
 ## Verification
 
 ```sh
-cargo test -p hyst-compile -p hyst-previz
+cargo test -p hyst-compile -p hyst-previz   # includes tests/acceptance.rs
 cargo clippy -p hyst-compile -p hyst-previz --all-targets -- -D warnings
 node crates/hyst-previz/tests/timing.cjs crates/hyst-previz/src/viewer.html
 ```
@@ -73,6 +102,8 @@ ranges and analytic quintic speed/acceleration extrema. Floor clearance is sampl
 at 120Hz, not proven collision-free. Holds and deterministic random-access sampling
 are checked. Exported `instant-crush.audit.json` records supplied-track results.
 
-Current supplied track: 222 cues, 56 anchored arrivals, 6 hold cues. Maximum joint
-speeds 33.85/40.35/47.47 degrees/s, minimum sampled floor clearance 29.26 cm.
+Current supplied track (re-extracted 2026-09-24 from user MP4): 19 sections,
+218 cues, 70 anchored arrivals, 6 holds. Max joint speeds 34.64/37.61/44.25
+degrees/s, minimum sampled floor clearance 27.84 cm. Audit logic lives in
+`hyst_previz::audit_score`, shared by CLI and acceptance tests.
 Human-quality dance remains unproven; the preview is ready for listening review.

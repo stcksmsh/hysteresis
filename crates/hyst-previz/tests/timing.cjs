@@ -2,8 +2,8 @@ const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/st
 const source=fs.readFileSync(process.argv[2],'utf8');
 const match=source.match(/\/\/ ARM_TIMING_HELPERS_BEGIN([\s\S]*?)\/\/ ARM_TIMING_HELPERS_END/);
 assert(match);const context={};vm.createContext(context);
-vm.runInContext(match[1]+';this.api={cleanBeats,beatFromGrid,manualBeat,gridBeat,transportBeat};',context);
-const {cleanBeats,beatFromGrid,manualBeat,gridBeat,transportBeat}=context.api;
+vm.runInContext(match[1]+';this.api={cleanBeats,beatFromGrid,manualBeat,gridBeat,transportBeat,remoteClock};',context);
+const {cleanBeats,beatFromGrid,manualBeat,gridBeat,transportBeat,remoteClock}=context.api;
 const close=(a,b)=>assert(Math.abs(a-b)<1e-9,`${a} != ${b}`);
 const irregular=cleanBeats([1,1.5,2.2]);
 close(beatFromGrid(.5,irregular,120),-1);close(beatFromGrid(1.25,irregular,120),.5);
@@ -24,6 +24,10 @@ const short=validSong({duration:1.01,fps:60,frames:Array.from({length:62},(_,i)=
 close(sampleSong(short,1.005)[0],60.5);close(sampleSong(short,1.01)[0],61);
 close(shiftedScoreSeconds(10,2,12),8);close(shiftedScoreSeconds(1,2,12),0);close(shiftedScoreSeconds(99,0,12),12);
 assert.equal(validSong({duration:2,frames:[[0,0]]}),null);
+// Remote: free-run only while muted/blocked; media owns time after unlock.
+close(remoteClock(true,true,0,5000,1000,100),4);close(remoteClock(true,true,0,500000,0,100),100);
+close(remoteClock(true,false,7,5000,1000,100),7);close(remoteClock(false,true,7,5000,1000,100),7);
+close(remoteClock(true,true,0,500,1000,NaN),0);close(remoteClock(false,true,undefined,0,0,1),0);
 console.log('arm timing helpers: passed');
 
 const visualScore={duration:4,cues:[{start:0,end:2,energy:.4,accent:.8,arrivalAnchor:1},{start:2,end:4,energy:0,accent:0}]};

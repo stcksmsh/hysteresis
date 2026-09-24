@@ -856,3 +856,15 @@ Compiler8/previz4 tests and targeted clippy/JS pass; workspace CPU tests pass.
 Full clippy blocked by existing julia.rs modulo warnings; GPU probe timed out45s,
 /dev/dri absent. Browser play/pause/seek/delay+anchors pass, no console errors.
 Updated docs/DANCE_HANDOFF.md + previz README. No commit or frozen-tree changes.
+
+### Song slice — sections, motif recurrence, remote clock (2026-09-24)
+
+`hyst-compile` segments song by z-scored multi-feature novelty (4s windows,
+median+2·MAD, >=8s), classes sections quiet/mid/peak/rest, reuses motifs for
+feature-similar sections (mirrored/scaled variation), inserts gather/settle
+transition cues and section postures. `Score.sections`/`Cue.section` additive.
+Audit moved to `hyst_previz::audit_score`; `tests/acceptance.rs` covers audit,
+recurrence, transitions, structure-driven decisions, anchors. Viewer remote
+mode clock handoff fixed. Real track re-extracted from user MP4: 19 sections,
+218 cues, audit pass (27.84cm clearance). Browser smoke via Playwright/WAV.
+Heuristic phrasing; perceptual quality unreviewed. Details: docs/DANCE_HANDOFF.md.
