@@ -143,17 +143,9 @@ fn loud_sections_dance_big_quiet_sections_breathe_rest_is_still() {
     // The complaint this guards: tiny twitching around one home pose.
     assert!(peak > 60.0, "peak tip travel only {peak:.1} cm");
     assert!(peak > quiet * 1.3, "peak {peak:.1} vs quiet {quiet:.1}");
-    // Loud: a new pose every bar with beat bounces. Quiet: few phrases, no bounces.
-    let bounces = |i: usize| {
-        moves_in(&score, i)
-            .iter()
-            .flat_map(|c| &c.knots)
-            .filter(|k| k.phase == "beat")
-            .count()
-    };
-    assert!(moves_in(&score, 2).len() >= 6, "{}", moves_in(&score, 2).len());
-    assert!(moves_in(&score, 0).len() <= 3);
-    assert!(bounces(2) >= 6 && bounces(0) == 0, "peak {} quiet {}", bounces(2), bounces(0));
+    // Loud: a new home pose every 2 bars. Quiet: every 4 bars.
+    assert!(moves_in(&score, 2).len() >= 3, "{}", moves_in(&score, 2).len());
+    assert!(moves_in(&score, 0).len() <= 2, "{}", moves_in(&score, 0).len());
     // Arrivals land on the beat grid.
     let beats: Vec<f64> = (0..200).map(|i| i as f64 * 0.5).collect();
     for c in &score.cues {
@@ -198,31 +190,36 @@ fn matched_tempo_different_structure_changes_decisions_not_just_scale() {
     hyst_previz::audit_score(&b).unwrap();
 }
 
+/// Add synthetic `elements`: vocals lead 0..24 s with a melody rising then
+/// falling (8 s cycle), bass leads 24..48 s.
+fn with_elements(json: &str) -> String {
+    let mut v: serde_json::Value = serde_json::from_str(json).unwrap();
+    let n = (v["duration"].as_f64().unwrap() * RATE).ceil() as usize;
+    let t = |i: usize| i as f64 / RATE;
+    let vocals: Vec<f64> = (0..n).map(|i| if t(i) < 24.0 { 0.9 } else { 0.2 }).collect();
+    let bass: Vec<f64> = (0..n).map(|i| if t(i) < 24.0 { 0.2 } else { 0.9 }).collect();
+    let melody: Vec<f64> = (0..n)
+        .map(|i| if t(i) < 24.0 { 0.5 - 0.5 * (std::f64::consts::TAU * t(i) / 8.0).cos() } else { -1.0 })
+        .collect();
+    v["elements"] = json!({"drums": vec![0.1; n], "bass": bass, "vocals": vocals,
+        "synth": vec![0.1; n], "melody": melody, "melodyOnsets": []});
+    v.to_string()
+}
+
 #[test]
-fn strong_onsets_become_exact_hits() {
-    // 36.6: inside a held bar (hit). 70.1: 0.1 s after a bar line (arrival snaps).
-    // Accents inside a big move's wind-up are not separately hit (documented).
-    let accents = [36.6, 70.1];
-    let score = compile_sidecar_json(&song(
-        &[INTRO, VERSE, CHORUS, VERSE, CHORUS, SILENCE],
-        &accents,
-    ))
-    .unwrap();
+fn arm_follows_the_dominant_element() {
+    let score = compile_sidecar_json(&with_elements(&song(&[Part(48.0, 0.6, 0.5)], &[]))).unwrap();
     hyst_previz::audit_score(&score).unwrap();
-    for t in accents {
-        let cue = score
-            .cues
-            .iter()
-            .find(|c| c.knots.iter().any(|k| (k.phase == "hit" || k.phase == "arrival") && k.time == t))
-            .unwrap_or_else(|| panic!("no hit/arrival knot at {t}"));
-        let knot = cue.knots.iter().find(|k| k.time == t).unwrap();
-        // Elbow/wrist trail the shoulder by `joint_lag_seconds`.
-        let at: Vec<f64> = (0..3).map(|j| score.sample(t + score.joint_lag_seconds[j])[j]).collect();
-        assert!((0..3).all(|j| (at[j] - knot.joints[j]).abs() < 1e-9), "{at:?} vs {:?}", knot.joints);
-        // Accent is a real move: from the hit's wind-up, or from the phrase start.
-        let before = if knot.phase == "hit" { score.sample(t - 0.22) } else { cue.knots[0].joints };
-        assert!((0..3).any(|j| (knot.joints[j] - before[j]).abs() > 10.0), "{t}: {} {:?} vs {before:?}", knot.phase, knot.joints);
-    }
+    let lead = |a: f64, b: f64, name: &str| {
+        let ks: Vec<_> = score.cues.iter().flat_map(|c| &c.knots).filter(|k| k.time >= a && k.time < b).collect();
+        ks.iter().filter(|k| k.phase == name).count() as f64 / ks.len() as f64
+    };
+    assert!(lead(4.0, 22.0, "vocals") > 0.8, "{}", lead(4.0, 22.0, "vocals"));
+    assert!(lead(27.0, 46.0, "bass") > 0.8, "{}", lead(27.0, 46.0, "bass"));
+    // Melody high (t = 12, 20) lifts the tip above melody low (t = 8, 16).
+    let y = |t: f64| tip(score.sample(t)).1;
+    let (high, low) = ((y(12.0) + y(20.0)) / 2.0, (y(8.0) + y(16.0)) / 2.0);
+    assert!(high > low + 4.0, "tip height high-melody {high:.1} vs low {low:.1}");
 }
 
 #[test]

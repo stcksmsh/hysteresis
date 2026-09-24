@@ -885,3 +885,11 @@ was 97.9–135.1). Knots gain optional velocity (C2 quintic Hermite, limit-check
 Score gains `jointLagSeconds` (overlapping action), held bars drift toward next
 pose, motif picks max-contrast poses, poses evolve per cycle. Audit now dense
 1 kHz. New `sample_score` example for offline renders. Tests green; clippy clean.
+
+### Song slice — element-following planner (2026-09-24)
+
+Planner = calm phrase home path + voice layer following the dominant element
+(vocals melody height, synth orbit, bass swing, drum dip) from new
+`scripts/arm_elements.py` (heuristic HPSS/mid-side; Demucs weights host is
+network-blocked in cloud env). Section cuts snap to bar lines at the start of
+the loudness change. Tests: element-following acceptance test added.

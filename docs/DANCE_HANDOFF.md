@@ -179,3 +179,17 @@ motif, per-cycle pose evolution, section build, gaps absorbed into slower moves.
 Real track: loud still 3%, mid 6%, quiet 22% of time; 100 cues, audit pass,
 8.16 cm clearance. v4 video rendered via `sample_score`. Not yet: chaos/loose
 beat per OK Go reference, multi-arm ensemble.
+
+## Continuation — 2026-09-24 element-following
+
+User on v4: sections still ~1 s late; motion "too hectic"; wants it to move to
+"vocals or synths or whatever is dominant". Timing: cut was mid-bar (92.0) and
+first loud move waited for the next bar (93.1); cuts now snap to the earliest
+strong bar-line step (first loud block 90.91–126.35). Demucs impossible here:
+model weights host dl.fbaipublicfiles.com denied by network policy (PyPI OK,
+download.pytorch.org also denied). Added `scripts/arm_elements.py` (numpy/
+scipy HPSS + mid/side: drums/bass/vocals/synth + melody + melodic onsets).
+Planner rewritten: calm home path (2/4-bar phrases) + dominance-blended voice
+layer. Real track: 54 phrase cues, vocals/bass/synth lead, audit pass,
+7.48 cm clearance. With Demucs available, feed its stems into the same
+`elements` fields for better separation.

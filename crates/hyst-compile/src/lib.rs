@@ -1,6 +1,6 @@
 //! Deterministic single-arm offline cue compiler.
 
-use hyst_core::sidecar::{Sidecar, SidecarOnset};
+use hyst_core::sidecar::Sidecar;
 use serde::{Deserialize, Serialize};
 
 const Q_V: f64 = 1.875; // max derivative of 6t^5-15t^4+10t^3
@@ -164,7 +164,42 @@ pub fn compile_sidecar_json_with_config(
             Some(parsed)
         }
     };
-    Ok(compile(&sidecar, rms.as_deref(), config))
+    let elements = match root.get("elements") {
+        None => None,
+        Some(v) => Some(parse_elements(v, (sidecar.duration * f64::from(sidecar.envelope_rate)).ceil() as usize)?),
+    };
+    Ok(compile(&sidecar, rms.as_deref(), elements.as_ref(), config))
+}
+
+fn parse_elements(v: &serde_json::Value, required: usize) -> Result<Elements, String> {
+    let series = |name: &str, lo: f64| -> Result<Vec<f32>, String> {
+        let a = v.get(name).and_then(|x| x.as_array()).ok_or(format!("elements.{name} must be an array"))?;
+        if a.len() < required {
+            return Err(format!("elements.{name} has {} samples; needs {required}", a.len()));
+        }
+        a.iter()
+            .enumerate()
+            .map(|(i, x)| {
+                x.as_f64()
+                    .filter(|x| x.is_finite() && *x >= lo && *x <= 10.0)
+                    .map(|x| x as f32)
+                    .ok_or(format!("elements.{name}[{i}] out of range"))
+            })
+            .collect()
+    };
+    let onsets = v
+        .get("melodyOnsets")
+        .and_then(|x| x.as_array())
+        .map(|a| a.iter().filter_map(|x| x.as_f64()).filter(|x| x.is_finite()).collect())
+        .unwrap_or_default();
+    Ok(Elements {
+        drums: series("drums", 0.0)?,
+        bass: series("bass", 0.0)?,
+        vocals: series("vocals", 0.0)?,
+        synth: series("synth", 0.0)?,
+        melody: series("melody", -1.0)?,
+        melody_onsets: onsets,
+    })
 }
 
 /// Named key pose: shoulder/elbow/wrist degrees, relative planar joints.
@@ -194,22 +229,19 @@ fn lerp(a: [f64; 3], b: [f64; 3], x: f64) -> [f64; 3] {
     std::array::from_fn(|j| a[j] + (b[j] - a[j]) * x)
 }
 
-/// Per-level phrasing: bars per phrase, move lead, settle time, amplitude,
-/// overshoot, beat-bounce depth. Loud = short phrases, fast committed moves,
-/// bounces on every beat; quiet = long phrases, slow sweeps, breathing only.
+/// Per-level phrasing: bars per home move, pose amplitude, voice-layer gain.
+/// Loud = pose changes every 2 bars and a strong voice; quiet = every 4 bars,
+/// small voice (mostly breathing with the dominant element).
 struct Feel {
     bars: usize,
-    lead: f64,
-    settle: f64,
     amp: f64,
-    overshoot: f64,
-    bounce: f64,
+    layer: f64,
 }
 fn feel(level: &str) -> Feel {
     match level {
-        "peak" => Feel { bars: 1, lead: 0.45, settle: 0.22, amp: 1.0, overshoot: 0.1, bounce: 1.0 },
-        "mid" => Feel { bars: 2, lead: 0.8, settle: 0.35, amp: 0.85, overshoot: 0.07, bounce: 0.55 },
-        _ => Feel { bars: 4, lead: 1.8, settle: 0.7, amp: 0.6, overshoot: 0.0, bounce: 0.0 },
+        "peak" => Feel { bars: 2, amp: 1.0, layer: 1.0 },
+        "mid" => Feel { bars: 4, amp: 0.85, layer: 0.8 },
+        _ => Feel { bars: 4, amp: 0.6, layer: 0.5 },
     }
 }
 
@@ -295,242 +327,264 @@ fn bar_lines(s: &Sidecar) -> Vec<f64> {
     beats.into_iter().skip(phase).step_by(4).collect()
 }
 
-struct Arrival {
+/// Per-element activity from `scripts/arm_elements.py` (0..~1 each, own
+/// range), sampled at `envelopeRate`. `melody` is 0..1 height or -1.
+#[derive(Debug, Clone, Default)]
+pub struct Elements {
+    pub drums: Vec<f32>,
+    pub bass: Vec<f32>,
+    pub vocals: Vec<f32>,
+    pub synth: Vec<f32>,
+    pub melody: Vec<f32>,
+    pub melody_onsets: Vec<f64>,
+}
+
+const ELEMENTS: [&str; 4] = ["vocals", "synth", "bass", "drums"];
+
+struct Phrase {
     time: f64,
     section: usize,
     step: usize,
 }
 
-fn compile(s: &Sidecar, rms: Option<&[f32]>, config: CompileConfig) -> Score {
+/// Choreography = slow *home path* between key poses (one move per phrase:
+/// 4 bars, 2 in loud sections) + a *voice* layer that moves to whichever
+/// musical element dominates right now, blended by dominance:
+///   vocals: height follows the melody, wrist articulates sung notes
+///   synth:  slow flowing orbit (one loop per 2 bars)
+///   bass:   weighted side-to-side sway, one swing per bar
+///   drums:  bounce on each beat
+/// Knots every half beat, then flow tangents: continuous, no stop-go.
+fn compile(s: &Sidecar, rms: Option<&[f32]>, el: Option<&Elements>, config: CompileConfig) -> Score {
     let limits = JointLimits::default();
     let sections = plan_sections(s, rms);
     let motifs: Vec<_> = sections.iter().map(|p| motif_poses(s, p)).collect();
     let bars = bar_lines(s);
-    let beat = {
-        let mut b: Vec<f64> = s.beats.iter().copied().filter(|b| b.is_finite()).collect();
-        b.sort_by(f64::total_cmp);
-        b
+    let mut beats: Vec<f64> = s.beats.iter().copied().filter(|b| b.is_finite()).collect();
+    beats.sort_by(f64::total_cmp);
+    let mut gaps: Vec<f64> = bars.windows(2).map(|w| w[1] - w[0]).collect();
+    gaps.sort_by(f64::total_cmp);
+    let bar_len = gaps.get(gaps.len() / 2).copied().unwrap_or(2.0);
+    let rate = f64::from(s.envelope_rate);
+    let at = |v: &[f32], t: f64| -> f64 {
+        v.get(((t * rate).max(0.0) as usize).min(v.len().saturating_sub(1)))
+            .map_or(0.0, |x| f64::from(*x))
     };
-    let strengths: Vec<f32> = s.onsets.iter().map(|o| o.strength).collect();
-    let onset_scale = percentile(&strengths, 0.9).max(0.05);
-    // A hit must stand out: top decile and well above the typical onset.
-    let hit_floor = onset_scale.max(percentile(&strengths, 0.5) * 1.8);
+    let window = |v: &[f32], t: f64, half: f64| -> f64 {
+        let n = 9;
+        (0..n).map(|k| at(v, t - half + 2.0 * half * k as f64 / (n - 1) as f64)).sum::<f64>() / n as f64
+    };
+    let section_at = |t: f64| sections.iter().position(|p| t >= p.start && t < p.end).unwrap_or(sections.len() - 1);
 
-    // Phrase arrivals: section entry downbeat, then every `bars` bar lines.
-    let mut arrivals: Vec<Arrival> = Vec::new();
+    // Phrase downbeats: each section's first bar, then every `bars` bars.
+    let mut phrases: Vec<Phrase> = Vec::new();
     for (si, p) in sections.iter().enumerate() {
         let f = feel(&p.level);
-        let lines: Vec<f64> = bars
-            .iter()
-            .copied()
-            .filter(|t| *t >= p.start - 0.3 && *t < p.end - 0.5 && *t > 0.2)
-            .collect();
-        let entry = lines.first().copied().unwrap_or(p.start + 0.5);
+        let lines: Vec<f64> = bars.iter().copied().filter(|t| *t >= p.start - 0.05 && *t < p.end - 0.5 && *t > 0.2).collect();
         let every = if p.level == "rest" { usize::MAX } else { f.bars };
         let mut step = 0;
-        for (k, t) in std::iter::once(entry)
-            .chain(lines.iter().copied().skip(1))
-            .enumerate()
-        {
+        let entry = lines.first().copied().unwrap_or(p.start.max(0.3));
+        for (k, t) in std::iter::once(entry).chain(lines.iter().copied().skip(1)).enumerate() {
             if k % every.max(1) == 0 && t < s.duration - 0.3 {
-                // A strong onset near the bar line wins: land exactly on it.
-                let t = s
-                    .onsets
-                    .iter()
-                    .filter(|o| (o.t - t).abs() <= 0.3 && o.strength >= hit_floor && o.t > 0.2)
-                    .max_by(|a, b| a.strength.total_cmp(&b.strength))
-                    .map_or(t, |o| o.t);
-                arrivals.push(Arrival { time: t, section: si, step });
+                phrases.push(Phrase { time: t, section: si, step });
                 step += 1;
             }
         }
     }
-    arrivals.dedup_by(|b, a| b.time - a.time < 0.6);
-
-    let section_at = |t: f64| sections.iter().position(|p| t >= p.start && t < p.end).unwrap_or(sections.len() - 1);
-    // Evolution: each pass through a motif (every 4 steps) bends its poses
-    // by a deterministic offset, so a long section develops instead of
-    // looping; intensity also builds toward the end of each section.
-    let planned = |a: &Arrival| -> [f64; 3] {
+    phrases.dedup_by(|b, a| b.time - a.time < 0.6);
+    let planned = |a: &Phrase| -> [f64; 3] {
         let m = &motifs[a.section];
         let base = m[a.step % m.len()].1;
         let c = (a.step / m.len()) as i64;
         let off = if c == 0 || sections[a.section].level == "rest" {
             [0.0; 3]
         } else {
-            [
-                ((c * 37) % 21 - 10) as f64,
-                ((c * 53) % 31 - 15) as f64,
-                ((c * 71) % 41 - 20) as f64,
-            ]
+            [((c * 37) % 21 - 10) as f64, ((c * 53) % 31 - 15) as f64, ((c * 71) % 41 - 20) as f64]
         };
         floor_safe(std::array::from_fn(|j| base[j] + off[j]))
     };
+    let targets: Vec<[f64; 3]> = phrases.iter().map(planned).collect();
+    // Home path: glide into each phrase pose over up to one bar, landing on
+    // the phrase downbeat; hold it otherwise (the voice layer keeps moving).
+    let glide: Vec<f64> = (0..phrases.len())
+        .map(|i| {
+            let from = if i == 0 { REST_POSE } else { targets[i - 1] };
+            let room = phrases[i].time - if i == 0 { 0.0 } else { phrases[i - 1].time + 0.3 };
+            bar_len.max(move_time(from, targets[i], 0.0, &limits) * 1.2).min(room.max(0.3))
+        })
+        .collect();
+    let home = |t: f64| -> [f64; 3] {
+        let i = phrases.partition_point(|p| p.time <= t);
+        let prev = if i == 0 { REST_POSE } else { targets[i - 1] };
+        match phrases.get(i) {
+            Some(p) if t > p.time - glide[i] => {
+                let x = (t - (p.time - glide[i])) / glide[i];
+                lerp(prev, targets[i], x * x * x * (10.0 + x * (-15.0 + 6.0 * x)))
+            }
+            _ => prev,
+        }
+    };
+    let zeros = [0.0_f32; 1];
+    let (drums, bass, vocals, synth, melody) = match el {
+        Some(e) => (&e.drums[..], &e.bass[..], &e.vocals[..], &e.synth[..], &e.melody[..]),
+        None => (&s.energy_envelope[..], &zeros[..], &zeros[..], &zeros[..], &zeros[..]),
+    };
+    // Dominance weights over ±1.5 s: phrase-scale, so the lead element does
+    // not flicker between beats and styles cross-fade.
+    let weights = |t: f64| -> [f64; 4] {
+        let voiced = {
+            let n = 9;
+            (0..n).filter(|k| at(melody, t - 1.5 + 3.0 * *k as f64 / (n - 1) as f64) >= 0.0).count() as f64 / n as f64
+        };
+        let score = [
+            window(vocals, t, 1.5) + 0.15 * voiced,
+            window(synth, t, 1.5),
+            window(bass, t, 1.5),
+            window(drums, t, 1.5),
+        ];
+        let e: Vec<f64> = score.iter().map(|x| (x / 0.08).exp()).collect();
+        let sum: f64 = e.iter().sum::<f64>().max(1e-12);
+        std::array::from_fn(|k| e[k] / sum)
+    };
+    let beat_phase = |t: f64| -> f64 {
+        let i = beats.partition_point(|b| *b <= t);
+        if i == 0 || i >= beats.len() {
+            return 0.0;
+        }
+        (t - beats[i - 1]) / (beats[i] - beats[i - 1])
+    };
+    let bar_phase = |t: f64| -> f64 {
+        let i = bars.partition_point(|b| *b <= t);
+        if i == 0 || i >= bars.len() {
+            return ((t / bar_len).fract() + 1.0).fract();
+        }
+        (t - bars[i - 1]) / (bars[i] - bars[i - 1]) + (i % 2) as f64
+    };
+    let tau = std::f64::consts::TAU;
+    let voice = |t: f64, gain: f64, side: f64, home: [f64; 3]| -> ([f64; 3], [f64; 4]) {
+        let w = weights(t);
+        let mut d = [0.0; 3];
+        // vocals: melody height -> shoulder lift + elbow opening; notes flick wrist.
+        let m = window(melody, t, 0.15);
+        let lvl = window(vocals, t, 0.3);
+        if m >= 0.0 {
+            let h = (m - 0.5) * 2.0;
+            let note = el.map_or(0.0, |e| {
+                e.melody_onsets.iter().map(|o| (-((t - o) / 0.12).powi(2)).exp()).fold(0.0, f64::max)
+            });
+            // Pull toward a raised pose when the melody is high, a lowered
+            // one when low (pose space, so "up" means up for any home pose).
+            let (goal, k) = if h >= 0.0 { ([90.0, -10.0, 10.0], 0.55 * h) } else { ([100.0, -115.0, -35.0], -0.45 * h) };
+            let k = k * lvl.max(0.5);
+            let v = [
+                (goal[0] - home[0]) * k + side * 8.0,
+                (goal[1] - home[1]) * k,
+                (goal[2] - home[2]) * k + 22.0 * note * side,
+            ];
+            (0..3).for_each(|j| d[j] += w[0] * v[j]);
+        }
+        // synth: orbit, two bars per loop; radius with synth level.
+        let ph = tau * bar_phase(t) / 2.0;
+        let r = 10.0 + 14.0 * window(synth, t, 0.5);
+        let v = [r * ph.sin() * side, r * 1.4 * ph.cos(), r * 1.2 * (ph + 1.2).sin()];
+        (0..3).for_each(|j| d[j] += w[1] * v[j]);
+        // bass: one heavy swing per bar, arm sinks.
+        let b = (tau * bar_phase(t) / 2.0).sin();
+        let lvl = window(bass, t, 0.5);
+        let v = [28.0 * b * lvl.max(0.5), -16.0 - 10.0 * lvl, 14.0 * b];
+        (0..3).for_each(|j| d[j] += w[2] * v[j]);
+        // drums: dip on the beat, lift between.
+        let p = (tau * beat_phase(t)).cos();
+        let lvl = window(drums, t, 0.3);
+        let v = [-3.0 * p * side, -10.0 * p * lvl.max(0.4), -14.0 * p * lvl.max(0.4)];
+        (0..3).for_each(|j| d[j] += w[3] * v[j]);
+        (d.map(|x| x * gain), w)
+    };
+
     let mut cues = Vec::new();
+    let first = phrases.first().map_or(s.duration, |p| (p.time - glide[0]).max(0.0));
+    if first > 0.0 {
+        cues.push(hold_cue(0.0, first, REST_POSE, 0, "stillness before first phrase"));
+    }
     let mut q = REST_POSE;
-    let mut t0 = 0.0;
-    for (i, a) in arrivals.iter().enumerate() {
-        let sec = &sections[a.section];
+    let mut current_lead = 0usize;
+    for (i, p) in phrases.iter().enumerate() {
+        let sec = &sections[p.section];
         let f = feel(&sec.level);
-        let name = motifs[a.section][a.step % motifs[a.section].len()].0.clone();
-        let wanted = planned(a);
-        // Lead = time the move needs at full size (speed/accel limits, with
-        // anticipation + overshoot headroom). If the bar is too short, the
-        // move shrinks so it still *arrives on the beat*; it never smears
-        // past the arrival into the following beats.
-        let available = a.time - t0;
-        let target = if move_time(q, wanted, f.overshoot, &limits) <= available {
-            wanted
-        } else {
-            let mut x = 1.0;
-            while x > 0.05 && move_time(q, lerp(q, wanted, x), f.overshoot, &limits) > available {
-                x -= 0.05;
-            }
-            lerp(q, wanted, x)
-        };
-        let lead = f.lead.max(move_time(q, target, f.overshoot, &limits)).min(available).max(0.12);
-        // Spend spare time moving, not parked: gaps under 1.5 s (drift has
-        // pre-travelled part of the move) become a slower, longer move.
-        // Rests keep their stillness.
-        let absorb = if sec.level == "rest" { 0.25 } else { 1.5 };
-        let start = if a.time - lead - t0 < absorb { t0 } else { a.time - lead };
-        let lead = a.time - start;
-        if start > t0 + 1e-6 {
-            cues.push(hold_cue(t0, start, q, section_at(t0), "stillness before next phrase"));
+        let start = if i == 0 { first } else { cues.last().map_or(0.0, |c: &Cue| c.end) };
+        let end = phrases.get(i + 1).map_or(s.duration, |n| n.time - glide[i + 1]).max(p.time + 0.1);
+        let side = if motifs[p.section][p.step % motifs[p.section].len()].0.ends_with('L') { -1.0 } else { 1.0 };
+        // Half-beat knots (plus the arrival) sample home + voice.
+        let half = beats.windows(2).map(|w| (w[1] - w[0]) / 2.0).next().unwrap_or(0.25).clamp(0.15, 0.5);
+        let mut times: Vec<f64> = vec![start];
+        let mut t = start + half;
+        while t < end - 0.08 {
+            times.push(t);
+            t += half;
         }
-        let next_start = arrivals.get(i + 1).map_or(s.duration, |n| {
-            let nf = feel(&sections[n.section].level);
-            let next = planned(n);
-            let next_lead = nf.lead.max(move_time(target, next, nf.overshoot, &limits));
-            (n.time - next_lead).max(a.time + f.settle + 0.1)
-        });
-        let end = next_start.min(s.duration).max(a.time + 0.05);
-        let progress = ((a.time - sec.start) / (sec.end - sec.start)).clamp(0.0, 1.0);
-        let build = 0.75 + 0.5 * progress;
-        // Drift: while holding, keep travelling toward the next pose, so the
-        // arm is never parked (up to 35% of the way by the next move).
-        let next_pose = arrivals.get(i + 1).map_or(target, planned);
-        let drift_share = if sec.level == "rest" { 0.0 } else { 0.35 };
-        let drift = |t: f64| {
-            let x = ((t - a.time) / (end - a.time).max(1e-6)).clamp(0.0, 1.0);
-            floor_safe(lerp(target, next_pose, drift_share * x))
-        };
-        let mut knots: Vec<(f64, &'static str, [f64; 3])> = vec![(start, "start", q)];
-        if config.enable_windups && f.overshoot > 0.0 && lead > 0.3 {
-            // Anticipation: brief counter-move before committing.
-            knots.push((start + lead * 0.35, "preparation", lerp(q, target, -0.12)));
+        times.push(end);
+        // The phrase arrival is exact; drop grid knots crowding it.
+        let arrival = p.time;
+        if arrival > start + 0.02 && arrival < end - 0.02 {
+            times.retain(|t| (t - arrival).abs() >= 0.08 || *t == start || *t == end);
+            times.push(arrival);
         }
-        knots.push((a.time, "arrival", lerp(q, target, 1.0 + f.overshoot)));
-        let settle_t = (a.time + f.settle).min(end);
-        if settle_t < end - 0.05 && f.overshoot > 0.0 {
-            knots.push((settle_t, "followThrough", target));
-        }
-        let sign = if name.ends_with('L') { -1.0 } else { 1.0 };
-        let hits: Vec<&SidecarOnset> = if config.enable_hits {
-            s.onsets
-                .iter()
-                .filter(|o| o.t > settle_t + 0.25 && o.t < end - 0.15 && o.strength >= hit_floor)
-                .collect()
-        } else {
-            Vec::new()
-        };
-        let mut sustain: Vec<(f64, &'static str, [f64; 3])> = Vec::new();
-        for o in &hits {
-            let d = [4.0 * sign, 16.0 * sign, 30.0 * sign];
-            let lo = if o.tone < 0.46 { -1.0 } else { 1.0 };
-            sustain.push((o.t - 0.22, "hit", drift(o.t - 0.22)));
-            let base = drift(o.t);
-            sustain.push((o.t, "hit", std::array::from_fn(|j| base[j] + d[j] * lo * f.amp)));
-            if o.t + 0.35 < end - 0.05 {
-                sustain.push((o.t + 0.35, "hit", drift(o.t + 0.35)));
-            }
-        }
-        if f.bounce > 0.0 {
-            // Groove: dip on each beat, lift on the off-beat.
-            for w in beat.windows(2).filter(|w| w[0] > settle_t + 0.1 && w[0] < end - 0.2) {
-                let b = f.bounce * f.amp * build;
-                let d = drift(w[0]);
-                sustain.push((w[0], "beat", [d[0] - 2.0 * b * sign, d[1] - 7.0 * b * sign, d[2] - 12.0 * b * sign]));
-                let off = (w[0] + w[1]) / 2.0;
-                if off < end - 0.12 {
-                    let d = drift(off);
-                    sustain.push((off, "offbeat", [d[0] + 1.0 * b * sign, d[1] + 3.0 * b * sign, d[2] + 6.0 * b * sign]));
-                }
-            }
-        } else if sec.level != "rest" && end - settle_t > 2.0 {
-            // Quiet: one slow breath across the held pose.
-            let mid = (settle_t + end) / 2.0;
-            let d = drift(mid);
-            sustain.push((mid, "breath", [d[0] + 4.0 * sign, d[1] - 6.0, d[2] + 10.0 * sign]));
-        }
-        sustain.sort_by(|a, b| a.0.total_cmp(&b.0));
-        // Hits win over nearby beat knots.
-        let hit_times: Vec<f64> = hits.iter().map(|o| o.t).collect();
-        sustain.retain(|k| k.1 == "hit" || hit_times.iter().all(|h| (k.0 - h).abs() > 0.35));
-        knots.extend(sustain);
-        knots.push((end, "recovery", drift(end)));
-        knots.sort_by(|a, b| a.0.total_cmp(&b.0));
-        let mut cleaned: Vec<(f64, &'static str, [f64; 3])> = Vec::new();
-        for k in knots {
-            match cleaned.last() {
-                Some(l) if k.0 - l.0 < 0.08 && k.1 != "arrival" && k.1 != "recovery" && k.1 != "hit" => {}
-                Some(l) if k.0 - l.0 < 0.02 => {}
-                _ => cleaned.push(k),
-            }
-        }
-        let mut out = Vec::with_capacity(cleaned.len());
+        times.sort_by(f64::total_cmp);
+        times.dedup_by(|b, a| *b - *a < 1e-9);
+        let mut knots = Vec::with_capacity(times.len());
+        let mut lead_votes = [0.0; 4];
         let mut prev = (start, q);
-        for (i, (t, phase, want)) in cleaned.into_iter().enumerate() {
-            let joints = if i == 0 { q } else { constrain(prev.1, floor_safe(want), t - prev.0, &limits) };
-            out.push(Knot { time: t, phase: phase.into(), joints, velocity: None });
+        for (k, &t) in times.iter().enumerate() {
+            let gain = if sec.level == "rest" { 0.0 } else { f.layer * if config.enable_hits { 1.0 } else { 0.8 } };
+            let h = home(t);
+            let (d, w) = voice(t, gain, side, h);
+            (0..4).for_each(|j| lead_votes[j] += w[j]);
+            // Label hysteresis: switch only when another element clearly leads.
+            let top = (0..4).max_by(|a, b| w[*a].total_cmp(&w[*b])).unwrap();
+            if w[top] > w[current_lead] + 0.25 {
+                current_lead = top;
+            }
+            let lead = current_lead;
+            let want = floor_safe(std::array::from_fn(|j| h[j] + d[j]));
+            let joints = if k == 0 { q } else { constrain(prev.1, want, t - prev.0, &limits) };
+            let phase = if (t - p.time).abs() < 1e-9 { "arrival".to_string() } else if sec.level == "rest" { "hold".to_string() } else { ELEMENTS[lead].to_string() };
+            knots.push(Knot { time: t, phase, joints, velocity: None });
             prev = (t, joints);
         }
         q = prev.1;
-        let accent = s
-            .onsets
-            .iter()
-            .filter(|o| (o.t - a.time).abs() < 0.08)
-            .map(|o| (o.strength / onset_scale).clamp(0.0, 1.0))
-            .fold(0.0_f32, f32::max);
+        let lead = (0..4).max_by(|a, b| lead_votes[*a].total_cmp(&lead_votes[*b])).unwrap();
         let energy = rms.map_or_else(
             || avg(&s.energy_envelope, s.envelope_rate, start, end),
             |r| (avg(r, s.envelope_rate, start, end) / 0.3).clamp(0.0, 1.0),
         );
+        let name = motifs[p.section][p.step % motifs[p.section].len()].0.clone();
         cues.push(Cue {
             start,
             end,
-            gesture: name.clone(),
+            gesture: name,
             reason: format!(
-                "{} section {} motif {} step {}: {} lands on bar {:.2}s{}{}",
+                "{} section {} motif {} phrase {}: lands {:.2}s, following {}",
                 sec.level,
-                a.section + 1,
+                p.section + 1,
                 motif_label(sec),
-                a.step + 1,
-                if f.bars == 1 { "1-bar phrase" } else if f.bars == 2 { "2-bar phrase" } else { "4-bar phrase" },
-                a.time,
-                if hits.is_empty() { String::new() } else { format!(", {} onset hit(s)", hits.len()) },
-                if f.bounce > 0.0 { ", beat bounce" } else { "" }
+                p.step + 1,
+                p.time,
+                if sec.level == "rest" { "silence" } else { ELEMENTS[lead] }
             ),
             energy: if sec.level == "rest" { 0.0 } else { energy },
-            accent: accent.max(if sec.level == "peak" { 0.8 } else { 0.4 }),
-            arrival_anchor: Some(a.time).filter(|t| *t > start && *t < end),
-            section: Some(a.section),
-            knots: out,
+            accent: if sec.level == "peak" { 0.8 } else { 0.4 },
+            arrival_anchor: Some(p.time).filter(|t| *t > start && *t < end),
+            section: Some(p.section),
+            knots,
         });
-        t0 = end;
     }
-    if t0 < s.duration - 1e-9 || cues.is_empty() {
+    if cues.last().is_none_or(|c| c.end < s.duration - 1e-9) {
+        let t0 = cues.last().map_or(0.0, |c| c.end);
         cues.push(hold_cue(t0, s.duration, q, section_at(t0), "hold to end"));
     }
-    // Section tags must not straddle: re-tag each cue by where it starts, and
-    // split any cue that crosses a section edge only in metadata terms.
     for c in &mut cues {
         let si = section_at(c.start);
-        if c.end <= sections[si].end + 1e-9 {
-            c.section = Some(si);
-        } else {
-            c.section = None;
-        }
+        c.section = (c.end <= sections[si].end + 1e-9).then_some(si);
     }
     add_flow(&mut cues, &limits, 0.9);
     Score {
@@ -749,18 +803,37 @@ fn novelty_cuts(features: &Features, duration: f64) -> Vec<f64> {
 
 /// Novelty peaks sit where *all* features changed most, which on the supplied
 /// track landed 6–9 s after the audible loudness change. Move each cut to the
-/// steepest loudness step (2 s windows) within ±6 s, in the direction of the
+/// earliest strong loudness step on a bar line within ±9 s, in the direction of the
 /// overall change: a rise when entering louder material, a fall when leaving.
-fn refine_cut(features: &Features, prev: f64, cut: f64, next: f64) -> f64 {
+fn refine_cut(features: &Features, bars: &[f64], prev: f64, cut: f64, next: f64) -> f64 {
     let loud = |a: f64, b: f64| features.mean(a.max(0.0), b)[0];
     // Direction from whole neighbouring sections, so a short dip or push
     // right at the edge cannot flip it.
     let dir = (loud(cut, next) - loud(prev, cut)).signum();
-    let steps = (-60..=60).map(|k| cut + f64::from(k) * 0.1);
-    steps
-        .map(|t| (dir * (loud(t, t + 2.0) - loud(t - 2.0, t)), t))
-        .max_by(|a, b| a.0.total_cmp(&b.0).then(b.1.total_cmp(&a.1)))
-        .map_or(cut, |(_, t)| t)
+    // Sections start on downbeats: score bar lines within ±6 s with 4 s
+    // windows (loudness pumps per beat, shorter windows are noise).
+    // Novelty cuts were measured up to ~9 s off; stay between neighbours.
+    let lo = (cut - 9.0).max((prev + cut) / 2.0);
+    let hi = (cut + 9.0).min((cut + next) / 2.0);
+    let near: Vec<f64> = bars.iter().copied().filter(|b| *b >= lo && *b <= hi).collect();
+    let candidates: Vec<f64> = if near.is_empty() {
+        (-60..=60).map(|k| cut + f64::from(k) * 0.1).collect()
+    } else {
+        near
+    };
+    let scored: Vec<(f64, f64)> = candidates
+        .into_iter()
+        .map(|t| (dir * (loud(t, t + 4.0) - loud(t - 4.0, t)), t))
+        .collect();
+    // A change is heard where it *starts*: the earliest bar reaching 70% of
+    // the strongest step, not the bar where the ramp is steepest.
+    let best = scored.iter().map(|x| x.0).fold(f64::MIN, f64::max);
+    scored
+        .iter()
+        .filter(|x| x.0 >= 0.7 * best)
+        .map(|x| x.1)
+        .fold(None, |acc: Option<f64>, t| Some(acc.map_or(t, |a| a.min(t))))
+        .unwrap_or(cut)
 }
 
 /// Split the song into sustained regimes, then label recurrences.
@@ -782,13 +855,13 @@ fn plan_sections(s: &Sidecar, rms: Option<&[f32]>) -> Vec<SectionPlan> {
     let mut cuts: Vec<f64> = cuts;
     cuts.sort_by(f64::total_cmp);
     let rough = cuts.clone();
+    let bars = bar_lines(s);
     let mut cuts: Vec<f64> = (0..rough.len())
         .map(|i| {
             let prev = if i == 0 { 0.0 } else { rough[i - 1] };
             let next = rough.get(i + 1).copied().unwrap_or(s.duration);
-            refine_cut(&features, prev, rough[i], next)
+            refine_cut(&features, &bars, prev, rough[i], next)
         })
-        .map(|t| nearest_beat(&s.beats, t).unwrap_or(t))
         .filter(|t| *t >= MIN_SECTION * 0.75 && *t <= s.duration - MIN_SECTION * 0.75)
         .collect();
     cuts.sort_by(f64::total_cmp);
@@ -870,14 +943,6 @@ fn plan_sections(s: &Sidecar, rms: Option<&[f32]>) -> Vec<SectionPlan> {
     plans
 }
 
-fn nearest_beat(beats: &[f64], target: f64) -> Option<f64> {
-    beats
-        .iter()
-        .copied()
-        .filter(|b| b.is_finite())
-        .min_by(|a, b| (a - target).abs().total_cmp(&(b - target).abs()))
-        .filter(|b| (b - target).abs() <= 0.22)
-}
 
 fn constrain(from: [f64; 3], wanted: [f64; 3], dt: f64, l: &JointLimits) -> [f64; 3] {
     std::array::from_fn(|j| {
@@ -1006,18 +1071,6 @@ fn add_flow(cues: &mut [Cue], limits: &JointLimits, flow: f64) {
     }
 }
 
-fn percentile(v: &[f32], q: f64) -> f32 {
-    let mut x = v
-        .iter()
-        .copied()
-        .filter(|v| v.is_finite())
-        .collect::<Vec<_>>();
-    if x.is_empty() {
-        return 1.;
-    }
-    x.sort_by(f32::total_cmp);
-    x[((x.len() - 1) as f64 * q).round() as usize]
-}
 fn avg(v: &[f32], rate: f32, start: f64, end: f64) -> f32 {
     if v.is_empty() {
         return 0.;
@@ -1066,19 +1119,14 @@ mod tests {
     }
 
     #[test]
-    fn moves_arrive_on_the_bar_not_after_it() {
-        let s = compile_sidecar_json(&fixture(24, 0.8, None, "")).unwrap();
+    fn phrase_moves_land_exactly_on_bar_lines() {
+        let s = compile_sidecar_json(&fixture(40, 0.8, None, "")).unwrap();
         let moves: Vec<_> = s.cues.iter().filter(|c| c.arrival_anchor.is_some()).collect();
-        assert!(moves.len() >= 4, "{}", moves.len());
+        assert!(moves.len() >= 3, "{}", moves.len());
         for c in moves {
-            let k = |p: &str| c.knots.iter().find(|k| k.phase == p).unwrap().joints;
-            let dist = |a: [f64; 3], b: [f64; 3]| (0..3).map(|j| (a[j] - b[j]).abs()).fold(0.0, f64::max);
-            let done = dist(k("arrival"), k("start"));
-            let total = dist(k("recovery"), k("start"));
-            // Regression: truncated leads once smeared the move across the
-            // bar (arrival ~7% of the phrase's travel). Drift toward the
-            // next pose after arriving is intended and stays secondary.
-            assert!(total < 20.0 || done >= 0.6 * total, "{}: done {done:.1} of {total:.1}", c.gesture);
+            let t = c.arrival_anchor.unwrap();
+            assert!(c.knots.iter().any(|k| k.phase == "arrival" && k.time == t));
+            assert!((t / 0.5 - (t / 0.5).round()).abs() < 1e-9, "arrival {t} off beat grid");
         }
     }
 

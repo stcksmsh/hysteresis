@@ -12,7 +12,9 @@ Media and generated files stay outside git. From repository root:
 ```sh
 media=/home/stcksmsh/Documents/Codex/2026-09-23-can-you-check-the-programming-github/output/music-arm
 python3 scripts/arm_features.py "$media/instant-crush-analysis.wav" "$media/instant-crush.sidecar.json" "$media/instant-crush.motion.sidecar.json"
-cargo run -p hyst-previz --example arm_preview -- "$media/song.html" instant-crush.m4a "$media/instant-crush.motion.sidecar.json" "$media/instant-crush.score.json"
+# element activity + melody (needs numpy + scipy)
+python3 scripts/arm_elements.py "$media/instant-crush-analysis.wav" "$media/instant-crush.motion.sidecar.json" "$media/instant-crush.elements.sidecar.json"
+cargo run -p hyst-previz --example arm_preview -- "$media/song.html" instant-crush.m4a "$media/instant-crush.elements.sidecar.json" "$media/instant-crush.score.json"
 node "$media/serve.cjs"
 ```
 
@@ -39,38 +41,29 @@ ffmpeg -i song.mp4 -vn -ac 2 -ar 44100 -c:a pcm_s16le "$media/instant-crush-anal
 node --import tsx "$PWD/scripts/analyze.ts" "$media/instant-crush-analysis.wav" "$media/instant-crush.sidecar.json"
 ```
 
-## Sections, phrases, key poses
+## How the score is built
 
-Compiler splits song into sections (z-scored loudness/5 bands/centroid/flatness,
-4s before/after novelty, peaks above median+2·MAD, >=8s apart). Level class
-(`quiet`/`mid`/`peak` song-relative, `rest` from absolute RMS) sets phrasing:
-
-| level | new pose every | move | sustain |
-|---|---|---|---|
-| peak | 1 bar | 0.45s lead, anticipation, 10% overshoot | bounce every beat, onset hits |
-| mid | 2 bars | 0.8s lead, 7% overshoot | half-depth bounce, hits |
-| quiet | 4 bars | 1.8s sweep | one slow breath |
-| rest | section | fold to rest pose | frozen |
-
-Poses come from 8 full-range key poses (rise, reach, arc, fold, sweep, hook,
-coil, open) + mirrors. Section motif = 4 poses, each the candidate farthest from
-the previous one; similar later sections replay it mirrored, and every further
-pass through a motif bends its poses (evolution); bounce depth builds across a
-section. Moves arrive exactly on bar lines (downbeat phase = beat parity with
-most onset strength; provisional) or on a strong onset within 0.3s. Lead time
-is reserved before each arrival; if a bar is too short the move shrinks rather
-than smearing past the beat. Spare time becomes slower travel, not parking.
-
-Flow: knots carry velocity where motion continues (monotone harmonic-mean
-tangents, zero at reversals, holds and hits), segments are C2 quintic Hermite,
-velocities shrink until 25-point checks pass speed/accel limits. During held
-bars the arm drifts up to 35% toward the next pose. Overlapping action: elbow
-and wrist trail the shoulder by 0.05/0.11 s (`jointLagSeconds`). Strong onsets
-in held bars become hits; accents inside a move's wind-up are not hit (gap).
-Every knot pose keeps >=8 cm floor clearance.
-
-Section edges: novelty cuts are refined to the steepest loudness step within
-±6 s in the direction of the whole-section change (fixed 6–9 s late edges).
+1. **Sections**: novelty over z-scored loudness/5 bands/centroid/flatness
+   (4 s windows, peaks above median+2·MAD, >=8 s apart), then each cut moves
+   to the earliest bar line within ±9 s whose 4 s loudness step reaches 70% of
+   the strongest step, in the direction of the whole-section change. Level:
+   `quiet`/`mid`/`peak` (song-relative loudness), `rest` (absolute RMS).
+2. **Home path**: one key pose per phrase (2 bars in `peak`, 4 otherwise),
+   gliding in over up to a bar and landing exactly on the phrase downbeat.
+   Poses: 8 full-range key poses + mirrors; motif = 4 maximally contrasting
+   poses; recurring sections mirror it; each further cycle bends poses.
+3. **Voice layer**: moves to whichever element dominates (`elements` from
+   `scripts/arm_elements.py`; HPSS + mid/side heuristic, not neural stems),
+   weights = softmax over ±1.5 s element levels, so styles cross-fade:
+   - vocals: pulls toward a raised pose as the melody rises, lowered as it
+     falls; wrist articulates sung notes
+   - synth: flowing orbit, one loop per 2 bars
+   - bass: heavy side-to-side swing per bar, arm sinks
+   - drums: dip on the beat
+   Without `elements`, only the drums layer (from energy) is active.
+4. **Flow**: half-beat knots with velocity (C2 quintic Hermite, limit-
+   checked), elbow/wrist lag 0.05/0.11 s. Knot `phase` names the element the
+   arm follows (label hysteresis); the viewer shows it.
 
 ## Remote mode
 
@@ -126,7 +119,7 @@ ranges and 1 kHz finite-difference speed/acceleration (2% tolerance). Floor clea
 at 120Hz, not proven collision-free. Holds and deterministic random-access sampling
 are checked. Exported `instant-crush.audit.json` records supplied-track results.
 
-Current supplied track: 19 sections (first loud block 92.0–129.7s), 100 cues, 99 exact arrivals. Max joint
-speeds 205/300/279 degrees/s, minimum sampled floor clearance 8.16 cm. Audit logic lives in
+Current supplied track: 18 sections (first loud block 90.91–126.35s), 54 phrase cues, 53 exact arrivals. Max joint
+speeds 99/260/209 degrees/s, minimum sampled floor clearance 7.48 cm. Audit logic lives in
 `hyst_previz::audit_score`, shared by CLI and acceptance tests.
 Human-quality dance remains unproven; the preview is ready for listening review.
