@@ -1,5 +1,15 @@
 # Hysteresis dance handoff — 2026-09-24
 
+## Latest user priority — 2026-10-01 bottom-up dance restart
+
+User rejected both recordings and amplitude/template fixes. Musical memory,
+whole-song analysis, anticipation and recognizable dance are primary goal.
+Read `docs/DANCE_RESTART_PROMPT.md` for fresh-agent task. Current score/recordings
+are rejected baselines, not perceptually accepted work. Native window/hardware
+integration must not displace this priority. User requested checkpoint commit
+and fresh prompt; no further dance implementation in this handoff session.
+
+
 ## Task prompt
 
 Work directly in `/home/stcksmsh/Programming/Github/Hysteresis` (canonical `/secondary/Programming/Github/Hysteresis`). Coordinator: GPT-6 Astra, medium. User authorizes completing this cross-crate vertical slice and explicitly requests cheaper-agent coding delegation. Preserve existing unrelated/uncommitted work; do not reset, clean, commit everything, or start from HEAD-only worktree. Native rewrite is largely untracked.
@@ -130,3 +140,172 @@ URL remains http://127.0.0.1:8766/song.html. Launch/audit commands in previz REA
 Interpretation still heuristic, shared visual simple canvas proof; native renderer,
 ensemble choreography, semantic repetition matching, physical actuator constraints
 remain outside this single-arm slice. No claim of perceptually finished dance.
+
+### Phrase context + remote transport — 2026-09-28
+
+Continued in canonical `/secondary/Programming/Github/Hysteresis`, baseline
+`a4afbda`, with only pre-existing `.codex/` untracked. Two bounded Terra workers
+owned compiler and remote transport; coordinator reviewed, integrated and verified.
+
+Compiler uses valid supplied section edges and section-specific recovery posture.
+Unlabeled spans use a bounded ±4s content neighborhood clipped at declared edges;
+energy/timbre departure selects related motif variation. Cue index no longer picks
+gesture or direction. Invalid/overlapping section spans are ignored deterministically;
+nearby declared edges remain exact. This is heuristic context, not inferred verse/
+chorus recognition. Existing single early break is not stretched over whole song.
+
+Remote preview advances before autoplay permission; explicit Play/Enable audio
+hands off at current preview position. Pause/seek/end no longer resume fallback.
+Removed global pointerdown play race; pending play rejection cannot overwrite
+intentional pause status. Normal music/synthetic paths retained. Added full-viewer
+mock media regression tests, plus section/posture/anchor/continuity compiler tests.
+
+Verified: compiler12 + previz4 tests; workspace check; workspace CPU tests excluding
+hyst-render; targeted compiler/previz clippy; JS timing + media suites; diff-check.
+Chrome real media: blocked autoplay, first Play, handoff, quick pause, seeks15/105/
+335/60s, mobile width, allowed muted autoplay/unmute, normal playback. Screenshot
+inspected. No GPU rerun; existing renderer clippy debt remains outside this slice.
+
+Regenerated external song.html/score/audit:221 cues,56 exact onset anchors,5 holds;
+max speed33.85/40.35/47.47deg/s, acceleration150/170/200deg/s², minimum floor
+clearance26.33cm sampled120Hz. Browser preview server on loopback8766. Review:
+http://127.0.0.1:8766/song.html?remote=1&fix=3. Existing MP4s were not regenerated.
+No commit/push, generated media outside repo, frozen src/tools untouched.
+Native score/output integration and perceptual dance acceptance remain open.
+
+### Native score output + CPU inspection checkpoint — 2026-09-30
+
+Implemented bounded single-arm native score playback/inspection slice. Two Terra
+workers owned hyst-output and CLI/previz; coordinator integrated and reviewed.
+Existing September28 dirty changes preserved. HEAD remains a4afbda; no commit/push.
+
+hyst-output now exports ChoreographyOutput, ChoreographyFrame and ClockPosition.
+Constructor validates finite limits, exact contiguous score/knot coverage, shared
+boundary poses, immutable holds, exact arrival anchors and analytic quintic speed/
+acceleration bounds. Sampling uses absolute time with explicit Logical/Audible
+AudioClock domain; no dt integration or patchgraph evaluation. Nonfinite sample
+time fails; finite out-of-range time clamps. Cue metadata selects next cue at
+shared boundary; phase selects first knot at/after time, including exact arrivals.
+
+CLI commands:
+  cargo run -p hyst-cli -- score-sample SCORE_JSON SECONDS [SVG_PATH]
+  cargo run -p hyst-cli -- score-trace SCORE_JSON WAV_PATH [FPS] [LATENCY_MS]
+Trace is offline WAV sample-clock simulation, no audio device. FPS integer1..240,
+latency0..5000ms. Duration mismatch fails before frames; tolerated one-sample skew
+and latency tail drain to exact score endpoint. JSON/NDJSON stdout, --help, path
+errors and broken-pipe handling implemented. Native SVG uses existing Arm FK,
+32/26/12cm assumed links, escaped metadata, joint/energy/accent readouts.
+Browser song_preview_data now validates/samples same ChoreographyOutput.
+
+Verified: workspace cargo check; CPU workspace tests excluding hyst-render;
+targeted compiler/output/previz/CLI clippy -D warnings; JS timing/media tests;
+git diff --check. Output23 tests; CLI4 unit+2 integration tests; previz5 tests.
+Final CLI integration extension tests both9/10 and10/10 WAVframes against1s score
+with200ms latency: endpoint exactly once, monotonic time, bounded cadence.
+No GPU rerun; existing renderer clippy warnings remain baseline limitation.
+
+Real supplied WAV44100Hz mono14986240frames, duration339.82403628117913s.
+Native30fps/50ms trace10198frames: exact final time, single terminal frame,
+bounded cadence, max pose difference5.97e-13degrees vs independent score sampler,
+sampled minimum floor clearance26.3254cm. Actual onset anchors retained.
+Browser20391 exported FK/joint frames byte-identical numerically to prior export;
+216 phase labels changed at exact knots to shared sampler semantics. Chrome
+play/pause and seeks15/60/105/335s pass; no page errors. Native SVG gallery inspected.
+
+External generated artifacts remain outside git in music-arm output directory:
+  native-arm-trace.ndjson
+  native-arm-60.svg / native-arm-60.png
+  native-inspection.html / native-inspection.png
+  native-arm-15.svg, native-arm-60.337052154195014.svg,
+  native-arm-105.svg, native-arm-335.svg
+song.html regenerated from shared sampler; existing score/media/MP4 unchanged.
+Loopback server started via exec session97793. If offline, run node serve.cjs
+in external asset directory. Gallery: http://127.0.0.1:8766/native-inspection.html
+Motion preview: http://127.0.0.1:8766/song.html?remote=1&fix=3
+Logs: /tmp/hyst-native-check.log, /tmp/hyst-native-tests.log,
+/tmp/hyst-native-clippy.log. Independent comparator /tmp/hysteresis-native-acceptance.py.
+Launch/limits documented in crates/hyst-previz/README.md.
+
+User requested state saved and work stopped. This delivers native sampling +
+static inspection/offline trace, not a native animated window or live audio loop.
+Next: wire score output to native live playback/animated previz; retain explicit
+clock domain and seek/pause semantics. Native wgpu connection, hardware transport,
+ensemble preview and perceptual dance acceptance remain open. Frozen src/tools
+untouched; pre-existing .codex/ untracked preserved. No reset/clean/commit/push.
+
+### Full-song arm recording — 2026-09-30
+
+User requested full song + dancing arm demo after saved native checkpoint.
+Recorded current score-driven browser preview deterministically at 30fps; reused
+existing arm/shared visual canvases and cue captions. Bounded Terra worker owned
+external recording script; coordinator reviewed framing and verified final media.
+
+External output (no generated media in git):
+/home/stcksmsh/Documents/Codex/2026-09-23-can-you-check-the-programming-github/output/music-arm/arm-dance-instant-crush-current.mp4
+Reusable record-demo.cjs lives beside video; defaults record full current song.
+H.264 1920x1080, 10195 frames, 339.833333s; original AAC copied unchanged,
+339.824036s, both streams start at zero. File size29612368bytes.
+Verified source/final audio payload SHA256 identical:
+339393e808e01509aef2cacafea29abe59f610ae036210680415ce3e02cdace4
+Final encoded frames inspected at60.333333s and335s. Chrome decoded video,
+sought60/335s, played forward and paused without error. Capture muted browser;
+no GPU probe, Rust changes or new dependencies. Existing dirty rewrite preserved.
+Native live animation/audio loop and hardware output remain open. No commit/push.
+
+### Tiny repeated gesture fix — 2026-10-01
+
+User rejected full-song recording: same little move repeated. Measured old score:
+221 cues, 133 nods; median active duration1.5s; median joint excursions5.40/7.41/
+10.43degrees. Five quintic stops per short cue + home recovery suppressed travel;
+normalized energy obscured broad loudness changes and fade.
+
+Bounded Sol worker changed only hyst-compile/src/lib.rs; coordinator reviewed
+full-song paths and integrated export. Ordinary fluctuations now coalesce into
+3.6–6.8s planning spans; groove uses three quintic legs. Rest/declared edges remain
+exact. RMS controls gesture, numeric recovery posture and amplitude; content,
+onset pan and prior displacement guide continuation, with workspace reversal.
+No random or cue-index cycling. Planning margins prevent hard-limit pinning.
+Quiet fade damps amplitude/history before immutable holds. Exact accent arrivals,
+C2 joins, published schema and deterministic seek preserved.
+
+Real score:92 cues,43 exact anchors,4 holds; sway29/reach13/nod3/coil17/
+flick-high16/strike-low10. Median active duration3.8s; median per-cue joint ranges
+24.68/20.75/24.30degrees. Max speed55/47.28/56.39deg/s; accel150/170/200deg/s²;
+120Hz sampled floor clearance22.63cm. Broad-workspace and normalized-path repetition
+acceptance checks added; matched-tempo loudness/timbre/rest fixtures contrast motion.
+
+Verified targeted compiler/output/previz/CLI Rust tests + clippy, workspacecheck,
+JS timing/media tests, real-score audit. Browser seeks15/60/105/200/285/335s,
+play/pause and selected song source pass with no page errors. Representative
+whole-arm path plots reviewed. Cargo logs /tmp/hyst-phrase-integration-tests.log,
+/tmp/hyst-phrase-check.log and /tmp/hyst-phrase-clippy.log. No GPU rerun.
+Canonical external song.html, score/audit regenerated. Score SHA256:
+dc09962813dadc2f102730ca16d82827c9e4a5410cb9c5e95d01bf305c3a0fe8
+Preview http://127.0.0.1:8766/song.html?remote=1&fix=4
+Older recording preserved. Generated media remains outside repo. Frozen src/tools
+untouched, dirty native work preserved. No commit/push. Dance quality still needs
+user listening review; no native live window or hardware added.
+
+Replacement full-song recording verified:
+/home/stcksmsh/Documents/Codex/2026-09-23-can-you-check-the-programming-github/output/music-arm/arm-dance-instant-crush-phrases.mp4
+H.264 1920x1080/30fps,10195frames,339.833333s. Original AAC preserved;
+packet payload SHA256 still339393e808e01509aef2cacafea29abe59f610ae036210680415ce3e02cdace4.
+Encoded frames15/105/200/320s inspected; intact canvas and contrasting silhouettes.
+Chrome MP4 playback/seeks/pause pass. Prior tiny-motion recording preserved.
+State saved; no active encode remains.
+
+### Rejected choreography + fresh diagnosis handoff — 2026-10-01
+
+User rejected larger-phrase recording too: looks like movement/flailing, weak
+energetic contrast, no clear bass/vocal following, rare hits seem coincidental.
+User requires bottom-up musical memory/anticipation and dance generation;
+previous geometric/amplitude fixes missed root problem. Neither recording is
+perceptually accepted. Saved self-contained docs/DANCE_RESTART_PROMPT.md.
+Current infrastructure remains useful; no further behavior edits this session.
+
+Checkpoint verification: CPU workspace tests excluding hyst-render and workspace
+check pass. Strict workspace clippy reconfirmed baseline manual_is_multiple_of
+warnings julia.rs308/1574. Targeted dance-crate clippy and JS tests pass. GPU
+unavailable; no rerun. Commit includes accumulated related compiler/remote/native
+output/CLI work + tests/docs. Local .codex/config.toml excluded; external assets
+excluded. User requested local commit, not push or new chat creation.

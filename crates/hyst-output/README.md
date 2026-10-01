@@ -1,7 +1,8 @@
 # hyst-output
 
-`VizOutput` implementations (physical + eventually screen). See `SINTEZA_IMPLEMENTATION_PLAN.md`
-§4 R5 and `SINTEZA_CHOREOGRAPHY.md` §0/§5.3/§7 for the spec this session builds against.
+Physical-output plumbing: `VizOutput` implementations for dense fields plus direct-clock
+compiled-score playback. See `SINTEZA_IMPLEMENTATION_PLAN.md` §4 R5/R8 and
+`SINTEZA_CHOREOGRAPHY.md` §0/§5.2/§5.3/§7.
 
 ## What's here
 
@@ -24,7 +25,18 @@ Shared plumbing, generic, not field-specific:
   failed element freezes at its last value and is excluded from all further resampling; every
   other element keeps updating normally.
 
-## Real integration point (when R2 lands)
+`ChoreographyOutput` (compiled single-arm score — §5.2):
+- Owns validated `hyst_compile::Score`; samples score directly at absolute time. It does not use
+  `VizOutput::update(dt)` or patchgraph because cue decisions are resolved offline.
+- `sample_at(seconds)` is deterministic random access. Nonfinite input errors; finite values clamp
+  to `[0, duration]`. Shared cue boundaries choose next cue metadata, except final endpoint.
+- `sample_clock(clock, ClockPosition::Logical|Audible)` makes latency domain explicit. Logical
+  source time leads output audio; audible time follows heard audio. Zero-rate clock errors.
+- Validation mirrors exported-score audit: contiguous coverage, shared poses, bounded quintic
+  speed/acceleration, exact anchor knots, immutable holds. It is artifact validation, not hardware
+  safety, torque, calibration, or collision certification.
+
+## Remaining field-renderer integration
 
 R2 (`hyst-render`) doesn't exist yet as a finished renderer. `FieldSource` is the seam: once R2
 has a real render target, add a `FieldSource` impl that reads it back (the same `wgpu` readback
@@ -48,7 +60,6 @@ frozen, every other element tracks the new field exactly, nothing panics.
 
 - No real transport (Art-Net/serial/USB) — out of scope this session, `last_diff()` is as far as
   it goes.
-- No `ChoreographyOutput` — blocked on R7's compiled cue list.
 - `FieldOutput::targets()` is empty — synthetic/self-driven sources only; a future
   bus-driven procedural `FieldSource` would declare routable targets.
 - Element failure freezes at last value (no injectable custom "dead" value) — matches §7's "one

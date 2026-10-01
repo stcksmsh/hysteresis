@@ -2,8 +2,8 @@ const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/st
 const source=fs.readFileSync(process.argv[2],'utf8');
 const match=source.match(/\/\/ ARM_TIMING_HELPERS_BEGIN([\s\S]*?)\/\/ ARM_TIMING_HELPERS_END/);
 assert(match);const context={};vm.createContext(context);
-vm.runInContext(match[1]+';this.api={cleanBeats,beatFromGrid,manualBeat,gridBeat,transportBeat};',context);
-const {cleanBeats,beatFromGrid,manualBeat,gridBeat,transportBeat}=context.api;
+vm.runInContext(match[1]+';this.api={cleanBeats,beatFromGrid,manualBeat,gridBeat,transportBeat,remoteClockSeconds,freezeRemoteClock,seekRemoteClock};',context);
+const {cleanBeats,beatFromGrid,manualBeat,gridBeat,transportBeat,remoteClockSeconds,freezeRemoteClock,seekRemoteClock}=context.api;
 const close=(a,b)=>assert(Math.abs(a-b)<1e-9,`${a} != ${b}`);
 const irregular=cleanBeats([1,1.5,2.2]);
 close(beatFromGrid(.5,irregular,120),-1);close(beatFromGrid(1.25,irregular,120),.5);
@@ -13,6 +13,12 @@ for(const bad of [[],[1],[0,10,3,4],[0,1,1],[0,-1,2],[0,NaN,2],[0,Infinity,2],[0
 close(gridBeat(2,'detected',cleanBeats([0,10,3,4]),120,0,0),4);
 close(transportBeat(true,12.25,999,'manual',[],120,.25,0),transportBeat(true,12.25,-999,'manual',[],120,.25,0));
 close(transportBeat(true,5,77,'manual',[],120,1,0),8);close(transportBeat(true,9,77,'manual',[],120,1,0),16);
+const fallback={previewing:true,seconds:0,startedAt:1000};
+close(remoteClockSeconds(fallback,3500),2.5);
+const handoff=freezeRemoteClock(fallback,3500);
+assert.equal(handoff.previewing,false);close(handoff.seconds,2.5);close(remoteClockSeconds(handoff,9000),2.5);
+const seeked=seekRemoteClock(17.25,10000);
+assert.equal(seeked.previewing,false);close(remoteClockSeconds(seeked,20000),17.25);
 const scoreMatch=source.match(/(function validSong[\s\S]*?)\n  window\.__ARM_SCORE__/);
 assert(scoreMatch);const scoreContext={};vm.createContext(scoreContext);
 vm.runInContext(scoreMatch[1]+';this.api={validSong,sampleSong,cueAt,shiftedScoreSeconds,visualAt};',scoreContext);

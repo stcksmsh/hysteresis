@@ -5,4 +5,5 @@ edition.workspace = true
 
 [dependencies]
 hyst-compile = { path = "../hyst-compile" }
+hyst-output = { path = "../hyst-output" }
 serde_json.workspace = true

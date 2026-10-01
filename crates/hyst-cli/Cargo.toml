@@ -8,3 +8,9 @@ name = "hyst"
 path = "src/main.rs"
 
 [dependencies]
+hyst-audio = { path = "../hyst-audio" }
+hyst-compile = { path = "../hyst-compile" }
+hyst-output = { path = "../hyst-output" }
+hyst-previz = { path = "../hyst-previz" }
+serde.workspace = true
+serde_json.workspace = true

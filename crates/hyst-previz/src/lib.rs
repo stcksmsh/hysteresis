@@ -1,5 +1,8 @@
 //! Arm previsualization. Rust compiles song cues and forward kinematics;
 //! exported viewer samples absolute audio time. Synthetic studies remain references.
+//! `native` renders CPU-only SVG inspection artifacts from output frames.
+
+pub mod native;
 
 use std::f64::consts::{PI, TAU};
 use std::fmt::Write;
@@ -226,25 +229,13 @@ pub fn render_html_with_score(
 pub fn song_preview_data(score: &hyst_compile::Score) -> Result<serde_json::Value, String> {
     let fps = 60.0;
     let arm = Arm::default();
+    let output = hyst_output::ChoreographyOutput::new(score.clone())?;
     let mut frames = Vec::new();
     for i in 0..=(score.duration * fps).ceil() as usize {
         let time = (i as f64 / fps).min(score.duration);
-        let angles = score.sample(time);
+        let frame = output.sample_at(time)?;
+        let angles = frame.joints_degrees;
         let points = arm.joints(Pose(angles.map(f64::to_radians)));
-        let cue = score
-            .cues
-            .iter()
-            .find(|c| time >= c.start && time < c.end)
-            .or_else(|| score.cues.last());
-        let stage = cue
-            .and_then(|c| {
-                c.knots
-                    .iter()
-                    .find(|k| k.time > time)
-                    .or_else(|| c.knots.last())
-            })
-            .map(|k| k.phase.as_str())
-            .unwrap_or("hold");
         frames.push(serde_json::json!([
             points[1].x,
             points[1].y,
@@ -255,7 +246,7 @@ pub fn song_preview_data(score: &hyst_compile::Score) -> Result<serde_json::Valu
             angles[0],
             angles[1],
             angles[2],
-            stage
+            frame.phase
         ]));
     }
     Ok(

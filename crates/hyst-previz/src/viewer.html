@@ -34,6 +34,9 @@
   .tempo input { height: 42px; }
   .music-only { display: none; }
   body.music .music-only { display: flex; }
+  .remote-only { display: none; }
+  body.remote .remote-only { display: flex; }
+  body.remote .remote-only[hidden] { display: none; }
   body.music #sound { display: none; }
   .music-config { margin-top: 16px; gap: 16px; align-items: end; }
   .music-config input[type=number] { width: 112px; min-height: 42px; padding: 8px; border: 1px solid #3c4953; border-radius: 8px; background: #202a32; color: #e5e9ed; }
@@ -64,6 +67,7 @@
     <label>Motion source<select id="study"><option value="song">Song score</option><option value="2">Reference: groove + reach + pause</option><option value="1">Reference: groove</option><option value="0">Reference: pulse</option></select></label>
     <label class="tempo"><span id="tempo-label">Tempo <output id="bpm-value">110 BPM</output></span><input id="bpm" type="range" min="50" max="180" step="0.01" value="110" aria-label="Tempo in beats per minute"></label>
     <button id="next-accent" type="button" class="music-only">Next accent</button>
+    <button id="enable-audio" type="button" class="remote-only">Enable audio</button>
     <button id="sound" type="button" aria-pressed="false">Click track off</button>
   </div>
   <div class="controls music-only music-config">
@@ -118,8 +122,20 @@
   function transportBeat(music, currentTime, syntheticBeat, mode, beats, tempo, zero, offset) {
     return music ? gridBeat(currentTime, mode, beats, tempo, zero, offset) : syntheticBeat;
   }
+  function remoteClockSeconds(state, now) {
+    return state.previewing ? state.seconds + Math.max(0, now - state.startedAt) / 1000 : state.seconds;
+  }
+  function freezeRemoteClock(state, now) {
+    return {previewing:false, seconds:remoteClockSeconds(state, now), startedAt:now};
+  }
+  function seekRemoteClock(seconds, now) {
+    return {previewing:false, seconds:Math.max(0, seconds), startedAt:now};
+  }
+  function remoteTransportTime(state, mediaSeconds, now) {
+    return state.previewing ? remoteClockSeconds(state, now) : (Number.isFinite(mediaSeconds) ? mediaSeconds : state.seconds);
+  }
   // ARM_TIMING_HELPERS_END
-  window.__ARM_TIMING__ = {cleanBeats, beatFromGrid, manualBeat, gridBeat, transportBeat};
+  window.__ARM_TIMING__ = {cleanBeats, beatFromGrid, manualBeat, gridBeat, transportBeat, remoteClockSeconds, freezeRemoteClock, seekRemoteClock, remoteTransportTime};
   function validSong(value) {
     if (!value || typeof value !== 'object' || !Number.isFinite(value.duration) || value.duration <= 0 || !Array.isArray(value.frames) || !value.frames.length) return null;
     const frames = value.frames.filter(frame => Array.isArray(frame) && frame.length >= 10 && frame.slice(0, 9).every(Number.isFinite) && typeof frame[9] === 'string');
@@ -163,13 +179,38 @@
   let bpm=Number.isFinite(Number(sidecar.tempo)) && Number(sidecar.tempo)>0 ? Number(sidecar.tempo) : 110;
   const score=validSong(song);
   const music=Boolean(trackUrl), remoteMode=new URLSearchParams(location.search).get('remote')==='1';
-  let beat=0, selected=music && score ? 'song' : 2, last=performance.now(), sound=false, clickAudio=null, nextClick=0, remoteEpoch=performance.now();
-  function clockSeconds() { return remoteMode && media.paused ? (performance.now()-remoteEpoch)/1000 : (media.currentTime||0); }
+  let beat=0, selected=music && score ? 'song' : 2, last=performance.now(), sound=false, clickAudio=null, nextClick=0, audioAttempt=0;
+  let remoteClock={previewing:remoteMode,seconds:0,startedAt:performance.now()};
+  function clockSeconds() { return remoteMode ? remoteTransportTime(remoteClock,media.currentTime,performance.now()) : (media.currentTime||0); }
+  function remoteStatus(message) { $('sound-error').textContent=message; }
+  function setMediaTime(seconds) {
+    const duration=Number.isFinite(media.duration)?media.duration:Infinity;
+    const time=Math.max(0,Math.min(seconds,duration));
+    media.currentTime=time;
+    return time;
+  }
+  async function enableRemoteAudio() {
+    const attempt=++audioAttempt;
+    const now=performance.now(), previewSeconds=remoteClock.previewing ? remoteClockSeconds(remoteClock, now) : (media.currentTime||0);
+    setMediaTime(previewSeconds);
+    media.muted=false;
+    try {
+      await media.play();
+      if(attempt!==audioAttempt) return;
+      $('enable-audio').hidden=true;
+      remoteStatus('Audio enabled. Audio time drives preview.');
+    } catch {
+      if(attempt===audioAttempt && remoteClock.previewing) remoteStatus('Silent preview continues. Enable audio needs browser permission.');
+    }
+  }
   let playing=music ? false : !matchMedia('(prefers-reduced-motion: reduce)').matches;
   let activeOscillators=new Set();
   if (music) {
-    document.body.classList.add('music'); media.src=trackUrl;
-    if (remoteMode) { media.muted=true; media.autoplay=true; media.play().catch(()=>{}); }
+    document.body.classList.add('music'); if(remoteMode)document.body.classList.add('remote'); media.src=trackUrl;
+    if (remoteMode) {
+      media.muted=true; media.autoplay=true;
+      remoteStatus('Silent preview advancing while browser starts muted audio.');
+    }
     $('clock-label').textContent=score ? 'Song-conditioned score · audio time master · detector grid remains provisional' : 'Reference study · detected grid provisional · audio time master';
     $('timeline-label').textContent='Track position';
     $('seek').setAttribute('aria-label','Seek track in seconds');
@@ -288,20 +329,20 @@
   }
   $('play').onclick=async()=>{
     if(music){
-      if(media.paused){try{await media.play();$('sound-error').textContent='';}catch{$('sound-error').textContent='Playback was blocked. Press Play again or check track URL.';}}
+      if(remoteMode && (remoteClock.previewing || media.muted)) await enableRemoteAudio();
+      else if(media.paused){try{await media.play();$('sound-error').textContent='';}catch{$('sound-error').textContent='Playback was blocked. Press Play again or check track URL.';}}
       else media.pause();
     }else{advance(performance.now());playing=!playing;stopClicks();}
     $('play').textContent=playing?'Pause':'Play';draw();
   };
-  if (remoteMode && music) {
-    document.addEventListener('pointerdown',async()=>{
-      media.muted=false;
-      try { await media.play(); $('sound-error').textContent=''; } catch { $('sound-error').textContent='Click Play to start audio.'; }
-    },{once:true});
-  }
+  $('enable-audio').onclick=()=>enableRemoteAudio();
   $('bpm').oninput=()=>{advance(performance.now());bpm=Number($('bpm').value);$('bpm-value').textContent=`${music?bpm.toFixed(2):bpm.toFixed(0)} BPM`;stopClicks();draw();};
   $('seek').oninput=()=>{
-    if(music){if(Number.isFinite(media.duration))media.currentTime=Math.min(Number($('seek').value),media.duration);}
+    if(music){
+      const seconds=Number($('seek').value);
+      if(remoteMode){audioAttempt++;remoteClock=seekRemoteClock(seconds,performance.now());}
+      setMediaTime(seconds);
+    }
     else beat=Number($('seek').value);
     last=performance.now();stopClicks();draw();
   };
@@ -311,17 +352,38 @@
   $('next-accent').onclick=()=>{
     if(!score)return;
     const now=scoreSeconds(),next=score.cues.find(c=>Number.isFinite(c.arrivalAnchor)&&c.arrivalAnchor>now+.05);
-    if(next){media.currentTime=Math.max(0,next.arrivalAnchor+(Number($('offset').value)||0));draw();}
+    if(next){
+      const seconds=Math.max(0,next.arrivalAnchor+(Number($('offset').value)||0));
+      if(remoteMode) remoteClock=seekRemoteClock(seconds,performance.now());
+      setMediaTime(seconds);draw();
+    }
   };
   $('sound').onclick=async()=>{try{if(!clickAudio)clickAudio=new(window.AudioContext||window.webkitAudioContext)();await clickAudio.resume();sound=!sound;stopClicks();$('sound').textContent=sound?'Click track on':'Click track off';$('sound').setAttribute('aria-pressed',String(sound));$('sound-error').textContent='';}catch{$('sound-error').textContent='Click track unavailable. Motion preview still works.';}};
-  media.addEventListener('play',()=>{playing=true;$('play').textContent='Pause';});
-  media.addEventListener('pause',()=>{playing=false;$('play').textContent='Play';draw();});
-  media.addEventListener('ended',()=>{playing=false;$('play').textContent='Play';$('sound-error').textContent='Track ended.';draw();});
+  media.addEventListener('play',()=>{
+    if(remoteMode && remoteClock.previewing){
+      const now=performance.now();remoteClock=freezeRemoteClock(remoteClock,now);setMediaTime(remoteClock.seconds);
+    }
+    if(remoteMode && media.muted) remoteStatus('Muted audio active. Press Enable audio for sound.');
+    if(remoteMode && !media.muted){$('enable-audio').hidden=true;remoteStatus('');}
+    playing=true;$('play').textContent='Pause';
+  });
+  media.addEventListener('pause',()=>{
+    if(remoteMode){audioAttempt++;remoteClock=seekRemoteClock(media.currentTime||remoteClock.seconds,performance.now());}
+    playing=false;$('play').textContent='Play';draw();
+  });
+  media.addEventListener('ended',()=>{
+    if(remoteMode){audioAttempt++;remoteClock=seekRemoteClock(media.currentTime||remoteClock.seconds,performance.now());}
+    playing=false;$('play').textContent='Play';$('sound-error').textContent='Track ended.';draw();
+  });
+  if(remoteMode && music){
+    const attempt=++audioAttempt;
+    media.play().catch(()=>{if(attempt===audioAttempt && remoteClock.previewing)remoteStatus('Silent preview advancing. Press Enable audio for sound.');});
+  }
   media.addEventListener('error',()=>{$('sound-error').textContent='Track could not be loaded. Check track URL and browser media support.';playing=false;$('play').textContent='Play';});
   media.addEventListener('loadedmetadata',()=>{if(Number.isFinite(media.duration))$('seek').max=String(media.duration);draw();});
   document.addEventListener('visibilitychange',()=>{advance(performance.now());if(document.hidden)stopClicks();});
   $('play').textContent=playing?'Pause':'Play';setInterval(scheduleClicks,25);
-  window.__ARM_PREVIEW__={inspect(time){const rawMediaSeconds=Number.isFinite(time)?time:(media.currentTime||0),effectiveTime=score?effectiveScoreSeconds(rawMediaSeconds):null,usesScore=activeScore();return {frame:usesScore?sampleSong(score,effectiveTime):frameAt(beat),cue:usesScore?cueAt(score,effectiveTime):null,visual:usesScore?visualAt(score,effectiveTime):null,state:{music,score:!!score,selected,playing,beat,rawMediaSeconds,effectiveScoreSeconds:effectiveTime}};}};
+  window.__ARM_PREVIEW__={inspect(time){const rawMediaSeconds=Number.isFinite(time)?time:clockSeconds(),effectiveTime=score?effectiveScoreSeconds(rawMediaSeconds):null,usesScore=activeScore();return {frame:usesScore?sampleSong(score,effectiveTime):frameAt(beat),cue:usesScore?cueAt(score,effectiveTime):null,visual:usesScore?visualAt(score,effectiveTime):null,state:{music,score:!!score,selected,playing,beat,rawMediaSeconds,effectiveScoreSeconds:effectiveTime,remotePreviewing:remoteMode&&remoteClock.previewing}};}};
   function tick(now){advance(now);draw();requestAnimationFrame(tick);}requestAnimationFrame(tick);
 })();
 </script>
