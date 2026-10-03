@@ -4,6 +4,8 @@
 use crate::CompileConfig;
 use serde::{Deserialize, Serialize};
 
+pub mod figures;
+
 const SOURCES: [&str; 4] = ["bass", "drums", "vocals", "other"];
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -136,13 +138,7 @@ pub fn compile_interpretation(json: &str, config: CompileConfig) -> Result<Inter
     let sources: [&Source; 4] =
         std::array::from_fn(|i| &data.stem_interpretation.sources[SOURCES[i]]);
     let transitions = transitions(&data, &sources);
-    let mut boundaries = vec![0.0, data.duration];
-    for phrase in &data.musical_memory.phrases {
-        boundaries.extend([phrase.start, phrase.end]);
-    }
-    boundaries.extend(transitions.iter().map(|(time, _, _)| *time));
-    boundaries.sort_by(f64::total_cmp);
-    boundaries.dedup_by(|a, b| (*a - *b).abs() < 0.08);
+    let boundaries = boundaries(&data, &transitions);
 
     // One continuous source-driven timeline prevents phrase/cue joins from
     // resetting position. Cue profiles sample it at identical absolute times.
@@ -315,6 +311,18 @@ pub fn compile_interpretation(json: &str, config: CompileConfig) -> Result<Inter
         beat_zero: data.musical_memory.beat_zero,
         cues,
     })
+}
+
+/// Phrase edges plus strong measured source/structure transitions, sorted.
+fn boundaries(data: &Evidence, transitions: &[(f64, usize, f64)]) -> Vec<f64> {
+    let mut boundaries = vec![0.0, data.duration];
+    for phrase in &data.musical_memory.phrases {
+        boundaries.extend([phrase.start, phrase.end]);
+    }
+    boundaries.extend(transitions.iter().map(|(time, _, _)| *time));
+    boundaries.sort_by(f64::total_cmp);
+    boundaries.dedup_by(|a, b| (*a - *b).abs() < 0.08);
+    boundaries
 }
 
 fn validate(data: &Evidence) -> Result<(), String> {
@@ -671,7 +679,7 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    fn fixture(vocal: f64, bass: f64) -> String {
+    pub(super) fn fixture(vocal: f64, bass: f64) -> String {
         let source = |activity: f64| json!({"absoluteRms":vec![0.1;160],"wholeTrackActivity":vec![activity;160],"spectralFlux":vec![0.55;160],"transientDensity":vec![0.4;160],"candidates":[]});
         json!({"duration":8.0,"envelopeRate":20.0,"rmsEnvelope":vec![0.2;160],
             "musicalMemory":{"version":1,"beatPeriod":0.5,"beatZero":0.0,"phrases":[{"start":0.0,"end":8.0,"rhythm":vec![0.5;32],"lowRhythm":vec![0.5;32],"highRhythm":vec![0.5;32],"similarity":0.0}]},

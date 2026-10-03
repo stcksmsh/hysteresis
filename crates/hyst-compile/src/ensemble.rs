@@ -837,7 +837,7 @@ fn bezier_extents<const N: usize>(controls: [f64; N], depth: u8) -> (f64, f64) {
     (a.0.min(b.0), a.1.max(b.1))
 }
 
-fn fit_tangents(track: &mut AgentTrack, rig: &Rig) -> Result<(), String> {
+pub(crate) fn fit_tangents(track: &mut AgentTrack, rig: &Rig) -> Result<(), String> {
     // Knot velocities come from the second-order follower in compile_ensemble;
     // only shrink them where a segment's continuous bounds still exceed limits.
     let len = track.knots.len();
