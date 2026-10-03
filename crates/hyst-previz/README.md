@@ -5,6 +5,110 @@ then exports a standalone browser preview. Audio playback position owns time;
 pause and seek reconstruct arm, trace and simple visual panel from identical score.
 Browser canvas remains disposable previz, not replacement for native renderer.
 
+## Corrected target — automatic interpretation and 3D ensemble
+
+The project must infer musical structure and phrasing from audio, then compile
+shared choreography for multiple synchronized 3D robot arms. The current planar
+three-joint score is a diagnostic rig, not the target architecture. A provisional
+arm has five servos: base rotation, three bending joints, and another rotation at
+the second joint. Local axes and the optional final link remain unconfirmed.
+Projected visuals should follow the same musical interpretation and shared clock.
+
+The authored solo director has been removed from the compiler. Its source and
+recordings survive outside the repository as rejected diagnostic material in the
+media directory. `scripts/instant_crush.acceptance.json` stores only the user's
+listening references for evaluating automatic inference; it must never drive
+inference or choreography. `?solo=1` hides auxiliary graphics for motion inspection.
+
+The musical-memory candidate below was also rejected: it does not provide adequate
+section interpretation or convincing dance. Passing trajectory limits is not
+perceptual acceptance.
+
+## Automatic analysis evidence
+
+`dance_structure.py` adds mixed-audio novelty and repeated-material candidates.
+`dance_stems.py` adds estimated source activity from four separated WAVs. Neither
+module accepts choreography roles or human section timestamps. Source-separation
+producer metadata comes from an optional `separation.json` manifest; arbitrary
+WAVs must not be attributed to a model that did not produce them. Activity uses
+whole-track calibration and preserves absolute RMS. Candidate confidence is
+heuristic evidence strength, not a calibrated probability or semantic label.
+
+```sh
+media=/home/stcksmsh/Documents/Codex/2026-09-23-can-you-check-the-programming-github/output/music-arm
+python3 scripts/dance_stems.py "$media/instant-crush.memory.sidecar.json" "$media/stem-analysis/htdemucs/instant-crush-stereo-analysis" "$media/instant-crush.stems.sidecar.json" "$media/instant-crush.stems.evidence.json"
+python3 scripts/dance_structure.py "$media/instant-crush-stereo-analysis.wav" "$media/instant-crush.stems.sidecar.json" "$media/instant-crush.interpreted.sidecar.json" "$media/instant-crush.interpreted.evidence.json" scripts/instant_crush.acceptance.json
+python3 -m unittest discover -s scripts -p 'test_dance_*.py'
+```
+
+The optional final reference file is evaluated after inference and appears only
+in the evidence report. It does not change the enriched sidecar or inferred data.
+Current source WAVs came from CPU htdemucs4.0.1 / torch2.5.1+cpu in isolated
+`/tmp/hyst-dance-cpu`, using original stereo audio, shifts0, float32 and clamp mode.
+No GPU, allin1 or natten was used. Stem estimates expose bass/vocal contrast hidden
+by total mix loudness; leakage and clamped peaks remain limitations.
+
+The compiler does not yet consume `musicalStructure` or `stemInterpretation`.
+These are automatic evidence for the next director integration, not a new
+accepted dance recording. The three-joint score remains a diagnostic format.
+
+## Musical-memory candidate — 2026-10-01
+
+Both previous recordings are rejected baselines. The new offline path analyzes the
+provided WAV with existing NumPy/SciPy/SoundFile, preserving the input sidecar.
+It adds versioned `musicalMemory` evidence: provisional regularized pulse,
+ordered 16-beat mix-transient profiles, harmonic recurrence comparisons, absolute
+level, and measured transient timestamps. These metrical windows are not inferred
+verse/chorus sections. Low/bright mix features are not isolated bass/vocal stems.
+
+```sh
+media=/home/stcksmsh/Documents/Codex/2026-09-23-can-you-check-the-programming-github/output/music-arm
+python3 scripts/dance_memory.py "$media/instant-crush-analysis.wav" "$media/instant-crush.motion.sidecar.json" "$media/instant-crush.memory.sidecar.json" "$media/instant-crush.memory.evidence.json"
+cargo run -p hyst-previz --example arm_preview -- "$media/song-memory.html" instant-crush.m4a "$media/instant-crush.memory.sidecar.json" "$media/instant-crush.memory.score.json"
+cargo run -p hyst-previz --example arm_preview -- "$media/song-memory-groove.html" instant-crush.m4a "$media/instant-crush.memory.sidecar.json" "$media/instant-crush.memory.groove.score.json" --groove-only
+```
+
+`--groove-only` removes event preparation/arrival overlays. `--no-reuse` resolves
+current phrase coefficients instead of recalling the matching earlier phrase.
+Both options affect compilation, not playback. Old sidecars without
+`musicalMemory` retain the previous planner; old scores deserialize unchanged.
+Invalid extension data fails explicitly rather than silently falling back.
+
+The planner projects ordered profiles onto phrase/four-beat/two-beat harmonics,
+with physical timing preserved. Whole-track calibration makes actual content
+variation visible. Phrase coefficients crossfade, absolute level shapes motion,
+and validated recurrence recalls the source signature. All decisions resolve
+into the score offline. Runtime sampling has no hidden musical state.
+
+Knots optionally carry velocity and acceleration. Quintic Hermite interpolation
+preserves C2 continuation; omitted derivatives retain legacy zero-stop quintics.
+Shared Bezier hull bounds conservatively prove continuous joint range, speed,
+and acceleration. Floor clearance remains a sampled geometry check. Jerk,
+actuator dynamics, calibration, self-collision and hardware safety remain open.
+
+Measured transients use 50Hz frame centers (20ms quantization), not sample-accurate
+acoustic onsets. Preparation targets the stored estimate exactly. No drop is
+invented for Instant Crush. Beat fit remains provisional; supplied detector
+residuals and independent waveform pulse evidence are reported separately.
+Preview readout uses the compiled pulse when this extension is present.
+
+```sh
+python3 -m unittest discover -s scripts -p test_dance_memory.py
+cargo test -p hyst-compile -p hyst-output -p hyst-previz -p hyst-cli
+cargo run -p hyst-previz --example audit_score -- "$media/instant-crush.memory.score.json"
+python3 scripts/dance_acceptance.py "$media/instant-crush.memory.score.json" "$media/instant-crush.memory.groove.score.json" "$media/instant-crush.memory.sidecar.json" "$media/instant-crush.rejected-phrases.score.json" "$media/instant-crush.memory.acceptance.json"
+```
+
+Listening comparison: <http://127.0.0.1:8766/dance-memory-review.html>.
+Candidate: <http://127.0.0.1:8766/song-memory.html>.
+No-accent candidate: <http://127.0.0.1:8766/song-memory-groove.html>.
+
+External `record-memory.cjs` preserves the existing recorder and adds `--start`
+for short excerpts. Full recordings copy original AAC; excerpts decode/re-encode
+AAC for sample-aligned trimming. Generated media stays outside git. Human
+listening/visual acceptance is still required; software checks do not establish
+convincing dance or verified instrument following.
+
 ## Supplied track
 
 Media and generated files stay outside git. From repository root:

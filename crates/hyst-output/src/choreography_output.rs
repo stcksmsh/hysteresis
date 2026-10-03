@@ -6,13 +6,10 @@
 //! hardware safety, calibration, torque, or collision clearance.
 
 use hyst_audio::AudioClock;
-use hyst_compile::{Cue, Score};
+use hyst_compile::{segment_bounds, Cue, Score};
 use serde::Serialize;
 
 const MAX_DURATION_SECS: f64 = 21_600.0;
-const QUINTIC_MAX_SPEED: f64 = 1.875;
-// Same analytic extrema used by `hyst-previz`'s `audit_score`.
-const QUINTIC_MAX_ACCELERATION: f64 = 5.773_502_691_896_258;
 const LIMIT_TOLERANCE: f64 = 1e-7;
 
 /// Which playback clock domain should drive score sampling.
@@ -124,11 +121,11 @@ fn validate_score(score: &Score) -> Result<(), String> {
     }
 
     let mut expected_start = 0.0;
-    let mut previous_pose = None;
+    let mut previous_knot = None;
     for cue in &score.cues {
-        validate_cue(score, cue, expected_start, previous_pose)?;
+        validate_cue(score, cue, expected_start, previous_knot)?;
         expected_start = cue.end;
-        previous_pose = Some(cue.knots.last().expect("validated knots").joints);
+        previous_knot = cue.knots.last();
     }
     require(
         expected_start == score.duration,
@@ -140,7 +137,7 @@ fn validate_cue(
     score: &Score,
     cue: &Cue,
     expected_start: f64,
-    previous_pose: Option<[f64; 3]>,
+    previous_knot: Option<&hyst_compile::Knot>,
 ) -> Result<(), String> {
     require(
         cue.start.is_finite() && cue.end.is_finite() && cue.end > cue.start,
@@ -162,10 +159,18 @@ fn validate_cue(
         cue.knots.last().expect("nonempty").time == cue.end,
         "last knot must end cue",
     )?;
-    if let Some(previous) = previous_pose {
+    if let Some(previous) = previous_knot {
         require(
-            cue.knots[0].joints == previous,
+            cue.knots[0].joints == previous.joints,
             "cue boundary poses must match",
+        )?;
+        require(
+            cue.knots[0].velocity == previous.velocity,
+            "cue boundary velocities must match",
+        )?;
+        require(
+            cue.knots[0].acceleration == previous.acceleration,
+            "cue boundary accelerations must match",
         )?;
     }
     for knot in &cue.knots {
@@ -177,6 +182,10 @@ fn validate_cue(
         for joint in 0..3 {
             require(knot.joints[joint].is_finite(), "joint angle must be finite")?;
             require(
+                knot.velocity[joint].is_finite() && knot.acceleration[joint].is_finite(),
+                "joint derivatives must be finite",
+            )?;
+            require(
                 knot.joints[joint] >= score.limits.min_degrees[joint]
                     && knot.joints[joint] <= score.limits.max_degrees[joint],
                 "joint angle outside limits",
@@ -184,27 +193,34 @@ fn validate_cue(
         }
     }
     for pair in cue.knots.windows(2) {
-        let dt = pair[1].time - pair[0].time;
-        require(dt.is_finite() && dt > 0.0, "knot times must increase")?;
+        let bounds = segment_bounds(&pair[0], &pair[1]).map_err(str::to_owned)?;
         for joint in 0..3 {
-            let distance = (pair[1].joints[joint] - pair[0].joints[joint]).abs();
             require(
-                distance * QUINTIC_MAX_SPEED / dt
-                    <= score.limits.max_speed_degrees_per_second[joint] + LIMIT_TOLERANCE,
-                "quintic speed limit exceeded",
+                bounds.min_position_degrees[joint]
+                    >= score.limits.min_degrees[joint] - LIMIT_TOLERANCE
+                    && bounds.max_position_degrees[joint]
+                        <= score.limits.max_degrees[joint] + LIMIT_TOLERANCE,
+                "continuous joint trajectory outside limits",
             )?;
             require(
-                distance * QUINTIC_MAX_ACCELERATION / dt.powi(2)
+                bounds.max_speed_degrees_per_second[joint]
+                    <= score.limits.max_speed_degrees_per_second[joint] + LIMIT_TOLERANCE,
+                "trajectory speed limit exceeded",
+            )?;
+            require(
+                bounds.max_acceleration_degrees_per_second2[joint]
                     <= score.limits.max_acceleration_degrees_per_second2[joint] + LIMIT_TOLERANCE,
-                "quintic acceleration limit exceeded",
+                "trajectory acceleration limit exceeded",
             )?;
         }
     }
     if cue.gesture == "hold" {
         require(
-            cue.knots
-                .iter()
-                .all(|knot| knot.joints == cue.knots[0].joints),
+            cue.knots.iter().all(|knot| {
+                knot.joints == cue.knots[0].joints
+                    && knot.velocity == [0.0; 3]
+                    && knot.acceleration == [0.0; 3]
+            }),
             "hold cue must remain still",
         )?;
     }
@@ -259,11 +275,15 @@ mod tests {
                             time: 0.0,
                             phase: "start".into(),
                             joints: a,
+                            velocity: [0.0; 3],
+                            acceleration: [0.0; 3],
                         },
                         Knot {
                             time: 2.0,
                             phase: "recovery".into(),
                             joints: b,
+                            velocity: [0.0; 3],
+                            acceleration: [0.0; 3],
                         },
                     ],
                 },
@@ -280,11 +300,15 @@ mod tests {
                             time: 2.0,
                             phase: "start".into(),
                             joints: b,
+                            velocity: [0.0; 3],
+                            acceleration: [0.0; 3],
                         },
                         Knot {
                             time: 4.0,
                             phase: "recovery".into(),
                             joints: b,
+                            velocity: [0.0; 3],
+                            acceleration: [0.0; 3],
                         },
                     ],
                 },
@@ -302,6 +326,8 @@ mod tests {
                 time: 1.0,
                 phase: "arrival".into(),
                 joints: [110.0, -60.0, -15.0],
+                velocity: [0.0; 3],
+                acceleration: [0.0; 3],
             },
         );
         score
@@ -417,5 +443,62 @@ mod tests {
         assert_eq!(frame.phase, "arrival");
         assert_eq!(frame.joints_degrees, [110.0, -60.0, -15.0]);
         assert_eq!(frame.arrival_anchor, Some(1.0));
+    }
+
+    #[test]
+    fn derivative_knots_sample_continuously_and_require_c2_cue_boundaries() {
+        let mut derivative_score = score();
+        derivative_score.cues[0].knots[0].velocity = [4.0, 0.0, 0.0];
+        derivative_score.cues[0].knots[1].velocity = [4.0, 0.0, 0.0];
+        derivative_score.cues[1].gesture = "sway".into();
+        derivative_score.cues[1].knots[0].velocity = [4.0, 0.0, 0.0];
+        derivative_score.cues[1].knots[1].joints = [115.0, -60.0, -15.0];
+        let output = ChoreographyOutput::new(derivative_score.clone()).unwrap();
+        let h = 1e-5;
+        let before = output.sample_at(2.0 - h).unwrap().joints_degrees[0];
+        let at = output.sample_at(2.0).unwrap().joints_degrees[0];
+        let after = output.sample_at(2.0 + h).unwrap().joints_degrees[0];
+        assert!(((at - before) / h - 4.0).abs() < 0.001);
+        assert!(((after - at) / h - 4.0).abs() < 0.001);
+
+        derivative_score.cues[1].knots[0].velocity[0] = 3.0;
+        assert!(ChoreographyOutput::new(derivative_score)
+            .err()
+            .unwrap()
+            .contains("boundary velocities"));
+
+        let mut score = score();
+        score.cues[0].knots[1].acceleration[0] = 1.0;
+        assert!(ChoreographyOutput::new(score)
+            .err()
+            .unwrap()
+            .contains("boundary accelerations"));
+    }
+
+    #[test]
+    fn derivative_trajectory_hulls_reject_overshoot_and_nonfinite_values() {
+        let mut overshoot = score();
+        overshoot.limits.max_speed_degrees_per_second = [10_000.0; 3];
+        overshoot.limits.max_acceleration_degrees_per_second2 = [10_000.0; 3];
+        overshoot.cues[0].knots[0].velocity[0] = 500.0;
+        assert!(ChoreographyOutput::new(overshoot)
+            .err()
+            .unwrap()
+            .contains("trajectory outside limits"));
+
+        let mut nonfinite = score();
+        nonfinite.cues[0].knots[0].acceleration[1] = f64::NAN;
+        assert!(ChoreographyOutput::new(nonfinite)
+            .err()
+            .unwrap()
+            .contains("derivatives must be finite"));
+
+        let mut moving_hold = score();
+        moving_hold.cues[1].knots[0].velocity[0] = 1.0;
+        moving_hold.cues[0].knots[1].velocity[0] = 1.0;
+        assert!(ChoreographyOutput::new(moving_hold)
+            .err()
+            .unwrap()
+            .contains("hold cue must remain still"));
     }
 }

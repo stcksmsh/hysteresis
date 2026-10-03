@@ -1,104 +1,155 @@
-# Fresh-agent prompt — musical memory → convincing dance
+# Fresh-agent prompt — investigate, clarify intent, then implement
 
-Work in `/secondary/Programming/Github/Hysteresis`. Fresh diagnosis required.
-User rejected both full-song demos. Current motion is technically valid but does
-not look like dancing. Larger gestures, fewer cues and generic energy thresholds
-missed the root problem. Treat current output as a rejected baseline.
+Work in `/secondary/Programming/Github/Hysteresis`.
+`/home/stcksmsh/Programming/Github/Hysteresis` resolves to the same checkout.
+Preserve all modified/untracked work. Do not reset, clean, create a worktree,
+commit, push, install models, or drive hardware. Frozen `src/` and `tools/` are
+read-only; active offline analysis lives in `scripts/`.
 
-User intent: HYSTERESIS = memory. Offline mode has the whole song available and
-should anticipate musical events, develop/revisit movement ideas and dance to
-what music is doing. Arm should follow meaningful bass/drum/vocal phrasing and
-become recognizably more energetic when music does. Occasional coincidental hits,
-beat-synchronized flailing and repetitive template playback fail acceptance.
-User does not know which algorithm will solve this; choose foundation from evidence.
+## Latest user instruction — 2026-10-03
 
-Read first: git status, git log -3 --oneline, AGENTS.md, docs/DANCE_HANDOFF.md,
-crates/hyst-previz/README.md. Then relevant SINTEZA_IMPLEMENTATION_PLAN.md R4/R7/R8/R9
-and SINTEZA_CHOREOGRAPHY.md sections4/6. Plan is authoritative; older companion
-specs are directional. Latest user correction overrides earlier priorities:
-convincing musical dance comes before native-window or hardware integration.
+The user explicitly wants the next agent to investigate the repository FIRST,
+then ask questions about unresolved intent — including **what they actually want
+from this project** — BEFORE continuing implementation. The previous agents
+moved too quickly from technical evidence into invented artistic decisions.
+Do not treat the newest prototype, old plan, or this handoff as an approved
+artistic brief. Do not assume that making arms move more, adding formations,
+or exposing more analysis is the desired outcome.
 
-Start bottom-up. Trace real audio → actual available analysis → musical memory /
-future context → movement generation → constrained joints → playback. Identify
-where musical information is absent, discarded or flattened. Watch/listen to
-rejected demos and contrasting real song passages before choosing implementation.
-Explain root failure briefly, then implement a coherent working improvement.
-Do not spend session renaming gestures, widening angles or randomly rotating
-existing templates. Reconsider compiler/movement representation if evidence says
-it is wrong. Do not assume one scalar energy envelope is a musical interpretation.
+## 1. Investigate without changing implementation
 
-Verified gaps to investigate, not a prescribed solution:
-- Supplied Instant Crush analysis has only one early break section,0–2.554s;
-  it is not a whole-song structure map. Current motion sidecar has no stemPresence,
-  repeats or novelty envelopes. Inspect actual assets before assuming otherwise.
-- hyst-core has optional stem/repetition/novelty types; scripts/ contains active
-  analysis, SSM/repetition and Demucs paths. Determine what actually works and
-  what is connected. Low frequency band energy is not an isolated bass stem;
-  brightness is not vocals. Never label proxies as verified instrument sources.
-- Current hyst-compile mainly averages envelopes over short spans and anchors a
-  few strongest onsets. It does not meaningfully use drop events, repetition maps
-  or vocal/bass phrase structure. Prior joint displacement is motion history,
-  not sufficient musical memory. All quintic legs stop at knots; evaluate whether
-  this prevents believable sustained groove.
-- Offline anticipation should use verified future musical timestamps and enough
-  preparation time. Live path currently provides limited causal analysis/PLL;
-  equivalent predictive live dance director is not implemented. Keep capabilities
-  separate; do not pretend unavailable structure is known.
+Read, in order:
+1. `AGENTS.md`, then the latest entries of `docs/DANCE_HANDOFF.md`.
+2. `crates/hyst-previz/README.md` and relevant R4/R7/R8/R9 sections of
+   `SINTEZA_IMPLEMENTATION_PLAN.md`; choreography spec sections 4 and 6 are
+   directional background, not a substitute for user clarification.
+3. Git status/diff/log and actual Rust/Python code. Separate pre-existing work
+   from the newest unaccepted integration. Check whether `.ai/state.json` exists
+   and follow its workflow if present.
 
-Deliver musical evidence, not only software checks:
-1. Identify several contrasting timestamps: sustained groove, vocal/bass change,
-   louder passage, transition/drop if actually present, quiet passage/rest.
-   Show which signals/events justify decisions. Do not invent a drop for this song.
-2. Demonstrate recognizable groove with hit/windup special cases disabled. Dance
-   needs phrasing, continuation, preparation, arrival and recovery—not continuous
-   random motion or a scalar amplitude dial. Musical recurrence should inform
-   related movement; different content at matched tempo should change behavior.
-3. Demonstrate anticipation of an annotated future event, with arrival at its
-   actual timestamp. Use a suitable real-track excerpt if supplied song lacks
-   reliable events; do not redownload media already provided or fabricate analysis.
-4. Use acceptance checks for musical decisions, memory/recurrence, anticipation,
-   energetic contrast, continuity, limits, rests and deterministic seek. Numeric
-   workspace coverage alone does not prove dance quality. Compare before/after
-   with audible short excerpts before spending time on another full-song render.
-5. Deliver runnable preview and, after review of representative excerpts, updated
-   full-song arm recording with original audio. User is perceptual acceptance gate.
-   Report what improved and what remains unresolved without claiming human-quality
-   dance from passing tests.
+Trace audio -> source/structure evidence -> musical interpretation -> motion
+intent -> ensemble scheduling -> rig retargeting -> playback and projection.
+Inspect actual sidecar/score data and representative preview frames. Do not
+claim to have watched motion or heard music without perceptual access.
 
-Current usable infrastructure: deterministic compiler score; shared native/browser
-absolute-time sampler; exact onset anchors; simulated joint speed/acceleration
-validation; audio-master seek/pause; autoplay-safe remote mode; recording script.
-Reuse it where useful. Preserve additive score/sidecar compatibility or provide
-explicit backwards-compatible migration. Compiled musical memory may be resolved
-into score offline; runtime hidden state must not break seek reconstruction.
+Summarize briefly: what works, what is speculative, where current implementation
+fails, and which decisions need the user. Reading and targeted checks are fine;
+do not begin another implementation or render campaign before clarification.
 
-Assets, all outside git:
+## 2. Clarify what the user wants
+
+Ask focused questions grounded in the investigation. Use plain language, not
+crate names or generic product-planning questionnaires. Start with the intended
+experience and acceptance bar. For example:
+
+- What should someone watching the installation experience? What would make you
+  say “yes, this is the project,” rather than “arms moving to music”?
+- What does convincing musical interpretation mean to you: following particular
+  musical voices, developing dance phrases, anticipating structure, dialogue
+  between arms, or something else? Ask for a concrete positive reference or an
+  explanation of a rejected passage; do not presume these choices are exhaustive.
+- What should multiple arms contribute, and how should projected visuals relate
+  to them? Is the next proof about choreography alone or the whole installation?
+- What is the smallest next result you want to judge, and what would count as
+  failure? Which parts of the current direction should be discarded?
+
+After that, resolve only technical unknowns needed for the chosen next slice:
+rig axes/geometry if relevant, desired agent arrangement, acceptable offline
+preparation, and whether this supplied song is still the right test case.
+Do not repeat facts already settled below. Do not ask the user to design the
+algorithm or review a giant requirements list. Ask a few high-value questions,
+wait for answers, restate the agreed objective and acceptance criteria, THEN
+continue implementation. No answer means no artistic approval.
+
+## 3. Established constraints, not open questions
+
+- Automatic interpretation is mandatory. Offline analysis has the whole song
+  available and must support musical memory, anticipation and coherent motion.
+- Target is multiple synchronized 3D articulated robot arms plus projection.
+  Provisional arm: base rotation + three bends + extra local rotation at second
+  joint (five servos); distal link optional. Exact axes/calibration are unsettled.
+  Local rotation axes must inherit upstream orientation.
+- All earlier motion recordings were rejected. New ensemble prototype is also
+  unreviewed; green tests are not dance approval.
+- Human timestamps in `scripts/instant_crush.acceptance.json` are validation-only.
+  Never feed them into inference, cue planning or choreography. Authored director
+  was removed from production and survives only outside git as diagnostic material.
+- No allin1/natten installation, expensive GPU experiments, hardware driving,
+  commits or pushes. Preserve existing CPU-separated stems; do not regenerate.
+- Follow repo worker ownership/delegation rules after scope is clarified.
+  Communicate smart caveman: concise, exact, no filler.
+
+## 4. Current implementation — inspect before trusting
+
+Existing mixed-audio memory planner remains `crates/hyst-compile/src/memory.rs`.
+Its planar motion was rejected. `scripts/dance_stems.py` and
+`scripts/dance_structure.py` produce estimated source activity, local transitions,
+multiscale novelty and recurring-material evidence. These are uncertain features,
+not confirmed semantic song sections or downbeats.
+
+Newest uncommitted integration adds:
+- `crates/hyst-compile/src/director.rs`: `compile_interpretation` consumes
+  musicalMemory + stemInterpretation + musicalStructure; emits rig-independent
+  sweep/lift/fold profiles, source character, formation choices, recurrence and
+  anticipation. Choices and thresholds are prototype assumptions, not user approval.
+- `crates/hyst-compile/src/ensemble.rs`: configurable local-axis rig, illustrative
+  five-servo geometry, existing hyst-choreo formation helpers, offline per-agent
+  tracks, shared quintic sampling and 3D forward kinematics. Interior tangents
+  support continuation; position/speed/acceleration use continuous Bezier bounds.
+  No jerk, collision or hardware-safety proof. Inspect actual formation handling:
+  some mappings remain simplified and must not be oversold.
+- `crates/hyst-output/src/ensemble.rs`: absolute-time/AudioClock sampling.
+- `crates/hyst-previz/examples/ensemble_preview.rs` + `src/ensemble.html`:
+  independent new 3D canvas preview, audio-master transport, shared floor visuals,
+  evidence readouts. Supports --agents, --groove-only, --no-reuse, --rig, --score,
+  --interpretation. Old single-arm APIs/preview stay intact.
+- `scripts/ensemble_acceptance.py`: independent numeric verifier drafted during
+  this session. Check latest handoff for run status; do not assume completed audit.
+
+Real track compiled to 55 cues over 339.824 seconds. Automatic local vocal exit
+185.15s and return203.60s influence decisions. Source contrast distinguishes
+percussive break from bass/vocal passages. This does not establish good dance,
+correct semantic sections, or correct recurrence phrasing.
+
+**Known geometry failure:** sampled exported world points reached z=-0.1377m,
+below the displayed floor. This is unresolved. Investigate real rig intent and
+retargeting; do not hide it by arbitrarily raising the whole installation.
+Latest silence-hold and preview-label changes may postdate exported artifacts.
+Regenerate only after clarification and necessary fixes.
+
+## 5. Assets and verification
+
+External media directory (never commit generated media):
 `/home/stcksmsh/Documents/Codex/2026-09-23-can-you-check-the-programming-github/output/music-arm/`
-- instant-crush.m4a / instant-crush-analysis.wav (339.824s)
-- instant-crush.sidecar.json / instant-crush.motion.sidecar.json
-- instant-crush.score.json / instant-crush.audit.json / song.html
-- arm-dance-instant-crush-current.mp4 (tiny repeated motion, rejected)
-- arm-dance-instant-crush-phrases.mp4 (larger heuristic motion, also rejected)
-- record-demo.cjs (1080p/30fps, original AAC copied)
-- serve.cjs (loopback8766, byte ranges)
-Preview: http://127.0.0.1:8766/song.html?remote=1&fix=4
-If offline: node serve.cjs in asset directory. Recording commands in script/previz
-README; use a new output filename and preserve rejected comparisons.
 
-Work directly in saved checkout. No reset/clean. Frozen src/ and tools/ remain
-read-only; active scripts/ may change. Native rewrite must survive. Cross-crate
-integration for this dance slice is authorized; give cheaper coding workers bounded
-file ownership per AGENTS.md. Keep coordinator focused on diagnosis/integration
-and perceptual review. Do not recursively delegate. Communicate smart caveman.
-Do not install allin1/natten, run expensive GPU experiments, drive hardware or
-commit generated media. Check existing dependencies before adding/installing any.
-Research technical options from primary sources if needed. Flag genuine expensive
-or missing-data decisions; do useful independent work before asking questions.
+Useful files:
+- `instant-crush.m4a`, `instant-crush-stereo-analysis.wav`.
+- `instant-crush.interpreted.sidecar.json` plus earlier memory/stems evidence.
+- `stem-analysis/htdemucs/instant-crush-stereo-analysis/` contains vocals, drums,
+  bass, other WAVs + separation.json. CPU separation already complete.
+- `song-ensemble.html`, `instant-crush.ensemble.score.json`,
+  `instant-crush.ensemble.intent.json`; groove/no-reuse exports may also exist.
+- Rejected full videos and old before/after excerpts remain as baselines.
+- `record-ensemble.cjs` was drafted but no new ensemble excerpt/video was produced
+  before the user redirected work to this handoff.
 
-Checkpoint validation: CPU workspace tests excluding hyst-render, workspace check,
-targeted compiler/output/previz/CLI clippy and JS timing/media tests pass. Strict
-workspace clippy has pre-existing manual_is_multiple_of warnings in
-hyst-render/src/passes/julia.rs:308,1574. GPU unavailable; do not repeat expensive
-probe or claim full GPU suite passed. Current 92-cue score/43 onset anchors is a
-technical checkpoint, not accepted choreography. .codex/config.toml is local and
-untracked. No remote push requested. Append honest checkpoint when done.
+Loopback8766 server was unavailable when checked this session. Verify before
+linking it. Preview can be inspected locally; source HTML contains placeholders
+and must first be exported. Don't imply an old artifact matches newest code.
+
+Recent checks: 15 Python analysis tests, legacy JS timing/media helpers, new
+ensemble JS deterministic seek/offset helpers, CPU Rust workspace tests excluding
+hyst-render and workspace check passed during integration. Workers reported
+targeted clippy pass. These precede some final edits; inspect latest receipts and
+rerun affected checks after changes. No new GPU or hardware checks.
+
+## 6. Continue only after answers
+
+Record agreed creative objective, explicit non-goals, and one concrete next
+acceptance slice. Keep musical reasoning independent from rig DOF and agent count.
+Prefer a small representative real-audio proof that tests the agreed intent.
+Show before/after and core groove with specials disabled when relevant; verify
+seek, continuity, limits, real rests, recurrence and uncertainty honestly.
+Ask for human dance-quality judgment on short excerpts before any full-song
+render. Do not call this installation complete because a pipeline compiles.
+Append an honest checkpoint to docs/DANCE_HANDOFF.md and AGENTS.md.

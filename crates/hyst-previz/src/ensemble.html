@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hysteresis · Ensemble study</title>
+<style>
+  :root { color-scheme: dark; font: 15px system-ui,sans-serif; background:#0b1118; color:#e8f0f3; }
+  * { box-sizing:border-box; }
+  body { margin:0; }
+  main { max-width:1320px; margin:auto; padding:18px; }
+  header, .transport, .readouts { display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+  header { justify-content:space-between; margin-bottom:12px; }
+  h1 { font-size:21px; font-weight:600; margin:0; }
+  .dim { color:#9fb1bc; }
+  .stage { border:1px solid #334450; border-radius:12px; overflow:hidden; background:#101923; }
+  #ensemble { display:block; width:100%; aspect-ratio:16/9; }
+  .transport { padding:16px 0; }
+  button, input { font:inherit; }
+  button { background:#b8e5d7; border:0; border-radius:6px; padding:8px 18px; min-height:38px; color:#10251f; cursor:pointer; }
+  button:focus-visible, input:focus-visible { outline:2px solid #b8e5d7; outline-offset:3px; }
+  #seek { flex:1; min-width:220px; accent-color:#b8e5d7; }
+  #offset { width:78px; background:#15232d; color:#e8f0f3; border:1px solid #52636d; border-radius:4px; padding:6px; }
+  .readouts { align-items:stretch; }
+  .readouts section { flex:1; min-width:250px; background:#14212b; border:1px solid #30414d; border-radius:8px; padding:12px 15px; }
+  h2 { margin:0 0 7px; font-size:13px; text-transform:uppercase; letter-spacing:.12em; color:#9fb1bc; }
+  #decision, #evidence, #uncertainty { white-space:pre-wrap; overflow-wrap:anywhere; line-height:1.45; }
+  audio { display:none; }
+</style>
+</head>
+<body>
+<main>
+  <header><h1>Hysteresis · 3D ensemble</h1><span id="rig-description" class="dim">Simulated rig · illustrative geometry and axes</span></header>
+  <div class="stage"><canvas id="ensemble" width="1280" height="720" role="img" aria-label="Perspective view of multiple articulated robot arms and shared floor projection"></canvas></div>
+  <div class="transport">
+    <button id="play" type="button">Play</button>
+    <input id="seek" type="range" min="0" max="__DURATION__" value="0" step="0.001" aria-label="Seek audio">
+    <span id="clock">0:00.00</span>
+    <label>Score delay <input id="offset" type="number" min="-30" max="30" step="0.01" value="0" aria-label="Score delay in seconds"> s</label>
+  </div>
+  <div class="readouts">
+    <section><h2>Decision</h2><div id="decision"></div></section>
+    <section><h2>Evidence</h2><div id="evidence"></div></section>
+    <section><h2>Uncertainty</h2><div id="uncertainty"></div></section>
+  </div>
+  <audio id="audio" preload="metadata"></audio>
+</main>
+<script>
+(() => {
+  'use strict';
+  const data = __ENSEMBLE_DATA__;
+  const audio = document.getElementById('audio');
+  audio.src = __TRACK_URL_JSON__;
+  const canvas = document.getElementById('ensemble');
+  const ctx = canvas.getContext('2d');
+  const seek = document.getElementById('seek');
+  const play = document.getElementById('play');
+  const offset = document.getElementById('offset');
+  const clock = document.getElementById('clock');
+  const decision = document.getElementById('decision');
+  const evidence = document.getElementById('evidence');
+  const uncertainty = document.getElementById('uncertainty');
+  document.getElementById('rig-description').textContent=`Simulated ${data.rig.channels.length}-axis rig · ${data.rig.channels.map(c=>c.name).join(' / ')}`;
+
+  // ENSEMBLE_HELPERS_BEGIN
+  const clamp = (v,a,b) => Math.max(a,Math.min(b,v));
+  function scoreTime(audioSeconds,delay,duration) { return clamp(audioSeconds-delay,0,duration); }
+  function frameAt(score,seconds) {
+    const t=clamp(seconds,0,score.duration), pos=t*score.fps;
+    const lo=Math.min(Math.floor(pos),score.frames.length-1), hi=Math.min(lo+1,score.frames.length-1);
+    const a=score.frames[lo], b=score.frames[hi];
+    const span=Math.min(hi/score.fps,score.duration)-lo/score.fps;
+    const alpha=span<=0?0:clamp((t-lo/score.fps)/span,0,1);
+    const agents=a[0].map((arm,j)=>arm.map((point,k)=>point.map((v,axis)=>v+(b[0][j][k][axis]-v)*alpha)));
+    const va=score.cues[a[1]], vb=score.cues[b[1]];
+    const visual={...va, sourceActivity:va.sourceActivity.map((v,i)=>v+(vb.sourceActivity[i]-v)*alpha), confidence:va.confidence+(vb.confidence-va.confidence)*alpha};
+    return {time:t,agents,cueIndex:a[1],visual};
+  }
+  function inspectAt(score,seconds) {
+    const frame=frameAt(score,seconds);
+    let cueIndex=score.cues.length-1;
+    for(let i=0;i<score.cues.length;i++) if(frame.time<score.cues[i].end) {cueIndex=i;break;}
+    const cue=score.cues[cueIndex]||null;
+    const visual=cue?{...frame.visual,character:cue.character,formation:cue.formation,
+      reason:cue.reason,recallFrom:cue.recallFrom,anticipation:cue.anticipation}:frame.visual;
+    return {...frame,cueIndex,visual,cue,rig:score.rig,placements:score.placements};
+  }
+  // ENSEMBLE_HELPERS_END
+
+  const eye=[1.55,-2.65,1.9], target=[0,0,0.25], up=[0,0,1];
+  const sub=(a,b)=>a.map((v,i)=>v-b[i]);
+  const dot=(a,b)=>a.reduce((s,v,i)=>s+v*b[i],0);
+  const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+  const norm=a=>a.map(v=>v/Math.hypot(...a));
+  const forward=norm(sub(target,eye)), right=norm(cross(forward,up)), cameraUp=cross(right,forward);
+  function project(point) {
+    const v=sub(point,eye), depth=dot(v,forward), scale=1800/Math.max(depth,0.1);
+    return [640+dot(v,right)*scale,315-dot(v,cameraUp)*scale,depth];
+  }
+  function line(a,b,color,width) {
+    const p=project(a),q=project(b);
+    ctx.strokeStyle=color;ctx.lineWidth=width;ctx.lineCap='round';
+    ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.lineTo(q[0],q[1]);ctx.stroke();
+  }
+  function point(p,r,color) {
+    const s=project(p);ctx.fillStyle=color;ctx.beginPath();ctx.arc(s[0],s[1],r,0,Math.PI*2);ctx.fill();
+  }
+  function draw(seconds) {
+    const state=inspectAt(data,seconds), v=state.visual;
+    ctx.fillStyle='#101923';ctx.fillRect(0,0,1280,720);
+    const floor=[[-1.65,-1.65,0],[1.65,-1.65,0],[1.65,1.65,0],[-1.65,1.65,0]];
+    ctx.fillStyle='#15252d';ctx.beginPath();floor.forEach((p,i)=>{const q=project(p);i?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1]);});ctx.closePath();ctx.fill();
+    for(let r=0.35;r<=1.4;r+=0.35) for(let i=0;i<64;i++) {
+      const a=i*Math.PI/32,b=(i+1)*Math.PI/32;
+      line([r*Math.cos(a),r*Math.sin(a),.004],[r*Math.cos(b),r*Math.sin(b),.004],'#29404b',1);
+    }
+    const colors=['#efb869','#9ed5dc','#d5a7de','#83cfaa'];
+    const activity=v.sourceActivity||[0,0,0,0];
+    for(let i=0;i<4;i++) {
+      const strength=clamp(activity[i],0,1), radius=.22+i*.28+strength*.12;
+      for(let j=0;j<24;j++) {
+        const a=2*Math.PI*j/24+(i%2)*Math.PI/24,b=a+Math.PI/24;
+        if(strength>.025) line([radius*Math.cos(a),radius*Math.sin(a),.012],[radius*Math.cos(b),radius*Math.sin(b),.012],colors[i],1+4*strength*v.confidence);
+      }
+    }
+    const primitives=[];
+    state.agents.forEach((arm,id)=>{for(let k=0;k<arm.length-1;k++) {
+      const p=project(arm[k]),q=project(arm[k+1]);
+      primitives.push({kind:'link',id,k,a:arm[k],b:arm[k+1],depth:(p[2]+q[2])/2});
+    }});
+    state.agents.forEach((arm,id)=>arm.forEach((p,k)=>primitives.push({kind:'joint',id,k,p,depth:project(p)[2]})));
+    primitives.sort((a,b)=>b.depth-a.depth);
+    primitives.forEach(s=>{
+      if(s.kind==='joint') point(s.p,s.k===0?8:6,s.k===0?'#f7f0da':'#e9f6f2');
+      else {line(s.a,s.b,'#07131a',s.k===0?12:16);line(s.a,s.b,colors[s.id%colors.length],s.k===0?6:9);}
+    });
+    ctx.font='15px system-ui';ctx.fillStyle='#c7d6db';ctx.fillText(`${state.agents.length} ${state.agents.length===1?'arm':'arms'} · ${v.formation} · ${v.character}`,24,34);
+    ctx.textAlign='right';ctx.fillText(`Score ${state.time.toFixed(2)}s`,1256,34);ctx.textAlign='left';
+    const cue=state.cue||{};
+    const arrival=v.anticipation==null?'':` · arrival ${v.anticipation.toFixed(2)}s (${state.time<v.anticipation?'upcoming':'passed'})`;
+    decision.textContent=`${v.character} / ${v.formation}${arrival}${v.recallFrom!=null?` · recall ${v.recallFrom.toFixed(2)}s`:''}`;
+    evidence.textContent=`${v.reason||cue.reason||'No decision evidence'}\nSource activity [bass, drums, vocals, other]: ${activity.map(x=>Number(x).toFixed(2)).join(' / ')}`;
+    uncertainty.textContent=`Evidence confidence ${Number(v.confidence).toFixed(2)} (heuristic, uncalibrated). Estimated stems may leak; pulse/downbeats provisional. Rig axes and link lengths illustrative.`;
+    return state;
+  }
+  function showClock() { const s=audio.currentTime||0;clock.textContent=`${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}.${String(Math.floor(s%1*100)).padStart(2,'0')}`;seek.value=String(s);draw(scoreTime(s,Number(offset.value)||0,data.duration)); }
+  function tick() { showClock();if(!audio.paused) requestAnimationFrame(tick); }
+  play.addEventListener('click',async()=>{if(audio.paused) {try{await audio.play();}catch(error){uncertainty.textContent=`Audio playback failed: ${error.message}`;}} else audio.pause();});
+  audio.addEventListener('play',()=>{play.textContent='Pause';requestAnimationFrame(tick);});
+  audio.addEventListener('pause',()=>{play.textContent='Play';showClock();});
+  audio.addEventListener('ended',()=>{play.textContent='Play';showClock();});
+  audio.addEventListener('seeked',showClock);
+  seek.addEventListener('input',()=>{audio.currentTime=Number(seek.value);showClock();});
+  offset.addEventListener('input',showClock);
+  window.__ENSEMBLE_PREVIEW__={inspect:seconds=>inspectAt(data,seconds),draw,scoreTime};
+  showClock();
+})();
+</script>
+</body>
+</html>

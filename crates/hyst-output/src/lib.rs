@@ -5,6 +5,7 @@ pub mod array_topology;
 pub mod cadence;
 pub mod choreography_output;
 pub mod diff;
+pub mod ensemble;
 pub mod failure;
 pub mod field;
 pub mod field_output;

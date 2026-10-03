@@ -15,6 +15,7 @@
   .note { color: #97a3ad; font-size: 13px; line-height: 1.6; }
   .stage { position: relative; background: #151b20; border: 1px solid #2c363f; border-radius: 16px; overflow: hidden; }
   .visual { margin-top: 14px; padding: 16px 24px; background: #151b20; border: 1px solid #2c363f; border-radius: 16px; }
+  body.solo .visual { display: none; }
   #visual { display: block; width: 100%; height: 116px; margin-top: 10px; }
   #event { color: #b7edda; }
   .stage-label { position: absolute; top: 22px; left: 24px; pointer-events: none; }
@@ -101,6 +102,10 @@
     for (let i = 1; i < values.length; i++) if (values[i] <= values[i - 1]) return [];
     return values.slice();
   }
+  function memoryBeats(memory, duration) {
+    if (!memory || memory.version !== 1 || !Number.isFinite(memory.beatPeriod) || memory.beatPeriod < .25 || memory.beatPeriod > 2 || !Number.isFinite(memory.beatZero) || memory.beatZero < 0 || memory.beatZero >= memory.beatPeriod || !Number.isFinite(duration) || duration <= memory.beatZero || duration > 21600) return [];
+    return Array.from({length:Math.floor((duration-memory.beatZero)/memory.beatPeriod)+1},(_,i)=>memory.beatZero+i*memory.beatPeriod);
+  }
   function beatFromGrid(time, beats, tempo) {
     if (beats.length < 2) return time * tempo / 60;
     if (time <= beats[0]) return (time - beats[0]) / (beats[1] - beats[0]);
@@ -135,7 +140,7 @@
     return state.previewing ? remoteClockSeconds(state, now) : (Number.isFinite(mediaSeconds) ? mediaSeconds : state.seconds);
   }
   // ARM_TIMING_HELPERS_END
-  window.__ARM_TIMING__ = {cleanBeats, beatFromGrid, manualBeat, gridBeat, transportBeat, remoteClockSeconds, freezeRemoteClock, seekRemoteClock, remoteTransportTime};
+  window.__ARM_TIMING__ = {cleanBeats, memoryBeats, beatFromGrid, manualBeat, gridBeat, transportBeat, remoteClockSeconds, freezeRemoteClock, seekRemoteClock, remoteTransportTime};
   function validSong(value) {
     if (!value || typeof value !== 'object' || !Number.isFinite(value.duration) || value.duration <= 0 || !Array.isArray(value.frames) || !value.frames.length) return null;
     const frames = value.frames.filter(frame => Array.isArray(frame) && frame.length >= 10 && frame.slice(0, 9).every(Number.isFinite) && typeof frame[9] === 'string');
@@ -175,8 +180,12 @@
   window.__ARM_SCORE__ = {validSong, sampleSong, cueAt, shiftedScoreSeconds, visualAt};
   let sidecar={};
   try { const parsed=sidecarText ? JSON.parse(sidecarText) : {}; sidecar=parsed && typeof parsed==='object'?parsed:{}; } catch {}
-  const detectedBeats=cleanBeats(sidecar.beats);
-  let bpm=Number.isFinite(Number(sidecar.tempo)) && Number(sidecar.tempo)>0 ? Number(sidecar.tempo) : 110;
+  const pulse=sidecar.musicalMemory;
+  const solo=new URLSearchParams(location.search).get('solo')==='1';
+  if(solo)document.body.classList.add('solo');
+  const compiledBeats=memoryBeats(pulse,sidecar.duration);
+  const detectedBeats=compiledBeats.length>1?compiledBeats:cleanBeats(sidecar.beats);
+  let bpm=compiledBeats.length>1?60/pulse.beatPeriod:(Number.isFinite(Number(sidecar.tempo)) && Number(sidecar.tempo)>0 ? Number(sidecar.tempo) : 110);
   const score=validSong(song);
   const music=Boolean(trackUrl), remoteMode=new URLSearchParams(location.search).get('remote')==='1';
   let beat=0, selected=music && score ? 'song' : 2, last=performance.now(), sound=false, clickAudio=null, nextClick=0, audioAttempt=0;
@@ -214,6 +223,7 @@
     $('clock-label').textContent=score ? 'Song-conditioned score · audio time master · detector grid remains provisional' : 'Reference study · detected grid provisional · audio time master';
     $('timeline-label').textContent='Track position';
     $('seek').setAttribute('aria-label','Seek track in seconds');
+    if(compiledBeats.length>1){$('grid').querySelector('option[value=detected]').textContent='Compiled pulse (provisional)';$('clock-label').textContent='Musical memory score · audio time master · compiled pulse remains provisional';}
     $('grid').value=detectedBeats.length>1?'detected':'manual';
     if (detectedBeats.length) $('beat-zero').value=detectedBeats[0].toFixed(4);
   }
@@ -272,6 +282,7 @@
     if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=2;ctx.stroke();}
   }
   function drawVisual(frame, cue, seconds) {
+    if(solo)return;
     const visual=$('visual'), vw=visual.clientWidth, vh=visual.clientHeight, dpr=Math.min(devicePixelRatio||1,2), vctx=visual.getContext('2d');
     if (visual.width!==Math.round(vw*dpr)||visual.height!==Math.round(vh*dpr)){visual.width=Math.round(vw*dpr);visual.height=Math.round(vh*dpr);}
     vctx.setTransform(dpr,0,0,dpr,0,0); vctx.clearRect(0,0,vw,vh);
@@ -287,13 +298,13 @@
     const w=canvas.clientWidth,h=canvas.clientHeight,dpr=Math.min(devicePixelRatio||1,2);
     if(canvas.width!==Math.round(w*dpr)||canvas.height!==Math.round(h*dpr)){canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);}
     ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);
-    const scale=Math.min(w/220,(h-62)/85),ox=w*.40,oy=h-35,point=(x,y)=>[ox+x*scale,oy-y*scale];
-    for(let x=-90;x<=130;x+=10)line([point(x,0),point(x,76)],'#26313a',1);
-    for(let y=0;y<=70;y+=10)line([point(-90,y),point(130,y)],'#26313a',1);
+    const scale=solo?Math.min(w/160,(h-62)/78):Math.min(w/220,(h-62)/85),ox=w*(solo ? .5 : .40),oy=h-35,point=(x,y)=>[ox+x*scale,oy-y*scale];
+    if(!solo){for(let x=-90;x<=130;x+=10)line([point(x,0),point(x,76)],'#26313a',1);
+    for(let y=0;y<=70;y+=10)line([point(-90,y),point(130,y)],'#26313a',1);}
     line([point(-90,0),point(130,0)],'#62727e',1);
     const f=currentFrame(),cue=currentCue(),seconds=activeScore()?scoreSeconds():0,points=[point(0,0),point(f[0],f[1]),point(f[2],f[3]),point(f[4],f[5])];
     const traceStart=activeScore()?Math.max(0,seconds-1.5):0;
-    for(let i=0;i<70;i++){const a=activeScore()?sampleSong(score,traceStart+i/70*(seconds-traceStart)):frameAt(beat-1.5+i/70*1.5),b=activeScore()?sampleSong(score,traceStart+(i+1)/70*(seconds-traceStart)):frameAt(beat-1.5+(i+1)/70*1.5);line([point(a[4],a[5]),point(b[4],b[5])],`rgba(239,182,116,${.04+.34*i/70})`,2);}
+    if(!solo)for(let i=0;i<70;i++){const a=activeScore()?sampleSong(score,traceStart+i/70*(seconds-traceStart)):frameAt(beat-1.5+i/70*1.5),b=activeScore()?sampleSong(score,traceStart+(i+1)/70*(seconds-traceStart)):frameAt(beat-1.5+(i+1)/70*1.5);line([point(a[4],a[5]),point(b[4],b[5])],`rgba(239,182,116,${.04+.34*i/70})`,2);}
     line([point(-6,-1),point(6,-1)],'#8899a4',7);line(points,'#0d1216',19);
     line(points.slice(0,3),'#aad8ca',12);line(points.slice(2),'#efb674',10);
     points.slice(0,3).forEach((p,i)=>{circle(...p,i===0?11:9,'#202d34','#b6c7ce');circle(...p,3,'#80939e');});

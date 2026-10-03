@@ -1,6 +1,6 @@
-//! Audit exported score, including exact quintic extrema and sampled clearance.
+//! Audit exported score, including proven trajectory bounds and sampled clearance.
 //! cargo run -p hyst-previz --example audit_score -- score.json
-use hyst_compile::Score;
+use hyst_compile::{segment_bounds, Knot, Score};
 use hyst_previz::{Arm, Pose};
 use std::{collections::BTreeMap, env, fs, io};
 
@@ -20,7 +20,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     )?;
     require(!score.cues.is_empty(), "empty score")?;
     let mut end = 0.0;
-    let mut previous_pose = None;
+    let mut previous_knot: Option<&Knot> = None;
     let mut speed = [0.0_f64; 3];
     let mut acceleration = [0.0_f64; 3];
     let mut gestures = BTreeMap::new();
@@ -34,8 +34,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             first.time == cue.start && last.time == cue.end,
             "knot coverage mismatch",
         )?;
-        if let Some(pose) = previous_pose {
-            require(first.joints == pose, "position discontinuity")?;
+        if let Some(previous) = previous_knot {
+            require(first.joints == previous.joints, "position discontinuity")?;
+            require(
+                first.velocity == previous.velocity,
+                "velocity discontinuity",
+            )?;
+            require(
+                first.acceleration == previous.acceleration,
+                "acceleration discontinuity",
+            )?;
         }
         for knot in &cue.knots {
             for (j, q) in knot.joints.iter().enumerate() {
@@ -45,16 +53,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         && *q <= score.limits.max_degrees[j],
                     "joint angle outside limits",
                 )?;
+                require(
+                    knot.velocity[j].is_finite() && knot.acceleration[j].is_finite(),
+                    "non-finite joint derivative",
+                )?;
             }
         }
         for pair in cue.knots.windows(2) {
-            let dt = pair[1].time - pair[0].time;
-            require(dt.is_finite() && dt > 0.0, "non-increasing knot times")?;
+            let bounds = segment_bounds(&pair[0], &pair[1]).map_err(io::Error::other)?;
             for j in 0..3 {
-                let distance = (pair[1].joints[j] - pair[0].joints[j]).abs();
-                speed[j] = speed[j].max(distance * 1.875 / dt);
+                require(
+                    bounds.min_position_degrees[j] >= score.limits.min_degrees[j] - 1e-7
+                        && bounds.max_position_degrees[j] <= score.limits.max_degrees[j] + 1e-7,
+                    "continuous joint trajectory outside limits",
+                )?;
+                speed[j] = speed[j].max(bounds.max_speed_degrees_per_second[j]);
                 acceleration[j] =
-                    acceleration[j].max(distance * (10.0 / 3.0_f64.sqrt()) / dt.powi(2));
+                    acceleration[j].max(bounds.max_acceleration_degrees_per_second2[j]);
                 require(
                     speed[j] <= score.limits.max_speed_degrees_per_second[j] + 1e-7,
                     "speed limit exceeded",
@@ -67,7 +82,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         if cue.gesture == "hold" {
             require(
-                cue.knots.iter().all(|k| k.joints == first.joints),
+                cue.knots.iter().all(|k| {
+                    k.joints == first.joints && k.velocity == [0.0; 3] && k.acceleration == [0.0; 3]
+                }),
                 "hold moves",
             )?;
         }
@@ -89,7 +106,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         *gestures.entry(cue.gesture.as_str()).or_insert(0) += 1;
         end = cue.end;
-        previous_pose = Some(last.joints);
+        previous_knot = Some(last);
     }
     require(
         (end - score.duration).abs() < 1e-9,
@@ -114,7 +131,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "duration":score.duration,"cues":score.cues.len(),"gestures":gestures,"exactArrivalAnchors":anchors,
             "maxSpeedDegreesPerSecond":speed,"maxAccelerationDegreesPerSecond2":acceleration,
             "sampledFloorClearanceCm":clearance,"clearanceSamplingHz":120,
-            "continuity":"C2 at quintic knots; positions shared across cues",
+            "continuity":"C2 at quintic-Hermite knots; position, velocity and acceleration shared across cues",
             "seek":"deterministic random access"
         }))?
     );

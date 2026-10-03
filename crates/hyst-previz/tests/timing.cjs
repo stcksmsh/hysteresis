@@ -2,8 +2,8 @@ const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/st
 const source=fs.readFileSync(process.argv[2],'utf8');
 const match=source.match(/\/\/ ARM_TIMING_HELPERS_BEGIN([\s\S]*?)\/\/ ARM_TIMING_HELPERS_END/);
 assert(match);const context={};vm.createContext(context);
-vm.runInContext(match[1]+';this.api={cleanBeats,beatFromGrid,manualBeat,gridBeat,transportBeat,remoteClockSeconds,freezeRemoteClock,seekRemoteClock};',context);
-const {cleanBeats,beatFromGrid,manualBeat,gridBeat,transportBeat,remoteClockSeconds,freezeRemoteClock,seekRemoteClock}=context.api;
+vm.runInContext(match[1]+';this.api={cleanBeats,memoryBeats,beatFromGrid,manualBeat,gridBeat,transportBeat,remoteClockSeconds,freezeRemoteClock,seekRemoteClock};',context);
+const {cleanBeats,memoryBeats,beatFromGrid,manualBeat,gridBeat,transportBeat,remoteClockSeconds,freezeRemoteClock,seekRemoteClock}=context.api;
 const close=(a,b)=>assert(Math.abs(a-b)<1e-9,`${a} != ${b}`);
 const irregular=cleanBeats([1,1.5,2.2]);
 close(beatFromGrid(.5,irregular,120),-1);close(beatFromGrid(1.25,irregular,120),.5);
@@ -37,3 +37,8 @@ close(visualAt(visualScore,1).accent,.8);close(visualAt(visualScore,3).accent,0)
 assert(visualAt(visualScore,0).accent<.0001);
 assert(Math.abs(visualAt(visualScore,2-1e-6).energy-visualAt(visualScore,2+1e-6).energy)<1e-6);
 close(visualAt(visualScore,3).energy,0);
+
+const compiled=memoryBeats({version:1,beatPeriod:.5,beatZero:.1},10);
+assert.equal(compiled.length,20);close(beatFromGrid(4.1,compiled,120),8);
+for(const memory of [null,{version:2,beatPeriod:.5,beatZero:.1},{version:1,beatPeriod:0,beatZero:0},{version:1,beatPeriod:.001,beatZero:0},{version:1,beatPeriod:.5,beatZero:NaN},{version:1,beatPeriod:.5,beatZero:1}])assert.equal(memoryBeats(memory,10).length,0);
+console.log('compiled pulse readout: passed');

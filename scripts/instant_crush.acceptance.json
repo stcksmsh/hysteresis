@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "source": "user_listening_reference",
+  "purpose": "Validation only. Never feed these timestamps or labels into inference or choreography.",
+  "regions": [
+    {
+      "start": 90,
+      "end": 126,
+      "label": "high"
+    },
+    {
+      "start": 185,
+      "end": 203,
+      "label": "break"
+    },
+    {
+      "start": 203,
+      "end": 212,
+      "label": "break_with_vocals"
+    },
+    {
+      "start": 212,
+      "end": 246,
+      "label": "high",
+      "recursWith": 0
+    }
+  ]
+}

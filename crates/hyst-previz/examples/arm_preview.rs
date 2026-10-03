@@ -2,7 +2,12 @@
 use std::{env, fs, io, path::PathBuf};
 
 fn main() -> io::Result<()> {
-    let mut args = env::args_os().skip(1);
+    let raw_args: Vec<_> = env::args_os().skip(1).collect();
+    let groove_only = raw_args.iter().any(|arg| arg == "--groove-only");
+    let no_reuse = raw_args.iter().any(|arg| arg == "--no-reuse");
+    let mut args = raw_args
+        .into_iter()
+        .filter(|arg| arg != "--groove-only" && arg != "--no-reuse");
     let output = args
         .next()
         .map(PathBuf::from)
@@ -18,7 +23,17 @@ fn main() -> io::Result<()> {
     let score = if sidecar_json.is_empty() {
         None
     } else {
-        Some(hyst_compile::compile_sidecar_json(&sidecar_json).map_err(io::Error::other)?)
+        Some(
+            hyst_compile::compile_sidecar_json_with_config(
+                &sidecar_json,
+                hyst_compile::CompileConfig {
+                    enable_hits: !groove_only,
+                    enable_windups: !groove_only,
+                    reuse_repeats: !no_reuse,
+                },
+            )
+            .map_err(io::Error::other)?,
+        )
     };
     let html = hyst_previz::render_html_with_score(&track_url, &sidecar_json, score.as_ref())
         .map_err(io::Error::other)?;

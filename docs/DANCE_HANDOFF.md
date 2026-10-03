@@ -309,3 +309,364 @@ warnings julia.rs308/1574. Targeted dance-crate clippy and JS tests pass. GPU
 unavailable; no rerun. Commit includes accumulated related compiler/remote/native
 output/CLI work + tests/docs. Local .codex/config.toml excluded; external assets
 excluded. User requested local commit, not push or new chat creation.
+
+### Whole-song memory + continuous groove candidate — 2026-10-01
+
+Fresh diagnosis: original sidecar contains no usable whole-song sections, stem
+presence, recurrence or novelty. Normalized energy falsely stays high in silence;
+onset pan is synthetic. Old compiler averages short spans into template choices,
+then zeroes velocity/acceleration at every knot. Prior recordings remain rejected.
+Current user restart authorizes implementation; previous handoff-only pause ended.
+
+Added scripts/dance_memory.py using already-installed NumPy/SciPy/SoundFile.
+Original input stays immutable. Additive musicalMemory v1 contains ordered
+16-beat mixed-spectral rhythm profiles, low/high flux, chroma comparisons,
+absolute level, provisional pulse and measured future transient estimates.
+No isolated bass/drum/vocal claims; no inferred verse/chorus/downbeat/drop labels.
+Grid =109.94744 BPM, beatZero0.323700s. Supplied beats have15.4ms median/88.2ms
+p90 residual; fit explicitly provisional. Independent233 strong WAV flux peaks
+have5.4ms median/11.9ms p90 residual against grid. Flux event timing uses50Hz
+frame-center estimates, not sample-accurate acoustic ground truth.
+
+One conservative real recurrence:87.638–96.370s →209.878–218.610s,
+similarity0.9633, matching ordered rhythm + harmonic profiles. Truncated edge
+phrases cannot become recall sources. Weak legacy SSM candidates discarded.
+Planner preserves phrase/four-beat/two-beat timing, calibrates rhythm projection
+across whole song, crossfades phrase coefficients, recalls earlier motif and
+uses absolute level/rest state. Accent overlays prepare before stored estimates;
+--groove-only removes all overlays, --no-reuse disables earlier-motif recall.
+Compilation resolves every choice; seek needs no hidden musical state.
+
+Knot velocity/acceleration fields additive, default zero for old JSON. Shared
+quintic Hermite sampler and Bezier hull bounds retain old zero-stop behavior,
+allow C2 continuation and prove continuous range/speed/acceleration bounds.
+Output validation + audit consume same bounds. Changes cross crates only inside
+user-authorized integration scope; CLI literals updated for additive fields.
+Workers owned analysis/tests and trajectory/memory modules; coordinator owned
+integration, exports, independent numeric evidence and representative media review.
+
+Real candidate =86cues,23 exact stored arrival anchors,2 absolute-RMS HOME holds.
+Continuous bound maxima speed[35.01,31.14,33.77]deg/s,
+acceleration[149.84,169.77,199.93]deg/s². Sampled120Hz minimum floor
+clearance21.94cm; geometry still illustrative, no physical safety claim.
+Independent scripts/dance_acceptance.py reports98.8% active internal knots carry
+speed>2deg/s, recalled centered motion cosine1.0, immutable rests and local
+anticipation. At66.906s, >0.5deg preparation difference starts0.733s early.
+60–68s groove median joint-vector speed6.40deg/s;96–104s7.49deg/s;
+264–272s dense transients19.27deg/s;336–339.8s completely still. This does
+not prove recognizable dance. Content/density matters; motion level is not a
+monotonic meter of mix RMS across different phrases.
+
+External outputs in existing music-arm directory: song-memory.html,
+song-memory-groove.html, instant-crush.memory.{sidecar,score,evidence,audit,
+acceptance}.json, instant-crush.memory.groove.score.json, dance-memory-review.html.
+Original song.html/score/media preserved. Audible before/after clips60–72,
+96–108,64–70s; no-accent60–72s; source/recall87.64/209.88s; dense264–276s;
+fade326–339.824s. Encoded frame grids inspected at60/96/264/326s. No assistant
+audio-perception facility available; human listening gate remains open.
+Full candidate recording currently encoding; final verification appended below.
+
+Verification: cargo check --workspace; cargo test --workspace --exclude
+hyst-render =165 tests; targeted compile/output/previz/CLI clippy -D warnings;
+5 Python analysis tests; JS timing/media tests; git diff --check all pass.
+GPU suite not run. Strict workspace clippy has previously verified unrelated
+manual_is_multiple_of warnings in Julia renderer; no renderer edits/probes.
+Browser UI control rejected supplied HTTP preview URL by security policy;
+no workaround attempted. Current browser play/pause/seek review unverified;
+JS media/timing tests and deterministic offline recording remain verified.
+Frozen src/tools unchanged. No dependencies installed, hardware driven,
+media committed or remote push. Local .codex/ stays untracked.
+
+Unresolved: isolated instrument phrasing, genuine semantic song structure,
+confirmed downbeats, live predictive director, human dance acceptance. Harmonic
+projection may still read as mechanical. Candidate is working foundation and
+review artifact, not completed perceptual goal.
+
+Full candidate recording completed + verified:
+arm-dance-instant-crush-memory.mp4, H.2641920×1080/30fps,
+10195frames,339.833333s video /339.824036s original AAC. Copied AAC packet
+payload SHA256339393e808e01509aef2cacafea29abe59f610ae036210680415ce3e02cdace4
+matches source exactly. Evidence saved instant-crush.memory.recording.json.
+No active encode remains; loopback8766 server stays running for review.
+Encoded full-song frames60/96/210/264/336s inspected: intact canvas, varying
+pose, final HOME rest. Proof saved memory-recording-proof.jpg outside git.
+
+### Rejected memory candidate → annotated solo-arm choreography — 2026-10-01
+
+User rejected third recording too: same one-sided sway, missing musical pickup,
+break and repeated high passage. Perceptual acceptance negative; prior numeric
+checks did not establish dance. User supplies human structure: high≈90–126s,
+break185–203s, vocals return203s while break continues until212s, then related
+high212–246s. Working demo must impress through servo-arm movement alone.
+
+Root failure confirmed: memory score hand mean remains x≈24–25cm across
+pickup/break/reprise, near same HOME bubble. Break RMS≈.220 vs high≈.260/.263;
+one loudness scalar cannot represent semantic break. Mix ratios change at185
+and212s;203s vocal meaning comes only from user.246s shows almost no RMS/flux
+change; human phrase annotation remains authoritative. Earlier memory repetition
+covers only8.7s, not full36/34s high regions. Automatic semantic MIR still unsolved.
+
+Added scripts/instant_crush.dance.json storing explicit user annotations;
+unmarked regions use generic groove, fade uses measured RMS. Additive dancePlan
+selects new hyst-compile/dance.rs before prior musicalMemory path. This is authored
+demo choreography, not claimed automatic vocal/bass/section recognition.
+32-beat phrase develops eight coordinated whole-arm silhouettes: coil, left
+reach, cross-right, recoil, rise, fold, low reach, recover. Neighbor-derived
+joint tangents + shared quintic Hermite preserve flowing C2 travel. Break has
+separate bow/wrist-turn path with exact held reposes. Vocal-return uses restrained
+wrist-led unfold within break character. Reprise recalls first high sequence at
+same beat rate, with3% amplitude variation; no34→36s time stretching.
+Three-beat blends prepare across human section markers. No claimed exact acoustic
+arrival anchors. Core choreography stays identical with hit/windup switches off;
+--no-reuse changes reprise pose by7.89deg mean across214–244s. Cue energy reports
+authored motion intensity, not mix loudness. RMS HOME holds and2s entry/exit gates
+retained. Invalid annotation contract fails explicitly; old sidecars still work.
+
+Annotated viewer renders arm alone, centered and larger: no auxiliary visual,
+grid or tip trails. External song-solo.html embeds original AAC bytes into one
+portable HTML file; JavaScript parses, embedded AAC byte identity checked.
+Existing recorder preserved; external record-dance.cjs renders solo1080p/30fps.
+Before/after audible excerpts:88–106s pickup,183–215s break/vocalreturn/high entry,
+210–228s reprise. Encoded frame grids inspected for all3: clear opposite-side
+travel and varying folded/extended/low-reaching silhouettes; no clipping.
+No assistant audio-perception facility; no human dance acceptance claimed.
+
+Final real score=10cues (8roles +2RMS holds), continuousC2 boundaries.
+Conservative speed bounds[39.08,49.39,61.36]deg/s;
+acceleration[68.78,87.92,100.08]deg/s²; sampled120Hz floorclearance22.74cm.
+Independent Python FK sampler: firsthigh handx−34.06→44.99cm, y27.70→68.80cm,
+9bilateralcrossings, endpointpath20.28cm/s; break1.41cm/s with2.86s longestdwell;
+reprise x−32.33→44.37cm,8crossings,path18.80cm/s. Recalled centered trajectory
+cosine≈1 across30s. These are motion evidence, not perceptual dance proof.
+Independent circular-arc fixture also verified path units + hysteretic side
+crossing count; earlier sampler’s legacy-memory results preserved.
+
+Verification: workspace check,168CPU tests excluding hyst-render, targeted
+compile/output/previz/CLI clippy -D warnings,5Python analysis tests, JS media/timing,
+cargo fmt --check and git diff --check pass. No renderer/GPU probes; previously
+verified workspace-wide Julia clippy warnings remain baseline. Browser interactions
+not rechecked after earlier URL-policy rejection; no alternate UI route attempted.
+Workers owned dance.rs and independent acceptance script; coordinator integrated
+schema dispatch, solo viewer, human annotation data, exports and media review.
+Frozen src/tools untouched, pre-existing native work preserved. No dependency
+installation, hardware driving, media commit, local commit or remote push.
+Local .codex/ remains untracked. Full solo recording currently encoding;
+final verification appended below.
+
+External artifacts in existing music-arm directory: instant-crush.dance.sidecar.json,
+instant-crush.dance.{score,audit,acceptance}.json, instant-crush.dance.groove.score.json,
+song-dance.html, song-dance-groove.html, portable song-solo.html,
+dance-solo-review.html, solo-{pickup,break,reprise}.mp4. Rejected files preserved.
+Human acceptance still pending. Automatic semantic director and instrument
+following remain unfinished; this authored demo tests movement foundation.
+
+Full solo recording completed + verified: arm-dance-instant-crush-solo.mp4,
+H.2641920×1080/30fps,10195frames,339.833333s video /339.824036s AAC.
+Original AAC packet payload unchanged:
+SHA256339393e808e01509aef2cacafea29abe59f610ae036210680415ce3e02cdace4.
+Recording evidence saved instant-crush.dance.recording.json. No active encode
+remains; loopback8766 server stays available. Single-file song-solo.html includes
+original audio bytes. All6 before/after excerpt files contain AAC and matched
+video/audio durations. Human review question pending; no positive acceptance
+inferred from silence. This is authored demo, not automatic semantic solution.
+
+### User correction — automatic interpretation and 3D ensemble (2026-10-01)
+
+The user rejected the authored-demo direction. Automatic musical interpretation
+is the project requirement, not an optional later feature. Human section times
+are validation references only. The installation uses multiple synchronized 3D
+robot arms, with a provisional five-servo layout: base rotation, three bending
+joints, and an additional rotation at the second joint. Local axes and the final
+distal link remain unsettled. Projected visuals share musical interpretation
+and timing with the ensemble. A single planar arm is only a diagnostic rig.
+
+Removed the authored dancePlan compiler dispatch and dance.rs from production.
+Archived their source outside git alongside the rejected solo recordings.
+Converted the song annotations to scripts/instant_crush.acceptance.json, which
+must not enter inference or choreography. The optional bare-arm view is now
+selected explicitly with ?solo=1, independent of analysis. The earlier authored
+checkpoint does not meet user acceptance. Musical-memory output also remains
+rejected. Resume at audio interpretation, not another pose/template adjustment.
+
+Architecture audit after correction: hyst-choreo already has normalized channel
+maps, agent topology and unison/canon/wave/mirror formations. They are disconnected
+from hyst-compile, which does not depend on hyst-choreo and emits fixed three-joint
+single-arm scores. ChoreographyOutput returns the same three-joint frame. The
+previz arm is planar; hyst-hw is a stub. Five-axis kinematics, rig calibration,
+3D agent placement, multi-agent resolved tracks and projection are not implemented.
+Do not duplicate ensemble primitives or turn the current arrays into five unrelated
+oscillators. Required integration is shared evidence -> coordinated motion intent
+-> formation scheduling -> calibrated rig/channel tracks -> one absolute-time
+playback clock for arms and visuals. Exact physical geometry remains provisional.
+
+### Automatic source/structure evidence checkpoint — 2026-10-02
+
+Installed Demucs4.0.1 with torch/torchaudio2.5.1+cpu in isolated
+/tmp/hyst-dance-cpu after checking dependencies and official CPU instructions.
+No global package changes, GPU, allin1 or natten. Decoded the supplied original
+AAC as stereo44100Hz float WAV and separated the entire track with htdemucs,
+shifts0, float32, clamp mode. Four matched stereo WAVs contain14,986,240 frames.
+Producer metadata, input and model hashes, and environment requirements are saved
+outside git in the existing media directory. Estimated sources remain uncertain,
+with leakage; drums have approximately0.00335% samples at/above0.99FS.
+
+Added scripts/dance_stems.py and tests: absolute RMS, globally calibrated source
+activity, flux/density and local activity-entry/exit/change evidence. Optional
+separation.json identifies the actual producer; absent manifest means unspecified.
+Added scripts/dance_structure.py and tests: mixed descriptors plus optional
+validated source RMS, multiscale4/8/16/32-beat novelty and longer recurrent-material
+candidates. No authored song roles enter inference. Outputs are additive
+stemInterpretation/musicalStructure evidence, not a semantic dance director.
+
+Post-inference listening-reference check: high90–126s estimated vocalsRMS0.1086,
+bass0.1661; break185–203s vocals0.0078, bass0.0440 while drums remain strong;
+203–212s vocals0.0752 but bass0.0294; reprise212–246s vocals0.1115, bass0.1692.
+Source estimates expose structural contrast that total mix level hid. Local vocal
+exit185.15s and entry203.60s are waveform-derived estimates, not supplied labels.
+Sparse novelty candidates approach126/185/203s but miss90/212/246s; broad recurring
+material appears roughly122.24s apart. These are uncalibrated hypotheses, not
+confirmed semantic sections or downbeats. Full semantic interpretation remains
+unresolved. Do not claim all user reference boundaries were automatically found.
+
+External files: instant-crush-stereo-analysis.wav; stem-analysis/htdemucs/
+instant-crush-stereo-analysis/{vocals,drums,bass,other}.wav and separation.json;
+instant-crush.stems.{sidecar,evidence}.json; instant-crush.structure.{sidecar,evidence}.json;
+instant-crush.interpreted.{sidecar,evidence}.json; source-reference evidence.
+Both annotated-reference and no-reference CLI runs on identical stereo input
+produce identical enriched sidecars. All original memory-sidecar fields survive.
+The first equality comparison used different mono/stereo inputs and failed;
+matching inputs resolved it. Evidence now records the actual input WAV path.
+
+Verified:165CPU workspace tests excluding hyst-render, workspace check, targeted
+compile/output/previz/CLI clippy-Dwarnings,15Python analysis tests, JS timing/media,
+fmt and diff checks. No hardware, new motion video, commit or push. Frozen src/tools
+and local .codex preserved. Earlier authored-demo review request is obsolete.
+
+Still unfinished: compiler integration of this richer automatic evidence,
+coordinated musical movement, generic rig retargeting, five-axis3D ensemble
+playback and projection. Compiler currently consumes musicalMemory only.
+All existing dance recordings remain rejected; numeric/source evidence does not
+prove dance quality. Continue here, not with manual section labels or amplitude
+tuning of the old single-arm score.
+
+### Fresh-context handoff requested — 2026-10-02
+
+User requested a fresh-context agent. Rewrote docs/DANCE_RESTART_PROMPT.md around
+the corrected automatic-interpretation/3D-ensemble target, current source evidence,
+uncommitted code, validation, assets and missing compiler/rig integration.
+No further dance implementation in this handoff turn. No commit or push requested.
+The saved project path resolves to this same checkout; the new chat must reuse
+its working tree and preserve all modified/untracked work.
+
+### Automatic director + 3D ensemble integration checkpoint — 2026-10-02
+
+Found prior uncommitted slice (undocumented): `hyst-compile/src/director.rs`
+(sidecar with musicalMemory + stemInterpretation + musicalStructure → `Interpretation`
+cues: character, formation, calibrated source activity, confidence, recall_from,
+anticipation, 3-axis sweep/lift/fold profile), `ensemble.rs` (`Rig` of
+`RigChannel` with local axes, N-agent ring placement, hyst-choreo canon/unison/
+mirror offsets, per-agent quintic score with C2 tangents, FK in carried local
+frames, absolute-time `sample`), `hyst-output/ensemble.rs` (`EnsembleOutput`,
+audio-clock sampling), `hyst-previz` `ensemble_preview` example + `ensemble.html`
++ `tests/ensemble.cjs`, `scripts/ensemble_acceptance.py`. No authored times enter it.
+
+This session: acceptance script self-test had wrong analytic constant (accel
+1.40625, not 1.0546875) — fixed. Acceptance then exposed a real bug: illustrative
+rig tip went 0.138 m below floor at 316.67 s (agent 5). Added `floor_safe` in
+`compile_ensemble` (bisect from prior feasible pose; 0.02 m margin; base joint
+points skipped) + test `links_stay_above_floor_under_extreme_intent`. Regenerated
+external song-ensemble{,-groove,-no-reuse}.html and instant-crush.ensemble.*.json
+(6 arms, 55 cues). Acceptance: 0 blockers, seek deterministic, limits within rig.
+
+Automatic decision evidence (reference windows used only after inference): break
+185–203 s → percussive-open/wave, vocal activity 0.03; vocal return 203–212 s →
+vocal-led/canon with recall; reprise 212–246 s → interlocked/mirror, 32.8 s recalled,
+reuse-off changes pose by 5.07° mean (49° max); high 90–126 s no recall (earlier
+material absent). Specials off changes ≤0.33° mean, so core groove carries motion.
+Anticipated arrivals include 185.15, 203.6, 211.0 s.
+
+Verified: workspace CPU tests excl. hyst-render (173), clippy -D warnings on
+compile/output/previz/cli, previz JS (ensemble/timing/media), 15 Python tests, fmt.
+Not done: perceptual review (human gate; no audio perception here), audible
+excerpts of ensemble motion, five-axis real geometry/calibration, projection
+shared-visual wiring, live native loop, hardware. Misses 90/212/246 s boundaries
+by design of evidence; formation vocabulary is small (mirror/canon/wave).
+Preview: http://127.0.0.1:8766/song-ensemble.html (server must be running).
+No commit/push. Frozen src/tools untouched.
+
+### User rejection of ensemble preview + rework — 2026-10-02 (evening)
+
+User review of song-ensemble.html: arms fully stationary until 0:29, low-energy
+and unresponsive until the high section, then "worms", arms clip each other, no
+emotion — "matching beat and RMS" is not dancing.
+
+Diagnosis (measured): (1) stillness 0–29 s was MY regression: floor clamp added
+earlier bisected every move back because the neutral wrist sat 2.4 cm above the
+floor margin. (2) Old director summed stem activity *levels* into 3 scalar axes —
+exactly beat/RMS matching; rate clamp (rest-to-rest bound) capped tip speed ~0.3 m/s;
+knots one per beat made everything a smooth worm. (3) Ring radius 0.70 m with
+0.74 m reach, arms facing inward: constant overlap, no collision check.
+
+Rework: director motion is now event-driven. Per-stem flux peaks become impulses
+with windup (opposite-direction anticipation before the measured onset), accent at
+it, follow-through: drums → alternating sweep snaps + wrist, bass → weighted
+drop/crouch, vocals → sustained lift/open swell + small flicks, other → bar-locked
+sway; lookahead trend (rise = tension lift, fall = release fold). Knots every
+beat/4; second-order follower bounds slope and slope change; knot tangents are the
+follower slopes (not harmonic means). Rig: higher neutral, illustrative servo limits
+raised to 400 deg/s / 6000 deg/s² (INVENTED, must be measured), larger mixes.
+Placement radius scales with N (min 0.6 m), arms face outward. New hard constraints
+in compile: floor margin 7 cm and inter-arm clearance 14 cm, both checked at
+interpolated sub-knot poses and resolved by bisection toward the prior pose.
+
+Evidence (numeric only): tip speed 0.6–1.1 m/s from the first seconds (was 0);
+sampled 5 Hz min inter-arm distance 6.7 cm in one second (117 s), none else <8 cm;
+acceptance 0 blockers; recall still differs 4° mean in 203–246 s; specials-off
+still ≤0.6° so groove carries motion. 173 CPU tests, clippy -D warnings, ensemble.cjs pass.
+Matplotlib pose sheet inspected: small ring of thin arms, still modest silhouettes.
+NOT established: that it reads as emotional dance. Likely still weak: only 3-axis
+intent, no per-phrase motif development, no emotion model beyond brightness-free
+trend/vocal proxies, formation vocabulary mirror/canon/wave. Human gate open.
+
+### Unaccepted ensemble integration; clarification-first handoff — 2026-10-03
+
+The user stopped the implementation direction and requested a prompt for a new
+agent: investigate the repo first, then ask what they actually want from the
+project and clarify uncertainties before further implementation. Rewrote
+DANCE_RESTART_PROMPT.md accordingly. New code is an unaccepted prototype, not an
+agreed artistic direction. No new full render or dance-quality approval.
+
+This session added uncommitted director.rs (source/structure/memory to intent),
+ensemble.rs (configurable local-axis 3D rig, offline formation/track resolution),
+EnsembleOutput, and a new standalone ensemble preview/exporter. Legacy planar
+score APIs remain. Existing hyst-choreo helpers are reused via a path dependency.
+Three bounded workers owned director, ensemble/output, and preview. All earlier
+modified/untracked work was preserved; frozen src/tools untouched.
+
+Real interpreted sidecar compiles to 55 cues/339.824s, with source-derived local
+vocal exit185.15s and entry203.60s. Core source-specific contour, recurrence and
+anticipation are prototype heuristics. Source estimates and provisional pulse
+are not semantic truth; movement/formation mappings were not approved by user.
+Shared interior tangents and quintic interpolation support C2 continuation;
+Bezier subdivision bounds constrain position/speed/acceleration. Physical jerk,
+collision clearance and calibration remain unresolved.
+
+Exported song-ensemble.html, instant-crush.ensemble.score.json and .intent.json
+outside git. Groove/no-reuse exports were also started. A static96s screenshot
+was inspected; no motion listening judgment was made. Important numeric finding:
+exported sampled joint endpoints reach z=-0.1377m below the floor. Do not call this
+rig valid or hide the issue with an arbitrary pedestal. The latest silence-hold
+and display-label fixes can postdate exports; verify provenance on resume.
+
+15 Python analysis tests, legacy JS timing/media checks, new JS seek/offset checks,
+CPU workspace tests excluding hyst-render, and workspace check passed during
+integration. Workers reported targeted clippy clean. Final verification receipts
+were interrupted by the handoff request; rerun affected checks after resumed edits.
+No new GPU/hardware checks. scripts/ensemble_acceptance.py was drafted by worker;
+its final status is recorded separately if available. scripts/__pycache__/ is
+transient output from this session. No commit/push/reset/clean. External
+record-ensemble.cjs exists as a draft; no new ensemble video was generated.
+
+Next action: read restart prompt, inspect current code/data, ask focused creative
+intent questions, wait for answers, agree next acceptance slice. Do not resume
+implementation simply because remaining technical tasks are obvious.

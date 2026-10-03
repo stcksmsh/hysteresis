@@ -681,6 +681,7 @@ dependencies = [
 name = "hyst-compile"
 version = "0.1.0"
 dependencies = [
+ "hyst-choreo",
  "hyst-core",
  "serde",
  "serde_json",
