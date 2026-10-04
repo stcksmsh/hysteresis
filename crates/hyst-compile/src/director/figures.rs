@@ -336,7 +336,10 @@ pub fn compile_figures(
         });
         let mut q = solve(&rig, &placement, &zones, target(time), &prior)?;
         for (j, c) in rig.channels.iter().enumerate() {
-            let travel = 0.5 * c.max_speed_degrees_per_second * dt;
+            // Largest step a rest-to-rest quintic can make inside both limits,
+            // so tangent fitting always has a feasible fallback.
+            let travel = (c.max_speed_degrees_per_second * dt / 1.875)
+                .min(c.max_acceleration_degrees_per_second2 * dt * dt / 5.7736);
             q[j] = q[j].clamp(prior[j] - travel, prior[j] + travel);
         }
         // Hard guarantee: bisect back toward the prior clear pose.
@@ -514,15 +517,14 @@ mod tests {
     use super::*;
 
     #[test]
-    #[ignore = "WIP: compile_figures rejects the rig neutral pose as intersecting a zone"]
     fn hand_travels_and_no_link_enters_a_red_zone() {
         let json = super::super::tests::fixture(0.7, 0.7);
         let rig = Rig::illustrative_five_axis();
         let free = compile_figures(&json, CompileConfig::default(), rig.clone(), &[]).unwrap();
         // Zone sits in the hand's unobstructed path.
         let zone = Zone {
-            min: [0.2, -0.15, 0.25],
-            max: [0.45, 0.15, 0.5],
+            min: [0.15, 0.25, 0.25],
+            max: [0.6, 0.5, 0.6],
         };
         let blocked = compile_figures(&json, CompileConfig::default(), rig, &[zone]).unwrap();
         let (mut entered_free, mut low, mut high) = (false, f64::INFINITY, f64::NEG_INFINITY);

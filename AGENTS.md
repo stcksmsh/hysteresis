@@ -1287,3 +1287,14 @@ choices remain unapproved. See latest `docs/DANCE_HANDOFF.md` for changes/checks
 Real export has a known sampled floor violation (z=-0.1377m). No ensemble video
 or human acceptance. Preserve all work; clarify desired experience and next
 acceptance proof before further coding, geometry changes or rendering.
+
+### Clarified intent + figure-based single-arm slice — 2026-10-04
+
+User clarified goal: one arm that dances beautifully beats many arms; hand leads,
+joints fluid, all links avoid red zones and other arms; motifs develop with the
+music; structured critique tool wanted. Added `director/figures.rs` (spatial hand
+figures, motif development and recall, zone-avoiding joint solver),
+`ensemble_preview --figures/--zone`, and trail, zones, speed and critique panel
+in `ensemble.html`. Branches: `dance-checkpoint` (old dirty tree), `dance-figures`
+(this work, worktree). 174 CPU tests pass; no human dance review yet. Details,
+weak points and emotion-model findings: latest `docs/DANCE_HANDOFF.md` entry.

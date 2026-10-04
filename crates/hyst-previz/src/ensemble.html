@@ -26,6 +26,15 @@
   h2 { margin:0 0 7px; font-size:13px; text-transform:uppercase; letter-spacing:.12em; color:#9fb1bc; }
   #decision, #evidence, #uncertainty { white-space:pre-wrap; overflow-wrap:anywhere; line-height:1.45; }
   audio { display:none; }
+  .critique { margin-top:16px; background:#14212b; border:1px solid #30414d; border-radius:8px; padding:12px 15px; }
+  .critique .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:8px; }
+  .tag { background:#22343f; color:#c7d6db; padding:4px 10px; min-height:30px; border:1px solid #3c505c; }
+  .tag.on { background:#efb869; color:#2a1c05; border-color:#efb869; }
+  #marks { list-style:none; margin:0; padding:0; }
+  #marks li { display:flex; gap:8px; flex-wrap:wrap; align-items:center; padding:8px 0; border-top:1px solid #30414d; }
+  #marks li.sel { background:#1a2b36; }
+  #marks input { flex:1; min-width:180px; background:#15232d; color:#e8f0f3; border:1px solid #52636d; border-radius:4px; padding:6px; }
+  select { font:inherit; background:#15232d; color:#e8f0f3; border:1px solid #52636d; border-radius:4px; padding:6px; }
 </style>
 </head>
 <body>
@@ -36,12 +45,20 @@
     <button id="play" type="button">Play</button>
     <input id="seek" type="range" min="0" max="__DURATION__" value="0" step="0.001" aria-label="Seek audio">
     <span id="clock">0:00.00</span>
+    <label>Speed <select id="speed" aria-label="Playback speed"><option value="1">1×</option><option value="0.5">0.5×</option><option value="0.25">0.25×</option></select></label>
     <label>Score delay <input id="offset" type="number" min="-30" max="30" step="0.01" value="0" aria-label="Score delay in seconds"> s</label>
   </div>
   <div class="readouts">
     <section><h2>Decision</h2><div id="decision"></div></section>
     <section><h2>Evidence</h2><div id="evidence"></div></section>
     <section><h2>Uncertainty</h2><div id="uncertainty"></div></section>
+  </div>
+  <div class="critique">
+    <h2>Critique</h2>
+    <div class="row dim">Hold M while something looks wrong or right (tap = last 2 s). Keys 1–9 tag the selected mark. Space plays. Click a time to replay it.</div>
+    <div class="row" id="tags"></div>
+    <div class="row"><button id="mark" type="button">Mark (M)</button><button id="export" type="button">Export notes</button><button id="clear" type="button" class="tag">Clear all</button><span id="mark-status" class="dim"></span></div>
+    <ol id="marks"></ol>
   </div>
   <audio id="audio" preload="metadata"></audio>
 </main>
@@ -87,7 +104,8 @@
   }
   // ENSEMBLE_HELPERS_END
 
-  const eye=[1.55,-2.65,1.9], target=[0,0,0.25], up=[0,0,1];
+  const solo=data.placements.length===1;
+  const eye=solo?[1.7,-1.15,0.8]:[1.55,-2.65,1.9], target=solo?[0.15,0,0.33]:[0,0,0.25], up=[0,0,1];
   const sub=(a,b)=>a.map((v,i)=>v-b[i]);
   const dot=(a,b)=>a.reduce((s,v,i)=>s+v*b[i],0);
   const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
@@ -123,6 +141,18 @@
         if(strength>.025) line([radius*Math.cos(a),radius*Math.sin(a),.012],[radius*Math.cos(b),radius*Math.sin(b),.012],colors[i],1+4*strength*v.confidence);
       }
     }
+    (data.zones||[]).forEach(z=>{
+      const c=i=>[i&1?z.max[0]:z.min[0],i&2?z.max[1]:z.min[1],i&4?z.max[2]:z.min[2]];
+      for(let i=0;i<8;i++) for(const bit of [1,2,4]) if(!(i&bit)) line(c(i),c(i|bit),'#e0524a',2);
+    });
+    // Hand path: 1.5 s behind (bright) and 1.5 s ahead (dim).
+    state.agents.forEach((_,id)=>{
+      const tip=t=>{const arm=frameAt(data,t).agents[id];return arm[arm.length-1];};
+      for(let k=-22;k<22;k++) {
+        const a=state.time+k/15,b=a+1/15;
+        if(a>=0&&b<=data.duration) line(tip(a),tip(b),k<0?'#f4e3b0':'#6f8997',k<0?3:1.5);
+      }
+    });
     const primitives=[];
     state.agents.forEach((arm,id)=>{for(let k=0;k<arm.length-1;k++) {
       const p=project(arm[k]),q=project(arm[k+1]);
@@ -152,8 +182,72 @@
   audio.addEventListener('seeked',showClock);
   seek.addEventListener('input',()=>{audio.currentTime=Number(seek.value);showClock();});
   offset.addEventListener('input',showClock);
-  window.__ENSEMBLE_PREVIEW__={inspect:seconds=>inspectAt(data,seconds),draw,scoreTime};
+  window.__ENSEMBLE_PREVIEW__={inspect:seconds=>inspectAt(data,seconds),draw,scoreTime,data};
   showClock();
+})();
+</script>
+<script>
+(() => {
+  'use strict';
+  // Critique notes: time ranges + tags + text, exported with planner context.
+  const api=window.__ENSEMBLE_PREVIEW__, data=api.data;
+  const $=id=>document.getElementById(id);
+  const audio=$('audio'), list=$('marks'), status=$('mark-status');
+  const TAGS=['good','too small','too busy','late','early','ignores music','repeats','ugly shape','stiff'];
+  const KEY=`hyst-critique:${data.duration}:${data.cues.length}`;
+  let marks=[], selected=-1, held=null;
+  try { marks=JSON.parse(localStorage.getItem(KEY)||'[]'); } catch { marks=[]; }
+  const now=()=>api.scoreTime(audio.currentTime||0,Number($('offset').value)||0,data.duration);
+  const fmt=s=>`${Math.floor(s/60)}:${(s%60).toFixed(1).padStart(4,'0')}`;
+  function save() { try { localStorage.setItem(KEY,JSON.stringify(marks)); } catch { /* notes stay in memory */ } }
+  function render() {
+    list.textContent='';
+    marks.forEach((m,i)=>{
+      const li=document.createElement('li'); if(i===selected) li.className='sel';
+      const go=document.createElement('button'); go.type='button'; go.textContent=`${fmt(m.start)}–${fmt(m.end)}`;
+      go.addEventListener('click',()=>{selected=i;audio.currentTime=Math.max(0,m.start-1);audio.play().catch(()=>{});render();});
+      li.append(go);
+      TAGS.forEach((tag,k)=>{
+        const b=document.createElement('button'); b.type='button'; b.className='tag'+(m.tags.includes(tag)?' on':''); b.textContent=`${k+1} ${tag}`;
+        b.addEventListener('click',()=>{selected=i;toggle(i,tag);}); li.append(b);
+      });
+      const note=document.createElement('input'); note.type='text'; note.value=m.note; note.placeholder='note (optional)'; note.setAttribute('aria-label','Note');
+      note.addEventListener('input',()=>{m.note=note.value;save();}); li.append(note);
+      const del=document.createElement('button'); del.type='button'; del.className='tag'; del.textContent='×'; del.setAttribute('aria-label','Delete mark');
+      del.addEventListener('click',()=>{marks.splice(i,1);selected=marks.length-1;save();render();}); li.append(del);
+      list.append(li);
+    });
+    status.textContent=`${marks.length} mark${marks.length===1?'':'s'}`;
+  }
+  function toggle(i,tag) { const m=marks[i]; if(!m) return; m.tags=m.tags.includes(tag)?m.tags.filter(t=>t!==tag):[...m.tags,tag]; save(); render(); }
+  function add(start,end) {
+    // A tap means "what I just saw"; a hold starts slightly before the key went down.
+    if(end-start<0.4) start=end-2; else start-=0.3;
+    marks.push({start:Math.max(0,start),end,tags:[],note:''}); selected=marks.length-1; save(); render();
+  }
+  function context(m) {
+    const cues=data.cues.map((c,index)=>({index,start:c.start,end:c.end,figure:c.character,musicalClass:c.formation,reason:c.reason,recallFrom:c.recallFrom}))
+      .filter(c=>c.end>m.start&&c.start<m.end);
+    const hand=[m.start,(m.start+m.end)/2,m.end].map(t=>{const a=api.inspect(t).agents;return {time:t,tips:a.map(arm=>arm[arm.length-1])};});
+    return {...m,cues,hand};
+  }
+  TAGS.forEach((tag,k)=>{const b=document.createElement('button');b.type='button';b.className='tag';b.textContent=`${k+1} ${tag}`;b.addEventListener('click',()=>toggle(selected,tag));$('tags').append(b);});
+  $('mark').addEventListener('click',()=>{const t=now();add(t,t);});
+  $('clear').addEventListener('click',()=>{marks=[];selected=-1;save();render();});
+  $('speed').addEventListener('change',()=>{audio.playbackRate=Number($('speed').value);});
+  $('export').addEventListener('click',()=>{
+    const blob=new Blob([JSON.stringify({version:1,duration:data.duration,exported:new Date().toISOString(),marks:marks.map(context)},null,2)],{type:'application/json'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`critique-${new Date().toISOString().replace(/[:.]/g,'-')}.json`; a.click(); URL.revokeObjectURL(a.href);
+    status.textContent='Exported. Give Claude the file path.';
+  });
+  document.addEventListener('keydown',e=>{
+    if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT'||e.repeat) return;
+    if(e.key==='m'||e.key==='M') held=now();
+    else if(e.key===' ') {e.preventDefault();$('play').click();}
+    else if(e.key>='1'&&e.key<='9'&&TAGS[e.key-1]) toggle(selected,TAGS[e.key-1]);
+  });
+  document.addEventListener('keyup',e=>{ if((e.key==='m'||e.key==='M')&&held!=null) {add(held,now());held=null;} });
+  render();
 })();
 </script>
 </body>

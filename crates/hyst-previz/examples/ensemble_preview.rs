@@ -1,4 +1,4 @@
-//! cargo run -p hyst-previz --example ensemble_preview -- output.html track-url sidecar.json [--agents N] [--score score.json] [--interpretation interpretation.json] [--rig rig.json] [--groove-only] [--no-reuse]
+//! cargo run -p hyst-previz --example ensemble_preview -- output.html track-url sidecar.json [--agents N] [--score score.json] [--interpretation interpretation.json] [--rig rig.json] [--groove-only] [--no-reuse] [--figures] [--zone x0,y0,z0,x1,y1,z1]
 use std::{env, fs, io, path::PathBuf};
 
 fn usage() -> &'static str {
@@ -10,6 +10,8 @@ fn usage() -> &'static str {
      --rig PATH       use JSON rig geometry and local axes (default illustrative five-axis)\n\
      --groove-only    disable hit and windup accents\n\
      --no-reuse       disable recalled musical material\n\
+     --figures        single arm, hand-figure planner with zone avoidance\n\
+     --zone BOX       red zone corners in metres, x0,y0,z0,x1,y1,z1 (repeatable; needs --figures)\n\
      Audio starts only after Play. Score and arm trajectories resolve offline for deterministic seek."
 }
 
@@ -20,6 +22,8 @@ fn main() -> io::Result<()> {
     let mut score_output = None;
     let mut interpretation_output = None;
     let mut rig_path = None;
+    let mut figures = false;
+    let mut zones = Vec::new();
     let mut config = hyst_compile::CompileConfig::default();
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -43,6 +47,24 @@ fn main() -> io::Result<()> {
                 config.enable_windups = false;
             }
             "--no-reuse" => config.reuse_repeats = false,
+            "--figures" => figures = true,
+            "--zone" => {
+                let raw = args
+                    .next()
+                    .ok_or_else(|| io::Error::other("--zone requires x0,y0,z0,x1,y1,z1"))?;
+                let v = raw
+                    .split(',')
+                    .map(str::parse::<f64>)
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(|_| io::Error::other("invalid --zone number"))?;
+                if v.len() != 6 {
+                    return Err(io::Error::other("--zone requires six numbers"));
+                }
+                zones.push(hyst_compile::director::figures::Zone {
+                    min: [v[0], v[1], v[2]],
+                    max: [v[3], v[4], v[5]],
+                });
+            }
             "--score" => {
                 score_output =
                     Some(PathBuf::from(args.next().ok_or_else(|| {
@@ -76,14 +98,29 @@ fn main() -> io::Result<()> {
     let output = PathBuf::from(&positional[0]);
     let track_url = &positional[1];
     let sidecar = fs::read_to_string(&positional[2])?;
-    let interpretation = hyst_compile::director::compile_interpretation(&sidecar, config)
-        .map_err(io::Error::other)?;
     let rig = match rig_path {
         Some(path) => serde_json::from_str(&fs::read_to_string(path)?)?,
         None => hyst_compile::ensemble::Rig::illustrative_five_axis(),
     };
-    let score = hyst_compile::ensemble::compile_ensemble(&interpretation, rig, count)
-        .map_err(io::Error::other)?;
+    if !figures && !zones.is_empty() {
+        return Err(io::Error::other("--zone needs --figures"));
+    }
+    let (score, cues) = if figures {
+        let score = hyst_compile::director::figures::compile_figures(&sidecar, config, rig, &zones)
+            .map_err(io::Error::other)?;
+        let cues = score.cues.clone();
+        (score, cues)
+    } else {
+        let interpretation = hyst_compile::director::compile_interpretation(&sidecar, config)
+            .map_err(io::Error::other)?;
+        if let Some(path) = &interpretation_output {
+            fs::write(path, serde_json::to_vec_pretty(&interpretation)?)?;
+        }
+        let score = hyst_compile::ensemble::compile_ensemble(&interpretation, rig, count)
+            .map_err(io::Error::other)?;
+        (score, interpretation.cues)
+    };
+    let count = score.tracks.len();
     const FPS: f64 = 30.0;
     let mut frames = Vec::with_capacity((score.duration * FPS).ceil() as usize + 1);
     for i in 0..=(score.duration * FPS).ceil() as usize {
@@ -104,7 +141,7 @@ fn main() -> io::Result<()> {
         frames.push(serde_json::json!([points, frame.cue_index]));
     }
     let data = serde_json::json!({
-        "duration":score.duration,"fps":FPS,"frames":frames,"cues":interpretation.cues,
+        "duration":score.duration,"fps":FPS,"frames":frames,"cues":cues,"zones":zones,
         "rig":score.rig,"placements":score.placements
     });
     let data_json = serde_json::to_string(&data)?
@@ -119,9 +156,6 @@ fn main() -> io::Result<()> {
         .replace("__DURATION__", &score.duration.to_string())
         .replace("__TRACK_URL_JSON__", &url_json)
         .replace("__ENSEMBLE_DATA__", &data_json);
-    if let Some(path) = interpretation_output {
-        fs::write(path, serde_json::to_vec_pretty(&interpretation)?)?;
-    }
     if let Some(path) = score_output {
         fs::write(path, serde_json::to_vec_pretty(&score)?)?;
     }
@@ -130,7 +164,7 @@ fn main() -> io::Result<()> {
         "{} {}, {} cues, {:.2}s → {}",
         count,
         if count == 1 { "arm" } else { "arms" },
-        interpretation.cues.len(),
+        cues.len(),
         score.duration,
         output.display()
     );

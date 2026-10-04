@@ -670,3 +670,64 @@ record-ensemble.cjs exists as a draft; no new ensemble video was generated.
 Next action: read restart prompt, inspect current code/data, ask focused creative
 intent questions, wait for answers, agree next acceptance slice. Do not resume
 implementation simply because remaining technical tasks are obvious.
+
+### Clarified intent + figure-based single-arm slice — 2026-10-04
+
+User answers (authoritative, replacing earlier agents' artistic assumptions):
+viewer should think "beautiful", then "impressive", then "how did they do this".
+Idea source: OK Go "Love" (industrial arms with mirrors). One convincing arm is
+the higher goal; many arms, mirrors and projection come after. Hand leads, but
+all joints must stay fluid and every link must avoid red zones and other arms.
+Dance must reuse and alter motifs with the music and match its imagery/emotion.
+User wants structured critique, not typed timestamps. Preview tool kept; planar
+path dropped; formations fine but maybe limiting. Rig-agnostic; renders only;
+hardware far later. Instant Crush stays. User described the first high section
+as "spiral inward, then up and out, then in pairs".
+
+Branches: previous dirty tree committed as `dance-checkpoint` (725127a). New work
+on `dance-figures` in `.claude/worktrees/dance-figures`. Nothing pushed.
+
+Added `crates/hyst-compile/src/director/figures.rs` (`compile_figures`): hand
+figures in arm-relative shell coordinates (gather = inward spiral, rise, open,
+arc, sway, reach, eight, still). Spans come from phrase edges plus measured
+transitions; each span's class reuses the director's stem thresholds. Each class
+has two figure sequences, played A, A mirrored, B, A mirrored. Returning
+material copies the source span's sequence and side, 12% larger. Progress eases
+into beats by drum activity. Joints: damped least squares toward the hand
+target, weighted to stay near the prior pose, with zone penalties; then a hard
+clearance check (three joint-space blends, bisect toward prior). Per-knot travel
+is capped at the rest-to-rest quintic limit so tangent fitting always succeeds.
+Output is the existing `EnsembleScore` (one agent); sampling and preview reused.
+
+Preview: `ensemble_preview --figures [--zone x0,y0,z0,x1,y1,z1]`. `ensemble.html`
+draws the hand trail (1.5 s behind/ahead) and red zones, moves the camera closer
+for one arm, adds a speed select and a critique panel: hold M to mark a range
+(tap = last 2 s), keys 1–9 toggle tags, optional note, click a mark to replay,
+Export writes JSON with overlapping figures, planner reasons and hand positions.
+Marks persist in localStorage when available.
+
+Real track: 126 figure cues. 90.4s starts gather, rise, open, arc; 212.7s
+recalls 90.4s; 203.6s recalls 78.9s. Tip speed median 0.14 m/s in verse,
+0.50–0.55 m/s in high sections (max 2.9 m/s), still in final silence. Lowest
+sampled joint 8.9 cm above floor. Hand-path plot and two headless-Chrome
+screenshots inspected: spiral and arcs are legible; no console errors.
+
+Verified: 174 CPU workspace tests excluding hyst-render, targeted clippy
+-D warnings (compile/output/previz/cli), fmt, `tests/ensemble.cjs`. New test
+proves no link sample enters a red zone that the unobstructed path crosses.
+Not run: `tests/timing.cjs` (needs an exported legacy viewer path), GPU suite.
+
+Not established: that this reads as dance. No human review yet. Figure shapes,
+class table and A/A'/B/A' development are assumptions. Known weak points: class
+still comes from stem-level thresholds; no emotion layer; gather does 1.5 turns
+in about 2.2 s and may read as rushed; hand tracking error is not measured; the
+zone variant shows the hand jittering against the box face; arm-vs-arm clearance
+is not in this path (ensemble path has it); servo limits remain invented.
+Emotion model: small arousal/valence regressors exist (Essentia heads on
+MusiCNN embeddings); `essentia-tensorflow` has no Python 3.12 wheel here,
+`onnxruntime` does. Not installed, not verified. `/tmp/hyst-dance-cpu` is gone.
+
+External (outside git): song-figures.html, song-figures-zone.html and
+instant-crush.figures.score.json in the music-arm directory. Open the HTML
+directly from disk; audio is `instant-crush.m4a` beside it.
+Next: user watches 80–110s and 205–235s, exports critique JSON, iterate from it.
