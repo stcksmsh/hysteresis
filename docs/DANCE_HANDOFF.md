@@ -1587,3 +1587,40 @@ what makes it WOW level of technical difficulty."
   the cross-check (it held on this song).
 `hexagon-36.html`, `hexagon-36-full.mp4`. 136 CPU tests, clippy, fmt,
 `ensemble.cjs` pass; one arm alone is identical to version 34.
+
+### Version 37: canon by a fraction of the move; ripple out and back — 2026-10-05
+
+User: a different one-by-one, a canon where arms "just start delayed, not for
+the duration of the whole move, but a fraction of it" (a 3 s move delayed
+0.5–1 s); circular (1-2-3-4-5-6-1-2-3…) or both directions (one starts, then
+the two next to it, then the next two, then the last one, then backwards).
+
+- `Formation::part` now gets the current move (figure) index and its length.
+  Step = move length / max(6, arms): a sixth of the move, 0.5 s for a 3 s move.
+  - Canon: delay = arm index × step; the next move starts again on arm 1.
+  - Ripple (new): delay = (steps round the ring from arm 1, either way) ×
+    step; on every second move the order is reversed, so it starts on the
+    opposite arm and comes back.
+- Table: vocal-led: Canon, Ripple, Mirrored in turn; percussive-open: Ripple,
+  Canon; the rest as in version 36. On this song: intro Ripple, verse 1 Canon,
+  chorus 1 Unison, link Ripple then Canon, verse 2 Mirrored, pre-break Canon,
+  break Ripple, vocal return Ripple, chorus 2 Unison onward, fade DropOut.
+- Two defects the larger delays exposed, both fixed:
+  1. The follower's braking near another arm limited motion in every
+     direction, so two arms that had met could only creep apart. It now limits
+     only motion that shrinks the gap (`arm_room` before and after); zones are
+     as before, so one arm alone is unchanged.
+  2. Neighbours out of step reach for the same place at different times; the
+     cross-check then held them (four arms stood still for 8 s in one canon).
+     The "own side of the line half way to the neighbours" limit, which
+     version 36 applied only to Mirrored, now applies to every formation but
+     Unison, from two beats before to two after, with 5 cm of room beyond the
+     clearance so the solver is not leaning on the hard check.
+- Consequence, told to the user: reaches overlap in space only in Unison. A
+  hand is inside a neighbour's reach 77 % of arm-time as before, but nearer a
+  neighbour's base than its own 6 % (14 % in version 36). Overlap during
+  canon would need the timing planned so paths interleave.
+- Measured, hexagon 0.8 m: no section with still or uneven arms; closest
+  approach 10.0 cm at 10 cm clearance; hand speed p95 0.88 m/s per arm.
+`hexagon-37.html`, `hexagon-37-full.mp4`. 136 CPU tests, clippy, fmt,
+`ensemble.cjs` pass; one arm alone identical to version 34.

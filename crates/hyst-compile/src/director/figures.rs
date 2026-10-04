@@ -164,8 +164,14 @@ enum Formation {
     Unison,
     /// Every second arm dances the mirror image.
     Mirrored,
-    /// The same dance passed round the ring, each arm half a beat after the last.
+    /// Each move starts on one arm and passes round the ring (1-2-3-4-5-6 and
+    /// on to 1 with the next move): each arm starts it a fraction of the
+    /// move's own length after the last.
     Canon,
+    /// Each move starts on one arm and spreads both ways round the ring to the
+    /// arm opposite (1, then 2 and 6, then 3 and 5, then 4); the next move
+    /// starts there and comes back.
+    Ripple,
     /// Opposite arms pair up; the pairs take turns of eight beats.
     Pairs,
     /// Every second arm sits out.
@@ -173,16 +179,32 @@ enum Formation {
 }
 
 impl Formation {
-    /// For arm `a` of `count`, `beats` into the run: (side: 1 as planned, -1
+    /// For arm `a` of `count`, `beats` into the run, during the song's
+    /// `index`-th move, which lasts `length` beats: (side: 1 as planned, -1
     /// mirrored; delay in beats; 1 dancing or 0 resting).
-    fn part(self, a: usize, count: usize, beats: f64) -> (f64, f64, f64) {
+    fn part(
+        self,
+        a: usize,
+        count: usize,
+        beats: f64,
+        index: usize,
+        length: f64,
+    ) -> (f64, f64, f64) {
+        // A sixth of the move per step (the user: half a second to a second
+        // for a move of three), less where more arms would overrun the move.
+        let step = length / (count as f64).max(6.0);
         let odd = a % 2 == 1;
         let turn = |every: f64, groups: usize| (beats / every) as usize % groups.max(1);
         let on = |dancing: bool| if dancing { 1.0 } else { 0.0 };
         match self {
             Self::Unison => (1.0, 0.0, 1.0),
             Self::Mirrored => (if odd { -1.0 } else { 1.0 }, 0.0, 1.0),
-            Self::Canon => (1.0, a as f64 * (4.0 / count as f64).min(0.5), 1.0),
+            Self::Canon => (1.0, a as f64 * step, 1.0),
+            Self::Ripple => {
+                let (out, far) = (a.min(count - a), count / 2);
+                let rank = if index % 2 == 1 { far - out } else { out };
+                (1.0, rank as f64 * step, 1.0)
+            }
             Self::Pairs => {
                 let groups = (count / 2).max(1);
                 (1.0, 0.0, on(a % groups == turn(8.0, groups)))
@@ -693,8 +715,8 @@ pub fn compile_ensemble(
         // low in energy and not synchronized enough).
         let formation = match class {
             "interlocked" | "bass-led" | "silence" => Formation::Unison,
-            "vocal-led" => [Formation::Canon, Formation::Mirrored][n % 2],
-            "percussive-open" => [Formation::Canon, Formation::Unison][n % 2],
+            "vocal-led" => [Formation::Canon, Formation::Ripple, Formation::Mirrored][n % 3],
+            "percussive-open" => [Formation::Ripple, Formation::Canon][n % 2],
             "sparse" => Formation::DropOut,
             _ => Formation::Pairs,
         };
@@ -899,7 +921,11 @@ pub fn compile_ensemble(
             let part = |t: f64| {
                 let run = formations.partition_point(|f| f.0 <= t).saturating_sub(1);
                 let (start, formation) = formations[run];
-                formation.part(a, count, ((t - start) / beat).max(0.0))
+                let index = instances
+                    .partition_point(|x| x.end <= t)
+                    .min(instances.len() - 1);
+                let length = (instances[index].end - instances[index].start) / beat;
+                formation.part(a, count, ((t - start) / beat).max(0.0), index, length)
             };
             let parts: Vec<(f64, f64, f64)> = times.iter().map(|&t| part(t)).collect();
             let column =
@@ -909,7 +935,7 @@ pub fn compile_ensemble(
             let mut reach: Vec<[f64; 2]> = Vec::with_capacity(times.len());
             for (i, &time) in times.iter().enumerate() {
                 let on = bell(&dancing, i as f64, 6.0);
-                let late = beat * bell(&delays, i as f64, 16.0);
+                let late = beat * bell(&delays, i as f64, 12.0);
                 let (p, bearing) = place(hand((time - late).max(0.0)));
                 let want = flip * parts[i].0 * bearing;
                 let aimed = lerp(360.0 * (want / 360.0).round(), want, on);
@@ -937,17 +963,27 @@ pub fn compile_ensemble(
         // collision, both the same for every arm so the picture stays
         // symmetric (the cross-check alone would stop arms by their order):
         // no hand enters the circle at the ring's centre where all the hands
-        // would meet; and while neighbours mirror each other, each hand stays
-        // on its own side of the line half way to them.
+        // would meet; and each hand stays on its own side of the line half way
+        // to its neighbours unless the arms move as one (unison), where every
+        // arm passes through the space its neighbour has just left. Out of
+        // step (canon, ripple, mirrored) neighbours would reach for the same
+        // spot and the cross-check would hold them there.
         let around = PI / count as f64;
         let own = (o[1] - middle[1]).atan2(o[0] - middle[0]);
-        let ball = 0.5 * clearance_m + held + 0.02;
+        // Half the clearance, the implement, and room for the solver to work
+        // without leaning on the cross-check.
+        let ball = 0.5 * clearance_m + held + 0.05;
         let keep_out = ball / around.sin();
-        let mirrored: Vec<f64> = times
+        // 1 while the arms are out of step, from two beats before to two
+        // beats after, so the line holds while a change of formation eases in.
+        let apart: Vec<f64> = times
             .iter()
             .map(|&t| {
-                let run = formations.partition_point(|f| f.0 <= t).saturating_sub(1);
-                f64::from(formations[run].1 == Formation::Mirrored)
+                let out_of_step = |t: f64| {
+                    let run = formations.partition_point(|f| f.0 <= t).saturating_sub(1);
+                    formations[run].1 != Formation::Unison
+                };
+                f64::from([-2.0, 0.0, 2.0].iter().any(|d| out_of_step(t + d * beat)))
             })
             .collect();
         let shared = |i: usize, p: [f64; 3]| -> [f64; 3] {
@@ -966,7 +1002,7 @@ pub fn compile_ensemble(
             let off = (y.atan2(x) - own + PI).rem_euclid(TAU) - PI;
             let half = (around - (ball / out).min(1.0).asin()).max(0.0);
             let inside = half * (off / half.max(1e-9)).tanh();
-            let angle = own + lerp(off, inside, bell(&mirrored, i as f64, 6.0));
+            let angle = own + lerp(off, inside, bell(&apart, i as f64, 6.0));
             [
                 middle[0] + out * angle.cos(),
                 middle[1] + out * angle.sin(),
@@ -1158,7 +1194,12 @@ pub fn compile_ensemble(
                         .map(|k| (b.0[k] - a.0[k]).powi(2))
                         .sum::<f64>()
                         .sqrt();
-                    let limit = (2.0 * brake * (world.room(a.0, a.1) + 0.005)).sqrt() * dt;
+                    // Toward another arm it brakes as toward a zone; moving
+                    // apart is free, or two arms that met would hardly part.
+                    let (near, then) = (world.arm_room(a.0, a.1), world.arm_room(b.0, b.1));
+                    let zone = world.zone_room(a.0, a.1);
+                    let room = if then < near { zone.min(near) } else { zone };
+                    let limit = (2.0 * brake * (room + 0.005)).sqrt() * dt;
                     if travel > limit {
                         scale = scale.min(limit / travel);
                     }
@@ -1318,11 +1359,14 @@ impl Obstacles<'_> {
             .max(self.radius + (slack - 1.0) * MARGIN_M - self.gap(p, extra))
             .max(0.0)
     }
-    /// Free distance from `p` to the nearest obstacle; 0 when inside one.
-    fn room(&self, p: [f64; 3], extra: f64) -> f64 {
-        // Half the gap to another arm: it may be closing in at the same rate.
+    /// Free distance from `p` to the nearest zone; 0 when inside one.
+    fn zone_room(&self, p: [f64; 3], extra: f64) -> f64 {
         clearance(p, self.zones, MARGIN_M + extra)
-            .min((0.5 * (self.gap(p, extra) - self.radius)).max(0.0))
+    }
+    /// Free distance from `p` to the nearest other arm, halved: that arm may
+    /// be closing in at the same rate. 0 when inside its clearance.
+    fn arm_room(&self, p: [f64; 3], extra: f64) -> f64 {
+        (0.5 * (self.gap(p, extra) - self.radius)).max(0.0)
     }
 }
 
@@ -1656,7 +1700,7 @@ mod tests {
         assert!((world.depth([0.85, 0.0, 0.5], 0.0, 1.0) - 0.03).abs() < 1e-9);
         // The arm's own extra room counts too, and it brakes within half the gap.
         assert!(world.depth([0.7, 0.0, 0.5], 0.13, 1.0) > 0.0);
-        assert!((world.room([0.7, 0.0, 0.5], 0.0) - 0.06).abs() < 1e-9);
+        assert!((world.arm_room([0.7, 0.0, 0.5], 0.0) - 0.06).abs() < 1e-9);
     }
 
     #[test]

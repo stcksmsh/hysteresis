@@ -1406,3 +1406,11 @@ formations are built so they never ask for a collision (a shared keep-out
 circle at the centre; mirrored neighbours keep to their side); the cross-check
 is the net. Rest-heavy formations are gone; choruses unison, verses canon or
 mirrored.
+
+### Canon and ripple — 2026-10-05
+
+Version 37. Canon delays are a sixth of the current move per arm, round the
+ring; Ripple spreads from one arm both ways to the opposite arm and comes back
+on the next move. Arms now part freely after meeting, and every formation but
+unison keeps each hand on its own side of the line to its neighbours, so
+overlapping reaches happen in unison only.
