@@ -25,8 +25,11 @@ const FLOOR: Zone = Zone {
 };
 /// Hard check enforces this clearance; the solver aims for 1.6 times it.
 const MARGIN_M: f64 = 0.05;
-/// `RollMode::Spin` and `Twirl`: disc turn per metre of hand travel.
-const SPIN_DEGREES_PER_METRE: f64 = 150.0;
+/// Beats the hand disc takes to turn over at a moment.
+const FLIP_BEATS: f64 = 3.0;
+/// Hand disc turn per metre of fast hand travel. The user leaned to 280 over
+/// 150 and 80 in a blind side-by-side.
+const SPIN_DEGREES_PER_METRE: f64 = 280.0;
 /// Fastest the figure path carries the hand, m/s. A guess, tuned by eye on one
 /// song; moments may exceed it briefly.
 const HAND_SPEED_CAP: f64 = 0.8;
@@ -568,7 +571,7 @@ pub fn compile_figures(
         let length = c.link_m.iter().map(|v| v * v).sum::<f64>().sqrt();
         (length > 0.0 && (along.abs() - length).abs() < 1e-9).then_some(rig.channels.len() - 1)
     });
-    let mut roll = 0.0;
+    let mut turned = 0.0;
     for (i, (&time, &(target, facing))) in times.iter().zip(&targets).enumerate() {
         if knots.last().is_some_and(|k| time - k.time < 1e-9) {
             continue;
@@ -580,63 +583,55 @@ pub fn compile_figures(
         let holding = held_target == Some(target);
         held_target = Some(target);
         if !holding || wanted.is_empty() {
-            wanted = solve(&rig, &placement, &zones, target, facing, &prior)?;
+            // Body: the wrist trails the hand's rise and fall like a brush
+            // (bends back as the hand rises, forward as it falls). It is only a
+            // posture preference, so the other joints make up for it and the
+            // hand still reaches its target.
+            let (lo, hi) = (i.saturating_sub(4), (i + 4).min(targets.len() - 1));
+            let rise = (targets[hi].0[2] - targets[lo].0[2]) / (times[hi] - times[lo]).max(1e-9);
+            let lean = (config.wrist_drag_degrees_per_mps * rise).clamp(-45.0, 45.0);
+            let wrist = roll_joint.map_or(rig.channels.len() - 1, |r| r - 1);
+            wanted = solve(
+                &rig,
+                &placement,
+                &zones,
+                target,
+                facing,
+                &prior,
+                (wrist, lean),
+            )?;
         }
         if let Some(r) = roll_joint {
-            // The disc's face leads the hand: turn its normal toward the hand's
-            // travel across the wrist link. Both faces are mirrors, so half
-            // turns are equal; take the nearer.
-            let points = forward_kinematics(&rig, &placement, &wanted)?;
-            let (tip, wrist) = (points[points.len() - 1], points[points.len() - 2]);
-            let d: [f64; 3] =
-                std::array::from_fn(|k| (tip[k] - wrist[k]) / rig.channels[r].link_m[0]);
-            let yaw = wanted[0].to_radians();
-            let y = [-yaw.sin(), yaw.cos(), 0.0];
-            let z = [
-                d[1] * y[2] - d[2] * y[1],
-                d[2] * y[0] - d[0] * y[2],
-                d[0] * y[1] - d[1] * y[0],
-            ];
-            // Travel over about half a second, and the roll eases toward its
-            // aim in proportion to that travel: slow or wavering motion barely
-            // moves it. Aiming knot by knot made the wrist jitter (user).
-            let (before, after) = (
-                targets[i.saturating_sub(4)].0,
-                targets[(i + 4).min(targets.len() - 1)].0,
-            );
-            let across = |axis: [f64; 3]| {
-                (0..3)
-                    .map(|k| (after[k] - before[k]) * axis[k])
+            // Flips: the disc turns to show its other face across each moment,
+            // in alternating directions.
+            let flips = 180.0
+                * moments
+                    .iter()
+                    .enumerate()
+                    .map(|(n, m)| {
+                        let way = if n % 2 == 0 { 1.0 } else { -1.0 };
+                        way * smooth((time - m.time) / (FLIP_BEATS * beat) + 0.5)
+                    })
+                    .sum::<f64>();
+            // Travel: in a fast sweep the disc turns with the distance the hand
+            // covers; it rests when the hand is slow. Its direction is the
+            // hand's sweep round the base relative to the figure's steady
+            // travel over the surrounding four beats, so left and right sweeps
+            // turn it opposite ways. (Turning with all travel, one way, read
+            // as constant purposeless rotation: user.)
+            if i > 0 && dt.is_finite() {
+                let (before, bearing) = targets[i - 1];
+                let travel = (0..3)
+                    .map(|k| (target[k] - before[k]).powi(2))
                     .sum::<f64>()
-            };
-            let (vy, vz) = (across(y), across(z));
-            let pace = vy.hypot(vz) / (8.0 * step);
-            let prior = targets[i.saturating_sub(1)].0;
-            let travel = (0..3)
-                .map(|k| (target[k] - prior[k]).powi(2))
-                .sum::<f64>()
-                .sqrt();
-            match config.roll {
-                crate::RollMode::Lead => {
-                    let aim = vz.atan2(vy).to_degrees();
-                    let aim = aim + 180.0 * ((roll - aim) / 180.0).round();
-                    roll += (aim - roll) * 0.3 * (pace / 0.5).min(1.0);
-                }
-                // One direction only: a roll that never reverses cannot jitter.
-                crate::RollMode::Spin => roll += SPIN_DEGREES_PER_METRE * travel,
-                crate::RollMode::Twirl => {
-                    // Spin, plus an extra half turn eased across each moment.
-                    let turned = |t: f64| {
-                        moments
-                            .iter()
-                            .map(|m| smooth((t - m.time) / (3.0 * beat) + 0.5))
-                            .sum::<f64>()
-                    };
-                    roll += SPIN_DEGREES_PER_METRE * travel
-                        + 180.0 * (turned(time) - turned(time - step));
-                }
+                    .sqrt();
+                let fast = smooth((travel / dt - 0.25) / 0.35);
+                let (lo, hi) = (i.saturating_sub(16), (i + 16).min(targets.len() - 1));
+                let steady = (targets[hi].1 - targets[lo].1) / (times[hi] - times[lo]);
+                let way = (((facing - bearing) / dt - steady) / 30.0).tanh();
+                turned += SPIN_DEGREES_PER_METRE * travel * fast * way;
             }
-            wanted[r] = roll;
+            wanted[r] = flips + turned;
         }
         // Hardware follower: each joint chases its solved angle at a design
         // acceleration and speed a hobby-class servo arm could plausibly follow,
@@ -663,6 +658,8 @@ pub fn compile_figures(
                 q[j] = (prior[j] + v * dt).clamp(c.min_degrees + 0.5, c.max_degrees - 0.5);
             }
         }
+        // The roll moves no link, so zone braking below must not disturb it.
+        let rolled = roll_joint.map(|r| (r, q[r]));
         // Zone-aware: a link near a zone moves only as fast as it could brake
         // within its remaining clearance (as for joint end stops above), so the
         // hard check below never has to stop the arm abruptly.
@@ -697,6 +694,9 @@ pub fn compile_figures(
             }
             q = (0..q.len()).map(|j| lerp(prior[j], q[j], lo)).collect();
         }
+        if let Some((r, angle)) = rolled {
+            q[r] = angle;
+        }
         if dt.is_finite() {
             for j in 0..q.len() {
                 speed[j] = (q[j] - prior[j]) / dt;
@@ -721,6 +721,14 @@ pub fn compile_figures(
                     (knots[i + 1].joints_degrees[j] - knots[i - 1].joints_degrees[j]) / span
                 }
             })
+            .collect();
+    }
+    // A score that ends mid-motion keeps its last slope; zero there would ask
+    // a moving joint to stop within one knot.
+    if let [.., before, last] = &mut knots[..] {
+        let dt = last.time - before.time;
+        last.velocity_degrees_per_second = (0..rig.channels.len())
+            .map(|j| (last.joints_degrees[j] - before.joints_degrees[j]) / dt)
             .collect();
     }
     let mut track = AgentTrack { id: 0, knots };
@@ -818,6 +826,8 @@ fn solve(
     target: [f64; 3],
     facing_degrees: f64,
     prior: &[f64],
+    // (joint, degrees): shifts that joint's home angle for this pose.
+    lean: (usize, f64),
 ) -> Result<Vec<f64>, String> {
     let n = rig.channels.len();
     let residual = |q: &[f64]| -> Result<Vec<f64>, String> {
@@ -832,7 +842,7 @@ fn solve(
             r.push(if free {
                 6e-4 * (q[j] - facing_degrees)
             } else {
-                3e-4 * (q[j] - c.neutral_degrees)
+                3e-4 * (q[j] - c.neutral_degrees - if j == lean.0 { lean.1 } else { 0.0 })
             });
         }
         r.extend(

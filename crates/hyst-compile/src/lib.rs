@@ -34,31 +34,23 @@ pub struct SegmentBounds {
     pub max_acceleration_degrees_per_second2: [f64; 3],
 }
 
-/// What drives the wrist roll (the mirror disc's face). Candidates under
-/// side-by-side review; the losers get deleted.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RollMode {
-    /// The face leads the hand's travel.
-    Lead,
-    /// The disc turns steadily with the distance the hand travels.
-    Spin,
-    /// `Spin`, plus an extra half turn across each moment.
-    Twirl,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CompileConfig {
     pub enable_hits: bool,
     /// Recall an earlier measured phrase signature; false uses current content.
     pub reuse_repeats: bool,
-    pub roll: RollMode,
+    /// Body: how far the wrist's preferred bend trails the hand's vertical
+    /// speed, degrees per m/s. 0 turns it off. 240 chosen by the user in a
+    /// blind side-by-side over 0 and 120; it about triples wrist travel, so
+    /// lower it if real wrist or elbow servos cannot keep up.
+    pub wrist_drag_degrees_per_mps: f64,
 }
 impl Default for CompileConfig {
     fn default() -> Self {
         Self {
             enable_hits: true,
             reuse_repeats: true,
-            roll: RollMode::Lead,
+            wrist_drag_degrees_per_mps: 240.0,
         }
     }
 }

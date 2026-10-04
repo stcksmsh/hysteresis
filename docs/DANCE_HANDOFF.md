@@ -1065,3 +1065,149 @@ written and dropped before review: it needs viewer and light positions.
 Blind side-by-side prepared, not yet judged: `blind-roll-side-by-side.mp4`
 (1:24–1:54, A | B | C shuffled), key `blind-roll-key.json` unread by the agent.
 130 CPU tests, clippy, fmt, `ensemble.cjs` pass.
+
+**Verdict and version 22.** User: B best, "a tight race", minus: always turns
+the same way. Key: A twirl, B spin, C lead. `lead`, `twirl`, `RollMode` and
+`--roll` deleted. Kept: the disc turns 150° per metre of hand travel. Its
+direction is now the figure's own left/right sense averaged over two beats, so
+a mirrored figure turns the other way and the roll eases through rest at the
+change. Measured: 5 reversals a minute, speed median 48, p95 123°/s. The zone
+test then failed ("cannot fit tangents", channel 4): zone braking was scaling
+the roll too; the roll is now exempt from zone braking, since it moves no link.
+130 CPU tests, clippy, fmt, `ensemble.cjs` pass. Clip `render-22.mp4`
+(1:24–2:04), export `song-figures-22.html`. Not reviewed yet.
+Agreed next: side-by-side tests of the next decisions, starting with body B
+(whip or wave on arrivals and flourishes), then spin rate, then keys-decide.
+
+### Version 23: disc on a stem, distinct faces; roll candidates again — 2026-10-04
+
+Pull request 13 was merged by accident mid-work; this continues on branch
+`wrist-roll` (pull request 14). `master` still carries the earlier three roll
+drivers until 14 merges.
+
+User on version 22: the disc should sit further out and overlap the arm less
+(it clipped); its two sides are hard to tell apart; it "seems to always rotate,
+even when not needed", and always the same way. Then: "I liked the disc being
+tied to travel, but it needs some in-between solution".
+
+- Rig: wrist link 0.08 m, roll link 0.11 m (5 cm stem + 6 cm disc radius);
+  reach 0.74 → 0.77 m. Preview draws a thin stem to the disc's edge.
+- Disc faces differ: one warm, one cool with a dark bar.
+- Measured why spin looked one-way: the figure-sense direction still netted a
+  large one-way drift, and tying direction to the hand's sweep round the base
+  drifted too (+5300°), because figures travel steadily one way round the base.
+- Three candidates, `CompileConfig::roll` / `--roll` (default `both`); the
+  losers must be deleted after the verdict:
+  - `flip`: still; turns over (180°, 3 beats) across each moment, alternating
+    direction. 0 reversals.
+  - `travel`: turns 150° per metre only in fast sweeps (fades in from 0.25 to
+    0.6 m/s); direction is the hand's sweep round the base relative to its
+    steady travel over the surrounding four beats. 5 reversals a minute, speed
+    median 2, p95 111°/s; still nets +2000° over the song.
+  - `both`: sum of the two.
+- Side-by-side prepared, shuffled, not yet judged:
+  `blind-roll-side-by-side.mp4` (1:24–2:04), key `blind-roll-key.json` unread.
+130 CPU tests, clippy, fmt, `ensemble.cjs` pass.
+
+**Verdict, version 24.** User: "I think C looks best?" Key: A travel, B flip,
+C both. `both` is now the only roll driver; `RollMode` and `--roll` deleted.
+Export `song-figures-24.html` is byte-identical to clip C's export. The
+one-way net drift of the travel part (about 5.5 turns over the song) was not
+raised again; unresolved, low priority. 130 CPU tests, clippy, fmt,
+`ensemble.cjs` pass. Next: body B (whip or wave on moments), with/without
+side by side.
+
+### Body, second attempt: wrist drag, side-by-side pending — 2026-10-04
+
+Plain joint delay died in its blind test. New mechanism: the wrist's preferred
+bend trails the hand's vertical speed (bends back as the hand rises, forward
+as it falls). It is a posture preference inside the solver (`lean` argument of
+`solve`), so shoulder and elbow compensate and the hand keeps its target.
+Knob `CompileConfig::wrist_drag_degrees_per_mps`, flag `--drag`, default 0
+(off) until judged; lean clamped to ±45°.
+
+Measured against drag 0, whole song: hand moves 0.0 cm median at every gain
+(p95 0.4 / 1.0 / 2.0 cm at gain 60 / 120 / 240); the wrist point moves 0.4 /
+0.8 / 1.4 cm median, 1.7 / 3.3 / 5.1 cm p95; wrist bend range −3..74° becomes
+−18..82°, −33..87°, −41..90°. Small in position; whether the changed tool angle
+reads is the question for the eye.
+
+Side-by-side prepared, shuffled, not yet judged: `blind-drag-side-by-side.mp4`
+(1:24–2:04) with gains 0, 120, 240; key `blind-drag-key.json` unread. If no
+difference is seen, delete the knob and `lean`. Body B (whip on moments) still
+unbuilt. 130 CPU tests, clippy, fmt, `ensemble.cjs` pass.
+
+**Verdict, version 25.** User: B and C best, C "stronger, more complex, wow",
+generally nicer though sometimes B is better; worried about hardware. Key: A 0,
+B 120, C 240. Wrist drag is the first "body" layer to pass a blind test.
+Default is now 240 (export `song-figures-25.html` identical to clip C); the
+knob stays as a hardware calibration knob.
+
+Servo cost, whole song, drag 0 → 120 → 240 (speed p95 °/s, acceleration p95
+°/s², travel in thousands of degrees): elbow 60 → 101 → 110, 216 → 380 → 439,
+4.7 → 8.6 → 10.9; wrist 52 → 99 → 125, 186 → 481 → 687, 4.3 → 9.3 → 13.6. Base
+and shoulder unchanged. All stay inside the follower's design limits (180°/s,
+800°/s²), which are themselves guesses; the wrist's acceleration p95 is close
+to that cap, so the follower is already clipping some of it. Wrist travel
+about triples: more heat and wear on the smallest servo.
+
+Body B built as a knob, off by default: `wrist_whip_degrees` / `--whip`. At
+each moment the wrist cocks back by that angle over the prepare window, snaps
+through to 0.6 of it just after the event, and settles over one beat; again a
+posture preference, hand target unchanged. Side-by-side prepared, shuffled,
+not yet judged: `blind-whip-side-by-side.mp4` (1:24–2:04), 0 / 35 / 60°, key
+`blind-whip-key.json` unread. Not measured. Delete the knob if invisible.
+
+**Whip verdict.** User: "They all seem identical." Checked it was a fair test:
+at 60° the wrist point moved at most 3.5 cm in the clip and over 1 cm in only
+144 of 2400 frames, so the whip acted but too little and too briefly. Deleted
+(`wrist_whip_degrees`, `--whip`); planner output again equals version 25.
+Lesson: a short posture pulse around a moment is too small to read. A whip
+that reads would have to move the hand's own path or timing around the moment
+(the arrival already does prepare/arrive), or use the roll (the disc flip
+already fires on moments). Not retried.
+
+State of "body": wrist drag at 240 kept; plain lag and whip dead.
+Remaining queue: spin rate of the disc, then keys-decide (largest open item).
+
+### Spin rate and suspension: two side-by-sides pending — 2026-10-04
+
+User plan: do these two quickly, then hand off to a fresh agent; keys-decide in
+a fresh iteration; disc-aware zone checks wait until the hand object is defined
+("it needs to know what it's holding").
+
+Two knobs added for review, both to be reduced to a constant or deleted after
+the verdicts:
+- `spin_degrees_per_metre` / `--spin` (default 150): side-by-side
+  `blind-spin-side-by-side.mp4`, values 80 / 150 / 280, key
+  `blind-spin-key.json`.
+- `suspension` / `--suspend` (default 0 = off): at a high peak of a figure
+  (hand higher than a quarter beat before and after, elevation above mid) the
+  figure clock slows by this fraction, so the hand hangs before coming down;
+  the clock makes the time up after. Side-by-side
+  `blind-suspend-side-by-side.mp4`, values 0 / 0.5 / 0.75, key
+  `blind-suspend-key.json`. First version slowed all high level travel and
+  threw figures up to 90 cm out of place; narrowed to true peaks: median shift
+  0 cm, in the clip the hand departs over 5 cm for 3.4 s (0.5) or 6.6 s (0.75)
+  of 40 s.
+Both clips 1:24–2:04, shuffled, keys unread. 130 CPU tests, clippy, fmt,
+`ensemble.cjs` pass.
+
+**Verdicts, version 26, session end.** Spin: user "a toss-up between A and C,
+leaning A". Key: A 280, B 80, C 150. `SPIN_DEGREES_PER_METRE` is now 280 and
+the knob is gone. Suspension: "they seem too similar". Key: A 0.75, B 0, C 0.5.
+Deleted. `song-figures-26.html` is byte-identical to the chosen spin clip.
+
+Found on the way: with the faster spin the fixture test
+`only_a_cut_freezes_the_arm` failed in `fit_tangents`. Cause: the last knot of
+a score always had zero velocity, and the fixture ends with the disc still
+turning at full speed. The last knot now keeps its backward slope. The
+`fit_tangents` error now prints the neighbouring knots, which is how this was
+found.
+
+Whole song, version 26: hand speed median 0.37, p95 0.83, max 2.02 m/s; wrist
+bend −41°..90°, elbow 10°..110° (limit 110°), shoulder −109.5°..−21°.
+130 CPU tests, clippy, fmt, `ensemble.cjs` pass. Only 1:24–2:04 was reviewed by
+eye this session.
+
+`docs/DANCE_RESTART_PROMPT.md` rewritten for a fresh agent. Next: keys-decide.
