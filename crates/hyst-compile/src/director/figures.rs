@@ -559,7 +559,15 @@ pub fn compile_figures(
     let mut held_target: Option<[f64; 3]> = None;
     let mut wanted: Vec<f64> = Vec::new();
     let mut speed = vec![0.0; rig.channels.len()];
-    for (&time, &(target, facing)) in times.iter().zip(&targets) {
+    // A last joint that turns about its own link is a tool roll: it moves no
+    // point of the chain, so it is driven here, not by the position solver.
+    let roll_joint = rig.channels.last().and_then(|c| {
+        let along: f64 = (0..3).map(|k| c.axis_local[k] * c.link_m[k]).sum();
+        let length = c.link_m.iter().map(|v| v * v).sum::<f64>().sqrt();
+        (length > 0.0 && (along.abs() - length).abs() < 1e-9).then_some(rig.channels.len() - 1)
+    });
+    let mut roll = 0.0;
+    for (i, (&time, &(target, facing))) in times.iter().zip(&targets).enumerate() {
         if knots.last().is_some_and(|k| time - k.time < 1e-9) {
             continue;
         }
@@ -571,6 +579,37 @@ pub fn compile_figures(
         held_target = Some(target);
         if !holding || wanted.is_empty() {
             wanted = solve(&rig, &placement, &zones, target, facing, &prior)?;
+        }
+        if let Some(r) = roll_joint {
+            // The disc's face leads the hand: turn its normal toward the hand's
+            // travel across the wrist link. Both faces are mirrors, so half
+            // turns are equal; take the nearer. Too slow across: keep the roll.
+            let points = forward_kinematics(&rig, &placement, &wanted)?;
+            let (tip, wrist) = (points[points.len() - 1], points[points.len() - 2]);
+            let d: [f64; 3] =
+                std::array::from_fn(|k| (tip[k] - wrist[k]) / rig.channels[r].link_m[0]);
+            let yaw = wanted[0].to_radians();
+            let y = [-yaw.sin(), yaw.cos(), 0.0];
+            let z = [
+                d[1] * y[2] - d[2] * y[1],
+                d[2] * y[0] - d[0] * y[2],
+                d[0] * y[1] - d[1] * y[0],
+            ];
+            let (before, after) = (
+                targets[i.saturating_sub(1)].0,
+                targets[(i + 1).min(targets.len() - 1)].0,
+            );
+            let across = |axis: [f64; 3]| {
+                (0..3)
+                    .map(|k| (after[k] - before[k]) * axis[k])
+                    .sum::<f64>()
+            };
+            let (vy, vz) = (across(y), across(z));
+            if vy.hypot(vz) > 0.1 * 2.0 * step {
+                let aim = vz.atan2(vy).to_degrees();
+                roll = aim + 180.0 * ((roll - aim) / 180.0).round();
+            }
+            wanted[r] = roll;
         }
         // Hardware follower: each joint chases its solved angle at a design
         // acceleration and speed a hobby-class servo arm could plausibly follow,

@@ -99,13 +99,17 @@ fn main() -> io::Result<()> {
                     .collect::<Vec<_>>()
             })
             .collect();
-        // First joint angle per arm, so the preview can turn the base visibly.
-        let yaws: Vec<f64> = frame
+        // First and last joint angle per arm: the preview turns the base marks
+        // and rolls the hand disc with them.
+        let turns: Vec<[f64; 2]> = frame
             .agents
             .iter()
-            .map(|agent| (agent.joints_degrees[0] * 100.0).round() / 100.0)
+            .map(|agent| {
+                let q = &agent.joints_degrees;
+                [q[0], q[q.len() - 1]].map(|v| (v * 100.0).round() / 100.0)
+            })
             .collect();
-        frames.push(serde_json::json!([points, frame.cue_index, yaws]));
+        frames.push(serde_json::json!([points, frame.cue_index, turns]));
     }
     let data = serde_json::json!({
         "duration":score.duration,"fps":fps,"frames":frames,"cues":cues,"zones":zones,

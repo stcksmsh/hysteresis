@@ -91,9 +91,9 @@
     const agents=a[0].map((arm,j)=>arm.map((point,k)=>point.map((v,axis)=>v+(b[0][j][k][axis]-v)*alpha)));
     const va=score.cues[a[1]], vb=score.cues[b[1]];
     const visual={...va, sourceActivity:va.sourceActivity.map((v,i)=>v+(vb.sourceActivity[i]-v)*alpha), confidence:va.confidence+(vb.confidence-va.confidence)*alpha};
-    // First joint angle per arm, degrees (absent in old exports).
-    const yaws=a[0].map((_,j)=>{const from=(a[2]||[])[j]||0;return from+(((b[2]||[])[j]||0)-from)*alpha;});
-    return {time:t,agents,yaws,cueIndex:a[1],visual};
+    // [base turn, hand roll] per arm, degrees (absent in old exports).
+    const turns=a[0].map((_,j)=>[0,1].map(i=>{const from=((a[2]||[])[j]||[])[i]||0;return from+((((b[2]||[])[j]||[])[i]||0)-from)*alpha;}));
+    return {time:t,agents,turns,cueIndex:a[1],visual};
   }
   function inspectAt(score,seconds) {
     const frame=frameAt(score,seconds);
@@ -212,9 +212,12 @@
         const ra=size(k)+(size(k+1)-size(k))*piece/4, rb=size(k)+(size(k+1)-size(k))*(piece+1)/4;
         parts.push({depth:(project(a)[2]+project(b)[2])/2,paint:()=>link(a,b,ra,rb,BODY)});
       }
-      // Disc lies in the arm's own vertical plane, centre one radius past the wrist link.
-      const heading=(state.yaws[id]||0)*Math.PI/180, centre=along(arm[last],norm(sub(arm[last],arm[last-1])),.06);
-      parts.push({depth:project(centre)[2],paint:()=>mirror(centre,[-Math.sin(heading),Math.cos(heading),0],.06,ACCENTS[id%4])});
+      // Disc held by its edge, centred on the last point. Unrolled it lies in
+      // the arm's vertical plane; the last joint rolls it about the wrist link.
+      const heading=state.turns[id][0]*Math.PI/180, roll=state.turns[id][1]*Math.PI/180;
+      const flat=[-Math.sin(heading),Math.cos(heading),0], stem=norm(sub(arm[last],arm[last-1]));
+      const facing=along(flat.map(c=>c*Math.cos(roll)),cross(stem,flat),Math.sin(roll));
+      parts.push({depth:project(arm[last])[2],paint:()=>mirror(arm[last],facing,.06,ACCENTS[id%4])});
       // Hand path: a ribbon of light 4 s behind.
       const tip=t=>{const pose=frameAt(data,t).agents[id];return pose[pose.length-1];};
       for(let k=-120;k<0;k++) {
@@ -260,7 +263,7 @@
       drum(arm[0],.11,.035,rgb(HOUSING,.8),rgb(HOUSING,1.5));
       // Turntable markings turn with the base joint.
       for(let spoke=0;spoke<3;spoke++) {
-        const angle=state.yaws[id]*Math.PI/180+spoke*2*Math.PI/3, mark=r=>[arm[0][0]+r*Math.cos(angle),arm[0][1]+r*Math.sin(angle),.036];
+        const angle=state.turns[id][0]*Math.PI/180+spoke*2*Math.PI/3, mark=r=>[arm[0][0]+r*Math.cos(angle),arm[0][1]+r*Math.sin(angle),.036];
         line(mark(.055),mark(.1),spoke?rgb(HOUSING,2.6):colors[id%4],spoke?2:4);
       }
       drum(arm[0],.05,arm[1][2],rgb(HOUSING,1),rgb(HOUSING,2),.035);

@@ -1018,3 +1018,27 @@ Export `song-figures-16.html`, clip `render-16.mp4`.
   passive. Not yet confirmed by the user; the rig still has the unused elbow
   twist and no roll. The preview draws the disc in the arm's vertical plane
   (`render-19.mp4`).
+
+### Version 20: wrist roll replaces the elbow twist — 2026-10-04
+
+**User decision, settled:** five servos; the rotation besides the base is a
+**wrist roll** (mechanically simplest); more axes "definitely not now".
+
+- Rig (`Rig::illustrative_five_axis`): base yaw, shoulder, elbow, wrist bend,
+  wrist roll. `second_local_yaw` removed. The wrist link is 0.10 m plus a
+  0.06 m roll link ending at the disc centre, so reach and every solved bend
+  are unchanged from version 19. Roll is unbounded (passive mirror).
+- Planner: a last joint that turns about its own link is detected as a tool
+  roll and driven outside the position solver. First driver, **an agent
+  default the user has not chosen**: the disc's face leads the hand, i.e. its
+  normal turns toward the hand's travel across the wrist link; both faces are
+  equal, so the nearer half turn is taken; below 0.1 m/s across, the roll is
+  kept. The servo follower then limits its speed and acceleration.
+- Preview frames carry `[base turn, hand roll]` per arm; the disc rolls.
+- Measured: roll spans −824°..656° over the song; other joints as before.
+  Not measured: roll rate, how often it reverses. The disc rim (6 cm past its
+  centre) is not in the zone check; the 5 cm margin does not fully cover it.
+- 130 CPU tests, clippy, fmt, `ensemble.cjs` pass. Stills at 92.5 and 101 s
+  inspected. Clip `render-20.mp4`, export `song-figures-20.html`. No review yet.
+- Alternatives offered for the roll: steady spin scaled by energy; flash toward
+  the viewer on arrivals and flourishes. Body step B (whip on moments) not built.

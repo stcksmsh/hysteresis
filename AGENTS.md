@@ -1315,3 +1315,13 @@ rig base yaw unbounded). Other joint limits and speeds remain invented.
 base, glowing hand and cast floor shadow (canvas 2D, single offline file,
 recorder unchanged). Planner output unchanged. Not reviewed by the user yet.
 Details in `docs/DANCE_HANDOFF.md`.
+
+### Settled rig and hand facts — 2026-10-04
+
+User decisions: five servos (base yaw continuous, shoulder, elbow, wrist bend,
+wrist roll); no more axes for now. The hand is a reflective, non-spherical
+object, for the first demo a mirror disc held by its edge in line with the arm;
+never a ball. A lifelike render (Blender or similar) comes much later; do not
+polish the canvas preview unless asked. Figure clock with a 0.8 m/s hand speed
+cap accepted by eye on 1:24–1:54. Plain joint lag failed a blind test and was
+deleted. See the last entries of `docs/DANCE_HANDOFF.md`.
