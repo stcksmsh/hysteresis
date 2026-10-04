@@ -382,6 +382,9 @@ pub fn compile_figures(
         hold_beats: f64,
         /// Beats to prepare, to arrive, and to release (each).
         span: f64,
+        /// True freeze. Only for a cut: dense music, near nothing, dense again.
+        /// Every other hold stays alive with small slow movement.
+        frozen: bool,
     }
     let mut moments: Vec<Moment> = Vec::new();
     if config.enable_hits {
@@ -404,8 +407,9 @@ pub fn compile_figures(
                     pose: [0.9, 1.0],
                     strength: 0.7 + 0.3 * strength,
                     label: "arrival",
-                    hold_beats: 0.5,
+                    hold_beats: 1.5,
                     span: span_for(class_at(time + beat)),
+                    frozen: false,
                 });
             }
         }
@@ -424,7 +428,48 @@ pub fn compile_figures(
                     label: "flourish",
                     hold_beats: 0.0,
                     span: 0.75 * span_for(class_at(time)),
+                    frozen: false,
                 });
+            }
+        }
+        // Cuts: the mix drops to near nothing for half a beat to four beats
+        // between two dense stretches. The arm freezes where it is.
+        let level = &data.rms_envelope;
+        if !level.is_empty() {
+            let frame = data.envelope_rate;
+            let mut sorted = level.clone();
+            sorted.sort_by(f64::total_cmp);
+            let dense = 0.6 * sorted[sorted.len() * 3 / 4];
+            let mut i = 0;
+            while i < level.len() {
+                let around = mean(
+                    level,
+                    frame,
+                    i as f64 / frame - 4.0 * beat,
+                    i as f64 / frame,
+                );
+                if level[i] >= 0.2 * around || around < dense {
+                    i += 1;
+                    continue;
+                }
+                let start = i;
+                while i < level.len() && level[i] < 0.2 * around {
+                    i += 1;
+                }
+                let (from, to) = (start as f64 / frame, i as f64 / frame);
+                let after = mean(level, frame, to, to + 2.0 * beat);
+                if (0.5 * beat..=4.0 * beat).contains(&(to - from)) && after >= dense {
+                    moments.retain(|m| (m.time - from).abs() >= 6.0 * beat);
+                    moments.push(Moment {
+                        time: from,
+                        pose: [0.0, 0.0],
+                        strength: 0.0,
+                        label: "cut",
+                        hold_beats: (to - from) / beat,
+                        span: 0.5,
+                        frozen: true,
+                    });
+                }
             }
         }
         moments.sort_by(|a, b| a.time.total_cmp(&b.time));
@@ -445,7 +490,7 @@ pub fn compile_figures(
             if !(-2.0 * span..hold + span).contains(&tau) {
                 continue;
             }
-            // Arrive smoothly, stop (or pass through), release.
+            // Arrive smoothly, hold (or pass through), release.
             let blend = if tau < -span {
                 0.0
             } else if tau < 0.0 {
@@ -465,14 +510,21 @@ pub fn compile_figures(
                 * f64::from(tau < 0.0);
             p[1] -= 0.2 * prepare;
             p[2] -= 0.35 * prepare;
-            // The hand stops turning only while it holds; a pass-through
-            // flourish keeps travelling so it adds no sideways swing. Strength
-            // sets how far the pose departs from the flowing path.
+            // A flourish passes through and keeps travelling. An arrival hold
+            // stays alive: the hand keeps drifting at a fifth of its travel,
+            // lifts and settles, and gives slightly. Only a cut truly freezes.
+            // Strength sets how far the pose departs from the flowing path.
             let base = flow(time);
+            let alive = f64::from(hold > 0.0 && !m.frozen);
+            let w = (tau / hold.max(1e-9)).clamp(0.0, 1.0);
             let held = [
-                if hold > 0.0 { base[0] } else { p[0] },
-                lerp(base[1], pose[0], strength),
-                lerp(base[2], pose[1], strength),
+                if hold > 0.0 {
+                    base[0] + alive * 0.2 * (p[0] - base[0])
+                } else {
+                    p[0]
+                },
+                lerp(base[1], pose[0], strength) + alive * 0.04 * (PI * w).sin(),
+                lerp(base[2], pose[1], strength) - alive * 0.05 * smooth(w),
             ];
             for k in 0..3 {
                 p[k] = lerp(p[k], held[k], blend);
@@ -796,5 +848,39 @@ mod tests {
         assert!(entered_free, "fixture zone must obstruct the free path");
         assert!(high - low > 0.4, "hand lateral travel {:.3} m", high - low);
         assert_eq!(free.cues[0].character, "gather");
+    }
+
+    #[test]
+    fn only_a_cut_freezes_the_arm() {
+        let mut value: serde_json::Value =
+            serde_json::from_str(&super::super::tests::fixture(0.7, 0.7)).unwrap();
+        // Dense, half a second of nothing, dense again.
+        for frame in 80..90 {
+            value["rmsEnvelope"][frame] = serde_json::json!(0.0);
+        }
+        let rig = Rig::illustrative_five_axis();
+        let score =
+            compile_figures(&value.to_string(), CompileConfig::default(), rig, &[]).unwrap();
+        assert!(score.cues.iter().any(|c| c.reason.contains("cut moment")));
+        let tip = |t: f64| {
+            *score.sample(t).unwrap().agents[0]
+                .world_points
+                .last()
+                .unwrap()
+        };
+        let moved = |a: f64, b: f64| {
+            let (p, q) = (tip(a), tip(b));
+            (0..3).map(|k| (p[k] - q[k]).powi(2)).sum::<f64>().sqrt()
+        };
+        assert!(
+            moved(4.25, 4.45) < 0.01,
+            "cut moved {:.3} m",
+            moved(4.25, 4.45)
+        );
+        assert!(
+            moved(2.25, 2.45) > 0.02,
+            "flow moved {:.3} m",
+            moved(2.25, 2.45)
+        );
     }
 }
