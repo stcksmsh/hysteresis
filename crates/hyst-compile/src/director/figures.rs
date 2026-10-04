@@ -583,7 +583,7 @@ pub fn compile_figures(
         if let Some(r) = roll_joint {
             // The disc's face leads the hand: turn its normal toward the hand's
             // travel across the wrist link. Both faces are mirrors, so half
-            // turns are equal; take the nearer. Too slow across: keep the roll.
+            // turns are equal; take the nearer.
             let points = forward_kinematics(&rig, &placement, &wanted)?;
             let (tip, wrist) = (points[points.len() - 1], points[points.len() - 2]);
             let d: [f64; 3] =
@@ -595,9 +595,12 @@ pub fn compile_figures(
                 d[2] * y[0] - d[0] * y[2],
                 d[0] * y[1] - d[1] * y[0],
             ];
+            // Travel over about half a second, and the roll eases toward its
+            // aim in proportion to that travel: slow or wavering motion barely
+            // moves it. Aiming knot by knot made the wrist jitter (user).
             let (before, after) = (
-                targets[i.saturating_sub(1)].0,
-                targets[(i + 1).min(targets.len() - 1)].0,
+                targets[i.saturating_sub(4)].0,
+                targets[(i + 4).min(targets.len() - 1)].0,
             );
             let across = |axis: [f64; 3]| {
                 (0..3)
@@ -605,10 +608,10 @@ pub fn compile_figures(
                     .sum::<f64>()
             };
             let (vy, vz) = (across(y), across(z));
-            if vy.hypot(vz) > 0.1 * 2.0 * step {
-                let aim = vz.atan2(vy).to_degrees();
-                roll = aim + 180.0 * ((roll - aim) / 180.0).round();
-            }
+            let aim = vz.atan2(vy).to_degrees();
+            let aim = aim + 180.0 * ((roll - aim) / 180.0).round();
+            let pace = vy.hypot(vz) / (8.0 * step);
+            roll += (aim - roll) * 0.12 * (pace / 0.5).min(1.0);
             wanted[r] = roll;
         }
         // Hardware follower: each joint chases its solved angle at a design
