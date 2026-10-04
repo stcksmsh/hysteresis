@@ -1192,3 +1192,22 @@ the verdicts:
   of 40 s.
 Both clips 1:24–2:04, shuffled, keys unread. 130 CPU tests, clippy, fmt,
 `ensemble.cjs` pass.
+
+**Verdicts, version 26, session end.** Spin: user "a toss-up between A and C,
+leaning A". Key: A 280, B 80, C 150. `SPIN_DEGREES_PER_METRE` is now 280 and
+the knob is gone. Suspension: "they seem too similar". Key: A 0.75, B 0, C 0.5.
+Deleted. `song-figures-26.html` is byte-identical to the chosen spin clip.
+
+Found on the way: with the faster spin the fixture test
+`only_a_cut_freezes_the_arm` failed in `fit_tangents`. Cause: the last knot of
+a score always had zero velocity, and the fixture ends with the disc still
+turning at full speed. The last knot now keeps its backward slope. The
+`fit_tangents` error now prints the neighbouring knots, which is how this was
+found.
+
+Whole song, version 26: hand speed median 0.37, p95 0.83, max 2.02 m/s; wrist
+bend −41°..90°, elbow 10°..110° (limit 110°), shoulder −109.5°..−21°.
+130 CPU tests, clippy, fmt, `ensemble.cjs` pass. Only 1:24–2:04 was reviewed by
+eye this session.
+
+`docs/DANCE_RESTART_PROMPT.md` rewritten for a fresh agent. Next: keys-decide.

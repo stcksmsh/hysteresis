@@ -466,13 +466,17 @@ pub(crate) fn fit_tangents(track: &mut AgentTrack, rig: &Rig) -> Result<(), Stri
             let b = channel_bounds(&track.knots[i], &track.knots[i + 1], j)?;
             if !within_bounds(&b, 0, c) {
                 return Err(format!(
-                    "cannot fit tangents segment {i} channel {j}: q {:.3}..{:.3}, speed {:.3}/{:.3}, accel {:.3}/{:.3}",
+                    "cannot fit tangents segment {i} channel {j}: q {:.3}..{:.3}, speed {:.3}/{:.3}, accel {:.3}/{:.3}; knots {:?}",
                     b.min_position_degrees[0],
                     b.max_position_degrees[0],
                     b.max_speed_degrees_per_second[0],
                     c.max_speed_degrees_per_second,
                     b.max_acceleration_degrees_per_second2[0],
-                    c.max_acceleration_degrees_per_second2
+                    c.max_acceleration_degrees_per_second2,
+                    track.knots[i.saturating_sub(4)..(i + 5).min(len)]
+                        .iter()
+                        .map(|k| (k.joints_degrees[j] * 10.0).round() / 10.0)
+                        .collect::<Vec<_>>()
                 ));
             }
         }

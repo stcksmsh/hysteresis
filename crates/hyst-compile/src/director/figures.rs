@@ -27,6 +27,9 @@ const FLOOR: Zone = Zone {
 const MARGIN_M: f64 = 0.05;
 /// Beats the hand disc takes to turn over at a moment.
 const FLIP_BEATS: f64 = 3.0;
+/// Hand disc turn per metre of fast hand travel. The user leaned to 280 over
+/// 150 and 80 in a blind side-by-side.
+const SPIN_DEGREES_PER_METRE: f64 = 280.0;
 /// Fastest the figure path carries the hand, m/s. A guess, tuned by eye on one
 /// song; moments may exceed it briefly.
 const HAND_SPEED_CAP: f64 = 0.8;
@@ -477,20 +480,13 @@ pub fn compile_figures(
             .sum::<f64>()
             .sqrt()
             / step;
-        // Suspension: at a high peak of the figure (the hand higher than a
-        // quarter beat before and after) the clock slows, so the hand hangs
-        // for a moment before coming down. Level travel is not a peak.
-        let height = |at: f64| flow(at)[1];
-        let (now, apart) = (height(s), 0.25 * beat);
-        let peak = smooth((now - height(s - apart)).min(now - height(s + apart)) / 0.01);
-        let hang = config.suspension * smooth((now - 0.5) / 0.25) * peak;
         let rate = if held {
             0.0
         } else {
             f64::min(
                 if s < t { 1.15 } else { 1.0 },
                 HAND_SPEED_CAP / pace.max(1e-9),
-            ) * (1.0 - hang)
+            )
         };
         s = (s + rate * step).min(t + step);
     }
@@ -633,7 +629,7 @@ pub fn compile_figures(
                 let (lo, hi) = (i.saturating_sub(16), (i + 16).min(targets.len() - 1));
                 let steady = (targets[hi].1 - targets[lo].1) / (times[hi] - times[lo]);
                 let way = (((facing - bearing) / dt - steady) / 30.0).tanh();
-                turned += config.spin_degrees_per_metre * travel * fast * way;
+                turned += SPIN_DEGREES_PER_METRE * travel * fast * way;
             }
             wanted[r] = flips + turned;
         }
@@ -725,6 +721,14 @@ pub fn compile_figures(
                     (knots[i + 1].joints_degrees[j] - knots[i - 1].joints_degrees[j]) / span
                 }
             })
+            .collect();
+    }
+    // A score that ends mid-motion keeps its last slope; zero there would ask
+    // a moving joint to stop within one knot.
+    if let [.., before, last] = &mut knots[..] {
+        let dt = last.time - before.time;
+        last.velocity_degrees_per_second = (0..rig.channels.len())
+            .map(|j| (last.joints_degrees[j] - before.joints_degrees[j]) / dt)
             .collect();
     }
     let mut track = AgentTrack { id: 0, knots };

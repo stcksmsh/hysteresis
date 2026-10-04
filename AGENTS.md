@@ -1325,3 +1325,13 @@ never a ball. A lifelike render (Blender or similar) comes much later; do not
 polish the canvas preview unless asked. Figure clock with a 0.8 m/s hand speed
 cap accepted by eye on 1:24–1:54. Plain joint lag failed a blind test and was
 deleted. See the last entries of `docs/DANCE_HANDOFF.md`.
+
+### Wrist roll, wrist drag, session end — 2026-10-04
+
+Version 26. Kept after shuffled side-by-sides: wrist drag (posture preference in
+the solver, hand path unchanged), disc roll = turn with fast hand travel plus a
+half turn on moments, spin 280° per metre. Deleted after failing them: wrist
+whip on moments, suspension at figure peaks, three other roll drivers. Planner
+fixes: follower brakes near zones; roll exempt from that; last knot keeps its
+slope. Next is keys-decide in a fresh session; start from
+`docs/DANCE_RESTART_PROMPT.md`.
