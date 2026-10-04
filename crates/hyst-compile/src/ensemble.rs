@@ -54,7 +54,7 @@ impl Rig {
                 max_speed_degrees_per_second: 400.0,
                 max_acceleration_degrees_per_second2: 6000.0,
             };
-        Self {
+        let mut rig = Self {
             channels: vec![
                 channel(
                     "base_yaw",
@@ -92,7 +92,10 @@ impl Rig {
                     [-6.0, 20.0, 22.0],
                 ),
             ],
-        }
+        };
+        // Base turns almost fully so the hand can use the whole half-dome.
+        (rig.channels[0].min_degrees, rig.channels[0].max_degrees) = (-170.0, 170.0);
+        rig
     }
 
     pub fn validate(&self) -> Result<(), String> {

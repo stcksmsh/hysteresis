@@ -731,3 +731,48 @@ External (outside git): song-figures.html, song-figures-zone.html and
 instant-crush.figures.score.json in the music-arm directory. Open the HTML
 directly from disk; audio is `instant-crush.m4a` beside it.
 Next: user watches 80–110s and 205–235s, exports critique JSON, iterate from it.
+
+### First human critique + second figure iteration — 2026-10-04
+
+User reviewed song-figures.html through the critique tool (7 marks,
+`~/Downloads/critique-2026-10-04T09-26-14-789Z.json`). Verdict: "night and day"
+better than every earlier version; "this path may be the way to go"; not yet
+good. Specific notes:
+- Intro (7–10s) good, but looked janky; user suspects the render.
+- 33s and 136–144s: flicks too hard/quick. This song has no sharp passages.
+- High sections: too busy, stiff, does not follow the music; uses only about a
+  quarter of the half-dome (front/left).
+- Break 186–203s: should follow the guitar solo, which truly leads there.
+- User's own model of dancing the high section: percussion is the floor
+  (keeps rhythm), keys are the decision-maker (their flourishes cue movement
+  from state to state), vocals give the emotion.
+- User decision: drop live audio for dance; work only from offline sidecars.
+
+Changes:
+- `scripts/dance_melody.py`: additive `melodyContour` (height and salience per
+  pitched stem, `other` and `vocals`) from the strongest spectral peak in
+  110–2500 Hz. Proxy, not a real f0 tracker. Built-in `--self-check`.
+- `figures.rs`: one figure sequence per class that runs for the whole stretch
+  of that class, mirrored each repeat (no restart per 16-beat phrase); figures
+  twice as long; gather is one turn. Figure progress is paced by `other`-stem
+  spectral flux (faster through flourishes, lingering on sustains). Lead
+  contour raises/lowers the hand; voice contour and salience extend the arm.
+  Hand path low-passed (sigma 0.3 s); beat pulse capped at 0.3; previous-figure
+  carry spread over half a figure. Azimuth range ±140° (was ±80°).
+- Illustrative rig base yaw limit ±170° (was ±110°). Still invented.
+- Preview exports 60 fps in figures mode.
+
+Measured, old → new: hand acceleration p95 in high sections 10–12 → 1.3–1.6
+m/s², at the 33s flick 5.1 → 1.1 m/s²; azimuth used in high sections about
+150° → 240–260°; figure cues 126 → 87; lowest sampled joint 14 cm above floor.
+212.7s still recalls 90.4s. These are motion numbers, not dance approval.
+
+Verified: 174 CPU workspace tests, targeted clippy, fmt, ensemble.cjs, melody
+self-check. Not verified: that the contour tracks the audible keys or guitar
+line (the break reads mostly low, which may be chords under the solo); that the
+result reads as following the music. Joint "stiffness" was not addressed
+directly: only the hand path changed; posture still comes from a neutral bias.
+Keys-as-decision-maker is only approximated by pacing, not by choosing figures.
+
+External: instant-crush.melody.sidecar.json, song-figures-2.html (first export
+song-figures.html kept for comparison).

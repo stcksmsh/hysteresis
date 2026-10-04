@@ -121,10 +121,11 @@ fn main() -> io::Result<()> {
         (score, interpretation.cues)
     };
     let count = score.tracks.len();
-    const FPS: f64 = 30.0;
-    let mut frames = Vec::with_capacity((score.duration * FPS).ceil() as usize + 1);
-    for i in 0..=(score.duration * FPS).ceil() as usize {
-        let time = (i as f64 / FPS).min(score.duration);
+    // One arm stays small at 60 fps and removes visible frame stepping.
+    let fps: f64 = if figures { 60.0 } else { 30.0 };
+    let mut frames = Vec::with_capacity((score.duration * fps).ceil() as usize + 1);
+    for i in 0..=(score.duration * fps).ceil() as usize {
+        let time = (i as f64 / fps).min(score.duration);
         let frame = score.sample(time).map_err(io::Error::other)?;
         // Preview geometry only: 0.1 mm precision keeps standalone HTML manageable.
         let points: Vec<_> = frame
@@ -141,7 +142,7 @@ fn main() -> io::Result<()> {
         frames.push(serde_json::json!([points, frame.cue_index]));
     }
     let data = serde_json::json!({
-        "duration":score.duration,"fps":FPS,"frames":frames,"cues":cues,"zones":zones,
+        "duration":score.duration,"fps":fps,"frames":frames,"cues":cues,"zones":zones,
         "rig":score.rig,"placements":score.placements
     });
     let data_json = serde_json::to_string(&data)?

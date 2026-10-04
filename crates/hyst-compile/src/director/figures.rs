@@ -43,7 +43,7 @@ fn lerp(a: f64, b: f64, u: f64) -> f64 {
 fn gather(u: f64, dir: f64) -> [f64; 3] {
     let s = smooth(u);
     let rho = lerp(1.0, 0.15, s);
-    let phi = PI + dir * TAU * 1.5 * u;
+    let phi = PI + dir * TAU * u;
     [
         0.9 * rho * phi.cos(),
         0.5 + 0.45 * rho * phi.sin(),
@@ -99,51 +99,34 @@ fn still(_: f64, _: f64) -> [f64; 3] {
 /// (name, shape, beats, direction multiplier)
 type Step = (&'static str, Shape, f64, f64);
 
-/// Two motif sequences per musical class and an overall size.
-/// Occurrences run A, A mirrored, B, A mirrored.
-fn motif(class: &str) -> ([&'static [Step]; 2], f64) {
-    const FULL_A: &[Step] = &[
-        ("gather", gather, 4.0, 1.0),
-        ("rise", rise, 2.0, 1.0),
-        ("open", open, 2.0, 1.0),
-        ("arc", arc, 4.0, 1.0),
-        ("arc", arc, 4.0, -1.0),
-    ];
-    const FULL_B: &[Step] = &[
-        ("gather", gather, 4.0, 1.0),
-        ("rise", rise, 2.0, 1.0),
-        ("open", open, 2.0, 1.0),
-        ("eight", eight, 8.0, 1.0),
-    ];
-    const VOCAL_A: &[Step] = &[("reach", reach, 8.0, 1.0), ("sway", sway, 8.0, 1.0)];
-    const VOCAL_B: &[Step] = &[
-        ("reach", reach, 4.0, 1.0),
-        ("reach", reach, 4.0, -1.0),
-        ("sway", sway, 8.0, 1.0),
-    ];
-    const PERC_A: &[Step] = &[("eight", eight, 8.0, 1.0), ("sway", sway, 8.0, 1.0)];
-    const PERC_B: &[Step] = &[("eight", eight, 8.0, 1.0), ("eight", eight, 8.0, -1.0)];
-    const BASS_A: &[Step] = &[
-        ("arc", arc, 4.0, 1.0),
-        ("arc", arc, 4.0, -1.0),
-        ("gather", gather, 4.0, 1.0),
+/// Figure sequence per musical class and an overall size. The sequence runs
+/// for as long as the class lasts, mirrored on every repeat.
+fn motif(class: &str) -> (&'static [Step], f64) {
+    const FULL: &[Step] = &[
+        ("gather", gather, 8.0, 1.0),
         ("rise", rise, 4.0, 1.0),
-    ];
-    const BASS_B: &[Step] = &[
         ("open", open, 4.0, 1.0),
-        ("arc", arc, 4.0, 1.0),
-        ("gather", gather, 8.0, -1.0),
+        ("arc", arc, 8.0, 1.0),
+        ("arc", arc, 8.0, -1.0),
     ];
+    const BASS: &[Step] = &[
+        ("arc", arc, 8.0, 1.0),
+        ("arc", arc, 8.0, -1.0),
+        ("gather", gather, 8.0, 1.0),
+        ("rise", rise, 8.0, 1.0),
+    ];
+    const VOCAL: &[Step] = &[("reach", reach, 8.0, 1.0), ("sway", sway, 8.0, 1.0)];
+    const PERC: &[Step] = &[("eight", eight, 8.0, 1.0), ("sway", sway, 8.0, 1.0)];
     const CALM: &[Step] = &[("sway", sway, 16.0, 1.0)];
     const STILL: &[Step] = &[("still", still, 1e9, 1.0)];
     match class {
-        "interlocked" => ([FULL_A, FULL_B], 0.9),
-        "bass-led" => ([BASS_A, BASS_B], 0.85),
-        "vocal-led" => ([VOCAL_A, VOCAL_B], 0.7),
-        "percussive-open" => ([PERC_A, PERC_B], 0.6),
-        "textural" => ([CALM, CALM], 0.5),
-        "silence" => ([STILL, STILL], 1.0),
-        _ => ([CALM, CALM], 0.35),
+        "interlocked" => (FULL, 0.9),
+        "bass-led" => (BASS, 0.85),
+        "vocal-led" => (VOCAL, 0.7),
+        "percussive-open" => (PERC, 0.6),
+        "textural" => (CALM, 0.5),
+        "silence" => (STILL, 1.0),
+        _ => (CALM, 0.35),
     }
 }
 
@@ -192,17 +175,8 @@ pub fn compile_figures(
     if edges.len() < 2 || edges[edges.len() - 1] < data.duration {
         edges.push(data.duration);
     }
-
-    // (span start, sequence index, direction, class) for recall lookups.
-    let mut chosen: Vec<(f64, usize, f64, &str)> = Vec::new();
-    let mut occurrences: HashMap<&str, usize> = HashMap::new();
-    let mut instances: Vec<Instance> = Vec::new();
-    let mut cues: Vec<IntentCue> = Vec::new();
-    let mut entry = still(0.0, 1.0);
-    for pair in edges.windows(2) {
-        let (start, end) = (pair[0], pair[1]);
-        let mid = (start + end) * 0.5;
-        let activity = activities(&sources, rate, mid, (end - start) * 0.5);
+    let classify = |start: f64, end: f64| {
+        let activity = activities(&sources, rate, (start + end) * 0.5, (end - start) * 0.5);
         let rms = if data.rms_envelope.is_empty() {
             sources
                 .iter()
@@ -211,51 +185,66 @@ pub fn compile_figures(
         } else {
             mean(&data.rms_envelope, data.envelope_rate, start, end)
         };
-        let (class, _) = character(activity, rms);
-        let (sequences, size) = motif(class);
+        (character(activity, rms).0, activity)
+    };
+    // Runs: neighbouring spans of one class dance one continuous sequence.
+    let mut runs: Vec<(f64, f64, &str)> = Vec::new();
+    for pair in edges.windows(2) {
+        let class = classify(pair[0], pair[1]).0;
+        match runs.last_mut() {
+            Some(run) if run.2 == class => run.1 = pair[1],
+            _ => runs.push((pair[0], pair[1], class)),
+        }
+    }
+
+    // (run start, direction, class) for recall lookups.
+    let mut chosen: Vec<(f64, f64, &str)> = Vec::new();
+    let mut occurrences: HashMap<&str, usize> = HashMap::new();
+    let mut instances: Vec<Instance> = Vec::new();
+    let mut cues: Vec<IntentCue> = Vec::new();
+    let mut entry = still(0.0, 1.0);
+    for &(start, end, class) in &runs {
+        let activity = classify(start, end).1;
+        let (sequence, size) = motif(class);
         let n = *occurrences
             .entry(class)
             .and_modify(|n| *n += 1)
             .or_insert(0);
-        let mut pick = (
-            usize::from(n % 4 == 2),
-            if n % 2 == 1 { -1.0 } else { 1.0 },
-            size,
-        );
+        let (mut first_dir, mut scale) = (if n % 2 == 1 { -1.0 } else { 1.0 }, size);
         let mut recall_from = None;
         if config.reuse_repeats {
-            if let Some((earlier, _)) = recall_at(&data, mid) {
+            let probe = start + (0.5 * (end - start)).min(8.0 * beat);
+            if let Some((earlier, _)) = recall_at(&data, probe) {
                 let source = chosen.partition_point(|c| c.0 <= earlier).checked_sub(1);
-                if let Some(&(source_start, sequence, dir, source_class)) =
-                    source.map(|i| &chosen[i])
-                {
+                if let Some(&(source_start, dir, source_class)) = source.map(|i| &chosen[i]) {
                     if source_class == class {
                         // Returning material: same figures, same side, larger.
-                        pick = (sequence, dir, (size * 1.12).min(1.0));
+                        (first_dir, scale) = (dir, (size * 1.12).min(1.0));
                         recall_from = Some(source_start);
                     }
                 }
             }
         }
-        chosen.push((start, pick.0, pick.1, class));
-        let pulse = (2.0 * activity[1]).clamp(0.0, 0.7);
+        chosen.push((start, first_dir, class));
+        let pulse = activity[1].clamp(0.0, 0.3);
         let mut t = start;
-        for &(name, shape, beats, step_dir) in sequences[pick.0].iter().cycle() {
+        for (k, &(name, shape, beats, step_dir)) in sequence.iter().cycle().enumerate() {
             let mut stop = t + beats * beat;
             if stop > end - 2.0 * beat {
                 stop = end;
             }
-            let dir = pick.1 * step_dir;
+            let repeat = k / sequence.len();
+            let dir = first_dir * step_dir * if repeat % 2 == 1 { -1.0 } else { 1.0 };
             instances.push(Instance {
                 start: t,
                 end: stop,
                 shape,
                 dir,
-                scale: pick.2,
+                scale,
                 pulse,
                 entry,
             });
-            entry = scaled(shape(1.0, dir), pick.2);
+            entry = scaled(shape(1.0, dir), scale);
             cues.push(IntentCue {
                 start: t,
                 end: stop,
@@ -266,11 +255,10 @@ pub fn compile_figures(
                 recall_from,
                 anticipation: None,
                 reason: format!(
-                    "figure {name} {} · class {class} occurrence {} sequence {} size {:.2}{} · stems bass {:.2}, drums {:.2}, vocals {:.2}, other {:.2}",
+                    "figure {name} {} · class {class} occurrence {} repeat {} size {scale:.2}{} · stems bass {:.2}, drums {:.2}, vocals {:.2}, other {:.2}",
                     if dir > 0.0 { "right-first" } else { "left-first" },
                     n + 1,
-                    if pick.0 == 0 { "A" } else { "B" },
-                    pick.2,
+                    repeat + 1,
                     recall_from.map_or(String::new(), |t| format!(" · returns from {t:.1}s")),
                     activity[0], activity[1], activity[2], activity[3],
                 ),
@@ -283,37 +271,89 @@ pub fn compile_figures(
         }
     }
 
-    // Beat-locked progress: motion eases into each beat by `pulse`.
+    // Drums set the floor: motion eases into each beat by `pulse`.
     let warped = |t: f64, pulse: f64| {
         let b = (t - beat_zero) / beat;
-        b.floor() + lerp(b.fract(), smooth(b.fract()), pulse)
+        beat_zero + beat * (b.floor() + lerp(b.fract(), smooth(b.fract()), pulse))
     };
+    // The melodic stem sets the pace: a figure advances faster through its
+    // flourishes (high spectral flux) and lingers while it sustains.
+    let flux = &sources[3].spectral_flux;
+    let mut pace = vec![0.0; flux.len() + 1];
+    for i in 0..flux.len() {
+        let t = i as f64 / rate;
+        pace[i + 1] = pace[i] + 0.35 + mean(flux, rate, t - 0.3, t + 0.3);
+    }
+    let paced = |t: f64| {
+        let x = (t * rate).clamp(0.0, flux.len() as f64);
+        let i = (x.floor() as usize).min(flux.len() - 1);
+        lerp(pace[i], pace[i + 1], x - i as f64)
+    };
+    let contour = |name: &str, t: f64| -> (f64, f64) {
+        data.melody_contour
+            .as_ref()
+            .and_then(|m| Some((m.envelope_rate, m.sources.get(name)?)))
+            .filter(|(_, c)| !c.height.is_empty() && c.height.len() == c.salience.len())
+            .map_or((0.5, 0.0), |(rate, c)| {
+                let i = ((t * rate).max(0.0) as usize).min(c.height.len() - 1);
+                (c.height[i], c.salience[i])
+            })
+    };
+    let shell = |t: f64| -> [f64; 3] {
+        let i = instances
+            .partition_point(|x| x.end <= t)
+            .min(instances.len() - 1);
+        let x = &instances[i];
+        let at = |t: f64| paced(warped(t, x.pulse));
+        let u = ((at(t) - at(x.start)) / (at(x.end) - at(x.start)).max(1e-9)).clamp(0.0, 1.0);
+        let here = scaled((x.shape)(u, x.dir), x.scale);
+        let first = scaled((x.shape)(0.0, x.dir), x.scale);
+        // Carry the previous figure's end into this one over its first half.
+        let carry = 1.0 - smooth(u / 0.5);
+        let mut p: [f64; 3] = std::array::from_fn(|k| here[k] + (x.entry[k] - first[k]) * carry);
+        // Lead melody lifts and lowers the hand; the voice opens the arm.
+        let (lead_height, lead_salience) = contour("other", t);
+        let (voice_height, voice_salience) = contour("vocals", t);
+        p[1] += 0.3 * (lead_height - 0.5) * lead_salience;
+        p[2] += 0.2 * (voice_height - 0.4) * voice_salience;
+        p
+    };
+    let step = beat / 4.0;
+    let count = (data.duration / step).ceil() as usize;
+    let times: Vec<f64> = (0..=count)
+        .map(|i| (i as f64 * step).min(data.duration))
+        .collect();
+    // This song has no sharp passages: low-pass the hand path (sigma 0.3 s).
+    let raw: Vec<[f64; 3]> = times.iter().map(|&t| shell(t)).collect();
+    let sigma = 0.3 / step;
+    let radius = (3.0 * sigma).ceil() as isize;
     let reach_m: f64 = rig
         .channels
         .iter()
         .map(|c| c.link_m.iter().map(|v| v * v).sum::<f64>().sqrt())
         .sum();
-    let target = |t: f64| -> [f64; 3] {
-        let i = instances
-            .partition_point(|x| x.end <= t)
-            .min(instances.len() - 1);
-        let x = &instances[i];
-        let (w0, w1) = (warped(x.start, x.pulse), warped(x.end, x.pulse));
-        let u = ((warped(t, x.pulse) - w0) / (w1 - w0).max(1e-9)).clamp(0.0, 1.0);
-        let here = scaled((x.shape)(u, x.dir), x.scale);
-        let first = scaled((x.shape)(0.0, x.dir), x.scale);
-        // Carry the previous figure's end into this one over its first third.
-        let carry = 1.0 - smooth(u / 0.33);
-        let p: [f64; 3] = std::array::from_fn(|k| here[k] + (x.entry[k] - first[k]) * carry);
-        let azimuth = (p[0].clamp(-1.0, 1.0) * 80.0_f64).to_radians();
-        let elevation = (10.0 + 70.0 * p[1].clamp(0.0, 1.0)).to_radians();
-        let distance = reach_m * (0.38 + 0.54 * p[2].clamp(0.0, 1.0));
-        [
-            distance * elevation.cos() * azimuth.cos(),
-            distance * elevation.cos() * azimuth.sin(),
-            distance * elevation.sin(),
-        ]
-    };
+    let targets: Vec<[f64; 3]> = (0..raw.len() as isize)
+        .map(|i| {
+            let (mut sum, mut total) = ([0.0; 3], 0.0);
+            for d in -radius..=radius {
+                let w = (-0.5 * (d as f64 / sigma).powi(2)).exp();
+                let sample = raw[(i + d).clamp(0, raw.len() as isize - 1) as usize];
+                for k in 0..3 {
+                    sum[k] += w * sample[k];
+                }
+                total += w;
+            }
+            let p = sum.map(|v| v / total);
+            let azimuth = (p[0].clamp(-1.0, 1.0) * 140.0_f64).to_radians();
+            let elevation = (10.0 + 70.0 * p[1].clamp(0.0, 1.0)).to_radians();
+            let distance = reach_m * (0.38 + 0.54 * p[2].clamp(0.0, 1.0));
+            [
+                distance * elevation.cos() * azimuth.cos(),
+                distance * elevation.cos() * azimuth.sin(),
+                distance * elevation.sin(),
+            ]
+        })
+        .collect();
 
     let placement = Placement {
         origin_m: [0.0; 3],
@@ -323,18 +363,15 @@ pub fn compile_figures(
     if !clear(&rig, &placement, &zones, &neutral, &neutral)? {
         return Err("rig neutral pose intersects a zone".into());
     }
-    let step = beat / 4.0;
-    let count = (data.duration / step).ceil() as usize;
-    let mut knots: Vec<JointKnot> = Vec::with_capacity(count + 1);
-    for i in 0..=count {
-        let time = (i as f64 * step).min(data.duration);
+    let mut knots: Vec<JointKnot> = Vec::with_capacity(times.len());
+    for (&time, &target) in times.iter().zip(&targets) {
         if knots.last().is_some_and(|k| time - k.time < 1e-9) {
             continue;
         }
         let (prior, dt) = knots.last().map_or((neutral.clone(), f64::INFINITY), |k| {
             (k.joints_degrees.clone(), time - k.time)
         });
-        let mut q = solve(&rig, &placement, &zones, target(time), &prior)?;
+        let mut q = solve(&rig, &placement, &zones, target, &prior)?;
         for (j, c) in rig.channels.iter().enumerate() {
             // Largest step a rest-to-rest quintic can make inside both limits,
             // so tangent fitting always has a feasible fallback.

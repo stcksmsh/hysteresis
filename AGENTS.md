@@ -1298,3 +1298,13 @@ figures, motif development and recall, zone-avoiding joint solver),
 in `ensemble.html`. Branches: `dance-checkpoint` (old dirty tree), `dance-figures`
 (this work, worktree). 174 CPU tests pass; no human dance review yet. Details,
 weak points and emotion-model findings: latest `docs/DANCE_HANDOFF.md` entry.
+
+### First human critique + second figure iteration — 2026-10-04
+
+User reviewed via critique tool: far better than all earlier versions, direction
+approved, not yet good (flicks, too busy, stiff, small space use, should follow
+keys/guitar and voice). User decision: dance works from offline sidecars only,
+no live audio. Added `scripts/dance_melody.py` (`melodyContour`), longer
+continuous figure sequences, lead-paced progress, contour-driven height and
+extension, low-passed hand path, wider azimuth, 60 fps preview. 174 CPU tests
+pass. Second review pending. Details in `docs/DANCE_HANDOFF.md`.

@@ -46,6 +46,22 @@ struct Evidence {
     musical_memory: Memory,
     stem_interpretation: Stems,
     musical_structure: Structure,
+    /// Optional estimated melodic height per pitched stem (dance_melody.py).
+    #[serde(default)]
+    melody_contour: Option<Melody>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Melody {
+    envelope_rate: f64,
+    sources: std::collections::HashMap<String, Contour>,
+}
+
+#[derive(Deserialize)]
+struct Contour {
+    height: Vec<f64>,
+    salience: Vec<f64>,
 }
 
 #[derive(Deserialize)]
