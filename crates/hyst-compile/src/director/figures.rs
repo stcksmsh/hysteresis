@@ -23,7 +23,7 @@ const FLOOR: Zone = Zone {
     min: [-1e3; 3],
     max: [1e3, 1e3, 0.0],
 };
-/// Solver keeps this clearance; the hard check enforces 60% of it.
+/// Hard check enforces this clearance; the solver aims for 1.6 times it.
 const MARGIN_M: f64 = 0.05;
 
 /// Hand position in arm-relative shell coordinates:
@@ -173,19 +173,24 @@ pub fn compile_figures(
     let sources: [&Source; 4] =
         std::array::from_fn(|i| &data.stem_interpretation.sources[SOURCES[i]]);
 
-    // Spans: phrase edges and measured transitions; drop edges under four beats apart.
-    let mut edges: Vec<f64> = Vec::new();
-    for edge in boundaries(&data, &transitions(&data, &sources)) {
-        if edges.last().is_none_or(|last| edge - last >= 4.0 * beat) {
+    // Measured transitions, strongest first, at least eight beats apart.
+    let mut arrivals: Vec<(f64, f64)> = Vec::new();
+    let mut ranked = transitions(&data, &sources);
+    ranked.sort_by(|a, b| b.2.total_cmp(&a.2));
+    for (time, _, strength) in ranked {
+        if arrivals.iter().all(|a| (a.0 - time).abs() >= 8.0 * beat) {
+            arrivals.push((time, strength));
+        }
+    }
+    // Spans: those transitions, then phrase edges at least four beats from any edge.
+    let mut edges: Vec<f64> = vec![0.0, data.duration];
+    edges.extend(arrivals.iter().map(|a| a.0));
+    for edge in boundaries(&data, &[]) {
+        if edges.iter().all(|e| (e - edge).abs() >= 4.0 * beat) {
             edges.push(edge);
         }
     }
-    if edges.len() > 1 && data.duration - edges[edges.len() - 1] > 1e-9 {
-        edges.pop();
-    }
-    if edges.len() < 2 || edges[edges.len() - 1] < data.duration {
-        edges.push(data.duration);
-    }
+    edges.sort_by(f64::total_cmp);
     let classify = |start: f64, end: f64| {
         let activity = activities(&sources, rate, (start + end) * 0.5, (end - start) * 0.5);
         let rms = if data.rms_envelope.is_empty() {
@@ -338,20 +343,14 @@ pub fn compile_figures(
     };
     let step = beat / 4.0;
     let count = (data.duration / step).ceil() as usize;
-    let times: Vec<f64> = (0..=count)
+    let grid: Vec<f64> = (0..=count)
         .map(|i| (i as f64 * step).min(data.duration))
         .collect();
     // This song has no sharp passages: low-pass the hand path (sigma 0.3 s).
-    let raw: Vec<[f64; 3]> = times.iter().map(|&t| shell(t)).collect();
+    let raw: Vec<[f64; 3]> = grid.iter().map(|&t| shell(t)).collect();
     let sigma = 0.3 / step;
     let radius = (3.0 * sigma).ceil() as isize;
-    let reach_m: f64 = rig
-        .channels
-        .iter()
-        .map(|c| c.link_m.iter().map(|v| v * v).sum::<f64>().sqrt())
-        .sum();
-    // (hand position in metres, unwrapped hand azimuth in degrees)
-    let targets: Vec<([f64; 3], f64)> = (0..raw.len() as isize)
+    let flowing: Vec<[f64; 3]> = (0..raw.len() as isize)
         .map(|i| {
             let (mut sum, mut total) = ([0.0; 3], 0.0);
             for d in -radius..=radius {
@@ -362,7 +361,128 @@ pub fn compile_figures(
                 }
                 total += w;
             }
-            let p = sum.map(|v| v / total);
+            sum.map(|v| v / total)
+        })
+        .collect();
+    let flow = |t: f64| -> [f64; 3] {
+        let x = (t / step).clamp(0.0, (flowing.len() - 1) as f64);
+        let i = (x.floor() as usize).min(flowing.len() - 2);
+        std::array::from_fn(|k| lerp(flowing[i][k], flowing[i + 1][k], x - i as f64))
+    };
+
+    // Moments: a few measured events the arm prepares for, arrives at exactly,
+    // holds, and releases. (time, [elevation, extension] pose, strength, label)
+    let mut moments: Vec<(f64, [f64; 2], f64, &str)> = Vec::new();
+    if config.enable_hits {
+        let class_at = |t: f64| {
+            runs.iter()
+                .find(|r| t >= r.0 && t < r.1)
+                .map_or("silence", |r| r.2)
+        };
+        for &(time, strength) in &arrivals {
+            if time > 4.0 * beat && class_at(time + beat) != "silence" {
+                moments.push((time, [0.9, 1.0], 0.7 + 0.3 * strength, "arrival"));
+            }
+        }
+        // Strongest melodic-stem onset in each stretch of about sixteen beats.
+        let flourishes = spaced(onsets(sources[3], rate, 0.25), 16.0 * beat);
+        for (n, (time, strength)) in flourishes.into_iter().enumerate() {
+            let clash = moments.iter().any(|m| (m.0 - time).abs() < 8.0 * beat);
+            let inside = class_at(time - 3.0 * beat) != "silence"
+                && class_at(time + 3.0 * beat) != "silence";
+            if inside && !clash {
+                let pose = if n % 2 == 0 { [0.8, 0.95] } else { [0.15, 1.0] };
+                moments.push((time, pose, 0.5 + 0.5 * strength, "flourish"));
+            }
+        }
+        moments.sort_by(|a, b| a.0.total_cmp(&b.0));
+    }
+    for &(time, _, _, label) in &moments {
+        let i = cues.partition_point(|c| c.end <= time).min(cues.len() - 1);
+        cues[i].anticipation = Some(time);
+        cues[i]
+            .reason
+            .push_str(&format!(" · {label} moment at {time:.2}s"));
+    }
+    const HOLD_BEATS: f64 = 1.0;
+    let hand = |t: f64| -> [f64; 3] {
+        let mut p = flow(t);
+        for &(time, pose, strength, _) in &moments {
+            let tau = (t - time) / beat;
+            if !(-4.0..HOLD_BEATS + 2.0).contains(&tau) {
+                continue;
+            }
+            // Arrive smoothly over two beats, stop, hold, release over two.
+            let blend = if tau < -2.0 {
+                0.0
+            } else if tau < 0.0 {
+                smooth((tau + 2.0) / 2.0)
+            } else if tau < HOLD_BEATS {
+                1.0
+            } else {
+                1.0 - smooth((tau - HOLD_BEATS) / 2.0)
+            };
+            // Prepare by sinking and pulling in, opposite to the arrival.
+            let prepare = strength
+                * if tau < -2.0 {
+                    smooth((tau + 4.0) / 2.0)
+                } else {
+                    1.0 - blend.min(1.0)
+                }
+                * f64::from(tau < 0.0);
+            p[1] -= 0.2 * prepare;
+            p[2] -= 0.35 * prepare;
+            // The hand stops turning while it holds. Strength sets how far the
+            // held pose departs from the flowing path, never how still it is.
+            let base = flow(time);
+            let held = [
+                base[0],
+                lerp(base[1], pose[0], strength),
+                lerp(base[2], pose[1], strength),
+            ];
+            for k in 0..3 {
+                p[k] = lerp(p[k], held[k], blend);
+            }
+        }
+        p
+    };
+    // Knots on the grid, plus exact arrival and hold-end times.
+    let mut times = grid.clone();
+    for m in &moments {
+        times.extend([m.0, (m.0 + HOLD_BEATS * beat).min(data.duration)]);
+    }
+    times.sort_by(f64::total_cmp);
+    let exact: Vec<f64> = moments
+        .iter()
+        .flat_map(|m| [m.0, m.0 + HOLD_BEATS * beat])
+        .collect();
+    let is_exact = |t: f64| exact.iter().any(|e| (e - t).abs() < 1e-9);
+    let mut kept: Vec<f64> = Vec::with_capacity(times.len());
+    for t in times {
+        match kept.last().copied() {
+            // Too close to the previous knot: keep whichever is an exact time.
+            Some(last) if t - last < 0.4 * step => {
+                if is_exact(t) && !is_exact(last) && kept.len() > 1 {
+                    *kept.last_mut().unwrap() = t;
+                }
+            }
+            _ => kept.push(t),
+        }
+    }
+    if let Some(last) = kept.last_mut() {
+        *last = data.duration;
+    }
+    let times = kept;
+    let reach_m: f64 = rig
+        .channels
+        .iter()
+        .map(|c| c.link_m.iter().map(|v| v * v).sum::<f64>().sqrt())
+        .sum();
+    // (hand position in metres, unwrapped hand azimuth in degrees)
+    let targets: Vec<([f64; 3], f64)> = times
+        .iter()
+        .map(|&t| {
+            let p = hand(t);
             // Azimuth is unbounded: 1.0 = 180 degrees, turns accumulate.
             let azimuth = (p[0] * 180.0_f64).to_radians();
             let elevation = (10.0 + 70.0 * p[1].clamp(0.0, 1.0)).to_radians();
@@ -387,6 +507,7 @@ pub fn compile_figures(
         return Err("rig neutral pose intersects a zone".into());
     }
     let mut knots: Vec<JointKnot> = Vec::with_capacity(times.len());
+    let mut held_target: Option<[f64; 3]> = None;
     for (&time, &(target, facing)) in times.iter().zip(&targets) {
         if knots.last().is_some_and(|k| time - k.time < 1e-9) {
             continue;
@@ -394,7 +515,14 @@ pub fn compile_figures(
         let (prior, dt) = knots.last().map_or((neutral.clone(), f64::INFINITY), |k| {
             (k.joints_degrees.clone(), time - k.time)
         });
-        let mut q = solve(&rig, &placement, &zones, target, facing, &prior)?;
+        // A held hand holds the whole arm: no settling toward neutral.
+        let holding = held_target == Some(target);
+        held_target = Some(target);
+        let mut q = if holding {
+            prior.clone()
+        } else {
+            solve(&rig, &placement, &zones, target, facing, &prior)?
+        };
         for (j, c) in rig.channels.iter().enumerate() {
             // Largest step a rest-to-rest quintic can make inside both limits,
             // so tangent fitting always has a feasible fallback.
@@ -424,8 +552,17 @@ pub fn compile_figures(
     }
     for i in 1..knots.len() - 1 {
         let span = knots[i + 1].time - knots[i - 1].time;
+        // An arrival stops dead: no tangent into a held pose.
+        let holds = (0..rig.channels.len())
+            .all(|j| (knots[i + 1].joints_degrees[j] - knots[i].joints_degrees[j]).abs() < 0.05);
         knots[i].velocity_degrees_per_second = (0..rig.channels.len())
-            .map(|j| (knots[i + 1].joints_degrees[j] - knots[i - 1].joints_degrees[j]) / span)
+            .map(|j| {
+                if holds {
+                    0.0
+                } else {
+                    (knots[i + 1].joints_degrees[j] - knots[i - 1].joints_degrees[j]) / span
+                }
+            })
             .collect();
     }
     let mut track = AgentTrack { id: 0, knots };
@@ -474,7 +611,7 @@ fn link_samples(points: &[[f64; 3]]) -> Vec<[f64; 3]> {
 }
 
 /// True when the straight joint-space move `from` → `to` stays out of all zones.
-// ponytail: checks 3 linear blends, not the exact quintic; margin covers the gap.
+// ponytail: checks 6 linear blends, not the exact quintic; margin covers the gap.
 fn clear(
     rig: &Rig,
     placement: &Placement,
@@ -482,12 +619,12 @@ fn clear(
     from: &[f64],
     to: &[f64],
 ) -> Result<bool, String> {
-    for u in [1.0 / 3.0, 2.0 / 3.0, 1.0] {
+    for u in [1.0 / 6.0, 2.0 / 6.0, 0.5, 4.0 / 6.0, 5.0 / 6.0, 1.0] {
         let q: Vec<f64> = (0..to.len()).map(|j| lerp(from[j], to[j], u)).collect();
         let points = forward_kinematics(rig, placement, &q)?;
         if link_samples(&points)
             .into_iter()
-            .any(|p| penetration(p, zones, 0.6 * MARGIN_M) > 0.0)
+            .any(|p| penetration(p, zones, MARGIN_M) > 0.0)
         {
             return Ok(false);
         }
@@ -525,7 +662,7 @@ fn solve(
         r.extend(
             link_samples(&points)
                 .into_iter()
-                .map(|p| 3.0 * penetration(p, zones, MARGIN_M)),
+                .map(|p| 3.0 * penetration(p, zones, 1.6 * MARGIN_M)),
         );
         Ok(r)
     };

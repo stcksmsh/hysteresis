@@ -796,3 +796,35 @@ sections; five circles, base travel 270–350° each; base speed max 142°/s; ha
 acceleration p95 about 2 m/s²; base ends about 1000° from start. 174 CPU tests
 pass. Not reviewed by eye yet. Only `circle` crosses the back; other classes
 keep their narrower figures. song-figures-3.html is the ±170° intermediate.
+
+### Travel, untwist, and step 1 "moments" — 2026-10-04
+
+User on version 4: only a chunk of the 360° is used; a joint looks stuck near
+2:40; and overall "not really wow". Measured and confirmed: 69% of the song
+sat within ±60° of a fixed front; the second-joint yaw had parked near 90°.
+
+Version 5: figures are relative to the hand's current facing and travel
+steadily around the base (per-class turns per 32 beats); the free base is
+biased to face the hand, other joints pulled harder to neutral. Azimuth use is
+now 6–11% in each 30° sector; twist joint stays within −7°..23°.
+
+Agreed order for "wow" (user): 1 moments, 2 body (motion travelling through the
+joints), 3 stillness and suspension, 4 many arms. Step 4 needs dynamic red
+zones (each arm a moving zone for the others); not started.
+
+Version 6 = step 1. Moments are measured events the arm prepares for (sink and
+pull in over two beats), arrives at over two beats, stops exactly on, holds one
+beat with the whole arm frozen, and releases over two. Sources: stem/novelty
+transitions (strongest first, eight beats apart; pose high and fully extended)
+and the strongest `other`-stem onset per sixteen beats (alternating high and
+low-out poses). Transitions now take priority over phrase edges when cutting
+spans, so runs start on measured changes (90.4, 185.2, 203.6, 212.7s).
+`--groove-only` disables moments for before/after comparison.
+
+Measured: 36 moments (13 arrivals, 23 flourishes), all on exact knots; joint
+change during holds median 0.00°, worst 0.94°; hand acceleration p95 3.4 m/s²
+(2.0 with moments off). Illustrative joint acceleration limit raised to
+12000°/s² (still invented) so arrivals are not rate-capped; that exposed a
+gap in the red-zone check, now six blends per knot at full margin with the
+solver aiming for 1.6× margin. Shoulder at its limit 10.7% of the song.
+174 CPU tests pass. No human review of version 5 or 6 yet.
