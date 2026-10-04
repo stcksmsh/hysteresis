@@ -288,6 +288,14 @@ pub fn compile_figures(
             }
         }
         hits.sort_by(f64::total_cmp);
+        if config.dejitter >= 1 {
+            // A run of quick notes is one stab: only its first note counts.
+            let all = hits.clone();
+            hits.retain(|h| {
+                let i = all.partition_point(|x| x < h);
+                i == 0 || h - all[i - 1] > 0.5 * beat
+            });
+        }
         stabs = (0..ranks.len())
             .map(|i| {
                 let around = &played[ranks[i][0]][i.saturating_sub(8)..(i + 9).min(ranks.len())];
@@ -602,6 +610,7 @@ pub fn compile_figures(
     // the hand faster than HAND_SPEED_CAP; lost time is made up at 15% extra pace.
     let mut clock = Vec::with_capacity(grid.len());
     let mut s = 0.0;
+    let mut eased = 1.0;
     for &t in &grid {
         clock.push(s);
         let held = moments
@@ -627,6 +636,12 @@ pub fn compile_figures(
                 .map(|i| t - hits[i]);
             let bump = since.map_or(0.0, |g| (-g / (0.35 * beat)).exp());
             lerp(1.0, 0.3 + 1.9 * bump, stabs[index.min(stabs.len() - 1)])
+        };
+        let pulse = if config.dejitter >= 2 {
+            eased += 0.5 * (pulse - eased);
+            eased
+        } else {
+            pulse
         };
         let rate = if held {
             0.0

@@ -35,6 +35,12 @@ fn main() -> io::Result<()> {
                     .and_then(|v| v.parse().ok())
                     .ok_or_else(|| io::Error::other("--drag requires degrees per m/s"))?
             }
+            "--dejitter" => {
+                config.dejitter = args
+                    .next()
+                    .and_then(|v| v.parse().ok())
+                    .ok_or_else(|| io::Error::other("--dejitter requires 0, 1 or 2"))?
+            }
             "--flourish" => {
                 config.flourish = args
                     .next()
