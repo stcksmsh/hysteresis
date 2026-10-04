@@ -126,25 +126,39 @@ friends score tracker lanes against the tab; `scrub*.py` make the piano-roll
 videos. Environments under `/secondary/hyst-env` (basic-pitch, demucs,
 muscriptor with the user's HuggingFace token); root disk is nearly full.
 
-## Next work, in the user's order
+## Where it stands (version 37)
 
-1. **Version 32 is approved on a whole-song review; next is the hand object, then many arms.** Earlier note on jitter, not reported again at 60 fps: ("jitter/flick/micro-stutter, may be the
-   rendering"). The clock smoothing removed the measured hand and base chatter
-   but the user saw no difference. Candidates: the disc roll (81 knot-to-knot
-   reversals; its spin target outruns the roll limit, so it chases at full
-   acceleration) and the 30 fps recorder (`record-ensemble.cjs`, outside git).
-   Ask where and on which part they see it before building.
-2. **Flourishes per moment: done in version 31** (soft where the leader plays
-   a steady stream, sharp among stabs). Left: flourish poses are two fixed
-   shapes alternating high and low.
-3. **"Over-focuses on centre": done in version 32.** It meant the base turning
-   mostly one way. Each section's steady travel now reverses (12.5 → 3.6 net
-   turns). A middle ground by the user's instruction, not a blind win.
-4. **Sidecar lanes for the machine**: the measured but unbuilt pipeline (Demucs
-   by kind, stereo position within a kind, MuScriptor notes, pYIN voice curve).
-   See the handoff entry for scores. The user asked to pause this ("enough for
-   now") in favour of the arm.
-5. Hand object, then many arms with dynamic red zones.
+The single arm was approved on a whole-song review at version 32. Since then:
+the hand object is rig data (`Rig.implement`, default a lumpy mirror ball,
+`--implement disc`); a projector faces the mounting surface from straight above
+(user's layout) and the preview draws each mirror's reflection; several arms
+are planned by `compile_ensemble` with a cross-check between them; in a ring
+every arm faces the centre; the planner picks a formation per section (Unison,
+Mirrored, Canon, Ripple, Pairs, DropOut). Read the handoff entries "Version 33"
+to "Version 37". Export the hexagon with `--ring 6,0.8`; whole-song review
+videos are made by `tracker-scratch`-style scripts outside git (record in 40 s
+chunks, concatenate, add a clock, keep under 30 MiB).
+
+The user's words on the ensemble: synchronized dancing is "a different game"
+(all together, inverses, one by one, drop-outs, pairs, complements); it should
+"decide itself"; version 35 was "not synchronized enough, too low energy" and
+"too far apart, dynamic red zones overlapping is what makes it WOW"; canon
+should delay each arm by a fraction of the move, circular or spreading both
+ways and back. Version 37 answers those but **has not been reviewed**.
+
+## Next work
+
+1. **The user's verdict on the version 37 video** (`hexagon-37-full.mp4`).
+   Do not build further ensemble choreography before it.
+2. **Overlap outside unison.** Canon, Ripple and Mirrored keep each hand on its
+   own side of the line to its neighbours, because out-of-step neighbours
+   blocked each other. The user's "wow" is overlapping zones; getting it in
+   canon needs timing planned so paths interleave. Not started.
+3. **The formation table** is an agent's guess (class and occurrence only). The
+   long unison from 3:33 to 5:23 may be too uniform. "Complements" is undefined.
+4. **Hexagon size, projector height, the object's real size**: all assumed.
+5. Paused or parked: sidecar lanes for the machine; the disc roll's chatter
+   (the user saw no jitter at 60 fps); flourish poses are two fixed shapes.
 
 ## Known weak points
 
