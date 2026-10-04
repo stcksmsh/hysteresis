@@ -1157,3 +1157,15 @@ through to 0.6 of it just after the event, and settles over one beat; again a
 posture preference, hand target unchanged. Side-by-side prepared, shuffled,
 not yet judged: `blind-whip-side-by-side.mp4` (1:24–2:04), 0 / 35 / 60°, key
 `blind-whip-key.json` unread. Not measured. Delete the knob if invisible.
+
+**Whip verdict.** User: "They all seem identical." Checked it was a fair test:
+at 60° the wrist point moved at most 3.5 cm in the clip and over 1 cm in only
+144 of 2400 frames, so the whip acted but too little and too briefly. Deleted
+(`wrist_whip_degrees`, `--whip`); planner output again equals version 25.
+Lesson: a short posture pulse around a moment is too small to read. A whip
+that reads would have to move the hand's own path or timing around the moment
+(the arrival already does prepare/arrive), or use the roll (the disc flip
+already fires on moments). Not retried.
+
+State of "body": wrist drag at 240 kept; plain lag and whip dead.
+Remaining queue: spin rate of the disc, then keys-decide (largest open item).
