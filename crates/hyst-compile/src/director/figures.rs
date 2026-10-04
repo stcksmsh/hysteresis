@@ -25,6 +25,11 @@ const FLOOR: Zone = Zone {
 };
 /// Hard check enforces this clearance; the solver aims for 1.6 times it.
 const MARGIN_M: f64 = 0.05;
+/// `RollMode::Spin` and `Twirl`: disc turn per metre of hand travel.
+const SPIN_DEGREES_PER_METRE: f64 = 150.0;
+/// Fastest the figure path carries the hand, m/s. A guess, tuned by eye on one
+/// song; moments may exceed it briefly.
+const HAND_SPEED_CAP: f64 = 0.8;
 
 /// Hand position in arm-relative shell coordinates:
 /// [azimuth -1..1, elevation 0..1, extension 0..1]. `dir` mirrors left/right.
@@ -436,8 +441,59 @@ pub fn compile_figures(
             .reason
             .push_str(&format!(" · {label} moment at {time:.2}s"));
     }
+    let reach_m: f64 = rig
+        .channels
+        .iter()
+        .map(|c| c.link_m.iter().map(|v| v * v).sum::<f64>().sqrt())
+        .sum();
+    // Shell coordinates to (hand position in metres, unwrapped azimuth in degrees).
+    let place = |p: [f64; 3]| -> ([f64; 3], f64) {
+        // Azimuth is unbounded: 1.0 = 180 degrees, turns accumulate.
+        let azimuth = (p[0] * 180.0_f64).to_radians();
+        let elevation = (10.0 + 70.0 * p[1].clamp(0.0, 1.0)).to_radians();
+        let distance = reach_m * (0.38 + 0.54 * p[2].clamp(0.0, 1.0));
+        (
+            [
+                distance * elevation.cos() * azimuth.cos(),
+                distance * elevation.cos() * azimuth.sin(),
+                distance * elevation.sin(),
+            ],
+            p[0] * 180.0,
+        )
+    };
+    // Figure clock. Figures wait out a hold instead of running on underneath it
+    // (the release then had to chase a path that kept moving), and never carry
+    // the hand faster than HAND_SPEED_CAP; lost time is made up at 15% extra pace.
+    let mut clock = Vec::with_capacity(grid.len());
+    let mut s = 0.0;
+    for &t in &grid {
+        clock.push(s);
+        let held = moments
+            .iter()
+            .any(|m| (m.time..m.time + m.hold_beats * beat).contains(&t));
+        let (from, to) = (place(flow(s)).0, place(flow(s + step)).0);
+        let pace = (0..3)
+            .map(|k| (to[k] - from[k]).powi(2))
+            .sum::<f64>()
+            .sqrt()
+            / step;
+        let rate = if held {
+            0.0
+        } else {
+            f64::min(
+                if s < t { 1.15 } else { 1.0 },
+                HAND_SPEED_CAP / pace.max(1e-9),
+            )
+        };
+        s = (s + rate * step).min(t + step);
+    }
+    let waited = |t: f64| -> [f64; 3] {
+        let x = (t / step).clamp(0.0, (clock.len() - 1) as f64);
+        let i = (x.floor() as usize).min(clock.len() - 2);
+        flow(lerp(clock[i], clock[i + 1], x - i as f64))
+    };
     let hand = |t: f64| -> [f64; 3] {
-        let mut p = flow(t);
+        let mut p = waited(t);
         for m in &moments {
             let (time, pose, strength, hold, span) =
                 (m.time, m.pose, m.strength, m.hold_beats, m.span);
@@ -470,9 +526,9 @@ pub fn compile_figures(
             // give) from before the arrival until after the release, so the hand
             // never comes to rest. Only a cut truly freezes.
             // Strength sets how far the pose departs from the flowing path.
-            let base = flow(time);
+            let base = waited(time);
             let alive = f64::from(hold > 0.0 && !m.frozen);
-            let turn = (flow(time + beat)[0] - base[0]).signum();
+            let turn = (waited(time + beat)[0] - base[0]).signum();
             let held = [
                 if hold > 0.0 {
                     base[0] + alive * (0.2 * (p[0] - base[0]) + 0.06 * turn * tau)
@@ -491,30 +547,7 @@ pub fn compile_figures(
     // Uniform knots keep the quintic well-conditioned; a moment lands within
     // half a knot (about 34 ms at this tempo) of its measured time.
     let times = grid.clone();
-    let reach_m: f64 = rig
-        .channels
-        .iter()
-        .map(|c| c.link_m.iter().map(|v| v * v).sum::<f64>().sqrt())
-        .sum();
-    // (hand position in metres, unwrapped hand azimuth in degrees)
-    let targets: Vec<([f64; 3], f64)> = times
-        .iter()
-        .map(|&t| {
-            let p = hand(t);
-            // Azimuth is unbounded: 1.0 = 180 degrees, turns accumulate.
-            let azimuth = (p[0] * 180.0_f64).to_radians();
-            let elevation = (10.0 + 70.0 * p[1].clamp(0.0, 1.0)).to_radians();
-            let distance = reach_m * (0.38 + 0.54 * p[2].clamp(0.0, 1.0));
-            (
-                [
-                    distance * elevation.cos() * azimuth.cos(),
-                    distance * elevation.cos() * azimuth.sin(),
-                    distance * elevation.sin(),
-                ],
-                p[0] * 180.0,
-            )
-        })
-        .collect();
+    let targets: Vec<([f64; 3], f64)> = times.iter().map(|&t| place(hand(t))).collect();
 
     let placement = Placement {
         origin_m: [0.0; 3],
@@ -528,7 +561,15 @@ pub fn compile_figures(
     let mut held_target: Option<[f64; 3]> = None;
     let mut wanted: Vec<f64> = Vec::new();
     let mut speed = vec![0.0; rig.channels.len()];
-    for (&time, &(target, facing)) in times.iter().zip(&targets) {
+    // A last joint that turns about its own link is a tool roll: it moves no
+    // point of the chain, so it is driven here, not by the position solver.
+    let roll_joint = rig.channels.last().and_then(|c| {
+        let along: f64 = (0..3).map(|k| c.axis_local[k] * c.link_m[k]).sum();
+        let length = c.link_m.iter().map(|v| v * v).sum::<f64>().sqrt();
+        (length > 0.0 && (along.abs() - length).abs() < 1e-9).then_some(rig.channels.len() - 1)
+    });
+    let mut roll = 0.0;
+    for (i, (&time, &(target, facing))) in times.iter().zip(&targets).enumerate() {
         if knots.last().is_some_and(|k| time - k.time < 1e-9) {
             continue;
         }
@@ -540,6 +581,62 @@ pub fn compile_figures(
         held_target = Some(target);
         if !holding || wanted.is_empty() {
             wanted = solve(&rig, &placement, &zones, target, facing, &prior)?;
+        }
+        if let Some(r) = roll_joint {
+            // The disc's face leads the hand: turn its normal toward the hand's
+            // travel across the wrist link. Both faces are mirrors, so half
+            // turns are equal; take the nearer.
+            let points = forward_kinematics(&rig, &placement, &wanted)?;
+            let (tip, wrist) = (points[points.len() - 1], points[points.len() - 2]);
+            let d: [f64; 3] =
+                std::array::from_fn(|k| (tip[k] - wrist[k]) / rig.channels[r].link_m[0]);
+            let yaw = wanted[0].to_radians();
+            let y = [-yaw.sin(), yaw.cos(), 0.0];
+            let z = [
+                d[1] * y[2] - d[2] * y[1],
+                d[2] * y[0] - d[0] * y[2],
+                d[0] * y[1] - d[1] * y[0],
+            ];
+            // Travel over about half a second, and the roll eases toward its
+            // aim in proportion to that travel: slow or wavering motion barely
+            // moves it. Aiming knot by knot made the wrist jitter (user).
+            let (before, after) = (
+                targets[i.saturating_sub(4)].0,
+                targets[(i + 4).min(targets.len() - 1)].0,
+            );
+            let across = |axis: [f64; 3]| {
+                (0..3)
+                    .map(|k| (after[k] - before[k]) * axis[k])
+                    .sum::<f64>()
+            };
+            let (vy, vz) = (across(y), across(z));
+            let pace = vy.hypot(vz) / (8.0 * step);
+            let prior = targets[i.saturating_sub(1)].0;
+            let travel = (0..3)
+                .map(|k| (target[k] - prior[k]).powi(2))
+                .sum::<f64>()
+                .sqrt();
+            match config.roll {
+                crate::RollMode::Lead => {
+                    let aim = vz.atan2(vy).to_degrees();
+                    let aim = aim + 180.0 * ((roll - aim) / 180.0).round();
+                    roll += (aim - roll) * 0.3 * (pace / 0.5).min(1.0);
+                }
+                // One direction only: a roll that never reverses cannot jitter.
+                crate::RollMode::Spin => roll += SPIN_DEGREES_PER_METRE * travel,
+                crate::RollMode::Twirl => {
+                    // Spin, plus an extra half turn eased across each moment.
+                    let turned = |t: f64| {
+                        moments
+                            .iter()
+                            .map(|m| smooth((t - m.time) / (3.0 * beat) + 0.5))
+                            .sum::<f64>()
+                    };
+                    roll += SPIN_DEGREES_PER_METRE * travel
+                        + 180.0 * (turned(time) - turned(time - step));
+                }
+            }
+            wanted[r] = roll;
         }
         // Hardware follower: each joint chases its solved angle at a design
         // acceleration and speed a hobby-class servo arm could plausibly follow,
@@ -564,6 +661,26 @@ pub fn compile_figures(
                     room(c.max_degrees - prior[j]),
                 );
                 q[j] = (prior[j] + v * dt).clamp(c.min_degrees + 0.5, c.max_degrees - 0.5);
+            }
+        }
+        // Zone-aware: a link near a zone moves only as fast as it could brake
+        // within its remaining clearance (as for joint end stops above), so the
+        // hard check below never has to stop the arm abruptly.
+        if dt.is_finite() {
+            let before = link_samples(&forward_kinematics(&rig, &placement, &prior)?);
+            let after = link_samples(&forward_kinematics(&rig, &placement, &q)?);
+            let brake =
+                (0.1 * rig.channels[0].max_acceleration_degrees_per_second2).to_radians() * reach_m;
+            let mut scale: f64 = 1.0;
+            for (a, b) in before.iter().zip(&after) {
+                let travel = (0..3).map(|k| (b[k] - a[k]).powi(2)).sum::<f64>().sqrt();
+                let limit = (2.0 * brake * (clearance(*a, &zones, MARGIN_M) + 0.005)).sqrt() * dt;
+                if travel > limit {
+                    scale = scale.min(limit / travel);
+                }
+            }
+            for j in 0..q.len() {
+                q[j] = lerp(prior[j], q[j], scale);
             }
         }
         // Hard guarantee: bisect back toward the prior clear pose.
@@ -633,6 +750,24 @@ fn penetration(p: [f64; 3], zones: &[Zone], margin: f64) -> f64 {
                 .fold(f64::INFINITY, f64::min)
         })
         .fold(0.0, f64::max)
+}
+
+/// Distance from `p` to the nearest zone grown by `margin`; 0 when inside one.
+fn clearance(p: [f64; 3], zones: &[Zone], margin: f64) -> f64 {
+    zones
+        .iter()
+        .map(|z| {
+            (0..3)
+                .map(|i| {
+                    (z.min[i] - margin - p[i])
+                        .max(p[i] - z.max[i] - margin)
+                        .max(0.0)
+                        .powi(2)
+                })
+                .sum::<f64>()
+                .sqrt()
+        })
+        .fold(f64::INFINITY, f64::min)
 }
 
 /// Points checked against zones. The base and its first link sit on the mount

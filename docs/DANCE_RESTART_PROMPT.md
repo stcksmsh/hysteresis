@@ -91,7 +91,7 @@ hyst-compile/-output/-previz/-cli, `cargo fmt --all --check`,
 
 ## Next work, in the user's order
 
-0. **Better render (asked last, do first).** The user called the arm render
+0. **Better render (done as version 13, awaiting user review).** The user called the arm render
    "too shitty". It is a 2D canvas of thick lines and dots. Ask one question
    about the look they want if unclear; otherwise make the arm read as a solid
    3D object: shaded links with thickness, joint housings, a base, a visible
@@ -118,13 +118,9 @@ hyst-compile/-output/-previz/-cli, `cargo fmt --all --check`,
 
 ## Known weak points
 
-- **Planner can fail to compile a score.** `--groove-only --no-reuse --zone
-  0.15,0.3,0.25,0.6,0.6,0.7` together ends with "cannot fit tangents ... accel
-  13856/8000" (each flag alone works). When the red-zone bisect stops a joint
-  abruptly, `fit_tangents` halves neighbouring tangents and the failure cascades
-  into rest-to-rest segments that exceed the envelope. Dynamic red zones (many
-  arms) will hit this constantly; fix it before step 5, ideally by making the
-  follower zone-aware instead of bisecting after it.
+- Zone handling: the follower slows links near zones (version 15), which fixed
+  the "cannot fit tangents" failure for the one documented flag combination.
+  Untested with several or moving zones; recheck before step 5.
 - Shoulder sits within 1° of its end stop about 11% of the song.
 - Follower limits (design 180°/s, 800°/s²; envelope 240°/s, 8000°/s²) are
   guesses for hobby-class servos; no load, gravity or inertia model.

@@ -34,17 +34,31 @@ pub struct SegmentBounds {
     pub max_acceleration_degrees_per_second2: [f64; 3],
 }
 
+/// What drives the wrist roll (the mirror disc's face). Candidates under
+/// side-by-side review; the losers get deleted.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RollMode {
+    /// The face leads the hand's travel.
+    Lead,
+    /// The disc turns steadily with the distance the hand travels.
+    Spin,
+    /// `Spin`, plus an extra half turn across each moment.
+    Twirl,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CompileConfig {
     pub enable_hits: bool,
     /// Recall an earlier measured phrase signature; false uses current content.
     pub reuse_repeats: bool,
+    pub roll: RollMode,
 }
 impl Default for CompileConfig {
     fn default() -> Self {
         Self {
             enable_hits: true,
             reuse_repeats: true,
+            roll: RollMode::Lead,
         }
     }
 }

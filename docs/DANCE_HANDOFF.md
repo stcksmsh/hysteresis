@@ -897,3 +897,171 @@ User's last requests: better render of the arm ("too shitty"), then continue
 with body, speed smoothing, stillness, keys-decide, many arms with dynamic red
 zones. Hand off to a fresh agent via `docs/DANCE_RESTART_PROMPT.md`.
 Latest export: `song-figures-12.html` (outside git).
+
+### Version 13: solid arm render — 2026-10-04
+
+User called the arm render "too shitty" (thick 2D lines and dots). Rewrote the
+arm drawing in `ensemble.html`, still canvas 2D: the recorder runs headless
+Chrome with `--disable-gpu` and reads the canvas with `toDataURL`, so WebGL was
+the riskier choice and the file stays one offline page. Links are tapered
+cylinders shaded from one world light (gradient across the silhouette from real
+cylinder normals), joints are lit spheres, the base is a turntable with a marker
+toward the shoulder, the hand is a glowing ball, and the arm casts a soft floor
+shadow along the light direction. Depth-sorted. Trail fades with age; stem rings
+dimmed. Critique panel, zones, orbit, drop line and the `draw(t)` hook unchanged.
+
+Planner untouched: before the change a fresh export was byte-identical to
+`song-figures-12.html`. Look is an agent assumption (matte light arm, dark
+stage), not a user choice. Joint housings are spheres because preview frames
+carry joint positions only, not axes. Link radii are invented (15–31 mm).
+Checked: stills at 95, 104, 150, 222 s inspected, no page errors; recorder ran
+unmodified. Clips of 1:24–1:54: `render-12-old.mp4`, `render-13-new.mp4`
+(outside git). No user review yet. Next: step 1 "body".
+
+### Version 14: figure clock (hold wait + speed cap), look 1 — 2026-10-04
+
+User on version 13: 1:31–1:33 too fast for the music, "especially the second
+flick"; follows the music OK, could be a tad better; likes look 1 (dark stage,
+light painting) and look 2 (studio product shot) most.
+
+Measured cause at 1:31: the arrival at 90.4 s holds the hand 1.5 beats while
+the figure path kept running underneath; on release the hand chased it, 185°
+round the base in 1.25 s at 1.4 m/s (the same `gather` elsewhere: 0.9), then
+reversed at 1.0 m/s (elsewhere 0.5). First attempt (figures only wait out the
+hold) made it worse, 1.8 m/s: the full wide low start of `gather` then played
+at its raw speed. Kept: a figure clock in `figures.rs`. It stops during any
+hold, never carries the hand faster than `HAND_SPEED_CAP` (0.8 m/s, a guess),
+and makes lost time up at 15% extra pace. This is restart-prompt step 2
+(speed smoothing) done ahead of step 1. Moments are not capped.
+
+Measured after: 91.5–93.5 s 0.8–1.0 m/s, reversal 0.55; song median 0.35, p95
+0.83 (was 0.94), max 2.22 (a moment). Not measured: how far figures lag phrase
+edges. The 2 s plateau at exactly the cap may read as mechanical.
+
+Render look 1: glossy gunmetal links with a highlight strip, dark housings,
+hand light pooling on the floor, 4 s additive ribbon trail, vignette; stem
+rings removed from the stage (numbers stay in the Evidence panel). An arm
+reflection in the floor was tried and dropped (read as detached clutter).
+Look 2 not built. 130 CPU tests, clippy, fmt, `ensemble.cjs` pass. Clip:
+`render-14.mp4`, export `song-figures-14.html`. Awaiting user review.
+
+### Version 15: shoulder on the base axis, capsule links, zone-aware follower — 2026-10-04
+
+User on version 14 (render only; no verdict yet on the speed change): the base
+joint rotates around something that is not the centre of the base plate, and
+the joints look bad and clip through the cylinders.
+
+- Base: true to the rig, which put the shoulder 8 cm sideways from the yaw
+  axis. The illustrative rig now puts it on the axis, 8 cm up
+  (`base_yaw` link `[0, 0, 0.08]`). Still invented geometry. This changes the
+  solved joint angles slightly; hand targets are unchanged.
+- Joints: links were flat-cut quads drawn over larger joint balls. Links are
+  now capsules whose round ends share the body shading; joint balls are gone.
+  The base is a pedestal plus a column to the shoulder.
+- The rig change made `hand_travels_and_no_link_enters_a_red_zone` fail with
+  the known "cannot fit tangents" weak point. Fixed at the root: the follower
+  now limits each link sample's travel per knot to what it could brake within
+  its remaining clearance to any zone (floor included), so the hard bisect no
+  longer stops the arm abruptly. The documented failing combination
+  (`--groove-only --no-reuse --zone 0.15,0.3,0.25,0.6,0.6,0.7`) now compiles.
+  Not tested with more zones or moving zones. Side effect: links skimming the
+  floor are slowed; song hand speed median and p95 unchanged (0.35, 0.83).
+
+130 CPU tests, clippy, fmt, `ensemble.cjs` pass. Stills inspected at 92.5 and
+150 s. Clip `render-15.mp4`, export `song-figures-15.html`. Awaiting review.
+
+### Version 16: trail sorted with the arm; render parked — 2026-10-04
+
+User on version 15: speed OK now, look much better, "looks and feels better";
+but the hand trail was always behind the arm. It was drawn as one layer before
+the arm. Trail segments are now depth-sorted together with the arm, links cut
+in four pieces so long links sort correctly; plain blending instead of additive
+(additive burned to white where the trail crossed a lit link); gloss lowered.
+Planner unchanged from version 15.
+
+User decision: a lifelike "wow" render (Blender or similar) comes much later.
+Do not polish the canvas preview further unless asked. Speed cap 0.8 m/s
+accepted by eye on 1:24–1:54 only. Next: restart-prompt step 1 "body".
+Export `song-figures-16.html`, clip `render-16.mp4`.
+
+### Versions 17–18: visible base turn, chain lag killed, mirror-disc hand — 2026-10-04
+
+- Version 17: the base seemed never to rotate (shoulder on the yaw axis, plain
+  disc). Preview frames now carry each arm's first joint angle; the pedestal
+  draws three marks that turn with it.
+- Body step A (chain lag: each joint aims at the pose solved slightly earlier,
+  more toward the wrist) was built and blind-tested at 0, 0.5 and 1 beat. User:
+  all three the same quality, one "really shitty" near 1:46. Key: the bad one
+  was 1 beat; 0.5 was indistinguishable from none. Deleted (commit reverted).
+  Do not retry plain delay as "body".
+- Found: `second_local_yaw` is effectively unused (−6°..11° over the song;
+  the version 5 fix pulls it to neutral), so the arm always lies in one
+  vertical plane. Shoulder reaches −109.5° of a −110° limit.
+- **User decision: the hand is a reflective, non-spherical object** (a disc
+  like OK Go, or mirrors on some faces), so its orientation matters. The ball
+  was only a placeholder. Version 18 draws the hand as a mirror disc square to
+  the last link, flashing when it throws the light at the camera
+  (`render-18.mp4`). The planner does not plan orientation yet.
+- Rig research for the user (references use 6-axis arms; flair comes from the
+  held object and timing): for a disc with its normal along the last link,
+  roll about that normal is invisible, so position (3) + aim (2) needs five
+  axes. The same five servos suffice if the unused twist becomes a forearm
+  roll (base, shoulder, elbow, forearm roll, wrist bend). A sixth (tool roll)
+  is needed only for a hand that is not rotationally symmetric. Not decided.
+- Open artistic question: what the mirror aims at. Next work depends on it.
+- Version 19, user correction: the disc is **held by its edge, in line with
+  the arm** ("---0", like a hand mirror), not square to the last link. So its
+  normal is perpendicular to the last link and a roll about that link turns the
+  disc visibly. This supersedes the "forearm roll" reasoning above: the natural
+  fifth axis is a **wrist roll about the last link** (base, shoulder, elbow,
+  wrist bend, wrist roll), which can be continuous because the mirror is
+  passive. Not yet confirmed by the user; the rig still has the unused elbow
+  twist and no roll. The preview draws the disc in the arm's vertical plane
+  (`render-19.mp4`).
+
+### Version 20: wrist roll replaces the elbow twist — 2026-10-04
+
+**User decision, settled:** five servos; the rotation besides the base is a
+**wrist roll** (mechanically simplest); more axes "definitely not now".
+
+- Rig (`Rig::illustrative_five_axis`): base yaw, shoulder, elbow, wrist bend,
+  wrist roll. `second_local_yaw` removed. The wrist link is 0.10 m plus a
+  0.06 m roll link ending at the disc centre, so reach and every solved bend
+  are unchanged from version 19. Roll is unbounded (passive mirror).
+- Planner: a last joint that turns about its own link is detected as a tool
+  roll and driven outside the position solver. First driver, **an agent
+  default the user has not chosen**: the disc's face leads the hand, i.e. its
+  normal turns toward the hand's travel across the wrist link; both faces are
+  equal, so the nearer half turn is taken; below 0.1 m/s across, the roll is
+  kept. The servo follower then limits its speed and acceleration.
+- Preview frames carry `[base turn, hand roll]` per arm; the disc rolls.
+- Measured: roll spans −824°..656° over the song; other joints as before.
+  Not measured: roll rate, how often it reverses. The disc rim (6 cm past its
+  centre) is not in the zone check; the 5 cm margin does not fully cover it.
+- 130 CPU tests, clippy, fmt, `ensemble.cjs` pass. Stills at 92.5 and 101 s
+  inspected. Clip `render-20.mp4`, export `song-figures-20.html`. No review yet.
+- Alternatives offered for the roll: steady spin scaled by energy; flash toward
+  the viewer on arrivals and flourishes. Body step B (whip on moments) not built.
+
+### Wrist roll: jitter, then too little; three drivers under blind review — 2026-10-04
+
+User on version 20: a lot better, wrist "a tad jittery". Measured: 41 roll
+reversals a minute, speed pinned at the 180°/s cap. Version 21 smoothed the
+aim (half-second travel window, easing by travel): 22 reversals a minute, p95
+77°/s. User on version 21: now "not rolling enough; it should move, flourish,
+but not jitter, big difference". So the target is much roll with no reversals.
+
+`CompileConfig::roll` / `--roll` now selects one of three candidates. The
+losers must be deleted after the verdict:
+- `lead` (default for now): face leads the hand's travel, livelier gain.
+  28 reversals a minute, acceleration p95 at the 800°/s² design cap.
+- `spin`: 150° per metre of hand travel, one direction. 0 reversals, speed
+  median 52, p95 123°/s.
+- `twirl`: spin plus an extra half turn eased over three beats across each
+  moment. 1 reversal a minute, speed p95 at the 180°/s cap.
+A fourth idea (turn the face to throw the light at the viewer on moments) was
+written and dropped before review: it needs viewer and light positions.
+
+Blind side-by-side prepared, not yet judged: `blind-roll-side-by-side.mp4`
+(1:24–1:54, A | B | C shuffled), key `blind-roll-key.json` unread by the agent.
+130 CPU tests, clippy, fmt, `ensemble.cjs` pass.

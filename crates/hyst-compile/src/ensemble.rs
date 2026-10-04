@@ -28,7 +28,7 @@ pub struct Rig {
 }
 
 impl Rig {
-    /// Provisional five-servo arm: base yaw, bend, local yaw, bend, bend.
+    /// Provisional five-servo arm: base yaw, three bends, wrist roll.
     /// Z is up; XY is floor. Replace with measured geometry before hardware use.
     pub fn illustrative_five_axis() -> Self {
         let channel =
@@ -48,7 +48,8 @@ impl Rig {
                 channel(
                     "base_yaw",
                     [0.0, 0.0, 1.0],
-                    [0.08, 0.0, 0.0],
+                    // Shoulder sits on the yaw axis, up a short column.
+                    [0.0, 0.0, 0.08],
                     0.0,
                     [70.0, 0.0, 0.0],
                 ),
@@ -60,13 +61,6 @@ impl Rig {
                     [0.0, -60.0, 6.0],
                 ),
                 channel(
-                    "second_local_yaw",
-                    [0.0, 0.0, 1.0],
-                    [0.0, 0.0, 0.0],
-                    0.0,
-                    [20.0, 0.0, -12.0],
-                ),
-                channel(
                     "elbow_bend",
                     [0.0, 1.0, 0.0],
                     [0.22, 0.0, 0.0],
@@ -76,12 +70,24 @@ impl Rig {
                 channel(
                     "wrist_bend",
                     [0.0, 1.0, 0.0],
-                    [0.16, 0.0, 0.0],
+                    [0.10, 0.0, 0.0],
                     5.0,
                     [-6.0, 20.0, 22.0],
                 ),
+                // Rolls the hand object about the wrist link. Its link ends at
+                // the centre of a disc held by its edge, so the roll moves no
+                // point of the chain and only turns the disc's face.
+                channel(
+                    "wrist_roll",
+                    [1.0, 0.0, 0.0],
+                    [0.06, 0.0, 0.0],
+                    0.0,
+                    [0.0, 0.0, 0.0],
+                ),
             ],
         };
+        // The roll carries a passive mirror, so it can also spin without end stops.
+        (rig.channels[4].min_degrees, rig.channels[4].max_degrees) = (-1e6, 1e6);
         // Base spins freely (continuous rotation) so the hand can circle through
         // the back. A real build needs a slip ring or a servo without end stops.
         (rig.channels[0].min_degrees, rig.channels[0].max_degrees) = (-1e6, 1e6);

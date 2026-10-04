@@ -8,6 +8,7 @@ fn usage() -> &'static str {
      --rig PATH       use JSON rig geometry and local axes (default illustrative five-axis)\n\
      --groove-only    disable hit accents\n\
      --no-reuse       disable recalled musical material\n\
+     --roll MODE      wrist roll driver: lead (default), spin or twirl\n\
      --zone BOX       red zone corners in metres, x0,y0,z0,x1,y1,z1 (repeatable)\n\
      --figures        accepted and ignored; the figure planner is the only mode\n\
      Audio starts only after Play. Score and arm trajectories resolve offline for deterministic seek."
@@ -28,6 +29,14 @@ fn main() -> io::Result<()> {
             }
             "--groove-only" => config.enable_hits = false,
             "--no-reuse" => config.reuse_repeats = false,
+            "--roll" => {
+                config.roll = match args.next().as_deref() {
+                    Some("lead") => hyst_compile::RollMode::Lead,
+                    Some("spin") => hyst_compile::RollMode::Spin,
+                    Some("twirl") => hyst_compile::RollMode::Twirl,
+                    _ => return Err(io::Error::other("--roll requires lead, spin or twirl")),
+                }
+            }
             "--figures" => {}
             "--zone" => {
                 let raw = args
@@ -99,7 +108,17 @@ fn main() -> io::Result<()> {
                     .collect::<Vec<_>>()
             })
             .collect();
-        frames.push(serde_json::json!([points, frame.cue_index]));
+        // First and last joint angle per arm: the preview turns the base marks
+        // and rolls the hand disc with them.
+        let turns: Vec<[f64; 2]> = frame
+            .agents
+            .iter()
+            .map(|agent| {
+                let q = &agent.joints_degrees;
+                [q[0], q[q.len() - 1]].map(|v| (v * 100.0).round() / 100.0)
+            })
+            .collect();
+        frames.push(serde_json::json!([points, frame.cue_index, turns]));
     }
     let data = serde_json::json!({
         "duration":score.duration,"fps":fps,"frames":frames,"cues":cues,"zones":zones,
