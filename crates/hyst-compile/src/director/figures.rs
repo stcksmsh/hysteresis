@@ -70,6 +70,12 @@ fn arc(u: f64, dir: f64) -> [f64; 3] {
         0.95,
     ]
 }
+/// Slightly more than a full circle in the floor plane (so it closes even when
+/// scaled down), starting at the `dir` side, hand rising and
+/// falling twice. Azimuth runs past the back; the base keeps turning.
+fn circle(u: f64, dir: f64) -> [f64; 3] {
+    [dir * (0.95 - 2.3 * u), 0.45 + 0.3 * (TAU * u).sin(), 0.95]
+}
 fn sway(u: f64, dir: f64) -> [f64; 3] {
     [
         0.45 * dir * (TAU * u).sin(),
@@ -106,8 +112,7 @@ fn motif(class: &str) -> (&'static [Step], f64) {
         ("gather", gather, 8.0, 1.0),
         ("rise", rise, 4.0, 1.0),
         ("open", open, 4.0, 1.0),
-        ("arc", arc, 8.0, 1.0),
-        ("arc", arc, 8.0, -1.0),
+        ("circle", circle, 16.0, 1.0),
     ];
     const BASS: &[Step] = &[
         ("arc", arc, 8.0, 1.0),
@@ -139,6 +144,9 @@ struct Instance {
     pulse: f64,
     /// Scaled shell position where the previous figure ended.
     entry: [f64; 3],
+    /// Whole turns (units of 2 = 360 degrees) added to azimuth so this figure
+    /// starts at the nearest equivalent of `entry` instead of unwinding.
+    winding: f64,
 }
 
 pub fn compile_figures(
@@ -235,6 +243,7 @@ pub fn compile_figures(
             }
             let repeat = k / sequence.len();
             let dir = first_dir * step_dir * if repeat % 2 == 1 { -1.0 } else { 1.0 };
+            let winding = 2.0 * ((entry[0] - scaled(shape(0.0, dir), scale)[0]) / 2.0).round();
             instances.push(Instance {
                 start: t,
                 end: stop,
@@ -243,8 +252,10 @@ pub fn compile_figures(
                 scale,
                 pulse,
                 entry,
+                winding,
             });
             entry = scaled(shape(1.0, dir), scale);
+            entry[0] += winding;
             cues.push(IntentCue {
                 start: t,
                 end: stop,
@@ -306,8 +317,10 @@ pub fn compile_figures(
         let x = &instances[i];
         let at = |t: f64| paced(warped(t, x.pulse));
         let u = ((at(t) - at(x.start)) / (at(x.end) - at(x.start)).max(1e-9)).clamp(0.0, 1.0);
-        let here = scaled((x.shape)(u, x.dir), x.scale);
-        let first = scaled((x.shape)(0.0, x.dir), x.scale);
+        let mut here = scaled((x.shape)(u, x.dir), x.scale);
+        let mut first = scaled((x.shape)(0.0, x.dir), x.scale);
+        here[0] += x.winding;
+        first[0] += x.winding;
         // Carry the previous figure's end into this one over its first half.
         let carry = 1.0 - smooth(u / 0.5);
         let mut p: [f64; 3] = std::array::from_fn(|k| here[k] + (x.entry[k] - first[k]) * carry);
@@ -344,9 +357,8 @@ pub fn compile_figures(
                 total += w;
             }
             let p = sum.map(|v| v / total);
-            // 340 of 360 degrees in the floor plane; the 20 degree gap straight back
-            // is the base-yaw seam, which the hand never crosses.
-            let azimuth = (p[0].clamp(-1.0, 1.0) * 170.0_f64).to_radians();
+            // Azimuth is unbounded: 1.0 = 180 degrees, turns accumulate.
+            let azimuth = (p[0] * 180.0_f64).to_radians();
             let elevation = (10.0 + 70.0 * p[1].clamp(0.0, 1.0)).to_radians();
             let distance = reach_m * (0.38 + 0.54 * p[2].clamp(0.0, 1.0));
             [
@@ -489,7 +501,14 @@ fn solve(
         let mut r: Vec<f64> = (0..3).map(|i| points[n][i] - target[i]).collect();
         for j in 0..n {
             r.push(4e-4 * (q[j] - prior[j]));
-            r.push(1e-4 * (q[j] - rig.channels[j].neutral_degrees));
+            // A freely spinning joint has no home angle to drift back to.
+            let c = &rig.channels[j];
+            let free = c.max_degrees - c.min_degrees >= 720.0;
+            r.push(if free {
+                0.0
+            } else {
+                1e-4 * (q[j] - c.neutral_degrees)
+            });
         }
         r.extend(
             link_samples(&points)

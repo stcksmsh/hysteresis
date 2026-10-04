@@ -93,8 +93,9 @@ impl Rig {
                 ),
             ],
         };
-        // Base turns almost fully so the hand can use the whole half-dome.
-        (rig.channels[0].min_degrees, rig.channels[0].max_degrees) = (-170.0, 170.0);
+        // Base spins freely (continuous rotation) so the hand can circle through
+        // the back. A real build needs a slip ring or a servo without end stops.
+        (rig.channels[0].min_degrees, rig.channels[0].max_degrees) = (-1e6, 1e6);
         rig
     }
 
