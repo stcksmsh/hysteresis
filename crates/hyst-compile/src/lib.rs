@@ -40,15 +40,21 @@ pub struct CompileConfig {
     /// Recall an earlier measured phrase signature; false uses current content.
     pub reuse_repeats: bool,
     /// Body: how far the wrist's preferred bend trails the hand's vertical
-    /// speed, degrees per m/s. 0 turns it off. Under side-by-side review.
+    /// speed, degrees per m/s. 0 turns it off. 240 chosen by the user in a
+    /// blind side-by-side over 0 and 120; it about triples wrist travel, so
+    /// lower it if real wrist or elbow servos cannot keep up.
     pub wrist_drag_degrees_per_mps: f64,
+    /// Body: at each moment the wrist cocks back by this many degrees, then
+    /// snaps through as the hand arrives. 0 turns it off. Under review.
+    pub wrist_whip_degrees: f64,
 }
 impl Default for CompileConfig {
     fn default() -> Self {
         Self {
             enable_hits: true,
             reuse_repeats: true,
-            wrist_drag_degrees_per_mps: 0.0,
+            wrist_drag_degrees_per_mps: 240.0,
+            wrist_whip_degrees: 0.0,
         }
     }
 }

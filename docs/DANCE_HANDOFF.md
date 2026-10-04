@@ -1136,3 +1136,24 @@ Side-by-side prepared, shuffled, not yet judged: `blind-drag-side-by-side.mp4`
 (1:24–2:04) with gains 0, 120, 240; key `blind-drag-key.json` unread. If no
 difference is seen, delete the knob and `lean`. Body B (whip on moments) still
 unbuilt. 130 CPU tests, clippy, fmt, `ensemble.cjs` pass.
+
+**Verdict, version 25.** User: B and C best, C "stronger, more complex, wow",
+generally nicer though sometimes B is better; worried about hardware. Key: A 0,
+B 120, C 240. Wrist drag is the first "body" layer to pass a blind test.
+Default is now 240 (export `song-figures-25.html` identical to clip C); the
+knob stays as a hardware calibration knob.
+
+Servo cost, whole song, drag 0 → 120 → 240 (speed p95 °/s, acceleration p95
+°/s², travel in thousands of degrees): elbow 60 → 101 → 110, 216 → 380 → 439,
+4.7 → 8.6 → 10.9; wrist 52 → 99 → 125, 186 → 481 → 687, 4.3 → 9.3 → 13.6. Base
+and shoulder unchanged. All stay inside the follower's design limits (180°/s,
+800°/s²), which are themselves guesses; the wrist's acceleration p95 is close
+to that cap, so the follower is already clipping some of it. Wrist travel
+about triples: more heat and wear on the smallest servo.
+
+Body B built as a knob, off by default: `wrist_whip_degrees` / `--whip`. At
+each moment the wrist cocks back by that angle over the prepare window, snaps
+through to 0.6 of it just after the event, and settles over one beat; again a
+posture preference, hand target unchanged. Side-by-side prepared, shuffled,
+not yet judged: `blind-whip-side-by-side.mp4` (1:24–2:04), 0 / 35 / 60°, key
+`blind-whip-key.json` unread. Not measured. Delete the knob if invisible.

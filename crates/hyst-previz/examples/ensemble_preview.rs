@@ -8,7 +8,8 @@ fn usage() -> &'static str {
      --rig PATH       use JSON rig geometry and local axes (default illustrative five-axis)\n\
      --groove-only    disable hit accents\n\
      --no-reuse       disable recalled musical material\n\
-     --drag GAIN      wrist trails the hand's rise and fall, degrees per m/s (default 0)\n\
+     --drag GAIN      wrist trails the hand's rise and fall, degrees per m/s (default 240)\n\
+     --whip DEGREES   wrist cocks back then snaps through at each moment (default 0)\n\
      --zone BOX       red zone corners in metres, x0,y0,z0,x1,y1,z1 (repeatable)\n\
      --figures        accepted and ignored; the figure planner is the only mode\n\
      Audio starts only after Play. Score and arm trajectories resolve offline for deterministic seek."
@@ -29,6 +30,12 @@ fn main() -> io::Result<()> {
             }
             "--groove-only" => config.enable_hits = false,
             "--no-reuse" => config.reuse_repeats = false,
+            "--whip" => {
+                config.wrist_whip_degrees = args
+                    .next()
+                    .and_then(|v| v.parse().ok())
+                    .ok_or_else(|| io::Error::other("--whip requires degrees"))?
+            }
             "--drag" => {
                 config.wrist_drag_degrees_per_mps = args
                     .next()

@@ -588,7 +588,22 @@ pub fn compile_figures(
             // hand still reaches its target.
             let (lo, hi) = (i.saturating_sub(4), (i + 4).min(targets.len() - 1));
             let rise = (targets[hi].0[2] - targets[lo].0[2]) / (times[hi] - times[lo]).max(1e-9);
-            let lean = (config.wrist_drag_degrees_per_mps * rise).clamp(-45.0, 45.0);
+            // Whip: before each moment the wrist cocks back, snaps through as
+            // the hand arrives, and settles over the next beat.
+            let whip: f64 = moments
+                .iter()
+                .map(|m| {
+                    let tau = (time - m.time) / beat;
+                    let keys = [(-m.span, 0.0), (-0.3, -1.0), (0.1, 0.6), (1.0, 0.0)];
+                    keys.windows(2)
+                        .find(|k| (k[0].0..k[1].0).contains(&tau))
+                        .map_or(0.0, |k| {
+                            lerp(k[0].1, k[1].1, smooth((tau - k[0].0) / (k[1].0 - k[0].0)))
+                        })
+                })
+                .sum();
+            let lean = (config.wrist_drag_degrees_per_mps * rise).clamp(-45.0, 45.0)
+                + config.wrist_whip_degrees * whip;
             let wrist = roll_joint.map_or(rig.channels.len() - 1, |r| r - 1);
             wanted = solve(
                 &rig,
