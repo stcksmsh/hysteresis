@@ -1142,6 +1142,47 @@ mod tests {
     }
 
     #[test]
+    fn hand_rides_higher_as_a_flowing_leader_brightens() {
+        let mut value: serde_json::Value =
+            serde_json::from_str(&super::super::tests::fixture(0.7, 0.7)).unwrap();
+        // The leader plays a steady stream (no stabs): dull for eight beats,
+        // then bright. A quieter lane keeps it company.
+        let steady: Vec<[f64; 3]> = (0..16).map(|i| [0.5 * i as f64, 60.0, 1.0]).collect();
+        let brightness: Vec<f64> = (0..16).map(|i| if i < 8 { 60.0 } else { 72.0 }).collect();
+        value["noteTrack"] = serde_json::json!({"lanes": {
+            "lead": {"notes": steady, "levelPerBeat": vec![-10.0; 16], "brightnessPerBeat": brightness},
+            "bass": {"notes": steady, "levelPerBeat": vec![-30.0; 16], "brightnessPerBeat": vec![40.0; 16]},
+        }});
+        let climb = |swell: f64| {
+            let config = CompileConfig {
+                enable_hits: false,
+                swell,
+                ..CompileConfig::default()
+            };
+            let rig = Rig::illustrative_five_axis();
+            let score = compile_figures(&value.to_string(), config, rig, &[]).unwrap();
+            let height = |from: f64| {
+                (0..20)
+                    .map(|i| {
+                        let t = from + 0.1 * i as f64;
+                        score.sample(t).unwrap().agents[0]
+                            .world_points
+                            .last()
+                            .unwrap()[2]
+                    })
+                    .sum::<f64>()
+                    / 20.0
+            };
+            height(5.5) - height(1.5)
+        };
+        let (with, without) = (climb(1.0), climb(0.0));
+        assert!(
+            with > without + 0.05,
+            "climb with swell {with:.3} m, without {without:.3} m"
+        );
+    }
+
+    #[test]
     fn only_a_cut_freezes_the_arm() {
         let mut value: serde_json::Value =
             serde_json::from_str(&super::super::tests::fixture(0.7, 0.7)).unwrap();
