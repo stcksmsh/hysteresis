@@ -983,3 +983,29 @@ User decision: a lifelike "wow" render (Blender or similar) comes much later.
 Do not polish the canvas preview further unless asked. Speed cap 0.8 m/s
 accepted by eye on 1:24–1:54 only. Next: restart-prompt step 1 "body".
 Export `song-figures-16.html`, clip `render-16.mp4`.
+
+### Versions 17–18: visible base turn, chain lag killed, mirror-disc hand — 2026-10-04
+
+- Version 17: the base seemed never to rotate (shoulder on the yaw axis, plain
+  disc). Preview frames now carry each arm's first joint angle; the pedestal
+  draws three marks that turn with it.
+- Body step A (chain lag: each joint aims at the pose solved slightly earlier,
+  more toward the wrist) was built and blind-tested at 0, 0.5 and 1 beat. User:
+  all three the same quality, one "really shitty" near 1:46. Key: the bad one
+  was 1 beat; 0.5 was indistinguishable from none. Deleted (commit reverted).
+  Do not retry plain delay as "body".
+- Found: `second_local_yaw` is effectively unused (−6°..11° over the song;
+  the version 5 fix pulls it to neutral), so the arm always lies in one
+  vertical plane. Shoulder reaches −109.5° of a −110° limit.
+- **User decision: the hand is a reflective, non-spherical object** (a disc
+  like OK Go, or mirrors on some faces), so its orientation matters. The ball
+  was only a placeholder. Version 18 draws the hand as a mirror disc square to
+  the last link, flashing when it throws the light at the camera
+  (`render-18.mp4`). The planner does not plan orientation yet.
+- Rig research for the user (references use 6-axis arms; flair comes from the
+  held object and timing): for a disc with its normal along the last link,
+  roll about that normal is invisible, so position (3) + aim (2) needs five
+  axes. The same five servos suffice if the unused twist becomes a forearm
+  roll (base, shoulder, elbow, forearm roll, wrist bend). A sixth (tool roll)
+  is needed only for a hand that is not rotationally symmetric. Not decided.
+- Open artistic question: what the mirror aims at. Next work depends on it.
