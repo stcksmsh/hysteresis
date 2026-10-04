@@ -1388,3 +1388,20 @@ mark, and the reflected patch on the wall or floor. Constants `PROJECTOR` and
 `WALL` are assumptions. The planner is unchanged (still version 32). Clip
 `mirror-light-32.mp4` (3:32–4:12) sent to the user. The disc rim is still not
 in the zone check.
+
+**Correction, same day: the projector is above the arm.** User: if the arm is
+on the floor the projector is on the ceiling; if the arm is on a wall the
+projector is perpendicular to that wall. So the projector faces the mounting
+surface head-on and that surface is also the screen. The front projector and
+back wall above were a wrong assumption and are gone from the preview.
+Re-measured on version 32, projector 2.5 m straight above the base (4 m gives
+the same shares): the disc faces the beam with 62 % of its area (median) and is
+nearly edge-on 17 % of the song; the reflection falls back on the mounting
+surface 60 % (within 1.5 m of the base 45 %), leaves sideways 18 %, upward
+23 %; the beam's direction turns at 54°/s median, 373°/s p95. The roll alone
+could always keep the disc facing the beam (never under 20 %, median 95 %).
+The preview now puts the projector overhead, casts the arm's shadow from it,
+and draws the reflection as a patch where it falls back on the surface and as a
+beam where it leaves for the room. Height 2.5 m is assumed. Clip
+`mirror-light-32b.mp4`. Not decided by the user: the object, the projector's
+distance, where the audience is, whether the mirrors aim.
