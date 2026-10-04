@@ -128,7 +128,7 @@ muscriptor with the user's HuggingFace token); root disk is nearly full.
 
 ## Next work, in the user's order
 
-1. **The jitter the user still sees** ("jitter/flick/micro-stutter, may be the
+1. **Version 32 is approved on a whole-song review; next is the hand object, then many arms.** Earlier note on jitter, not reported again at 60 fps: ("jitter/flick/micro-stutter, may be the
    rendering"). The clock smoothing removed the measured hand and base chatter
    but the user saw no difference. Candidates: the disc roll (81 knot-to-knot
    reversals; its spin target outruns the roll limit, so it chases at full

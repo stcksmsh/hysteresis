@@ -1358,3 +1358,11 @@ turn the same way as each other (the sections between them reverse); that falls
 out of the alternation on this song, it is not a rule. The `--travel` knob is
 deleted. `song-figures-32.html`; 133 CPU tests, clippy, fmt, `ensemble.cjs`
 pass. No review knobs remain in the code.
+
+### Version 32 approved on a whole-song review — 2026-10-04
+
+The user watched the whole song at version 32 (60 fps, on-screen clock,
+`review-32-full-60fps.mp4`) and said: "I think it's all good". No jitter was
+reported. The single-arm motion is accepted for now. Agreed order from here:
+the hand object, then several arms with red zones. Open before the hand object
+can be built: what the object is in numbers, and what the mirror aims at.
