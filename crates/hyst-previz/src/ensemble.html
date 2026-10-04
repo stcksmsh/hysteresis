@@ -181,6 +181,34 @@
   // The projector faces the mounting surface from straight above the arm
   // (user): on the ceiling for a floor arm. Its height in metres is assumed.
   const PROJECTOR=[0,0,2.5];
+  // Hand object: "shards" (default), an irregular cluster of small round
+  // mirrors facing all ways, or "disc" (?hand=disc), one two-faced mirror held
+  // by its edge. Shard layout is an invented stand-in, fixed, not random per run.
+  const HAND=/[?&]hand=disc/.test(typeof location==='undefined'?'':location.search)?'disc':'shards';
+  const noise=(i,k)=>{const x=Math.sin(i*12.9898+k*78.233)*43758.5453;return x-Math.floor(x);};
+  const SHARDS=Array.from({length:16},(_,i)=>{
+    const z=1-2*(i+.5)/16, r=Math.sqrt(1-z*z), phi=i*2.39996, radial=[z,r*Math.cos(phi),r*Math.sin(phi)];
+    const tilted=radial.map((v,k)=>v+.7*(noise(i,k)-.5)), length=Math.hypot(...tilted);
+    return {at:radial.map(v=>v*(.035+.035*noise(i,3))),normal:tilted.map(v=>v/length),size:.016+.014*noise(i,4)};
+  });
+  // The hand's mirrors in the world: {centre, normal, size, both faces mirrored}.
+  function handMirrors(arm,turns) {
+    const last=arm.length-1, stem=norm(sub(arm[last],arm[last-1])), facing=discNormal(arm,turns), third=cross(stem,facing);
+    if(HAND==='disc') return [{centre:arm[last],normal:facing,size:.06,both:true}];
+    const world=v=>[0,1,2].map(a=>v[0]*stem[a]+v[1]*facing[a]+v[2]*third[a]);
+    return SHARDS.map(s=>({centre:along(arm[last],world(s.at),1),normal:world(s.normal),size:s.size,both:false}));
+  }
+  // One shard: a small round mirror, dark from behind, bright when it throws
+  // the projector's light at the camera.
+  function shard(centre,normal,size) {
+    const side=cross(normal,up), u=Math.hypot(...side)<1e-6?[1,0,0]:norm(side), v=cross(normal,u);
+    const rim=Array.from({length:12},(_,i)=>project(along(along(centre,u,size*Math.cos(i*Math.PI/6)),v,size*Math.sin(i*Math.PI/6))));
+    if(dot(normal,sub(eye,centre))<=0) {fill(rim,rgb(HOUSING,1.2));return;}
+    const view=norm(sub(centre,eye)), bounce=along(view,normal,-2*dot(view,normal));
+    const glint=Math.pow(Math.max(0,dot(bounce,norm(sub(PROJECTOR,centre)))),8);
+    fill(rim,rgb([150,175,195],.5+.9*glint,170*glint));
+    ctx.strokeStyle=rgb(HOUSING,2.2);ctx.lineWidth=1;ctx.stroke();
+  }
   function discNormal(arm,turns) {
     const last=arm.length-1, heading=turns[0]*Math.PI/180, roll=turns[1]*Math.PI/180;
     const flat=[-Math.sin(heading),Math.cos(heading),0], stem=norm(sub(arm[last],arm[last-1]));
@@ -209,19 +237,17 @@
     // mounting surface, a beam where it leaves for the room. (Drawn under the
     // arm; a beam towards the viewer will look as if it passed behind.)
     ctx.globalCompositeOperation='lighter';
-    state.agents.forEach((arm,id)=>{
-      const centre=arm[arm.length-1], normal=discNormal(arm,state.turns[id]);
+    state.agents.forEach((arm,id)=>handMirrors(arm,state.turns[id]).forEach(({centre,normal,size,both})=>{
+      if(!both&&dot(normal,sub(PROJECTOR,centre))<=0) return; // faces away from the projector
       const side=cross(normal,up), u=Math.hypot(...side)<1e-6?[1,0,0]:norm(side), w=cross(normal,u);
       const bounce=from=>{const beam=norm(sub(from,PROJECTOR));return along(beam,normal,-2*dot(beam,normal));};
-      const caught=Math.abs(dot(norm(sub(centre,PROJECTOR)),normal)), tint=ACCENTS[id%4].join(','), spot=[];
-      for(let i=0;i<16;i++) {
-        const rim=along(along(centre,u,.06*Math.cos(i*Math.PI/8)),w,.06*Math.sin(i*Math.PI/8));
-        const out=bounce(rim), toFloor=-rim[2]/out[2];
-        if(toFloor>0&&toFloor<8) spot.push(along(rim,out,toFloor));
-      }
-      if(spot.length===16) fill(spot.map(project),`rgba(${tint},${.25+.6*caught})`);
-      else line(centre,along(centre,bounce(centre),1.2),`rgba(${tint},${.15+.6*caught})`,1+5*caught);
-    });
+      const land=from=>{const out=bounce(from), toFloor=-from[2]/out[2];return toFloor>0&&toFloor<8?along(from,out,toFloor):null;};
+      const caught=Math.abs(dot(norm(sub(centre,PROJECTOR)),normal)), tint=ACCENTS[id%4].join(',');
+      const spot=Array.from({length:12},(_,i)=>land(along(along(centre,u,size*Math.cos(i*Math.PI/6)),w,size*Math.sin(i*Math.PI/6))));
+      if(spot.every(Boolean)) fill(spot.map(project),`rgba(${tint},${.25+.6*caught})`);
+      // Always a thin ray from the mirror: to its patch, or out into the room.
+      line(centre,land(centre)||along(centre,bounce(centre),1.2),`rgba(${tint},${.08+.25*caught})`,1);
+    }));
     ctx.globalCompositeOperation='source-over';
     // Soft shadow the arm casts in the projector's light.
     const cast=p=>{const s=PROJECTOR[2]/(PROJECTOR[2]-p[2]);return [p[0]*s,p[1]*s,.003];};
@@ -244,10 +270,14 @@
       // Disc held by its edge on a thin stem, centred on the last point. Unrolled
       // it lies in the arm's vertical plane; the last joint rolls it about the stem.
       const stem=norm(sub(arm[last],arm[last-1])), facing=discNormal(arm,state.turns[id]);
-      parts.push({depth:project(arm[last])[2],paint:()=>{
+      if(HAND==='disc') parts.push({depth:project(arm[last])[2],paint:()=>{
         link(arm[last-1],along(arm[last],stem,-.06),size(last-1),.005,BODY);
         mirror(arm[last],facing,.06,ACCENTS[id%4],stem);
       }});
+      else {
+        parts.push({depth:project(arm[last])[2],paint:()=>link(arm[last-1],arm[last],size(last-1),.02,HOUSING)});
+        handMirrors(arm,state.turns[id]).forEach(m=>parts.push({depth:project(m.centre)[2],paint:()=>shard(m.centre,m.normal,m.size)}));
+      }
       // Hand path: a ribbon of light 4 s behind.
       const tip=t=>{const pose=frameAt(data,t).agents[id];return pose[pose.length-1];};
       for(let k=-120;k<0;k++) {

@@ -1405,3 +1405,22 @@ and draws the reflection as a patch where it falls back on the surface and as a
 beam where it leaves for the room. Height 2.5 m is assumed. Clip
 `mirror-light-32b.mp4`. Not decided by the user: the object, the projector's
 distance, where the audience is, whether the mirrors aim.
+
+### Hand object "shards": a cluster of small mirrors — 2026-10-04
+
+User on the overhead-projector clip: "a ray from mirror to reflection sometimes
+appears"; after that is fixed "I think it's OK". Then asked for a new
+implement: "a strange shape with mirrors all over, scattered".
+
+- Ray: it was drawn only when the reflection left for the room. Now every lit
+  mirror always has one thin ray, to its patch or 1.2 m out into the room.
+- New hand object in the preview, the default: `SHARDS`, sixteen small round
+  mirrors (1.6–3 cm radius) at 3.5–7 cm from the hand point, each tilted off
+  the radial direction, one-sided. The layout is a fixed invented stand-in. It
+  turns with the wrist roll like the disc did. Each mirror that faces the
+  projector throws its own patch or ray. The disc remains as `?hand=disc` on
+  the preview URL.
+- Not modelled: one shard shading another, the arm blocking the beam, the
+  image content. The planner and the rig are unchanged (version 32): the rig's
+  last link still ends at a 6 cm disc radius and nothing of the hand object is
+  in the zone check. Clips `shards-32.mp4` and `disc-32.mp4` (3:32–4:12).
