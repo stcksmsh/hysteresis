@@ -382,15 +382,16 @@ pub fn compile_figures(
             let clash = moments.iter().any(|m| (m.time - time).abs() < 8.0 * beat);
             let inside = class_at(time - 3.0 * beat) != "silence"
                 && class_at(time + 3.0 * beat) != "silence";
-            if inside && !clash {
+            if inside && !clash && config.flourish != 1 {
+                let soft = config.flourish == 2;
                 let pose = if n % 2 == 0 { [0.8, 0.95] } else { [0.15, 1.0] };
                 moments.push(Moment {
                     time,
                     pose,
-                    strength: 0.5 + 0.5 * strength,
+                    strength: (0.5 + 0.5 * strength) * if soft { 0.5 } else { 1.0 },
                     label: "flourish",
                     hold_beats: 0.0,
-                    span: 0.75 * span_for(class_at(time)),
+                    span: if soft { 1.5 } else { 0.75 } * span_for(class_at(time)),
                     frozen: false,
                 });
             }
