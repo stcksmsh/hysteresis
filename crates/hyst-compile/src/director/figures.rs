@@ -157,8 +157,46 @@ struct Instance {
     turn: f64,
 }
 
-/// One arm of an ensemble: where it stands, and whether it dances the
-/// left-right mirror image of the figures.
+/// How the arms of an ensemble share one dance.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Formation {
+    /// All together.
+    Unison,
+    /// Every second arm dances the mirror image.
+    Mirrored,
+    /// The same dance passed round the ring, each arm a beat after the last.
+    Canon,
+    /// Opposite arms pair up; the pairs take turns of eight beats.
+    Pairs,
+    /// One arm at a time, four beats each, round the ring.
+    OneByOne,
+    /// Every second arm sits out.
+    DropOut,
+}
+
+impl Formation {
+    /// For arm `a` of `count`, `beats` into the run: (side: 1 as planned, -1
+    /// mirrored; delay in beats; 1 dancing or 0 resting).
+    fn part(self, a: usize, count: usize, beats: f64) -> (f64, f64, f64) {
+        let odd = a % 2 == 1;
+        let turn = |every: f64, groups: usize| (beats / every) as usize % groups.max(1);
+        let on = |dancing: bool| if dancing { 1.0 } else { 0.0 };
+        match self {
+            Self::Unison => (1.0, 0.0, 1.0),
+            Self::Mirrored => (if odd { -1.0 } else { 1.0 }, 0.0, 1.0),
+            Self::Canon => (1.0, a as f64 * (8.0 / count as f64).min(1.0), 1.0),
+            Self::Pairs => {
+                let groups = (count / 2).max(1);
+                (1.0, 0.0, on(a % groups == turn(8.0, groups)))
+            }
+            Self::OneByOne => (1.0, 0.0, on(a == turn(4.0, count))),
+            Self::DropOut => (1.0, 0.0, on(!odd)),
+        }
+    }
+}
+
+/// One arm of an ensemble: where it stands (its forward is its placement's
+/// yaw), and whether it always dances the left-right mirror image.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ArmPlan {
     pub placement: Placement,
@@ -647,6 +685,37 @@ pub fn compile_ensemble(
             .reason
             .push_str(&format!(" · {label} moment at {time:.2}s"));
     }
+    // Ensemble formation of each run, chosen from its class and how often that
+    // class has come round. A first rule table, not reviewed by the user. A run
+    // shorter than eight beats keeps the formation before it.
+    let mut formations: Vec<(f64, Formation)> = Vec::new();
+    let mut seen: HashMap<&str, usize> = HashMap::new();
+    for &(start, end, class) in &runs {
+        let n = *seen.entry(class).and_modify(|n| *n += 1).or_insert(0);
+        let formation = match class {
+            "interlocked" => [Formation::Unison, Formation::Mirrored][n % 2],
+            "vocal-led" => [Formation::Canon, Formation::Mirrored, Formation::Pairs][n % 3],
+            "percussive-open" => [Formation::OneByOne, Formation::Canon][n % 2],
+            "bass-led" => Formation::Mirrored,
+            "silence" => Formation::Unison,
+            _ => Formation::DropOut,
+        };
+        let short = end - start < 8.0 * beat && !formations.is_empty();
+        let formation = if short {
+            formations[formations.len() - 1].1
+        } else {
+            formation
+        };
+        formations.push((start, formation));
+        if arms.len() > 1 {
+            for cue in cues
+                .iter_mut()
+                .filter(|c| c.start >= start && c.start < end)
+            {
+                cue.reason.push_str(&format!(" · ensemble {formation:?}"));
+            }
+        }
+    }
     let reach_m: f64 = rig
         .channels
         .iter()
@@ -806,36 +875,100 @@ pub fn compile_ensemble(
         speed: Vec<f64>,
         turned: f64,
     }
-    let mut dancers: Vec<Arm> = arms
-        .iter()
-        .map(|arm| {
-            let side = if arm.mirrored { -1.0 } else { 1.0 };
-            let (sin, cos) = arm.placement.yaw_degrees.to_radians().sin_cos();
-            Arm {
-                placement: &arm.placement,
-                targets: targets
-                    .iter()
-                    .map(|&(p, facing)| {
-                        let (x, y) = (p[0], side * p[1]);
-                        let o = arm.placement.origin_m;
-                        (
-                            [
-                                o[0] + cos * x - sin * y,
-                                o[1] + sin * x + cos * y,
-                                o[2] + p[2],
-                            ],
-                            side * facing,
-                        )
-                    })
-                    .collect(),
-                knots: Vec::with_capacity(times.len()),
-                held_target: None,
-                wanted: Vec::new(),
-                speed: vec![0.0; rig.channels.len()],
-                turned: 0.0,
+    // Each arm's own hand path. Alone, an arm dances the figures as planned.
+    // In an ensemble the formation gives each arm a side (mirror image about
+    // its forward line), a delay and whether it dances or rests; bearings are
+    // in the arm's frame, where 0 is its forward. A resting arm draws in low
+    // and turns forward. Changes of formation are eased, never cut.
+    let count = arms.len();
+    let rest = place(still(0.0, 1.0)).0;
+    let (rest_out, rest_up) = (rest[0].hypot(rest[1]), rest[2]);
+    let mut dancers: Vec<Arm> = Vec::with_capacity(count);
+    for (a, plan) in arms.iter().enumerate() {
+        let flip = if plan.mirrored { -1.0 } else { 1.0 };
+        // Radius of this arm's cell: half way to its nearest neighbour, less
+        // the clearance and the implement.
+        let apart = |other: &ArmPlan| {
+            let (o, q) = (plan.placement.origin_m, other.placement.origin_m);
+            (o[0] - q[0]).hypot(o[1] - q[1])
+        };
+        let nearest = (0..count).filter(|b| *b != a).map(|b| apart(&arms[b]));
+        let cell = 0.5 * (nearest.fold(f64::INFINITY, f64::min) - clearance_m) - held;
+        if count > 1 && cell < rest_out {
+            return Err(format!(
+                "arm {a} has a {cell:.2} m cell, under the {rest_out:.2} m it needs to rest: move the arms apart"
+            ));
+        }
+        let local: Vec<([f64; 3], f64)> = if count == 1 {
+            let flipped =
+                |&(p, facing): &([f64; 3], f64)| ([p[0], flip * p[1], p[2]], flip * facing);
+            targets.iter().map(flipped).collect()
+        } else {
+            let part = |t: f64| {
+                let run = formations.partition_point(|f| f.0 <= t).saturating_sub(1);
+                let (start, formation) = formations[run];
+                formation.part(a, count, ((t - start) / beat).max(0.0))
+            };
+            let parts: Vec<(f64, f64, f64)> = times.iter().map(|&t| part(t)).collect();
+            let column =
+                |pick: fn(&(f64, f64, f64)) -> f64| parts.iter().map(pick).collect::<Vec<f64>>();
+            let (delays, dancing) = (column(|p| p.1), column(|p| p.2));
+            let mut bearings: Vec<f64> = Vec::with_capacity(times.len());
+            let mut reach: Vec<[f64; 2]> = Vec::with_capacity(times.len());
+            for (i, &time) in times.iter().enumerate() {
+                let on = bell(&dancing, i as f64, 6.0);
+                let late = beat * bell(&delays, i as f64, 16.0);
+                let (p, bearing) = place(hand((time - late).max(0.0)));
+                let want = flip * parts[i].0 * bearing;
+                let aimed = lerp(360.0 * (want / 360.0).round(), want, on);
+                // Turns are counted from the last bearing, so a change of side
+                // swings the nearer way round and not back through every turn.
+                let last = bearings.last().copied().unwrap_or(aimed);
+                bearings.push(last + (aimed - last + 180.0).rem_euclid(360.0) - 180.0);
+                // The hand stays over the arm's own cell of floor, easing into
+                // its edge, so no formation counts on the cross-check to stop
+                // two hands (mirrored neighbours would block each other).
+                let out = lerp(rest_out, p[0].hypot(p[1]), on);
+                let soft = 0.2 * cell;
+                let out = if out > cell - soft {
+                    cell - soft + soft * ((out - cell + soft) / soft).tanh()
+                } else {
+                    out
+                };
+                reach.push([out, lerp(rest_up, p[2], on)]);
             }
-        })
-        .collect();
+            (0..times.len())
+                .map(|i| {
+                    let bearing = bell(&bearings, i as f64, 5.0);
+                    let (sin, cos) = bearing.to_radians().sin_cos();
+                    ([reach[i][0] * cos, reach[i][0] * sin, reach[i][1]], bearing)
+                })
+                .collect()
+        };
+        let (sin, cos) = plan.placement.yaw_degrees.to_radians().sin_cos();
+        let o = plan.placement.origin_m;
+        dancers.push(Arm {
+            placement: &plan.placement,
+            targets: local
+                .into_iter()
+                .map(|(p, facing)| {
+                    (
+                        [
+                            o[0] + cos * p[0] - sin * p[1],
+                            o[1] + sin * p[0] + cos * p[1],
+                            o[2] + p[2],
+                        ],
+                        facing,
+                    )
+                })
+                .collect(),
+            knots: Vec::with_capacity(times.len()),
+            held_target: None,
+            wanted: Vec::new(),
+            speed: vec![0.0; rig.channels.len()],
+            turned: 0.0,
+        });
+    }
     // Where each arm is now, as points the other arms must keep away from.
     let mut bodies: Vec<Vec<([f64; 3], f64)>> = Vec::new();
     for arm in &dancers {
@@ -1463,48 +1596,87 @@ mod tests {
     }
 
     #[test]
-    fn arms_keep_the_clearance_from_each_other() {
+    fn another_arm_is_a_red_zone() {
+        // One point of another arm, carrying 0.08 m of implement, 1 m away.
+        let other = [([1.0, 0.0, 0.5], 0.08)];
+        let world = Obstacles {
+            zones: &[],
+            others: &other,
+            radius: 0.1,
+        };
+        // 0.3 m apart: 0.22 m of free gap, clear. 0.15 m apart: inside.
+        assert_eq!(world.depth([0.7, 0.0, 0.5], 0.0, 1.0), 0.0);
+        assert!((world.depth([0.85, 0.0, 0.5], 0.0, 1.0) - 0.03).abs() < 1e-9);
+        // The arm's own extra room counts too, and it brakes within half the gap.
+        assert!(world.depth([0.7, 0.0, 0.5], 0.13, 1.0) > 0.0);
+        assert!((world.room([0.7, 0.0, 0.5], 0.0) - 0.06).abs() < 1e-9);
+    }
+
+    #[test]
+    fn six_arms_share_the_dance_and_keep_apart() {
         let json = super::super::tests::fixture(0.7, 0.7);
         let rig = Rig::illustrative_five_axis();
-        // Two arms side by side, 0.6 m apart, one dancing the mirror image.
-        let arm = |y: f64, mirrored: bool| ArmPlan {
-            placement: Placement {
-                origin_m: [0.0, y, 0.0],
-                yaw_degrees: 0.0,
-            },
-            mirrored,
-        };
-        let pair = [arm(-0.3, false), arm(0.3, true)];
-        let closest = |clearance: f64| {
-            let config = CompileConfig::default();
-            let score =
-                compile_ensemble(&json, config, rig.clone(), &[], &pair, clearance).unwrap();
-            let held = score.rig.implement.radius_m;
-            let mut closest = f64::INFINITY;
-            for i in 0..=960 {
-                let frame = score.sample(8.0 * i as f64 / 960.0).unwrap();
-                let bodies: Vec<_> = frame
-                    .agents
-                    .iter()
-                    .map(|agent| body_samples(&agent.world_points, held))
-                    .collect();
-                for (p, extra) in &bodies[0] {
-                    for (q, more) in &bodies[1] {
-                        let apart = (0..3).map(|k| (p[k] - q[k]).powi(2)).sum::<f64>().sqrt();
-                        closest = closest.min(apart - extra - more);
+        let ring: Vec<ArmPlan> = (0..6)
+            .map(|k| {
+                let degrees = 60.0 * k as f64;
+                let (sin, cos) = degrees.to_radians().sin_cos();
+                ArmPlan {
+                    placement: Placement {
+                        origin_m: [1.1 * cos, 1.1 * sin, 0.0],
+                        yaw_degrees: degrees + 180.0,
+                    },
+                    mirrored: false,
+                }
+            })
+            .collect();
+        let config = CompileConfig::default();
+        let score = compile_ensemble(&json, config, rig.clone(), &[], &ring, 0.1).unwrap();
+        assert_eq!(score.tracks.len(), 6);
+        assert!(score.cues[0].reason.contains("ensemble Unison"));
+        let held = score.rig.implement.radius_m;
+        let (mut closest, mut moved) = (f64::INFINITY, [0.0f64; 6]);
+        for i in 0..=480 {
+            let frame = score.sample(8.0 * i as f64 / 480.0).unwrap();
+            let bodies: Vec<_> = frame
+                .agents
+                .iter()
+                .map(|agent| body_samples(&agent.world_points, held))
+                .collect();
+            for a in 0..6 {
+                let hand = frame.agents[a].world_points.last().unwrap();
+                let origin = ring[a].placement.origin_m;
+                moved[a] = moved[a].max((hand[0] - origin[0]).hypot(hand[1] - origin[1]));
+                for b in a + 1..6 {
+                    for (p, extra) in &bodies[a] {
+                        for (q, more) in &bodies[b] {
+                            let apart = (0..3).map(|k| (p[k] - q[k]).powi(2)).sum::<f64>().sqrt();
+                            closest = closest.min(apart - extra - more);
+                        }
                     }
                 }
             }
-            closest
-        };
-        // Left alone they would pass through each other.
-        assert!(closest(0.0) < 0.05, "free arms came {:.3} m", closest(0.0));
-        // Between knots the curve may cut a little inside the checked poses.
-        let kept = closest(0.15);
+        }
         assert!(
-            kept > 0.13,
-            "arms came within {kept:.3} m, clearance 0.15 m"
+            closest > 0.08,
+            "arms came within {closest:.3} m, clearance 0.1 m"
         );
+        // Each hand stays over its own cell: half way to the neighbour (1.1 m
+        // on a hexagon), less the clearance and the implement.
+        let cell = 0.5 * (1.1 - 0.1) - held;
+        assert!(
+            moved.iter().all(|m| *m < cell + 0.03),
+            "reach {moved:?}, cell {cell:.3}"
+        );
+        // Too tight a ring is refused, not danced badly.
+        let tight: Vec<ArmPlan> = ring
+            .iter()
+            .map(|arm| {
+                let mut arm = arm.clone();
+                arm.placement.origin_m = arm.placement.origin_m.map(|v| 0.5 * v);
+                arm
+            })
+            .collect();
+        assert!(compile_ensemble(&json, config, rig, &[], &tight, 0.1).is_err());
     }
 
     #[test]

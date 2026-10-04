@@ -1505,3 +1505,48 @@ pairs, complements) is "a different game", not this step.
 `song-figures-34.html` (one arm), `hexagon-34-unison.{html,mp4}` and
 `hexagon-34-mirrored.{html,mp4}` (3:32–4:12). 135 CPU tests, clippy, fmt,
 `ensemble.cjs` pass.
+
+### Version 35: the ensemble picks its own formations; forward is the centre — 2026-10-05
+
+User: the ensemble "should be able to do both mirrored and unison and all of
+the others, should decide itself (canon for instance)"; and in a ring "there is
+a rough forward for the arms, towards the center ... it should be 360 but
+center is the center".
+
+- Forward: `--ring N,R` now faces every arm toward the ring's centre (yaw =
+  its angle + 180°). Bearings are in the arm's frame, 0 = forward. Figures
+  still travel all the way round the base.
+- `Formation` (`figures.rs`): Unison, Mirrored (every second arm the mirror
+  image about its forward line), Canon (each arm one beat after the last),
+  Pairs (opposite arms pair up, pairs take turns of eight beats), OneByOne
+  (four beats each round the ring), DropOut (every second arm rests).
+  `Formation::part` gives each arm a side, a delay and dancing or resting.
+- Chosen per run from its class and how often that class has come round:
+  interlocked: Unison, Mirrored alternating; vocal-led: Canon, Mirrored, Pairs
+  in turn; percussive-open: OneByOne, Canon; bass-led: Mirrored; silence:
+  Unison; anything else: DropOut. A run under eight beats keeps the formation
+  before it. **This table is an agent's first guess, not reviewed.** The
+  choice is appended to each cue's reason (" · ensemble Canon").
+- Each arm's hand path is built from the single-arm path: sampled at its own
+  delayed time, bearing times its side, blended toward a rest pose (drawn in,
+  low, facing forward) when it sits out. Delay and rest weights are eased with
+  bells (16 and 6 knots) and the bearing with one of 5 knots, counted from the
+  last bearing so a change of side swings the nearer way. One arm alone skips
+  all of this and is identical to version 34.
+- Cells: at 1.1 m a mirrored chorus had neighbours reach for the same spot and
+  the cross-check stopped them (median hand speed 0.25 against 0.48 m/s when
+  they cannot meet). Now each hand stays within its own cell of floor: radius
+  = half the distance to the nearest arm, less the clearance and the implement
+  (0.42 m on a 1.1 m hexagon), easing into the edge. The mirrored chorus runs
+  at 0.41 m/s. A ring too tight for an arm to rest in its cell is refused
+  (0.9 m hexagon: 0.32 m cell, needs 0.37 m). The cross-check stays as the
+  safety net; closest approach on the song is 9.8 cm at 10 cm clearance.
+- `--mirror-odd` is gone (the Mirrored formation covers it); `ArmPlan.mirrored`
+  remains as a per-arm fixed flip.
+On this song (hexagon 1.1 m): intro OneByOne, verse 1 Canon, chorus 1 Unison,
+verse 2 Pairs, break OneByOne, vocal return Mirrored, chorus 2 Mirrored, then
+Unison, Canon, Mirrored, Mirrored (bass-led), DropOut, still. Weak points seen
+in the numbers: OneByOne and Pairs leave most arms resting for long (26 s in
+the intro, 40 s in verse 2); hand speed peaks at 2.7 m/s at some formation
+changes; arms still have right of way by index. `hexagon-35.html`,
+`hexagon-35-full.mp4`. 136 CPU tests, clippy, fmt, `ensemble.cjs` pass.

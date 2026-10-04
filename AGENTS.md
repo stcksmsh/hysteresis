@@ -1389,3 +1389,11 @@ implements, earlier arms having right of way. All arms dance the same figures
 in their own frame; ensemble choreography (together, inverses, one by one,
 drop-outs, pairs) is the next, separate task. `compile_figures` is the one-arm
 case, unchanged.
+
+### Ensemble formations — 2026-10-05
+
+Version 35. In a ring every arm's forward is the centre. The planner picks a
+formation per section from the music (unison, mirrored, canon, pairs, one by
+one, drop-out); the rule table is a first guess awaiting review. Each hand
+keeps to its own cell of floor so formations never rely on the cross-check,
+which stays as a safety net. One arm alone is unchanged.

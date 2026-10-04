@@ -11,8 +11,7 @@ fn usage() -> &'static str {
      --drag GAIN      wrist trails the hand's rise and fall, degrees per m/s (default 240)\n\
      --implement KIND hand object: ball (default, lumpy mirror ball) or disc; a --rig file may carry any other\n\
      --zone BOX       red zone corners in metres, x0,y0,z0,x1,y1,z1 (repeatable)\n\
-     --ring N,R       N arms evenly on a circle of radius R metres, each facing outward (6,0.9 is a hexagon)\n\
-     --mirror-odd     with --ring: every second arm dances the mirror image\n\
+     --ring N,R       N arms evenly on a circle of radius R metres, their forward toward its centre (6,1.1 is a hexagon)\n\
      --clearance M    arms keep their checked points this far apart, metres (default 0.1)\n\
      --figures        accepted and ignored; the figure planner is the only mode\n\
      Audio starts only after Play. Score and arm trajectories resolve offline for deterministic seek."
@@ -25,7 +24,7 @@ fn main() -> io::Result<()> {
     let mut rig_path = None;
     let mut zones = Vec::new();
     let mut implement = None;
-    let (mut ring, mut mirror_odd, mut clearance) = ((1usize, 0.0f64), false, 0.1f64);
+    let (mut ring, mut clearance) = ((1usize, 0.0f64), 0.1f64);
     let mut config = hyst_compile::CompileConfig::default();
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -59,7 +58,6 @@ fn main() -> io::Result<()> {
                     })
                     .ok_or_else(|| io::Error::other("--ring requires N,RADIUS with 1..=16 arms"))?
             }
-            "--mirror-odd" => mirror_odd = true,
             "--clearance" => {
                 clearance = args
                     .next()
@@ -125,9 +123,10 @@ fn main() -> io::Result<()> {
             hyst_compile::director::figures::ArmPlan {
                 placement: hyst_compile::ensemble::Placement {
                     origin_m: [ring.1 * cos, ring.1 * sin, 0.0],
-                    yaw_degrees: degrees,
+                    // Forward is toward the centre; a lone arm keeps yaw 0.
+                    yaw_degrees: if ring.0 > 1 { degrees + 180.0 } else { 0.0 },
                 },
-                mirrored: mirror_odd && k % 2 == 1,
+                mirrored: false,
             }
         })
         .collect();

@@ -109,7 +109,7 @@ node $D/record-ensemble.cjs $D/song-figures-N.html $D/instant-crush.m4a $D/clip.
 python3 scripts/dance_notes.py $D/instant-crush.interpreted.sidecar.json \
   /secondary/hyst-env/stems6/htdemucs_6s/instant-crush-stereo-analysis $D/instant-crush.notes.sidecar.json
 ```
-Checks: `cargo test --workspace --exclude hyst-render` (135 pass), clippy
+Checks: `cargo test --workspace --exclude hyst-render` (136 pass), clippy
 `-D warnings` on hyst-compile/-output/-previz/-cli, `cargo fmt --all --check`,
 `node crates/hyst-previz/tests/ensemble.cjs`,
 `cd scripts && python3 -m unittest test_dance_notes`. No hyst-render tests (GPU).
