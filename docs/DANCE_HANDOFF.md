@@ -1108,3 +1108,11 @@ tied to travel, but it needs some in-between solution".
 - Side-by-side prepared, shuffled, not yet judged:
   `blind-roll-side-by-side.mp4` (1:24–2:04), key `blind-roll-key.json` unread.
 130 CPU tests, clippy, fmt, `ensemble.cjs` pass.
+
+**Verdict, version 24.** User: "I think C looks best?" Key: A travel, B flip,
+C both. `both` is now the only roll driver; `RollMode` and `--roll` deleted.
+Export `song-figures-24.html` is byte-identical to clip C's export. The
+one-way net drift of the travel part (about 5.5 turns over the song) was not
+raised again; unresolved, low priority. 130 CPU tests, clippy, fmt,
+`ensemble.cjs` pass. Next: body B (whip or wave on moments), with/without
+side by side.

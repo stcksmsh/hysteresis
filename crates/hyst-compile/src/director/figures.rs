@@ -614,11 +614,7 @@ pub fn compile_figures(
                 let way = (((facing - bearing) / dt - steady) / 30.0).tanh();
                 turned += SPIN_DEGREES_PER_METRE * travel * fast * way;
             }
-            wanted[r] = match config.roll {
-                crate::RollMode::Flip => flips,
-                crate::RollMode::Travel => turned,
-                crate::RollMode::Both => flips + turned,
-            };
+            wanted[r] = flips + turned;
         }
         // Hardware follower: each joint chases its solved angle at a design
         // acceleration and speed a hobby-class servo arm could plausibly follow,

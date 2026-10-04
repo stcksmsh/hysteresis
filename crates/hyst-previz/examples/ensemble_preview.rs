@@ -8,7 +8,6 @@ fn usage() -> &'static str {
      --rig PATH       use JSON rig geometry and local axes (default illustrative five-axis)\n\
      --groove-only    disable hit accents\n\
      --no-reuse       disable recalled musical material\n\
-     --roll MODE      wrist roll driver under review: flip, travel or both (default)\n\
      --zone BOX       red zone corners in metres, x0,y0,z0,x1,y1,z1 (repeatable)\n\
      --figures        accepted and ignored; the figure planner is the only mode\n\
      Audio starts only after Play. Score and arm trajectories resolve offline for deterministic seek."
@@ -29,14 +28,6 @@ fn main() -> io::Result<()> {
             }
             "--groove-only" => config.enable_hits = false,
             "--no-reuse" => config.reuse_repeats = false,
-            "--roll" => {
-                config.roll = match args.next().as_deref() {
-                    Some("flip") => hyst_compile::RollMode::Flip,
-                    Some("travel") => hyst_compile::RollMode::Travel,
-                    Some("both") => hyst_compile::RollMode::Both,
-                    _ => return Err(io::Error::other("--roll requires flip, travel or both")),
-                }
-            }
             "--figures" => {}
             "--zone" => {
                 let raw = args
