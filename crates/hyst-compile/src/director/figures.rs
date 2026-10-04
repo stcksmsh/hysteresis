@@ -344,7 +344,9 @@ pub fn compile_figures(
                 total += w;
             }
             let p = sum.map(|v| v / total);
-            let azimuth = (p[0].clamp(-1.0, 1.0) * 140.0_f64).to_radians();
+            // 340 of 360 degrees in the floor plane; the 20 degree gap straight back
+            // is the base-yaw seam, which the hand never crosses.
+            let azimuth = (p[0].clamp(-1.0, 1.0) * 170.0_f64).to_radians();
             let elevation = (10.0 + 70.0 * p[1].clamp(0.0, 1.0)).to_radians();
             let distance = reach_m * (0.38 + 0.54 * p[2].clamp(0.0, 1.0));
             [
