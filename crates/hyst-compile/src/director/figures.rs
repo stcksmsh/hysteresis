@@ -142,9 +142,6 @@ struct Instance {
     shape: Shape,
     dir: f64,
     scale: f64,
-    pulse: f64,
-    /// Scaled shell position where the previous figure ended.
-    entry: [f64; 3],
     /// Azimuth offset (1.0 = 180 degrees) that makes this figure start where
     /// the last one ended. Figures are relative to the current facing: no front.
     heading: f64,
@@ -168,7 +165,6 @@ pub fn compile_figures(
     }
     let zones: Vec<Zone> = zones.iter().copied().chain([FLOOR]).collect();
     let beat = data.musical_memory.beat_period;
-    let beat_zero = data.musical_memory.beat_zero;
     let rate = data.stem_interpretation.envelope_rate;
     let sources: [&Source; 4] =
         std::array::from_fn(|i| &data.stem_interpretation.sources[SOURCES[i]]);
@@ -218,7 +214,8 @@ pub fn compile_figures(
     let mut occurrences: HashMap<&str, usize> = HashMap::new();
     let mut instances: Vec<Instance> = Vec::new();
     let mut cues: Vec<IntentCue> = Vec::new();
-    let mut entry = still(0.0, 1.0);
+    // Scaled shell azimuth where the previous figure ended.
+    let mut entry = still(0.0, 1.0)[0];
     for &(start, end, class) in &runs {
         let activity = classify(start, end).1;
         let (sequence, size, travel) = motif(class);
@@ -242,7 +239,6 @@ pub fn compile_figures(
             }
         }
         chosen.push((start, first_dir, class));
-        let pulse = activity[1].clamp(0.0, 0.3);
         let mut t = start;
         for (k, &(name, shape, beats, step_dir)) in sequence.iter().cycle().enumerate() {
             let mut stop = t + beats * beat;
@@ -251,7 +247,7 @@ pub fn compile_figures(
             }
             let repeat = k / sequence.len();
             let dir = first_dir * step_dir * if repeat % 2 == 1 { -1.0 } else { 1.0 };
-            let heading = entry[0] - scaled(shape(0.0, dir), scale)[0];
+            let heading = entry - scaled(shape(0.0, dir), scale)[0];
             let turn = first_dir * travel * 2.0 * (stop - t) / (32.0 * beat);
             instances.push(Instance {
                 start: t,
@@ -259,13 +255,10 @@ pub fn compile_figures(
                 shape,
                 dir,
                 scale,
-                pulse,
-                entry,
                 heading,
                 turn,
             });
-            entry = scaled(shape(1.0, dir), scale);
-            entry[0] += heading + turn;
+            entry = scaled(shape(1.0, dir), scale)[0] + heading + turn;
             cues.push(IntentCue {
                 start: t,
                 end: stop,
@@ -292,24 +285,6 @@ pub fn compile_figures(
         }
     }
 
-    // Drums set the floor: motion eases into each beat by `pulse`.
-    let warped = |t: f64, pulse: f64| {
-        let b = (t - beat_zero) / beat;
-        beat_zero + beat * (b.floor() + lerp(b.fract(), smooth(b.fract()), pulse))
-    };
-    // The melodic stem sets the pace: a figure advances faster through its
-    // flourishes (high spectral flux) and lingers while it sustains.
-    let flux = &sources[3].spectral_flux;
-    let mut pace = vec![0.0; flux.len() + 1];
-    for i in 0..flux.len() {
-        let t = i as f64 / rate;
-        pace[i + 1] = pace[i] + 0.6 + mean(flux, rate, t - 0.3, t + 0.3);
-    }
-    let paced = |t: f64| {
-        let x = (t * rate).clamp(0.0, flux.len() as f64);
-        let i = (x.floor() as usize).min(flux.len() - 1);
-        lerp(pace[i], pace[i + 1], x - i as f64)
-    };
     let contour = |name: &str, t: f64| -> (f64, f64) {
         data.melody_contour
             .as_ref()
@@ -325,15 +300,9 @@ pub fn compile_figures(
             .partition_point(|x| x.end <= t)
             .min(instances.len() - 1);
         let x = &instances[i];
-        let at = |t: f64| paced(warped(t, x.pulse));
-        let u = ((at(t) - at(x.start)) / (at(x.end) - at(x.start)).max(1e-9)).clamp(0.0, 1.0);
-        let mut here = scaled((x.shape)(u, x.dir), x.scale);
-        let mut first = scaled((x.shape)(0.0, x.dir), x.scale);
-        here[0] += x.heading + x.turn * u;
-        first[0] += x.heading;
-        // Carry the previous figure's end into this one over its first half.
-        let carry = 1.0 - smooth(u / 0.5);
-        let mut p: [f64; 3] = std::array::from_fn(|k| here[k] + (x.entry[k] - first[k]) * carry);
+        let u = ((t - x.start) / (x.end - x.start).max(1e-9)).clamp(0.0, 1.0);
+        let mut p = scaled((x.shape)(u, x.dir), x.scale);
+        p[0] += x.heading + x.turn * u;
         // Lead melody lifts and lowers the hand; the voice opens the arm.
         let (lead_height, lead_salience) = contour("other", t);
         let (voice_height, voice_salience) = contour("vocals", t);
@@ -346,7 +315,8 @@ pub fn compile_figures(
     let grid: Vec<f64> = (0..=count)
         .map(|i| (i as f64 * step).min(data.duration))
         .collect();
-    // This song has no sharp passages: low-pass the hand path (sigma 0.3 s).
+    // Low-pass the hand path (sigma 0.3 s). This also joins one figure's end
+    // to the next one's start. Without it the arm jitters badly (user-verified).
     let raw: Vec<[f64; 3]> = grid.iter().map(|&t| shell(t)).collect();
     let sigma = 0.3 / step;
     let radius = (3.0 * sigma).ceil() as isize;
