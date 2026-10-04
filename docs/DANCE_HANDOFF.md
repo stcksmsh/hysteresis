@@ -917,3 +917,30 @@ carry joint positions only, not axes. Link radii are invented (15–31 mm).
 Checked: stills at 95, 104, 150, 222 s inspected, no page errors; recorder ran
 unmodified. Clips of 1:24–1:54: `render-12-old.mp4`, `render-13-new.mp4`
 (outside git). No user review yet. Next: step 1 "body".
+
+### Version 14: figure clock (hold wait + speed cap), look 1 — 2026-10-04
+
+User on version 13: 1:31–1:33 too fast for the music, "especially the second
+flick"; follows the music OK, could be a tad better; likes look 1 (dark stage,
+light painting) and look 2 (studio product shot) most.
+
+Measured cause at 1:31: the arrival at 90.4 s holds the hand 1.5 beats while
+the figure path kept running underneath; on release the hand chased it, 185°
+round the base in 1.25 s at 1.4 m/s (the same `gather` elsewhere: 0.9), then
+reversed at 1.0 m/s (elsewhere 0.5). First attempt (figures only wait out the
+hold) made it worse, 1.8 m/s: the full wide low start of `gather` then played
+at its raw speed. Kept: a figure clock in `figures.rs`. It stops during any
+hold, never carries the hand faster than `HAND_SPEED_CAP` (0.8 m/s, a guess),
+and makes lost time up at 15% extra pace. This is restart-prompt step 2
+(speed smoothing) done ahead of step 1. Moments are not capped.
+
+Measured after: 91.5–93.5 s 0.8–1.0 m/s, reversal 0.55; song median 0.35, p95
+0.83 (was 0.94), max 2.22 (a moment). Not measured: how far figures lag phrase
+edges. The 2 s plateau at exactly the cap may read as mechanical.
+
+Render look 1: glossy gunmetal links with a highlight strip, dark housings,
+hand light pooling on the floor, 4 s additive ribbon trail, vignette; stem
+rings removed from the stage (numbers stay in the Evidence panel). An arm
+reflection in the floor was tried and dropped (read as detached clutter).
+Look 2 not built. 130 CPU tests, clippy, fmt, `ensemble.cjs` pass. Clip:
+`render-14.mp4`, export `song-figures-14.html`. Awaiting user review.

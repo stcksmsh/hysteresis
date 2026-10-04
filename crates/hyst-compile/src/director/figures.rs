@@ -25,6 +25,9 @@ const FLOOR: Zone = Zone {
 };
 /// Hard check enforces this clearance; the solver aims for 1.6 times it.
 const MARGIN_M: f64 = 0.05;
+/// Fastest the figure path carries the hand, m/s. A guess, tuned by eye on one
+/// song; moments may exceed it briefly.
+const HAND_SPEED_CAP: f64 = 0.8;
 
 /// Hand position in arm-relative shell coordinates:
 /// [azimuth -1..1, elevation 0..1, extension 0..1]. `dir` mirrors left/right.
@@ -436,8 +439,59 @@ pub fn compile_figures(
             .reason
             .push_str(&format!(" · {label} moment at {time:.2}s"));
     }
+    let reach_m: f64 = rig
+        .channels
+        .iter()
+        .map(|c| c.link_m.iter().map(|v| v * v).sum::<f64>().sqrt())
+        .sum();
+    // Shell coordinates to (hand position in metres, unwrapped azimuth in degrees).
+    let place = |p: [f64; 3]| -> ([f64; 3], f64) {
+        // Azimuth is unbounded: 1.0 = 180 degrees, turns accumulate.
+        let azimuth = (p[0] * 180.0_f64).to_radians();
+        let elevation = (10.0 + 70.0 * p[1].clamp(0.0, 1.0)).to_radians();
+        let distance = reach_m * (0.38 + 0.54 * p[2].clamp(0.0, 1.0));
+        (
+            [
+                distance * elevation.cos() * azimuth.cos(),
+                distance * elevation.cos() * azimuth.sin(),
+                distance * elevation.sin(),
+            ],
+            p[0] * 180.0,
+        )
+    };
+    // Figure clock. Figures wait out a hold instead of running on underneath it
+    // (the release then had to chase a path that kept moving), and never carry
+    // the hand faster than HAND_SPEED_CAP; lost time is made up at 15% extra pace.
+    let mut clock = Vec::with_capacity(grid.len());
+    let mut s = 0.0;
+    for &t in &grid {
+        clock.push(s);
+        let held = moments
+            .iter()
+            .any(|m| (m.time..m.time + m.hold_beats * beat).contains(&t));
+        let (from, to) = (place(flow(s)).0, place(flow(s + step)).0);
+        let pace = (0..3)
+            .map(|k| (to[k] - from[k]).powi(2))
+            .sum::<f64>()
+            .sqrt()
+            / step;
+        let rate = if held {
+            0.0
+        } else {
+            f64::min(
+                if s < t { 1.15 } else { 1.0 },
+                HAND_SPEED_CAP / pace.max(1e-9),
+            )
+        };
+        s = (s + rate * step).min(t + step);
+    }
+    let waited = |t: f64| -> [f64; 3] {
+        let x = (t / step).clamp(0.0, (clock.len() - 1) as f64);
+        let i = (x.floor() as usize).min(clock.len() - 2);
+        flow(lerp(clock[i], clock[i + 1], x - i as f64))
+    };
     let hand = |t: f64| -> [f64; 3] {
-        let mut p = flow(t);
+        let mut p = waited(t);
         for m in &moments {
             let (time, pose, strength, hold, span) =
                 (m.time, m.pose, m.strength, m.hold_beats, m.span);
@@ -470,9 +524,9 @@ pub fn compile_figures(
             // give) from before the arrival until after the release, so the hand
             // never comes to rest. Only a cut truly freezes.
             // Strength sets how far the pose departs from the flowing path.
-            let base = flow(time);
+            let base = waited(time);
             let alive = f64::from(hold > 0.0 && !m.frozen);
-            let turn = (flow(time + beat)[0] - base[0]).signum();
+            let turn = (waited(time + beat)[0] - base[0]).signum();
             let held = [
                 if hold > 0.0 {
                     base[0] + alive * (0.2 * (p[0] - base[0]) + 0.06 * turn * tau)
@@ -491,30 +545,7 @@ pub fn compile_figures(
     // Uniform knots keep the quintic well-conditioned; a moment lands within
     // half a knot (about 34 ms at this tempo) of its measured time.
     let times = grid.clone();
-    let reach_m: f64 = rig
-        .channels
-        .iter()
-        .map(|c| c.link_m.iter().map(|v| v * v).sum::<f64>().sqrt())
-        .sum();
-    // (hand position in metres, unwrapped hand azimuth in degrees)
-    let targets: Vec<([f64; 3], f64)> = times
-        .iter()
-        .map(|&t| {
-            let p = hand(t);
-            // Azimuth is unbounded: 1.0 = 180 degrees, turns accumulate.
-            let azimuth = (p[0] * 180.0_f64).to_radians();
-            let elevation = (10.0 + 70.0 * p[1].clamp(0.0, 1.0)).to_radians();
-            let distance = reach_m * (0.38 + 0.54 * p[2].clamp(0.0, 1.0));
-            (
-                [
-                    distance * elevation.cos() * azimuth.cos(),
-                    distance * elevation.cos() * azimuth.sin(),
-                    distance * elevation.sin(),
-                ],
-                p[0] * 180.0,
-            )
-        })
-        .collect();
+    let targets: Vec<([f64; 3], f64)> = times.iter().map(|&t| place(hand(t))).collect();
 
     let placement = Placement {
         origin_m: [0.0; 3],
