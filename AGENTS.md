@@ -2,7 +2,7 @@
 
 ## Current user priority — 2026-10-04 single-arm figure dance
 
-Read `docs/DANCE_RESTART_PROMPT.md` first, then the last entries of
+Read `docs/DANCE_RESTART_PROMPT.md` first (branch `keys-decide`), then the last entries of
 `docs/DANCE_HANDOFF.md`. Goal: one 3D arm that dances beautifully to the song,
 planned automatically from offline sidecars, executable on real servo hardware.
 Many arms and projection come later. The base rotates a continuous 360°.
