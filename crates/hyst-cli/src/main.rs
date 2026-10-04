@@ -1,5 +1,7 @@
-// hyst-cli — stub binary, scaffolded ahead of its workstream landing.
-// See SINTEZA_IMPLEMENTATION_PLAN.md for scope.
+//! `hyst` command-line entry point. No commands exist yet.
+
 fn main() {
-    println!("hyst-cli: not yet implemented");
+    println!(
+        "usage: hyst (no commands yet; see crates/hyst-previz/README.md for the dance preview)"
+    );
 }

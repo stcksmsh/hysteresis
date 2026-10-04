@@ -1,7 +1,7 @@
 # hyst-output
 
-`VizOutput` implementations (physical + eventually screen). See `SINTEZA_IMPLEMENTATION_PLAN.md`
-§4 R5 and `SINTEZA_CHOREOGRAPHY.md` §0/§5.3/§7 for the spec this session builds against.
+Physical-output plumbing: `VizOutput` implementations for dense fields. See
+`SINTEZA_IMPLEMENTATION_PLAN.md` §4 R5/R8 and `SINTEZA_CHOREOGRAPHY.md` §0/§5.3/§7.
 
 ## What's here
 
@@ -24,7 +24,7 @@ Shared plumbing, generic, not field-specific:
   failed element freezes at its last value and is excluded from all further resampling; every
   other element keeps updating normally.
 
-## Real integration point (when R2 lands)
+## Remaining field-renderer integration
 
 R2 (`hyst-render`) doesn't exist yet as a finished renderer. `FieldSource` is the seam: once R2
 has a real render target, add a `FieldSource` impl that reads it back (the same `wgpu` readback
@@ -48,7 +48,6 @@ frozen, every other element tracks the new field exactly, nothing panics.
 
 - No real transport (Art-Net/serial/USB) — out of scope this session, `last_diff()` is as far as
   it goes.
-- No `ChoreographyOutput` — blocked on R7's compiled cue list.
 - `FieldOutput::targets()` is empty — synthetic/self-driven sources only; a future
   bus-driven procedural `FieldSource` would declare routable targets.
 - Element failure freezes at last value (no injectable custom "dead" value) — matches §7's "one

@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hysteresis · Ensemble study</title>
+<style>
+  :root { color-scheme: dark; font: 15px system-ui,sans-serif; background:#0b1118; color:#e8f0f3; }
+  * { box-sizing:border-box; }
+  body { margin:0; }
+  main { max-width:1320px; margin:auto; padding:18px; }
+  header, .transport, .readouts { display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+  header { justify-content:space-between; margin-bottom:12px; }
+  h1 { font-size:21px; font-weight:600; margin:0; }
+  .dim { color:#9fb1bc; }
+  .stage { border:1px solid #334450; border-radius:12px; overflow:hidden; background:#101923; }
+  #ensemble { display:block; width:100%; aspect-ratio:16/9; cursor:grab; touch-action:none; }
+  .transport { padding:16px 0; }
+  button, input { font:inherit; }
+  button { background:#b8e5d7; border:0; border-radius:6px; padding:8px 18px; min-height:38px; color:#10251f; cursor:pointer; }
+  button:focus-visible, input:focus-visible { outline:2px solid #b8e5d7; outline-offset:3px; }
+  #seek { flex:1; min-width:220px; accent-color:#b8e5d7; }
+  #offset { width:78px; background:#15232d; color:#e8f0f3; border:1px solid #52636d; border-radius:4px; padding:6px; }
+  .readouts { align-items:stretch; }
+  .readouts section { flex:1; min-width:250px; background:#14212b; border:1px solid #30414d; border-radius:8px; padding:12px 15px; }
+  h2 { margin:0 0 7px; font-size:13px; text-transform:uppercase; letter-spacing:.12em; color:#9fb1bc; }
+  #decision, #evidence, #uncertainty { white-space:pre-wrap; overflow-wrap:anywhere; line-height:1.45; }
+  audio { display:none; }
+  .critique { margin-top:16px; background:#14212b; border:1px solid #30414d; border-radius:8px; padding:12px 15px; }
+  .critique .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:8px; }
+  .tag { background:#22343f; color:#c7d6db; padding:4px 10px; min-height:30px; border:1px solid #3c505c; }
+  .tag.on { background:#efb869; color:#2a1c05; border-color:#efb869; }
+  #marks { list-style:none; margin:0; padding:0; }
+  #marks li { display:flex; gap:8px; flex-wrap:wrap; align-items:center; padding:8px 0; border-top:1px solid #30414d; }
+  #marks li.sel { background:#1a2b36; }
+  #marks input { flex:1; min-width:180px; background:#15232d; color:#e8f0f3; border:1px solid #52636d; border-radius:4px; padding:6px; }
+  select { font:inherit; background:#15232d; color:#e8f0f3; border:1px solid #52636d; border-radius:4px; padding:6px; }
+</style>
+</head>
+<body>
+<main>
+  <header><h1>Hysteresis · 3D ensemble</h1><span id="rig-description" class="dim">Simulated rig · illustrative geometry and axes</span></header>
+  <div class="stage"><canvas id="ensemble" width="1280" height="720" role="img" aria-label="Perspective view of multiple articulated robot arms and shared floor projection"></canvas></div>
+  <div class="transport">
+    <button id="play" type="button">Play</button>
+    <input id="seek" type="range" min="0" max="__DURATION__" value="0" step="0.001" aria-label="Seek audio">
+    <span id="clock">0:00.00</span>
+    <label>Speed <select id="speed" aria-label="Playback speed"><option value="1">1×</option><option value="0.5">0.5×</option><option value="0.25">0.25×</option></select></label>
+    <label>Score delay <input id="offset" type="number" min="-30" max="30" step="0.01" value="0" aria-label="Score delay in seconds"> s</label>
+  </div>
+  <div class="readouts">
+    <section><h2>Decision</h2><div id="decision"></div></section>
+    <section><h2>Evidence</h2><div id="evidence"></div></section>
+    <section><h2>Uncertainty</h2><div id="uncertainty"></div></section>
+  </div>
+  <div class="critique">
+    <h2>Critique</h2>
+    <div class="row dim">Drag the stage to orbit the camera. Hold M while something looks wrong or right (tap = last 2 s). Keys 1–9 tag the selected mark. Space plays. Click a time to replay it.</div>
+    <div class="row" id="tags"></div>
+    <div class="row"><button id="mark" type="button">Mark (M)</button><button id="export" type="button">Export notes</button><button id="clear" type="button" class="tag">Clear all</button><span id="mark-status" class="dim"></span></div>
+    <ol id="marks"></ol>
+  </div>
+  <audio id="audio" preload="metadata"></audio>
+</main>
+<script>
+(() => {
+  'use strict';
+  const data = __ENSEMBLE_DATA__;
+  const audio = document.getElementById('audio');
+  audio.src = __TRACK_URL_JSON__;
+  const canvas = document.getElementById('ensemble');
+  const ctx = canvas.getContext('2d');
+  const seek = document.getElementById('seek');
+  const play = document.getElementById('play');
+  const offset = document.getElementById('offset');
+  const clock = document.getElementById('clock');
+  const decision = document.getElementById('decision');
+  const evidence = document.getElementById('evidence');
+  const uncertainty = document.getElementById('uncertainty');
+  document.getElementById('rig-description').textContent=`Simulated ${data.rig.channels.length}-axis rig · ${data.rig.channels.map(c=>c.name).join(' / ')}`;
+
+  // ENSEMBLE_HELPERS_BEGIN
+  const clamp = (v,a,b) => Math.max(a,Math.min(b,v));
+  function scoreTime(audioSeconds,delay,duration) { return clamp(audioSeconds-delay,0,duration); }
+  function frameAt(score,seconds) {
+    const t=clamp(seconds,0,score.duration), pos=t*score.fps;
+    const lo=Math.min(Math.floor(pos),score.frames.length-1), hi=Math.min(lo+1,score.frames.length-1);
+    const a=score.frames[lo], b=score.frames[hi];
+    const span=Math.min(hi/score.fps,score.duration)-lo/score.fps;
+    const alpha=span<=0?0:clamp((t-lo/score.fps)/span,0,1);
+    const agents=a[0].map((arm,j)=>arm.map((point,k)=>point.map((v,axis)=>v+(b[0][j][k][axis]-v)*alpha)));
+    const va=score.cues[a[1]], vb=score.cues[b[1]];
+    const visual={...va, sourceActivity:va.sourceActivity.map((v,i)=>v+(vb.sourceActivity[i]-v)*alpha), confidence:va.confidence+(vb.confidence-va.confidence)*alpha};
+    return {time:t,agents,cueIndex:a[1],visual};
+  }
+  function inspectAt(score,seconds) {
+    const frame=frameAt(score,seconds);
+    let cueIndex=score.cues.length-1;
+    for(let i=0;i<score.cues.length;i++) if(frame.time<score.cues[i].end) {cueIndex=i;break;}
+    const cue=score.cues[cueIndex]||null;
+    const visual=cue?{...frame.visual,character:cue.character,formation:cue.formation,
+      reason:cue.reason,recallFrom:cue.recallFrom,anticipation:cue.anticipation}:frame.visual;
+    return {...frame,cueIndex,visual,cue,rig:score.rig,placements:score.placements};
+  }
+  // ENSEMBLE_HELPERS_END
+
+  const solo=data.placements.length===1;
+  const target=solo?[0,0,0.3]:[0,0,0.25], up=[0,0,1];
+  // Orbit camera: drag on the stage to turn (yaw) and tilt (pitch).
+  let yaw=solo?-0.6:-1.04, pitch=solo?0.35:0.5, eye, forward, right, cameraUp;
+  const distance=solo?2.1:3.5;
+  function aim() {
+    eye=[target[0]+distance*Math.cos(pitch)*Math.cos(yaw),target[1]+distance*Math.cos(pitch)*Math.sin(yaw),target[2]+distance*Math.sin(pitch)];
+    forward=norm(sub(target,eye)); right=norm(cross(forward,up)); cameraUp=cross(right,forward);
+  }
+  const sub=(a,b)=>a.map((v,i)=>v-b[i]);
+  const dot=(a,b)=>a.reduce((s,v,i)=>s+v*b[i],0);
+  const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+  const norm=a=>a.map(v=>v/Math.hypot(...a));
+  aim();
+  function project(point) {
+    const v=sub(point,eye), depth=dot(v,forward), scale=1800/Math.max(depth,0.1);
+    return [640+dot(v,right)*scale,315-dot(v,cameraUp)*scale,depth];
+  }
+  function line(a,b,color,width) {
+    const p=project(a),q=project(b);
+    ctx.strokeStyle=color;ctx.lineWidth=width;ctx.lineCap='round';
+    ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.lineTo(q[0],q[1]);ctx.stroke();
+  }
+  function point(p,r,color) {
+    const s=project(p);ctx.fillStyle=color;ctx.beginPath();ctx.arc(s[0],s[1],r,0,Math.PI*2);ctx.fill();
+  }
+  function draw(seconds) {
+    const state=inspectAt(data,seconds), v=state.visual;
+    ctx.fillStyle='#101923';ctx.fillRect(0,0,1280,720);
+    const floor=[[-1.65,-1.65,0],[1.65,-1.65,0],[1.65,1.65,0],[-1.65,1.65,0]];
+    ctx.fillStyle='#15252d';ctx.beginPath();floor.forEach((p,i)=>{const q=project(p);i?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1]);});ctx.closePath();ctx.fill();
+    for(let r=0.35;r<=1.4;r+=0.35) for(let i=0;i<64;i++) {
+      const a=i*Math.PI/32,b=(i+1)*Math.PI/32;
+      line([r*Math.cos(a),r*Math.sin(a),.004],[r*Math.cos(b),r*Math.sin(b),.004],'#29404b',1);
+    }
+    const colors=['#efb869','#9ed5dc','#d5a7de','#83cfaa'];
+    const activity=v.sourceActivity||[0,0,0,0];
+    for(let i=0;i<4;i++) {
+      const strength=clamp(activity[i],0,1), radius=.22+i*.28+strength*.12;
+      for(let j=0;j<24;j++) {
+        const a=2*Math.PI*j/24+(i%2)*Math.PI/24,b=a+Math.PI/24;
+        if(strength>.025) line([radius*Math.cos(a),radius*Math.sin(a),.012],[radius*Math.cos(b),radius*Math.sin(b),.012],colors[i],1+4*strength*v.confidence);
+      }
+    }
+    (data.zones||[]).forEach(z=>{
+      const c=i=>[i&1?z.max[0]:z.min[0],i&2?z.max[1]:z.min[1],i&4?z.max[2]:z.min[2]];
+      for(let i=0;i<8;i++) for(const bit of [1,2,4]) if(!(i&bit)) line(c(i),c(i|bit),'#e0524a',2);
+    });
+    // Hand path: 1.5 s behind (bright) and 1.5 s ahead (dim).
+    state.agents.forEach((_,id)=>{
+      const tip=t=>{const arm=frameAt(data,t).agents[id];return arm[arm.length-1];};
+      for(let k=-22;k<22;k++) {
+        const a=state.time+k/15,b=a+1/15;
+        if(a>=0&&b<=data.duration) line(tip(a),tip(b),k<0?'#f4e3b0':'#6f8997',k<0?3:1.5);
+      }
+    });
+    // Depth cues: arm shadow on the floor and a drop line under each hand.
+    state.agents.forEach(arm=>{
+      for(let k=0;k<arm.length-1;k++) line([arm[k][0],arm[k][1],.002],[arm[k+1][0],arm[k+1][1],.002],'#060b10',10);
+      const hand=arm[arm.length-1];
+      line(hand,[hand[0],hand[1],.002],'#5d7480',1);
+    });
+    const primitives=[];
+    state.agents.forEach((arm,id)=>{for(let k=0;k<arm.length-1;k++) {
+      const p=project(arm[k]),q=project(arm[k+1]);
+      primitives.push({kind:'link',id,k,a:arm[k],b:arm[k+1],depth:(p[2]+q[2])/2});
+    }});
+    state.agents.forEach((arm,id)=>arm.forEach((p,k)=>primitives.push({kind:'joint',id,k,p,depth:project(p)[2]})));
+    primitives.sort((a,b)=>b.depth-a.depth);
+    primitives.forEach(s=>{
+      if(s.kind==='joint') point(s.p,s.k===0?8:6,s.k===0?'#f7f0da':'#e9f6f2');
+      else {line(s.a,s.b,'#07131a',s.k===0?12:16);line(s.a,s.b,colors[s.id%colors.length],s.k===0?6:9);}
+    });
+    ctx.font='15px system-ui';ctx.fillStyle='#c7d6db';ctx.fillText(`${state.agents.length} ${state.agents.length===1?'arm':'arms'} · ${v.formation} · ${v.character}`,24,34);
+    ctx.textAlign='right';ctx.fillText(`Score ${state.time.toFixed(2)}s`,1256,34);ctx.textAlign='left';
+    const cue=state.cue||{};
+    const arrival=v.anticipation==null?'':` · arrival ${v.anticipation.toFixed(2)}s (${state.time<v.anticipation?'upcoming':'passed'})`;
+    decision.textContent=`${v.character} / ${v.formation}${arrival}${v.recallFrom!=null?` · recall ${v.recallFrom.toFixed(2)}s`:''}`;
+    evidence.textContent=`${v.reason||cue.reason||'No decision evidence'}\nSource activity [bass, drums, vocals, other]: ${activity.map(x=>Number(x).toFixed(2)).join(' / ')}`;
+    uncertainty.textContent=`Evidence confidence ${Number(v.confidence).toFixed(2)} (heuristic, uncalibrated). Estimated stems may leak; pulse/downbeats provisional. Rig axes and link lengths illustrative.`;
+    return state;
+  }
+  function showClock() { const s=audio.currentTime||0;clock.textContent=`${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}.${String(Math.floor(s%1*100)).padStart(2,'0')}`;seek.value=String(s);draw(scoreTime(s,Number(offset.value)||0,data.duration)); }
+  function tick() { showClock();if(!audio.paused) requestAnimationFrame(tick); }
+  play.addEventListener('click',async()=>{if(audio.paused) {try{await audio.play();}catch(error){uncertainty.textContent=`Audio playback failed: ${error.message}`;}} else audio.pause();});
+  audio.addEventListener('play',()=>{play.textContent='Pause';requestAnimationFrame(tick);});
+  audio.addEventListener('pause',()=>{play.textContent='Play';showClock();});
+  audio.addEventListener('ended',()=>{play.textContent='Play';showClock();});
+  audio.addEventListener('seeked',showClock);
+  seek.addEventListener('input',()=>{audio.currentTime=Number(seek.value);showClock();});
+  offset.addEventListener('input',showClock);
+  let drag=null;
+  canvas.addEventListener('pointerdown',e=>{drag=[e.clientX,e.clientY];});
+  canvas.addEventListener('pointermove',e=>{
+    if(!drag) return;
+    yaw-=(e.clientX-drag[0])*0.008; pitch=clamp(pitch+(e.clientY-drag[1])*0.008,0.05,1.5); drag=[e.clientX,e.clientY];
+    aim(); showClock();
+  });
+  for(const name of ['pointerup','pointerleave']) canvas.addEventListener(name,()=>{drag=null;});
+  window.__ENSEMBLE_PREVIEW__={inspect:seconds=>inspectAt(data,seconds),draw,scoreTime,data};
+  showClock();
+})();
+</script>
+<script>
+(() => {
+  'use strict';
+  // Critique notes: time ranges + tags + text, exported with planner context.
+  const api=window.__ENSEMBLE_PREVIEW__, data=api.data;
+  const $=id=>document.getElementById(id);
+  const audio=$('audio'), list=$('marks'), status=$('mark-status');
+  const TAGS=['good','too small','too busy','late','early','ignores music','repeats','ugly shape','stiff'];
+  const KEY=`hyst-critique:${data.duration}:${data.cues.length}`;
+  let marks=[], selected=-1, held=null;
+  try { marks=JSON.parse(localStorage.getItem(KEY)||'[]'); } catch { marks=[]; }
+  const now=()=>api.scoreTime(audio.currentTime||0,Number($('offset').value)||0,data.duration);
+  const fmt=s=>`${Math.floor(s/60)}:${(s%60).toFixed(1).padStart(4,'0')}`;
+  function save() { try { localStorage.setItem(KEY,JSON.stringify(marks)); } catch { /* notes stay in memory */ } }
+  function render() {
+    list.textContent='';
+    marks.forEach((m,i)=>{
+      const li=document.createElement('li'); if(i===selected) li.className='sel';
+      const go=document.createElement('button'); go.type='button'; go.textContent=`${fmt(m.start)}–${fmt(m.end)}`;
+      go.addEventListener('click',()=>{selected=i;audio.currentTime=Math.max(0,m.start-1);audio.play().catch(()=>{});render();});
+      li.append(go);
+      TAGS.forEach((tag,k)=>{
+        const b=document.createElement('button'); b.type='button'; b.className='tag'+(m.tags.includes(tag)?' on':''); b.textContent=`${k+1} ${tag}`;
+        b.addEventListener('click',()=>{selected=i;toggle(i,tag);}); li.append(b);
+      });
+      const note=document.createElement('input'); note.type='text'; note.value=m.note; note.placeholder='note (optional)'; note.setAttribute('aria-label','Note');
+      note.addEventListener('input',()=>{m.note=note.value;save();}); li.append(note);
+      const del=document.createElement('button'); del.type='button'; del.className='tag'; del.textContent='×'; del.setAttribute('aria-label','Delete mark');
+      del.addEventListener('click',()=>{marks.splice(i,1);selected=marks.length-1;save();render();}); li.append(del);
+      list.append(li);
+    });
+    status.textContent=`${marks.length} mark${marks.length===1?'':'s'}`;
+  }
+  function toggle(i,tag) { const m=marks[i]; if(!m) return; m.tags=m.tags.includes(tag)?m.tags.filter(t=>t!==tag):[...m.tags,tag]; save(); render(); }
+  function add(start,end) {
+    // A tap means "what I just saw"; a hold starts slightly before the key went down.
+    if(end-start<0.4) start=end-2; else start-=0.3;
+    marks.push({start:Math.max(0,start),end,tags:[],note:''}); selected=marks.length-1; save(); render();
+  }
+  function context(m) {
+    const cues=data.cues.map((c,index)=>({index,start:c.start,end:c.end,figure:c.character,musicalClass:c.formation,reason:c.reason,recallFrom:c.recallFrom}))
+      .filter(c=>c.end>m.start&&c.start<m.end);
+    const hand=[m.start,(m.start+m.end)/2,m.end].map(t=>{const a=api.inspect(t).agents;return {time:t,tips:a.map(arm=>arm[arm.length-1])};});
+    return {...m,cues,hand};
+  }
+  TAGS.forEach((tag,k)=>{const b=document.createElement('button');b.type='button';b.className='tag';b.textContent=`${k+1} ${tag}`;b.addEventListener('click',()=>toggle(selected,tag));$('tags').append(b);});
+  $('mark').addEventListener('click',()=>{const t=now();add(t,t);});
+  $('clear').addEventListener('click',()=>{marks=[];selected=-1;save();render();});
+  $('speed').addEventListener('change',()=>{audio.playbackRate=Number($('speed').value);});
+  $('export').addEventListener('click',()=>{
+    const blob=new Blob([JSON.stringify({version:1,duration:data.duration,exported:new Date().toISOString(),marks:marks.map(context)},null,2)],{type:'application/json'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`critique-${new Date().toISOString().replace(/[:.]/g,'-')}.json`; a.click(); URL.revokeObjectURL(a.href);
+    status.textContent='Exported. Give Claude the file path.';
+  });
+  document.addEventListener('keydown',e=>{
+    if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT'||e.repeat) return;
+    if(e.key==='m'||e.key==='M') held=now();
+    else if(e.key===' ') {e.preventDefault();$('play').click();}
+    else if(e.key>='1'&&e.key<='9'&&TAGS[e.key-1]) toggle(selected,TAGS[e.key-1]);
+  });
+  document.addEventListener('keyup',e=>{ if((e.key==='m'||e.key==='M')&&held!=null) {add(held,now());held=null;} });
+  render();
+})();
+</script>
+</body>
+</html>

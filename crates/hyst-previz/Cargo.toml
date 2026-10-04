@@ -3,6 +3,6 @@ name = "hyst-previz"
 version.workspace = true
 edition.workspace = true
 
-[dependencies]
+[dev-dependencies]
 hyst-compile = { path = "../hyst-compile" }
 serde_json.workspace = true

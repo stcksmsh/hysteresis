@@ -1,6 +1,5 @@
-//! `hyst-output` — `VizOutput` implementations. This session: shared cadence/diff/failure
-//! plumbing, and `FieldOutput` (dense physical arrays). See README.md and
-//! `SINTEZA_CHOREOGRAPHY.md` §0/§5.3/§7.
+//! `hyst-output` — physical-output plumbing: `VizOutput`-based dense fields.
+//! See README.md and `SINTEZA_CHOREOGRAPHY.md` §0/§5.3/§7.
 
 pub mod array_topology;
 pub mod cadence;
