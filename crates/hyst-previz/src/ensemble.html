@@ -14,7 +14,7 @@
   h1 { font-size:21px; font-weight:600; margin:0; }
   .dim { color:#9fb1bc; }
   .stage { border:1px solid #334450; border-radius:12px; overflow:hidden; background:#101923; }
-  #ensemble { display:block; width:100%; aspect-ratio:16/9; }
+  #ensemble { display:block; width:100%; aspect-ratio:16/9; cursor:grab; touch-action:none; }
   .transport { padding:16px 0; }
   button, input { font:inherit; }
   button { background:#b8e5d7; border:0; border-radius:6px; padding:8px 18px; min-height:38px; color:#10251f; cursor:pointer; }
@@ -55,7 +55,7 @@
   </div>
   <div class="critique">
     <h2>Critique</h2>
-    <div class="row dim">Hold M while something looks wrong or right (tap = last 2 s). Keys 1–9 tag the selected mark. Space plays. Click a time to replay it.</div>
+    <div class="row dim">Drag the stage to orbit the camera. Hold M while something looks wrong or right (tap = last 2 s). Keys 1–9 tag the selected mark. Space plays. Click a time to replay it.</div>
     <div class="row" id="tags"></div>
     <div class="row"><button id="mark" type="button">Mark (M)</button><button id="export" type="button">Export notes</button><button id="clear" type="button" class="tag">Clear all</button><span id="mark-status" class="dim"></span></div>
     <ol id="marks"></ol>
@@ -105,12 +105,19 @@
   // ENSEMBLE_HELPERS_END
 
   const solo=data.placements.length===1;
-  const eye=solo?[1.7,-1.15,0.8]:[1.55,-2.65,1.9], target=solo?[0.15,0,0.33]:[0,0,0.25], up=[0,0,1];
+  const target=solo?[0,0,0.3]:[0,0,0.25], up=[0,0,1];
+  // Orbit camera: drag on the stage to turn (yaw) and tilt (pitch).
+  let yaw=solo?-0.6:-1.04, pitch=solo?0.35:0.5, eye, forward, right, cameraUp;
+  const distance=solo?2.1:3.5;
+  function aim() {
+    eye=[target[0]+distance*Math.cos(pitch)*Math.cos(yaw),target[1]+distance*Math.cos(pitch)*Math.sin(yaw),target[2]+distance*Math.sin(pitch)];
+    forward=norm(sub(target,eye)); right=norm(cross(forward,up)); cameraUp=cross(right,forward);
+  }
   const sub=(a,b)=>a.map((v,i)=>v-b[i]);
   const dot=(a,b)=>a.reduce((s,v,i)=>s+v*b[i],0);
   const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
   const norm=a=>a.map(v=>v/Math.hypot(...a));
-  const forward=norm(sub(target,eye)), right=norm(cross(forward,up)), cameraUp=cross(right,forward);
+  aim();
   function project(point) {
     const v=sub(point,eye), depth=dot(v,forward), scale=1800/Math.max(depth,0.1);
     return [640+dot(v,right)*scale,315-dot(v,cameraUp)*scale,depth];
@@ -153,6 +160,12 @@
         if(a>=0&&b<=data.duration) line(tip(a),tip(b),k<0?'#f4e3b0':'#6f8997',k<0?3:1.5);
       }
     });
+    // Depth cues: arm shadow on the floor and a drop line under each hand.
+    state.agents.forEach(arm=>{
+      for(let k=0;k<arm.length-1;k++) line([arm[k][0],arm[k][1],.002],[arm[k+1][0],arm[k+1][1],.002],'#060b10',10);
+      const hand=arm[arm.length-1];
+      line(hand,[hand[0],hand[1],.002],'#5d7480',1);
+    });
     const primitives=[];
     state.agents.forEach((arm,id)=>{for(let k=0;k<arm.length-1;k++) {
       const p=project(arm[k]),q=project(arm[k+1]);
@@ -182,6 +195,14 @@
   audio.addEventListener('seeked',showClock);
   seek.addEventListener('input',()=>{audio.currentTime=Number(seek.value);showClock();});
   offset.addEventListener('input',showClock);
+  let drag=null;
+  canvas.addEventListener('pointerdown',e=>{drag=[e.clientX,e.clientY];});
+  canvas.addEventListener('pointermove',e=>{
+    if(!drag) return;
+    yaw-=(e.clientX-drag[0])*0.008; pitch=clamp(pitch+(e.clientY-drag[1])*0.008,0.05,1.5); drag=[e.clientX,e.clientY];
+    aim(); showClock();
+  });
+  for(const name of ['pointerup','pointerleave']) canvas.addEventListener(name,()=>{drag=null;});
   window.__ENSEMBLE_PREVIEW__={inspect:seconds=>inspectAt(data,seconds),draw,scoreTime,data};
   showClock();
 })();
