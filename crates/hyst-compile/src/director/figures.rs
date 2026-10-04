@@ -460,7 +460,7 @@ pub fn compile_figures(
                 * if tau < -span {
                     smooth((tau + 2.0 * span) / span)
                 } else {
-                    1.0 - blend.min(1.0)
+                    1.0 - blend
                 }
                 * f64::from(tau < 0.0);
             p[1] -= 0.2 * prepare;
