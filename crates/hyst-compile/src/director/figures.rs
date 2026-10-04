@@ -538,13 +538,12 @@ pub fn compile_figures(
             let inside = class_at(time - 3.0 * beat) != "silence"
                 && class_at(time + 3.0 * beat) != "silence";
             // Among stabs a flourish lands on a hit that stands out. In a
-            // steady stream it lands on an arbitrary note: the knob decides
-            // what it does there (0 as among stabs, 1 nothing, 2 slow and soft).
+            // steady stream it lands on an arbitrary note, so there it is slow
+            // and soft (blind side-by-side: the sharp one was "too much", and
+            // the user picked soft over none).
             let index = ((time - data.musical_memory.beat_zero) / beat).max(0.0) as usize;
-            let stabbed = stabs.is_empty() || stabs[index.min(stabs.len() - 1)] >= 0.5;
-            let mode = if stabbed { 0 } else { config.flourish };
-            if inside && !clash && mode != 1 {
-                let soft = mode == 2;
+            let soft = !stabs.is_empty() && stabs[index.min(stabs.len() - 1)] < 0.5;
+            if inside && !clash {
                 let pose = if n % 2 == 0 { [0.8, 0.95] } else { [0.15, 1.0] };
                 moments.push(Moment {
                     time,

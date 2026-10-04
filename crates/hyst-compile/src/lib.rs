@@ -44,9 +44,6 @@ pub struct CompileConfig {
     /// blind side-by-side over 0 and 120; it about triples wrist travel, so
     /// lower it if real wrist or elbow servos cannot keep up.
     pub wrist_drag_degrees_per_mps: f64,
-    /// Temporary review knob, for flourishes where the leader plays a steady
-    /// stream: 0 as among stabs, 1 none, 2 slow and soft.
-    pub flourish: u8,
 }
 impl Default for CompileConfig {
     fn default() -> Self {
@@ -54,7 +51,6 @@ impl Default for CompileConfig {
             enable_hits: true,
             reuse_repeats: true,
             wrist_drag_degrees_per_mps: 240.0,
-            flourish: 0,
         }
     }
 }

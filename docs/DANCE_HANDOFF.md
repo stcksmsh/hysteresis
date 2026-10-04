@@ -1326,3 +1326,19 @@ max 2.25 m/s. 133 CPU tests, clippy, fmt, `ensemble.cjs`, tracker test pass.
 An old sidecar no longer reproduces version 26 (the clock smoothing applies to
 every sidecar). Still open: the `--flourish` knob, the roll chatter, the leader
 change found at 188.8 s (the user hears 185), "over-focuses on centre".
+
+### Version 31: flourishes soft where the leader plays a steady stream — 2026-10-04
+
+Measured cause of the flick at 2:19: a flourish is the strongest onset of the
+melodic stem per ~16 beats. In the choruses that is a stab of the leading
+synth, a hit that stands out (9 of 23). In the verses, the break and the end
+the leader plays a steady stream, every strum has the same strength, and the
+flourish lands on an arbitrary one (14 of 23). Rule: where the stab weight of
+the leading lane is under 0.5 at the flourish's beat, the flourish is slow and
+soft (half strength, twice the window); among stabs it is as before. Blind
+side-by-side on 2:05–2:45: the user called the sharp one "a bit too much" and
+the soft one "ok"; "none" was not chosen. Peak hand acceleration at 2:19 falls
+from 11.3 to 1.5 m/s². The `--flourish` knob and its config field are deleted.
+`song-figures-31.html`; the choruses are unchanged from version 30. No test
+covers the soft/sharp choice (the fixture has no flourish). Flourish poses are
+still two fixed shapes alternating high and low.

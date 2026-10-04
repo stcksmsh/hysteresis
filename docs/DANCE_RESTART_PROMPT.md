@@ -5,11 +5,11 @@ Continue on branch `keys-decide` (draft pull request open; do not push to
 read-only. Never drive hardware.
 
 First, before any code: read this file, then the `DANCE_HANDOFF.md` entry
-"Versions 28–30" and the one before it, "Version 27" ("Version 13" onward only
+"Versions 28–30", "Version 31" and "Version 27" ("Version 13" onward only
 if you need the earlier blind-test history). Read `crates/hyst-compile/src/director/figures.rs` in full and skim
 `director.rs`, `ensemble.rs`, `scripts/dance_notes.py`. Run the checks under
 "Commands" and export one preview: it must be byte-identical to
-`song-figures-30.html`. Report in a few lines what you understand and what you
+`song-figures-31.html`. Report in a few lines what you understand and what you
 will do first, then start; do not wait for approval unless you asked a blocking
 question.
 
@@ -57,7 +57,8 @@ scrolling piano-roll video with the song's audio, not plots.
 Blind-test record. Kept: hand-path low-pass, figure clock with 0.8 m/s cap,
 wrist drag 240, disc roll = travel + flips, spin 280°/m, **surge after each
 stab of the leading lane**, **hand size and height follow the leader's swell**
-(full strength; break and verse), **hand rises with a high voice** (0.65).
+(full strength; break and verse), **hand rises with a high voice** (0.65),
+**soft flourishes in a steady stream** (sharp there was "too much").
 Kept without a visible difference, for the hardware: figure clock smoothed over
 two knots. Died: beat pulse, keys pacing, figure carry, melody
 contour (from a poor pitch proxy), plain joint lag, wrist whip, suspension at
@@ -91,7 +92,8 @@ for four beats to take over, backdated); while the leading lane plays stabs
 its loudness and hand height its brightness. The clock is smoothed over two
 knots. The hand rises and extends while the vocal lane sings well above its
 median pitch. Moments:
-section arrivals and "flourishes" (strongest `other`-stem onset per ~16 beats).
+section arrivals and "flourishes" (strongest `other`-stem onset per ~16 beats;
+slow and soft where the leader plays a steady stream).
 Joints are solved per knot with a wrist-drag posture preference; the wrist roll
 is driven outside the solver; a follower limits speed and acceleration and
 brakes near end stops and zones.
@@ -102,7 +104,7 @@ brakes near end stops and zones.
 D=/home/stcksmsh/Documents/Codex/2026-09-23-can-you-check-the-programming-github/output/music-arm
 cargo run --release -p hyst-previz --example ensemble_preview -- \
   $D/song-figures-N.html instant-crush.m4a $D/instant-crush.notes.sidecar.json \
-  [--score OUT.json] [--zone x0,y0,z0,x1,y1,z1] [--groove-only] [--no-reuse] [--drag GAIN] [--flourish 0|1|2]
+  [--score OUT.json] [--zone x0,y0,z0,x1,y1,z1] [--groove-only] [--no-reuse] [--drag GAIN]
 node $D/record-ensemble.cjs $D/song-figures-N.html $D/instant-crush.m4a $D/clip.mp4 START SECONDS
 python3 scripts/dance_notes.py $D/instant-crush.interpreted.sidecar.json \
   /secondary/hyst-env/stems6/htdemucs_6s/instant-crush-stereo-analysis $D/instant-crush.notes.sidecar.json
@@ -132,10 +134,9 @@ muscriptor with the user's HuggingFace token); root disk is nearly full.
    reversals; its spin target outruns the roll limit, so it chases at full
    acceleration) and the 30 fps recorder (`record-ensemble.cjs`, outside git).
    Ask where and on which part they see it before building.
-2. **Flourishes per moment.** `--flourish` (0 as before, 1 none, 2 slow and
-   soft) is a leftover review knob: the user said each has a part, depending
-   on the moment. The flick at 2:19 is a flourish thrown on an arbitrary guitar
-   note. Build a rule from the lanes, test it, then delete the knob.
+2. **Flourishes per moment: done in version 31** (soft where the leader plays
+   a steady stream, sharp among stabs). Left: flourish poses are two fixed
+   shapes alternating high and low.
 3. **"Over-focuses on centre"**: the user's complaint, meaning not yet
    answered (asked three times). Measured: verses sway about one fixed direction
    (base nets −57° in 2:00–2:30) and the hand stays 0.31–0.55 m from the base

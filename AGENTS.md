@@ -1357,3 +1357,9 @@ hand acceleration to a third, but the user saw no difference by eye. The hand
 rises and extends while the voice sings well above its usual pitch (user's
 request for 4:07; strength chosen between two blind variants). Details and
 numbers: last entry of `docs/DANCE_HANDOFF.md`.
+
+### Flourishes per moment — 2026-10-04
+
+Version 31. A flourish is slow and soft where the leading lane plays a steady
+stream (verses, break, end) and sharp as before among stabs; the `--flourish`
+knob is gone. Blind-test verdict: sharp in a verse was "too much", soft "ok".
