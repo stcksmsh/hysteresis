@@ -46,9 +46,9 @@ pub struct CompileConfig {
     pub wrist_drag_degrees_per_mps: f64,
     /// Temporary review knob: 0 flourishes as before, 1 none, 2 slow and soft.
     pub flourish: u8,
-    /// Temporary review knob: 0 figures change on fixed beat counts; 1 the
-    /// leading instrument lane's phrases time the figures and its pitch steps
-    /// pick them; 2 also takes flourishes from the second lane.
+    /// Temporary review knob for how the hand travels while the leading
+    /// instrument plays stabs: 0 evenly, 1 it pushes off on each stab, 2 it
+    /// arrives on each stab.
     pub keys: u8,
 }
 impl Default for CompileConfig {

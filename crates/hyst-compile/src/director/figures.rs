@@ -270,30 +270,32 @@ pub fn compile_figures(
         let i = ((t - data.musical_memory.beat_zero) / beat).max(0.0) as usize;
         ranks[i.min(ranks.len() - 1)]
     };
-    // Where figures may change, and the pitch to compare: the phrases of
-    // whichever lane leads at that time, as (start, pitch).
-    let mut roots: Vec<(f64, f64)> = Vec::new();
-    // Accents for flourishes: notes of whichever lane is second, (time, strength).
-    let mut accents: Vec<(f64, f64)> = Vec::new();
+    // The leader's note starts, and how much it plays in stabs (separate
+    // hits with empty beats between) rather than as a steady stream, 0..1.
+    let mut hits: Vec<f64> = Vec::new();
+    let mut stabs: Vec<f64> = Vec::new();
     if !ranks.is_empty() {
+        let beat_of = |t: f64| ((t - data.musical_memory.beat_zero) / beat).max(0.0) as usize;
+        let mut played = vec![vec![false; ranks.len()]; lanes.len()];
         for (index, (_, lane)) in lanes.iter().enumerate() {
-            roots.extend(
-                lane.phrases
-                    .iter()
-                    .filter(|p| rank_at(p.start)[0] == index)
-                    .map(|p| (p.start, p.pitch_median)),
-            );
-            accents.extend(
-                lane.notes
-                    .iter()
-                    .filter(|n| rank_at(n[0])[1] == index)
-                    .map(|n| (n[0], n[2])),
-            );
+            for note in &lane.notes {
+                if let Some(cell) = played[index].get_mut(beat_of(note[0])) {
+                    *cell = true;
+                }
+                if rank_at(note[0])[0] == index {
+                    hits.push(note[0]);
+                }
+            }
         }
+        hits.sort_by(f64::total_cmp);
+        stabs = (0..ranks.len())
+            .map(|i| {
+                let around = &played[ranks[i][0]][i.saturating_sub(8)..(i + 9).min(ranks.len())];
+                let empty = around.iter().filter(|p| !**p).count() as f64 / around.len() as f64;
+                ((empty - 0.1) / 0.2).clamp(0.0, 1.0)
+            })
+            .collect();
     }
-    roots.sort_by(|a, b| a.0.total_cmp(&b.0));
-    roots.dedup_by(|b, a| b.0 - a.0 < 1.5 * beat);
-    accents.sort_by(|a, b| a.0.total_cmp(&b.0));
 
     // (run start, direction, class) for recall lookups.
     let mut chosen: Vec<(f64, f64, &str)> = Vec::new();
@@ -326,38 +328,8 @@ pub fn compile_figures(
         }
         chosen.push((start, first_dir, class));
         let mut t = start;
-        let mut last_step = usize::MAX;
-        for k in 0.. {
-            let mut step = k % sequence.len();
-            // The leader decides which figure follows: its pitch stepping up
-            // picks the class's most rising figure, a step down its most falling.
-            if config.keys >= 1 {
-                let i = roots.partition_point(|p| p.0 <= t + beat);
-                if i >= 2 && (roots[i - 1].0 - t).abs() <= 2.0 * beat {
-                    let way = (roots[i - 1].1 - roots[i - 2].1).signum();
-                    let lift = |s: &Step| way * ((s.1)(1.0, 1.0)[1] - (s.1)(0.0, 1.0)[1]);
-                    let pick = (0..sequence.len())
-                        .max_by(|a, b| lift(&sequence[*a]).total_cmp(&lift(&sequence[*b])))
-                        .unwrap();
-                    if way != 0.0 && pick != last_step {
-                        step = pick;
-                    }
-                }
-            }
-            last_step = step;
-            let (name, shape, beats, step_dir) = sequence[step];
+        for (k, &(name, shape, beats, step_dir)) in sequence.iter().cycle().enumerate() {
             let mut stop = t + beats * beat;
-            // The leader decides when figures change: the figure ends on its
-            // phrase start nearest the figure's nominal length.
-            if config.keys >= 1 {
-                let near = roots
-                    .iter()
-                    .filter(|p| (0.6 * beats * beat..=1.4 * beats * beat).contains(&(p.0 - t)))
-                    .min_by(|a, b| (a.0 - stop).abs().total_cmp(&(b.0 - stop).abs()));
-                if let Some(point) = near {
-                    stop = point.0;
-                }
-            }
             if stop > end - 2.0 * beat {
                 stop = end;
             }
@@ -490,11 +462,7 @@ pub fn compile_figures(
             }
         }
         // Strongest melodic-stem onset in each stretch of about sixteen beats.
-        let flourishes = if config.keys == 2 && !accents.is_empty() {
-            spaced(accents.clone(), 16.0 * beat)
-        } else {
-            spaced(onsets(sources[3], rate, 0.25), 16.0 * beat)
-        };
+        let flourishes = spaced(onsets(sources[3], rate, 0.25), 16.0 * beat);
         for (n, (time, strength)) in flourishes.into_iter().enumerate() {
             let clash = moments.iter().any(|m| (m.time - time).abs() < 8.0 * beat);
             let inside = class_at(time - 3.0 * beat) != "silence"
@@ -598,12 +566,29 @@ pub fn compile_figures(
             .sum::<f64>()
             .sqrt()
             / step;
+        // While the leader plays stabs the hand travels in pulses along its
+        // path: fastest just after a stab (1) or just before one (2), slow
+        // between. A steady leader keeps the even pace.
+        let pulse = if config.keys == 0 || stabs.is_empty() {
+            1.0
+        } else {
+            let index = ((t - data.musical_memory.beat_zero) / beat).max(0.0) as usize;
+            let next = hits.partition_point(|h| *h <= t);
+            let gap = if config.keys == 1 {
+                next.checked_sub(1).map(|i| t - hits[i])
+            } else {
+                hits.get(next).map(|h| h - t)
+            };
+            let bump = gap.map_or(0.0, |g| (-g / (0.35 * beat)).exp());
+            lerp(1.0, 0.3 + 1.9 * bump, stabs[index.min(stabs.len() - 1)])
+        };
         let rate = if held {
             0.0
         } else {
             f64::min(
-                if s < t { 1.15 } else { 1.0 },
-                HAND_SPEED_CAP / pace.max(1e-9),
+                pulse * if s < t { 1.15 } else { 1.0 },
+                // A pulse may exceed the cap by as much as it exceeds even pace.
+                HAND_SPEED_CAP * pulse.clamp(1.0, 1.5) / pace.max(1e-9),
             )
         };
         s = (s + rate * step).min(t + step);
