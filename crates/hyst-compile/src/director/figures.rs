@@ -558,6 +558,11 @@ pub fn compile_figures(
     let mut knots: Vec<JointKnot> = Vec::with_capacity(times.len());
     let mut held_target: Option<[f64; 3]> = None;
     let mut wanted: Vec<f64> = Vec::new();
+    // Solved poses per knot, so later joints can trail earlier ones.
+    let mut solved: Vec<Vec<f64>> = Vec::new();
+    if !(0.0..=4.0).contains(&config.chain_lag_beats) {
+        return Err("chain lag must be 0 to 4 beats".into());
+    }
     let mut speed = vec![0.0; rig.channels.len()];
     for (&time, &(target, facing)) in times.iter().zip(&targets) {
         if knots.last().is_some_and(|k| time - k.time < 1e-9) {
@@ -577,12 +582,22 @@ pub fn compile_figures(
         // braking early enough to stop on target (trapezoid profile). The rig's
         // own limits are the hard validation envelope, reached only when a zone
         // forces an abrupt stop. Both are assumptions until measured on hardware.
-        let mut q = wanted.clone();
+        solved.push(wanted.clone());
+        // Body: each joint aims at the pose solved a little earlier, more so
+        // toward the wrist (knots are an eighth of a beat).
+        let aim: Vec<f64> = (0..wanted.len())
+            .map(|j| {
+                let lag =
+                    config.chain_lag_beats * 8.0 * j as f64 / (wanted.len() - 1).max(1) as f64;
+                solved[solved.len() - 1 - (lag.round() as usize).min(solved.len() - 1)][j]
+            })
+            .collect();
+        let mut q = aim.clone();
         if dt.is_finite() {
             for (j, c) in rig.channels.iter().enumerate() {
                 let top = 0.75 * c.max_speed_degrees_per_second;
                 let accel = 0.1 * c.max_acceleration_degrees_per_second2;
-                let gap = wanted[j] - prior[j];
+                let gap = aim[j] - prior[j];
                 let brake = (2.0 * accel * gap.abs())
                     .sqrt()
                     .min(top)

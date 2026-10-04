@@ -8,6 +8,7 @@ fn usage() -> &'static str {
      --rig PATH       use JSON rig geometry and local axes (default illustrative five-axis)\n\
      --groove-only    disable hit accents\n\
      --no-reuse       disable recalled musical material\n\
+     --lag BEATS      how far the wrist trails its solved angle (default 0.5, 0 = off)\n\
      --zone BOX       red zone corners in metres, x0,y0,z0,x1,y1,z1 (repeatable)\n\
      --figures        accepted and ignored; the figure planner is the only mode\n\
      Audio starts only after Play. Score and arm trajectories resolve offline for deterministic seek."
@@ -28,6 +29,12 @@ fn main() -> io::Result<()> {
             }
             "--groove-only" => config.enable_hits = false,
             "--no-reuse" => config.reuse_repeats = false,
+            "--lag" => {
+                config.chain_lag_beats = args
+                    .next()
+                    .and_then(|v| v.parse().ok())
+                    .ok_or_else(|| io::Error::other("--lag requires beats"))?
+            }
             "--figures" => {}
             "--zone" => {
                 let raw = args
