@@ -676,7 +676,8 @@ pub fn compile_figures(
         let mut p = flow(lerp(clock[i], clock[i + 1], x - i as f64));
         // The hand rises while the voice sings well above its usual pitch.
         let sung = (t - data.musical_memory.beat_zero) / beat - 0.5;
-        let lift = config.voice * bell(&voice, sung, 2.0);
+        // 0.65: the user put it between 0.45 and 0.9 in a blind side-by-side.
+        let lift = 0.65 * bell(&voice, sung, 2.0);
         (p[1], p[2]) = (p[1] + lift, p[2] + lift);
         // The hand rides higher as the leader's line brightens.
         p[1] += 0.3 * swell_at(t)[1];
@@ -1232,6 +1233,46 @@ mod tests {
         assert!(
             with > without + 0.05,
             "climb with a brightening leader {with:.3} m, with a flat one {without:.3} m"
+        );
+    }
+
+    #[test]
+    fn hand_rises_while_the_voice_sings_high() {
+        let mut value: serde_json::Value =
+            serde_json::from_str(&super::super::tests::fixture(0.7, 0.7)).unwrap();
+        let config = CompileConfig {
+            enable_hits: false,
+            ..CompileConfig::default()
+        };
+        let mut climb = |high: f64| {
+            // Two notes a beat at its usual pitch, then one a beat higher up.
+            let low = (0..16).map(|i| [0.25 * i as f64, 60.0, 1.0]);
+            let notes: Vec<[f64; 3]> = low
+                .chain((8..16).map(|i| [0.5 * i as f64, high, 1.0]))
+                .collect();
+            value["noteTrack"] = serde_json::json!({"lanes": {
+                "vocals": {"notes": notes, "levelPerBeat": vec![-20.0; 16]},
+            }});
+            let rig = Rig::illustrative_five_axis();
+            let score = compile_figures(&value.to_string(), config, rig, &[]).unwrap();
+            let height = |from: f64| {
+                (0..20)
+                    .map(|i| {
+                        let t = from + 0.1 * i as f64;
+                        score.sample(t).unwrap().agents[0]
+                            .world_points
+                            .last()
+                            .unwrap()[2]
+                    })
+                    .sum::<f64>()
+                    / 20.0
+            };
+            height(5.5) - height(1.5)
+        };
+        let (with, without) = (climb(72.0), climb(60.0));
+        assert!(
+            with > without + 0.1,
+            "climb with a high voice {with:.3} m, with a level one {without:.3} m"
         );
     }
 

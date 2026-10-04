@@ -5,11 +5,11 @@ Continue on branch `keys-decide` (draft pull request open; do not push to
 read-only. Never drive hardware.
 
 First, before any code: read this file, then the `DANCE_HANDOFF.md` entry
-"Version 27" (and "Version 13" onward only if you need the earlier blind-test
-history). Read `crates/hyst-compile/src/director/figures.rs` in full and skim
+"Versions 28–30" and the one before it, "Version 27" ("Version 13" onward only
+if you need the earlier blind-test history). Read `crates/hyst-compile/src/director/figures.rs` in full and skim
 `director.rs`, `ensemble.rs`, `scripts/dance_notes.py`. Run the checks under
 "Commands" and export one preview: it must be byte-identical to
-`song-figures-27.html`. Report in a few lines what you understand and what you
+`song-figures-30.html`. Report in a few lines what you understand and what you
 will do first, then start; do not wait for approval unless you asked a blocking
 question.
 
@@ -56,20 +56,26 @@ scrolling piano-roll video with the song's audio, not plots.
 
 Blind-test record. Kept: hand-path low-pass, figure clock with 0.8 m/s cap,
 wrist drag 240, disc roll = travel + flips, spin 280°/m, **surge after each
-stab of the leading lane**. Died: beat pulse, keys pacing, figure carry, melody
+stab of the leading lane**, **hand size and height follow the leader's swell**
+(full strength; break and verse), **hand rises with a high voice** (0.65).
+Kept without a visible difference, for the hardware: figure clock smoothed over
+two knots. Died: beat pulse, keys pacing, figure carry, melody
 contour (from a poor pitch proxy), plain joint lag, wrist whip, suspension at
 peaks, three roll drivers, figures snapping to the leader's phrase starts,
 figures picked by the leader's pitch step, accents from the second lane,
 arriving on the stab. Lesson: small posture pulses and small timing shifts are
 invisible; structural changes read. A reaction that swaps in short up/down
 figures wobbles across the travel line; the user wants the hit along it.
+Variants in one side-by-side must keep the same choreography: when two
+de-jitter candidates shifted figure timing the user could not judge them.
+Tell the user what to look for with each clip; they asked.
 
 ## What exists
 
 - Sidecar pipeline: `scripts/dance_memory.py`, `dance_stems.py`,
   `dance_structure.py`, and `dance_notes.py` (adds `noteTrack.lanes`: one lane
-  per stem WAV with onsets `[time, rough pitch, strength]`, phrases and
-  `levelPerBeat`).
+  per stem WAV with onsets `[time, rough pitch, strength]`, phrases,
+  `levelPerBeat` and `brightnessPerBeat`).
 - `crates/hyst-compile/src/director/figures.rs`: `compile_figures`, the planner.
   `director.rs`: sidecar parsing. `ensemble.rs`: rig, kinematics, score.
 - `crates/hyst-previz`: `examples/ensemble_preview.rs` + `src/ensemble.html`.
@@ -81,7 +87,10 @@ round the base. The hand path is low-passed. A figure clock stops during holds,
 caps path speed at 0.8 m/s and makes lost time up at 15 % extra pace. The
 instrument lanes are ranked per beat by level (voice and drums excluded; 3 dB
 for four beats to take over, backdated); while the leading lane plays stabs
-(empty beats between its hits) the clock surges after each hit. Moments:
+(empty beats between its hits) the clock surges after each hit; where it does not, figure size follows
+its loudness and hand height its brightness. The clock is smoothed over two
+knots. The hand rises and extends while the vocal lane sings well above its
+median pitch. Moments:
 section arrivals and "flourishes" (strongest `other`-stem onset per ~16 beats).
 Joints are solved per knot with a wrist-drag posture preference; the wrist roll
 is driven outside the solver; a follower limits speed and acceleration and
@@ -98,7 +107,7 @@ node $D/record-ensemble.cjs $D/song-figures-N.html $D/instant-crush.m4a $D/clip.
 python3 scripts/dance_notes.py $D/instant-crush.interpreted.sidecar.json \
   /secondary/hyst-env/stems6/htdemucs_6s/instant-crush-stereo-analysis $D/instant-crush.notes.sidecar.json
 ```
-Checks: `cargo test --workspace --exclude hyst-render` (131 pass), clippy
+Checks: `cargo test --workspace --exclude hyst-render` (133 pass), clippy
 `-D warnings` on hyst-compile/-output/-previz/-cli, `cargo fmt --all --check`,
 `node crates/hyst-previz/tests/ensemble.cjs`,
 `cd scripts && python3 -m unittest test_dance_notes`. No hyst-render tests (GPU).
@@ -117,14 +126,12 @@ muscriptor with the user's HuggingFace token); root disk is nearly full.
 
 ## Next work, in the user's order
 
-1. **The fluid half, for the break (3:05–3:32).** When the leader is a single
-   flowing line (the guitar solo), keep long flowing figures and let the hand's
-   size and height follow the lead line's swell. The user liked how version 26
-   moves there ("like it whines"), by coincidence: long figure-eights and sways.
-   The solo's pitch cannot be read reliably (under half its notes by any
-   method); its loudness and brightness can. "Fluid" versus "stabs" is so far
-   told only by empty beats in the leading lane. Side-by-side on 3:00–3:40
-   against version 27.
+1. **The jitter the user still sees** ("jitter/flick/micro-stutter, may be the
+   rendering"). The clock smoothing removed the measured hand and base chatter
+   but the user saw no difference. Candidates: the disc roll (81 knot-to-knot
+   reversals; its spin target outruns the roll limit, so it chases at full
+   acceleration) and the 30 fps recorder (`record-ensemble.cjs`, outside git).
+   Ask where and on which part they see it before building.
 2. **Flourishes per moment.** `--flourish` (0 as before, 1 none, 2 slow and
    soft) is a leftover review knob: the user said each has a part, depending
    on the moment. The flick at 2:19 is a flourish thrown on an arbitrary guitar
@@ -141,9 +148,13 @@ muscriptor with the user's HuggingFace token); root disk is nearly full.
 
 ## Known weak points
 
-- Stab surges raise hand acceleration outside moments to 5.6 m/s² p95 (was
-  1.4) and exceed the speed cap by up to half; approved by eye on 3:32–4:12
-  only. Constants in the clock loop of `figures.rs`.
+- Stab surges exceed the speed cap by up to half; approved by eye on 3:32–4:12
+  only. Hand acceleration outside moments is 1.7 m/s² p95 since the clock
+  smoothing. Constants in the clock loop of `figures.rs`.
+- The swell has no gate for "single flowing line": it runs in the verses too
+  (user approved one verse). The voice lift also raises 2:45–3:05 and other
+  high vocal stretches the user has not reviewed.
+- An old sidecar no longer reproduces version 26.
 - The break's leader change is found at 188.8 s; the user hears it at 185.
 - Lanes come from six-stem Demucs: the solo guitar lands in `other`, the
   `piano` stem is nearly empty, keys and synths share `other`.
@@ -154,7 +165,7 @@ muscriptor with the user's HuggingFace token); root disk is nearly full.
 - Stretch class comes from fixed thresholds on stem levels. Arrival and
   flourish poses are two or three fixed shapes.
 - Reviewed by eye so far: 1:24–2:04 (version 26), the whole song once
-  (version 26), 2:05–2:45, 3:00–3:40 and 3:32–4:12 in side-by-sides.
+  (version 26), 2:05–2:45, 3:00–3:40, 3:32–4:12 and 3:52–4:32 in side-by-sides.
 - `AGENTS.md` is long; trimming it was proposed, not done.
 
 ## Rules of engagement

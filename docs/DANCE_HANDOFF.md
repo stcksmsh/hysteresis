@@ -1271,3 +1271,58 @@ height follow its swell. User's unanswered point: the arm "over-focuses on
 centre"; measured that verses sway about one fixed direction and the hand stays
 0.31 to 0.55 m from the base axis. 131 CPU tests, clippy, fmt, `ensemble.cjs`,
 tracker test pass.
+
+### Versions 28–30: leader's swell, smoothed figure clock, voice lift — 2026-10-04
+
+Branch `keys-decide`. All three were settled by side-by-sides with the user.
+
+**Sidecar.** `scripts/dance_notes.py` now also writes `brightnessPerBeat` per
+lane: the A-weighted spectral centroid as a MIDI pitch, 0 for a silent beat.
+Old fields are unchanged; `$D/instant-crush.notes.sidecar.json` was regenerated.
+A sidecar without the field compiles, without the swell.
+
+**Version 28, swell of the leading lane (the "fluid half").** Measured on the
+break: the solo's loudness is nearly flat (−27 to −23.5 dB over 187–204 s, then
+fading to −38 dB by 212 s); its brightness carries the contour (89–98). Rule:
+per beat, the leader's level and brightness about their medians over the
+stretch that lane leads (3 dB and 4 semitones are full scale), faded out where
+it plays stabs, smoothed with a bell one beat wide. Level scales the figure by
+up to 35 %; brightness shifts hand elevation by up to 0.3. The user chose full
+strength over half and none, blind on the break (3:00–3:40) and open on a verse
+(2:05–2:45). There is no gate for "single flowing line": the rule runs wherever
+the leader plays no stabs, verses included.
+
+**Version 29, smoothed figure clock.** The user reported possible jitter or
+micro-stutter. Measured: clips are 30 fps with no dropped or duplicate frames.
+The motion did chatter: when the leader plays quick notes the surge retriggers
+every second knot, so the hand's step alternated about 26 and 35 mm per knot
+and the base and disc followed (163 knot-to-knot acceleration reversals of the
+base over the song, mostly in the choruses). The joint follower was not the
+cause; it reproduces its targets. Two first candidates (a run of quick notes
+surges once; eased surge) shifted figure timing by 35–65 cm of hand position,
+so the user could not compare them; deleted. Kept: a bell of two knots over the
+figure clock. Hand within 1 cm of version 28; base reversals 163 → 1; hand
+acceleration outside moments 5.8 → 1.7 m/s² p95. **The user saw no difference
+by eye**; it is kept for the hardware only, against the "no difference means
+delete" rule, and the user was told. So the jitter the user sees is something
+else: candidates are the disc roll (still 81 reversals; its spin target is
+faster than the roll limit, so it chases at full acceleration) and the 30 fps
+recording. Smoothing the roll's direction signal changed almost nothing and was
+deleted.
+
+**Version 30, voice lift.** The user, on 4:07: the vocals are high and
+important there, the arm should go a lot higher. Measured: the vocal lane's
+rough pitch jumps from about 65 to 73 at 247.5 s and stays until about 262 s,
+at the song's loudest vocal level; its brightness does not show it. Rule: per
+beat, the median pitch of the vocal lane's notes above the song's median note
+(2 semitones start it, 8 are full), smoothed with a bell two beats wide, adds
+up to 0.65 to both elevation and extension. The user put the strength between
+0.45 and 0.9 in a blind side-by-side on 3:52–4:32. Median hand height in
+247–262 s: 0.39 → 0.61 m. It also lifts other high vocal stretches (165–185 s:
+0.37 → 0.50 m), which the user has not reviewed.
+
+**State.** `song-figures-30.html`. Whole song: hand speed median 0.34, p95 0.97,
+max 2.25 m/s. 133 CPU tests, clippy, fmt, `ensemble.cjs`, tracker test pass.
+An old sidecar no longer reproduces version 26 (the clock smoothing applies to
+every sidecar). Still open: the `--flourish` knob, the roll chatter, the leader
+change found at 188.8 s (the user hears 185), "over-focuses on centre".

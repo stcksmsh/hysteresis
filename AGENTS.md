@@ -1346,3 +1346,14 @@ snapping and picking by the leader lost and were deleted. A Songsterr tab is
 the validation reference (never input). MuScriptor, pYIN voice curve and
 stereo lane discovery were measured but are not in the repo. Details and
 numbers: last entry of `docs/DANCE_HANDOFF.md`.
+
+### Swell, smoothed clock, voice lift — 2026-10-04
+
+Version 30, branch `keys-decide`. The sidecar lanes gained `brightnessPerBeat`.
+Hand size and height follow the leading lane's loudness and brightness where it
+plays no stabs (blind-test winner at full strength). The figure clock is
+smoothed over two knots: it removes a measured knot-to-knot chatter and cuts
+hand acceleration to a third, but the user saw no difference by eye. The hand
+rises and extends while the voice sings well above its usual pitch (user's
+request for 4:07; strength chosen between two blind variants). Details and
+numbers: last entry of `docs/DANCE_HANDOFF.md`.
