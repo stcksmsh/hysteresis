@@ -29,6 +29,19 @@ fn main() -> io::Result<()> {
             }
             "--groove-only" => config.enable_hits = false,
             "--no-reuse" => config.reuse_repeats = false,
+            "--spin" => {
+                config.spin_degrees_per_metre = args
+                    .next()
+                    .and_then(|v| v.parse().ok())
+                    .ok_or_else(|| io::Error::other("--spin requires degrees per metre"))?
+            }
+            "--suspend" => {
+                config.suspension = args
+                    .next()
+                    .and_then(|v| v.parse().ok())
+                    .filter(|v| (0.0..=1.0).contains(v))
+                    .ok_or_else(|| io::Error::other("--suspend requires 0..1"))?
+            }
             "--drag" => {
                 config.wrist_drag_degrees_per_mps = args
                     .next()

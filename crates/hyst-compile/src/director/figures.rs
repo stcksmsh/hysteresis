@@ -27,8 +27,6 @@ const FLOOR: Zone = Zone {
 const MARGIN_M: f64 = 0.05;
 /// Beats the hand disc takes to turn over at a moment.
 const FLIP_BEATS: f64 = 3.0;
-/// Hand disc turn per metre of fast hand travel.
-const SPIN_DEGREES_PER_METRE: f64 = 150.0;
 /// Fastest the figure path carries the hand, m/s. A guess, tuned by eye on one
 /// song; moments may exceed it briefly.
 const HAND_SPEED_CAP: f64 = 0.8;
@@ -479,13 +477,20 @@ pub fn compile_figures(
             .sum::<f64>()
             .sqrt()
             / step;
+        // Suspension: at a high peak of the figure (the hand higher than a
+        // quarter beat before and after) the clock slows, so the hand hangs
+        // for a moment before coming down. Level travel is not a peak.
+        let height = |at: f64| flow(at)[1];
+        let (now, apart) = (height(s), 0.25 * beat);
+        let peak = smooth((now - height(s - apart)).min(now - height(s + apart)) / 0.01);
+        let hang = config.suspension * smooth((now - 0.5) / 0.25) * peak;
         let rate = if held {
             0.0
         } else {
             f64::min(
                 if s < t { 1.15 } else { 1.0 },
                 HAND_SPEED_CAP / pace.max(1e-9),
-            )
+            ) * (1.0 - hang)
         };
         s = (s + rate * step).min(t + step);
     }
@@ -628,7 +633,7 @@ pub fn compile_figures(
                 let (lo, hi) = (i.saturating_sub(16), (i + 16).min(targets.len() - 1));
                 let steady = (targets[hi].1 - targets[lo].1) / (times[hi] - times[lo]);
                 let way = (((facing - bearing) / dt - steady) / 30.0).tanh();
-                turned += SPIN_DEGREES_PER_METRE * travel * fast * way;
+                turned += config.spin_degrees_per_metre * travel * fast * way;
             }
             wanted[r] = flips + turned;
         }

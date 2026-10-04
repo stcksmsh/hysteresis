@@ -1169,3 +1169,26 @@ already fires on moments). Not retried.
 
 State of "body": wrist drag at 240 kept; plain lag and whip dead.
 Remaining queue: spin rate of the disc, then keys-decide (largest open item).
+
+### Spin rate and suspension: two side-by-sides pending — 2026-10-04
+
+User plan: do these two quickly, then hand off to a fresh agent; keys-decide in
+a fresh iteration; disc-aware zone checks wait until the hand object is defined
+("it needs to know what it's holding").
+
+Two knobs added for review, both to be reduced to a constant or deleted after
+the verdicts:
+- `spin_degrees_per_metre` / `--spin` (default 150): side-by-side
+  `blind-spin-side-by-side.mp4`, values 80 / 150 / 280, key
+  `blind-spin-key.json`.
+- `suspension` / `--suspend` (default 0 = off): at a high peak of a figure
+  (hand higher than a quarter beat before and after, elevation above mid) the
+  figure clock slows by this fraction, so the hand hangs before coming down;
+  the clock makes the time up after. Side-by-side
+  `blind-suspend-side-by-side.mp4`, values 0 / 0.5 / 0.75, key
+  `blind-suspend-key.json`. First version slowed all high level travel and
+  threw figures up to 90 cm out of place; narrowed to true peaks: median shift
+  0 cm, in the clip the hand departs over 5 cm for 3.4 s (0.5) or 6.6 s (0.75)
+  of 40 s.
+Both clips 1:24–2:04, shuffled, keys unread. 130 CPU tests, clippy, fmt,
+`ensemble.cjs` pass.

@@ -44,6 +44,11 @@ pub struct CompileConfig {
     /// blind side-by-side over 0 and 120; it about triples wrist travel, so
     /// lower it if real wrist or elbow servos cannot keep up.
     pub wrist_drag_degrees_per_mps: f64,
+    /// Hand disc turn per metre of fast hand travel. Under side-by-side review.
+    pub spin_degrees_per_metre: f64,
+    /// 0..1: how much the figure clock slows where the hand is high and its
+    /// rise turns into a fall. Under side-by-side review.
+    pub suspension: f64,
 }
 impl Default for CompileConfig {
     fn default() -> Self {
@@ -51,6 +56,8 @@ impl Default for CompileConfig {
             enable_hits: true,
             reuse_repeats: true,
             wrist_drag_degrees_per_mps: 240.0,
+            spin_degrees_per_metre: 150.0,
+            suspension: 0.0,
         }
     }
 }
