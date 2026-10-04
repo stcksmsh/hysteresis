@@ -9,3 +9,4 @@ public/render-worker.js
 # Rust (crates/)
 /target/
 crates/*/test-output/
+__pycache__/

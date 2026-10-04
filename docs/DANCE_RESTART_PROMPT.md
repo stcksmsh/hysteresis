@@ -1,155 +1,133 @@
-# Fresh-agent prompt — investigate, clarify intent, then implement
+# Fresh-agent prompt — continue the single-arm dance
 
-Work in `/secondary/Programming/Github/Hysteresis`.
-`/home/stcksmsh/Programming/Github/Hysteresis` resolves to the same checkout.
-Preserve all modified/untracked work. Do not reset, clean, create a worktree,
-commit, push, install models, or drive hardware. Frozen `src/` and `tools/` are
-read-only; active offline analysis lives in `scripts/`.
+Work on branch `dance-figures` (pushed). Communicate terse and exact. Frozen
+`src/` and `tools/` are read-only. Never drive hardware. Do not push to `master`.
+Read this file, then the last four entries of `docs/DANCE_HANDOFF.md`. You do not
+need the older history.
 
-## Latest user instruction — 2026-10-03
+## What the user wants (their words, settled)
 
-The user explicitly wants the next agent to investigate the repository FIRST,
-then ask questions about unresolved intent — including **what they actually want
-from this project** — BEFORE continuing implementation. The previous agents
-moved too quickly from technical evidence into invented artistic decisions.
-Do not treat the newest prototype, old plan, or this handoff as an approved
-artistic brief. Do not assume that making arms move more, adding formations,
-or exposing more analysis is the desired outcome.
+- A viewer should think "beautiful", then "impressive", then "how did they do
+  this". Idea source: OK Go "Love" (robot arms with mirrors).
+- One arm that truly dances is the goal now. Many arms, mirrors and projection
+  come after, and need "dynamic red zones" (each arm a moving zone for the others).
+- Interpretation must be automatic. Human timestamps in
+  `scripts/instant_crush.acceptance.json` are validation only, never input.
+- Dance works from offline sidecars only. No live audio.
+- **Real hardware is the end goal.** Motion no servo arm could execute is a defect.
+- The base rotates a full continuous 360°. Settled rig fact. Everything else
+  about the rig (lengths, limits, speeds) is invented until measured.
+- The user's own model of dancing this song: percussion is the floor, the
+  keys/guitar are the decision-maker (their flourishes cue movement from state to
+  state), vocals give the emotion. In the break the guitar solo leads.
+- A hold is almost never a dead stop: small slow movement. A true freeze only
+  on a cut (dense, nothing, dense). This song has none.
+- This song has no sharp passages; flicks are wrong here.
+- Test song stays Instant Crush.
 
-## 1. Investigate without changing implementation
+## How the user reviews (keep this loop)
 
-Read, in order:
-1. `AGENTS.md`, then the latest entries of `docs/DANCE_HANDOFF.md`.
-2. `crates/hyst-previz/README.md` and relevant R4/R7/R8/R9 sections of
-   `SINTEZA_IMPLEMENTATION_PLAN.md`; choreography spec sections 4 and 6 are
-   directional background, not a substitute for user clarification.
-3. Git status/diff/log and actual Rust/Python code. Separate pre-existing work
-   from the newest unaccepted integration. Check whether `.ai/state.json` exists
-   and follow its workflow if present.
+The user judges by eye and is fast and precise. Send a short clip (30–40 s, with
+audio) of a stated passage after each change; one change per version. The preview
+has a critique panel (hold M to mark, 1–9 tags, Export JSON to `~/Downloads`).
+When a layer's value is in doubt, run a **blind ablation**: same passage with and
+without it, shuffled labels, key kept unread until the verdict. Four of five
+layers died that way. Numbers are evidence about motion, never proof of dance.
+Do not claim to have watched or heard anything.
 
-Trace audio -> source/structure evidence -> musical interpretation -> motion
-intent -> ensemble scheduling -> rig retargeting -> playback and projection.
-Inspect actual sidecar/score data and representative preview frames. Do not
-claim to have watched motion or heard music without perceptual access.
+## What exists
 
-Summarize briefly: what works, what is speculative, where current implementation
-fails, and which decisions need the user. Reading and targeted checks are fine;
-do not begin another implementation or render campaign before clarification.
-
-## 2. Clarify what the user wants
-
-Ask focused questions grounded in the investigation. Use plain language, not
-crate names or generic product-planning questionnaires. Start with the intended
-experience and acceptance bar. For example:
-
-- What should someone watching the installation experience? What would make you
-  say “yes, this is the project,” rather than “arms moving to music”?
-- What does convincing musical interpretation mean to you: following particular
-  musical voices, developing dance phrases, anticipating structure, dialogue
-  between arms, or something else? Ask for a concrete positive reference or an
-  explanation of a rejected passage; do not presume these choices are exhaustive.
-- What should multiple arms contribute, and how should projected visuals relate
-  to them? Is the next proof about choreography alone or the whole installation?
-- What is the smallest next result you want to judge, and what would count as
-  failure? Which parts of the current direction should be discarded?
-
-After that, resolve only technical unknowns needed for the chosen next slice:
-rig axes/geometry if relevant, desired agent arrangement, acceptable offline
-preparation, and whether this supplied song is still the right test case.
-Do not repeat facts already settled below. Do not ask the user to design the
-algorithm or review a giant requirements list. Ask a few high-value questions,
-wait for answers, restate the agreed objective and acceptance criteria, THEN
-continue implementation. No answer means no artistic approval.
-
-## 3. Established constraints, not open questions
-
-- Automatic interpretation is mandatory. Offline analysis has the whole song
-  available and must support musical memory, anticipation and coherent motion.
-- Target is multiple synchronized 3D articulated robot arms plus projection.
-  Provisional arm: base rotation + three bends + extra local rotation at second
-  joint (five servos); distal link optional. Exact axes/calibration are unsettled.
-  Local rotation axes must inherit upstream orientation.
-- All earlier motion recordings were rejected. New ensemble prototype is also
-  unreviewed; green tests are not dance approval.
-- Human timestamps in `scripts/instant_crush.acceptance.json` are validation-only.
-  Never feed them into inference, cue planning or choreography. Authored director
-  was removed from production and survives only outside git as diagnostic material.
-- No allin1/natten installation, expensive GPU experiments, hardware driving,
-  commits or pushes. Preserve existing CPU-separated stems; do not regenerate.
-- Follow repo worker ownership/delegation rules after scope is clarified.
-  Communicate smart caveman: concise, exact, no filler.
-
-## 4. Current implementation — inspect before trusting
-
-Existing mixed-audio memory planner remains `crates/hyst-compile/src/memory.rs`.
-Its planar motion was rejected. `scripts/dance_stems.py` and
-`scripts/dance_structure.py` produce estimated source activity, local transitions,
-multiscale novelty and recurring-material evidence. These are uncertain features,
-not confirmed semantic song sections or downbeats.
-
-Newest uncommitted integration adds:
-- `crates/hyst-compile/src/director.rs`: `compile_interpretation` consumes
-  musicalMemory + stemInterpretation + musicalStructure; emits rig-independent
-  sweep/lift/fold profiles, source character, formation choices, recurrence and
-  anticipation. Choices and thresholds are prototype assumptions, not user approval.
-- `crates/hyst-compile/src/ensemble.rs`: configurable local-axis rig, illustrative
-  five-servo geometry, existing hyst-choreo formation helpers, offline per-agent
-  tracks, shared quintic sampling and 3D forward kinematics. Interior tangents
-  support continuation; position/speed/acceleration use continuous Bezier bounds.
-  No jerk, collision or hardware-safety proof. Inspect actual formation handling:
-  some mappings remain simplified and must not be oversold.
-- `crates/hyst-output/src/ensemble.rs`: absolute-time/AudioClock sampling.
+Live path only (older planners were deleted on purpose; they are in git at
+`dance-checkpoint`, 725127a):
+- `scripts/dance_memory.py`, `dance_stems.py`, `dance_structure.py` build the
+  sidecar (`musicalMemory`, `stemInterpretation`, `musicalStructure`) from audio
+  and Demucs stems.
+- `crates/hyst-compile/src/director.rs`: sidecar parsing and evidence helpers
+  (stretch class from stem levels, transitions, onsets, recurrence).
+- `crates/hyst-compile/src/director/figures.rs`: `compile_figures`, the planner.
+- `crates/hyst-compile/src/ensemble.rs`: rig, forward kinematics, score type,
+  quintic sampling and validation.
 - `crates/hyst-previz/examples/ensemble_preview.rs` + `src/ensemble.html`:
-  independent new 3D canvas preview, audio-master transport, shared floor visuals,
-  evidence readouts. Supports --agents, --groove-only, --no-reuse, --rig, --score,
-  --interpretation. Old single-arm APIs/preview stay intact.
-- `scripts/ensemble_acceptance.py`: independent numeric verifier drafted during
-  this session. Check latest handoff for run status; do not assume completed audit.
+  browser preview at 60 fps with hand trail, floor shadow, drag-to-orbit, red
+  zones, speed select, critique panel.
 
-Real track compiled to 55 cues over 339.824 seconds. Automatic local vocal exit
-185.15s and return203.60s influence decisions. Source contrast distinguishes
-percussive break from bass/vocal passages. This does not establish good dance,
-correct semantic sections, or correct recurrence phrasing.
+Planner in one paragraph: the song is cut at measured transitions and phrase
+edges; each stretch gets a class from stem levels; each class has a sequence of
+hand figures (gather = inward spiral, rise, open, circle, arc, sway, reach,
+eight) in arm-relative coordinates, mirrored on each repeat, relative to the
+hand's current facing and travelling around the base, so the full 360° is used.
+Returning material reuses the same sequence, larger. The hand path is low-passed.
+Moments: section arrivals (prepare, arrive, living hold, release) and keys/guitar
+flourishes (reached and passed through); a true freeze only on a cut. Joints are
+solved per knot (damped least squares, base faces the hand, zone penalties), then
+a follower limits each joint's speed and acceleration and brakes before end
+stops, then a hard red-zone clearance check bisects back if needed.
 
-**Known geometry failure:** sampled exported world points reached z=-0.1377m,
-below the displayed floor. This is unresolved. Investigate real rig intent and
-retargeting; do not hide it by arbitrarily raising the whole installation.
-Latest silence-hold and preview-label changes may postdate exported artifacts.
-Regenerate only after clarification and necessary fixes.
+## Commands
 
-## 5. Assets and verification
+```
+D=/home/stcksmsh/Documents/Codex/2026-09-23-can-you-check-the-programming-github/output/music-arm
+cargo run --release -p hyst-previz --example ensemble_preview -- \
+  $D/song-figures-N.html instant-crush.m4a $D/instant-crush.interpreted.sidecar.json \
+  [--score OUT.json] [--zone x0,y0,z0,x1,y1,z1] [--groove-only] [--no-reuse]
+node $D/record-ensemble.cjs $D/song-figures-N.html $D/instant-crush.m4a $D/clip.mp4 START SECONDS
+```
+Open the HTML from disk (audio sits beside it). The recorder draws the canvas
+only, max 40 s, fixed camera. `$D` is outside git; never commit media. Stems are
+in `$D/stem-analysis/`; the Demucs environment is gone, do not regenerate.
+Checks: `cargo test --workspace --exclude hyst-render`, clippy `-D warnings` on
+hyst-compile/-output/-previz/-cli, `cargo fmt --all --check`,
+`node crates/hyst-previz/tests/ensemble.cjs`. Do not run hyst-render tests (GPU).
 
-External media directory (never commit generated media):
-`/home/stcksmsh/Documents/Codex/2026-09-23-can-you-check-the-programming-github/output/music-arm/`
+## Next work, in the user's order
 
-Useful files:
-- `instant-crush.m4a`, `instant-crush-stereo-analysis.wav`.
-- `instant-crush.interpreted.sidecar.json` plus earlier memory/stems evidence.
-- `stem-analysis/htdemucs/instant-crush-stereo-analysis/` contains vocals, drums,
-  bass, other WAVs + separation.json. CPU separation already complete.
-- `song-ensemble.html`, `instant-crush.ensemble.score.json`,
-  `instant-crush.ensemble.intent.json`; groove/no-reuse exports may also exist.
-- Rejected full videos and old before/after excerpts remain as baselines.
-- `record-ensemble.cjs` was drafted but no new ensemble excerpt/video was produced
-  before the user redirected work to this handoff.
+0. **Better render (asked last, do first).** The user called the arm render
+   "too shitty". It is a 2D canvas of thick lines and dots. Ask one question
+   about the look they want if unclear; otherwise make the arm read as a solid
+   3D object: shaded links with thickness, joint housings, a base, a visible
+   hand/end effector, ground shadow, sensible lighting and depth ordering. Keep
+   it one portable HTML file, keep the critique panel, trail, zones and orbit.
+   Decide between improving the canvas and a small embedded WebGL renderer by
+   what stays a single offline file. The same dance must look better, so the
+   user can judge motion more fairly. The recorder must keep working.
+1. **Body.** Motion should travel through the arm: base to wrist (wave, whip)
+   or wrist leading and arm following; wrist and elbow lag or counter-move.
+   Now the arm is a stick that follows its hand and the posture comes from one
+   neutral bias. The user called it "stiff" early on; never addressed.
+2. **Speed smoothing** (user's guess): hand speed is whatever each figure's
+   shape gives (median 0.32 m/s, peaks 2.1). Re-time along path length while
+   keeping arrivals on time.
+3. **Stillness and suspension**, beyond the living holds.
+4. **Keys decide.** Still open and important: nothing follows keys/guitar/voice
+   directly. Two attempts (pace from keys activity, hand height from a pitch
+   proxy) were invisible in blind tests and deleted. A next attempt must be
+   structural (keys choose figures and their timing), probably needs a real
+   pitch/onset tracker on the `other` stem, and must pass a blind test.
+5. **Many arms** with dynamic red zones. Old arm-vs-arm code was deleted; build
+   it as moving zones inside the figure planner.
 
-Loopback8766 server was unavailable when checked this session. Verify before
-linking it. Preview can be inspected locally; source HTML contains placeholders
-and must first be exported. Don't imply an old artifact matches newest code.
+## Known weak points
 
-Recent checks: 15 Python analysis tests, legacy JS timing/media helpers, new
-ensemble JS deterministic seek/offset helpers, CPU Rust workspace tests excluding
-hyst-render and workspace check passed during integration. Workers reported
-targeted clippy pass. These precede some final edits; inspect latest receipts and
-rerun affected checks after changes. No new GPU or hardware checks.
+- **Planner can fail to compile a score.** `--groove-only --no-reuse --zone
+  0.15,0.3,0.25,0.6,0.6,0.7` together ends with "cannot fit tangents ... accel
+  13856/8000" (each flag alone works). When the red-zone bisect stops a joint
+  abruptly, `fit_tangents` halves neighbouring tangents and the failure cascades
+  into rest-to-rest segments that exceed the envelope. Dynamic red zones (many
+  arms) will hit this constantly; fix it before step 5, ideally by making the
+  follower zone-aware instead of bisecting after it.
+- Shoulder sits within 1° of its end stop about 11% of the song.
+- Follower limits (design 180°/s, 800°/s²; envelope 240°/s, 8000°/s²) are
+  guesses for hobby-class servos; no load, gravity or inertia model.
+- Stretch class comes from fixed thresholds on stem levels.
+- Arrival and flourish poses are two or three fixed shapes; likely repetitive.
+- Cut detector is tested only on a synthetic fixture.
+- Arrivals stop 0–80 ms late (follower lag); knots are 68 ms apart.
+- `AGENTS.md` is long (about 38k tokens of history); trimming it into a history
+  file was proposed and not done.
 
-## 6. Continue only after answers
+## Rules of engagement
 
-Record agreed creative objective, explicit non-goals, and one concrete next
-acceptance slice. Keep musical reasoning independent from rig DOF and agent count.
-Prefer a small representative real-audio proof that tests the agreed intent.
-Show before/after and core groove with specials disabled when relevant; verify
-seek, continuity, limits, real rests, recurrence and uncertainty honestly.
-Ask for human dance-quality judgment on short excerpts before any full-song
-render. Do not call this installation complete because a pipeline compiles.
-Append an honest checkpoint to docs/DANCE_HANDOFF.md and AGENTS.md.
+Ask the user before artistic choices they have not made. Do not stack layers
+without a blind test. Keep code small: the planner is about 840 lines and every
+surviving part was either requested or verified by eye. Append an honest entry
+to `docs/DANCE_HANDOFF.md` and `AGENTS.md` when you stop.

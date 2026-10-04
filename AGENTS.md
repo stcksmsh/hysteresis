@@ -1,27 +1,20 @@
 # AGENTS.md — Hysteresis (native Rust rewrite)
 
-## Latest user priority — 2026-10-01 automatic interpretation + 3D ensemble
+## Current user priority — 2026-10-04 single-arm figure dance
 
-Automatic musical interpretation is mandatory. Offline analysis must drive
-coherent choreography, musical memory and anticipation. The installation target
-is multiple synchronized 3D robot arms plus projected visuals. Provisional rig:
-base rotation + three bending joints + extra rotation at the second joint
-(five servos; distal link optional). Local axes remain unconfirmed.
+Read `docs/DANCE_RESTART_PROMPT.md` first, then the last entries of
+`docs/DANCE_HANDOFF.md`. Goal: one 3D arm that dances beautifully to the song,
+planned automatically from offline sidecars, executable on real servo hardware.
+Many arms and projection come later. The base rotates a continuous 360°.
+The only dance path is `hyst_compile::director::figures::compile_figures`,
+previewed by `hyst-previz`'s `ensemble_preview`; all older dance planners were
+deleted on the user's decision (kept in history at branch `dance-checkpoint`).
+The user reviews short clips by eye; unverified layers are settled by blind
+ablation. Human timings in `scripts/instant_crush.acceptance.json` are
+validation-only. Frozen `src/` and `tools/` remain read-only.
 
-Read `docs/DANCE_RESTART_PROMPT.md` and latest `docs/DANCE_HANDOFF.md` entry.
-All current recordings remain rejected. The authored solo director was removed
-from production; human timings are validation-only in
-`scripts/instant_crush.acceptance.json`. A planar arm is only a diagnostic rig.
-Native window and hardware integration must not displace musical interpretation.
-
-## Active user priority — 2026-09-24 dance handoff
-
-Read `docs/DANCE_HANDOFF.md` for current task, assets and acceptance. User confirms
-audio-synchronized 16-beat study does not meet goal: motion must respond to song
-content. User authorizes coordinator cross-crate integration for this vertical
-slice; assign workers bounded file ownership. Frozen `src/` and `tools/` remain
-read-only. Explicitly delegate coding to cheaper agents; Astra medium coordinates.
-Preserve substantial pre-existing uncommitted/untracked native rewrite.
+Older dance entries in §5 below describe deleted code and rejected directions;
+read them only for history.
 
 
 The single AI-facing entry point for this repo, **for the Rust rewrite currently in progress.**

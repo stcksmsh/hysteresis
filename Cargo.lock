@@ -668,20 +668,11 @@ version = "0.1.0"
 [[package]]
 name = "hyst-cli"
 version = "0.1.0"
-dependencies = [
- "hyst-audio",
- "hyst-compile",
- "hyst-output",
- "hyst-previz",
- "serde",
- "serde_json",
-]
 
 [[package]]
 name = "hyst-compile"
 version = "0.1.0"
 dependencies = [
- "hyst-choreo",
  "hyst-core",
  "serde",
  "serde_json",
@@ -707,10 +698,7 @@ version = "0.1.0"
 name = "hyst-output"
 version = "0.1.0"
 dependencies = [
- "hyst-audio",
- "hyst-compile",
  "hyst-core",
- "serde",
 ]
 
 [[package]]
@@ -718,7 +706,6 @@ name = "hyst-previz"
 version = "0.1.0"
 dependencies = [
  "hyst-compile",
- "hyst-output",
  "serde_json",
 ]
 

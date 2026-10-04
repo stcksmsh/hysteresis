@@ -5,6 +5,3 @@ edition.workspace = true
 
 [dependencies]
 hyst-core.workspace = true
-hyst-audio = { path = "../hyst-audio" }
-hyst-compile = { path = "../hyst-compile" }
-serde.workspace = true

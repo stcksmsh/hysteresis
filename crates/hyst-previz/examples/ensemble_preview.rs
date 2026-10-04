@@ -1,28 +1,23 @@
-//! cargo run -p hyst-previz --example ensemble_preview -- output.html track-url sidecar.json [--agents N] [--score score.json] [--interpretation interpretation.json] [--rig rig.json] [--groove-only] [--no-reuse] [--figures] [--zone x0,y0,z0,x1,y1,z1]
+//! cargo run -p hyst-previz --example ensemble_preview -- output.html track-url sidecar.json [--score score.json] [--rig rig.json] [--groove-only] [--no-reuse] [--zone x0,y0,z0,x1,y1,z1]
 use std::{env, fs, io, path::PathBuf};
 
 fn usage() -> &'static str {
-    "Usage: ensemble_preview OUTPUT.html AUDIO_URL SIDECAR.json [--agents N] [--score OUT.json] [--interpretation OUT.json] [--rig RIG.json] [--groove-only] [--no-reuse]\n\
+    "Usage: ensemble_preview OUTPUT.html AUDIO_URL SIDECAR.json [--score OUT.json] [--rig RIG.json] [--groove-only] [--no-reuse] [--zone BOX]\n\
      AUDIO_URL resolves relative to OUTPUT.html; serve both files with a range-capable local server.\n\
-     --agents N       arm count (default 6; 1..=24)\n\
-     --score PATH     write resolved 3D ensemble score for audit\n\
-     --interpretation PATH  write musical decision cues for audit\n\
+     --score PATH     write resolved 3D score for audit\n\
      --rig PATH       use JSON rig geometry and local axes (default illustrative five-axis)\n\
-     --groove-only    disable hit and windup accents\n\
+     --groove-only    disable hit accents\n\
      --no-reuse       disable recalled musical material\n\
-     --figures        single arm, hand-figure planner with zone avoidance\n\
-     --zone BOX       red zone corners in metres, x0,y0,z0,x1,y1,z1 (repeatable; needs --figures)\n\
+     --zone BOX       red zone corners in metres, x0,y0,z0,x1,y1,z1 (repeatable)\n\
+     --figures        accepted and ignored; the figure planner is the only mode\n\
      Audio starts only after Play. Score and arm trajectories resolve offline for deterministic seek."
 }
 
 fn main() -> io::Result<()> {
     let mut args = env::args().skip(1);
     let mut positional = Vec::new();
-    let mut count = 6_usize;
     let mut score_output = None;
-    let mut interpretation_output = None;
     let mut rig_path = None;
-    let mut figures = false;
     let mut zones = Vec::new();
     let mut config = hyst_compile::CompileConfig::default();
     while let Some(arg) = args.next() {
@@ -31,23 +26,9 @@ fn main() -> io::Result<()> {
                 println!("{}", usage());
                 return Ok(());
             }
-            "--agents" => {
-                let raw = args
-                    .next()
-                    .ok_or_else(|| io::Error::other("--agents requires a count"))?;
-                count = raw
-                    .parse()
-                    .map_err(|_| io::Error::other("invalid --agents count"))?;
-                if !(1..=24).contains(&count) {
-                    return Err(io::Error::other("--agents must be 1..=24"));
-                }
-            }
-            "--groove-only" => {
-                config.enable_hits = false;
-                config.enable_windups = false;
-            }
+            "--groove-only" => config.enable_hits = false,
             "--no-reuse" => config.reuse_repeats = false,
-            "--figures" => figures = true,
+            "--figures" => {}
             "--zone" => {
                 let raw = args
                     .next()
@@ -69,12 +50,6 @@ fn main() -> io::Result<()> {
                 score_output =
                     Some(PathBuf::from(args.next().ok_or_else(|| {
                         io::Error::other("--score requires a path")
-                    })?))
-            }
-            "--interpretation" => {
-                interpretation_output =
-                    Some(PathBuf::from(args.next().ok_or_else(|| {
-                        io::Error::other("--interpretation requires a path")
                     })?))
             }
             "--rig" => {
@@ -102,27 +77,12 @@ fn main() -> io::Result<()> {
         Some(path) => serde_json::from_str(&fs::read_to_string(path)?)?,
         None => hyst_compile::ensemble::Rig::illustrative_five_axis(),
     };
-    if !figures && !zones.is_empty() {
-        return Err(io::Error::other("--zone needs --figures"));
-    }
-    let (score, cues) = if figures {
-        let score = hyst_compile::director::figures::compile_figures(&sidecar, config, rig, &zones)
-            .map_err(io::Error::other)?;
-        let cues = score.cues.clone();
-        (score, cues)
-    } else {
-        let interpretation = hyst_compile::director::compile_interpretation(&sidecar, config)
-            .map_err(io::Error::other)?;
-        if let Some(path) = &interpretation_output {
-            fs::write(path, serde_json::to_vec_pretty(&interpretation)?)?;
-        }
-        let score = hyst_compile::ensemble::compile_ensemble(&interpretation, rig, count)
-            .map_err(io::Error::other)?;
-        (score, interpretation.cues)
-    };
+    let score = hyst_compile::director::figures::compile_figures(&sidecar, config, rig, &zones)
+        .map_err(io::Error::other)?;
+    let cues = &score.cues;
     let count = score.tracks.len();
     // One arm stays small at 60 fps and removes visible frame stepping.
-    let fps: f64 = if figures { 60.0 } else { 30.0 };
+    let fps: f64 = 60.0;
     let mut frames = Vec::with_capacity((score.duration * fps).ceil() as usize + 1);
     for i in 0..=(score.duration * fps).ceil() as usize {
         let time = (i as f64 / fps).min(score.duration);

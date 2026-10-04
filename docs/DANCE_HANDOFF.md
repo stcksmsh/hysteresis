@@ -857,3 +857,43 @@ shoulder segment 3042); at 0:21–0:25 base 559 → 237, elbow 1817 → 903°/s�
 hand acceleration max 22.8 → 14.5 m/s². Arrivals now reach zero speed 0–80 ms
 after the event (follower lag; was 0–20 ms). Shoulder within 1° of its end
 stop 11.7% of the song, unresolved. 174 CPU tests pass.
+
+### Versions 9–12: living holds, blind ablation, cleanup — 2026-10-04
+
+User on version 8: "really good now", but holds too mechanical. A dancer's hold
+is almost never a stop: small slow movement. A true hold only when the music
+really cuts (dense, nothing, dense). Version 9–10: arrival holds drift steadily
+(slow turn, slow rise, slight give) from before the arrival until after the
+release, 1.5 beats, lower arrival pose; a `cut` detector on the RMS envelope
+gives a true freeze. Instant Crush has no cuts; a synthetic-fixture test covers
+the detector. Slowest hand speed around arrivals 0.036–0.18 m/s.
+
+User asked whether the loop had over-engineered the code. Blind ablation over
+1:24–2:04 (six shuffled clips, key unread until the verdict): with the hand-path
+low-pass off the arm was "extremely jittery"; with beat pulse, keys pacing,
+figure carry, or melody contour off the user saw no difference. A second blind
+pair over the break rated the no-contour version same or slightly better. All
+four were deleted, with `scripts/dance_melody.py`. Consequence: nothing follows
+keys, guitar or voice directly any more; that request is fully open.
+
+A clean-context reviewer found no bugs in `figures.rs` (its two "needs changes"
+claims were checked and were wrong). On the user's decision ("option A") a
+clean-context worker then deleted every older dance planner and the features
+holding them in place: `memory.rs`, the planar score planner in `lib.rs`,
+`compile_interpretation`, `compile_ensemble` with formations and arm-vs-arm
+clearance, `hyst-output` choreography/ensemble outputs, the old single-arm
+preview and viewer, `hyst` CLI `score-sample`/`score-trace` (the CLI now only
+prints usage), two old acceptance scripts and `arm_features.py`. About 6300
+lines removed. `ensemble_preview` is figures-only (`--figures` is a no-op).
+The planner's score and HTML output are byte-identical before and after
+(checked by the worker and again by the coordinator). 130 CPU workspace tests,
+clippy, fmt, `ensemble.cjs` and 15 Python tests pass. Older entries in this file
+and in `AGENTS.md` §5 describe deleted code.
+
+Found during verification, not fixed: `--groove-only --no-reuse --zone ...`
+together fails with "cannot fit tangents" (see restart prompt, weak points).
+
+User's last requests: better render of the arm ("too shitty"), then continue
+with body, speed smoothing, stillness, keys-decide, many arms with dynamic red
+zones. Hand off to a fresh agent via `docs/DANCE_RESTART_PROMPT.md`.
+Latest export: `song-figures-12.html` (outside git).

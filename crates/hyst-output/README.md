@@ -1,8 +1,7 @@
 # hyst-output
 
-Physical-output plumbing: `VizOutput` implementations for dense fields plus direct-clock
-compiled-score playback. See `SINTEZA_IMPLEMENTATION_PLAN.md` §4 R5/R8 and
-`SINTEZA_CHOREOGRAPHY.md` §0/§5.2/§5.3/§7.
+Physical-output plumbing: `VizOutput` implementations for dense fields. See
+`SINTEZA_IMPLEMENTATION_PLAN.md` §4 R5/R8 and `SINTEZA_CHOREOGRAPHY.md` §0/§5.3/§7.
 
 ## What's here
 
@@ -24,17 +23,6 @@ Shared plumbing, generic, not field-specific:
   rig needs), tracks a diff (`last_diff()`), and supports `mark_element_failed(index)` — a
   failed element freezes at its last value and is excluded from all further resampling; every
   other element keeps updating normally.
-
-`ChoreographyOutput` (compiled single-arm score — §5.2):
-- Owns validated `hyst_compile::Score`; samples score directly at absolute time. It does not use
-  `VizOutput::update(dt)` or patchgraph because cue decisions are resolved offline.
-- `sample_at(seconds)` is deterministic random access. Nonfinite input errors; finite values clamp
-  to `[0, duration]`. Shared cue boundaries choose next cue metadata, except final endpoint.
-- `sample_clock(clock, ClockPosition::Logical|Audible)` makes latency domain explicit. Logical
-  source time leads output audio; audible time follows heard audio. Zero-rate clock errors.
-- Validation mirrors exported-score audit: contiguous coverage, shared poses, bounded quintic
-  speed/acceleration, exact anchor knots, immutable holds. It is artifact validation, not hardware
-  safety, torque, calibration, or collision certification.
 
 ## Remaining field-renderer integration
 
