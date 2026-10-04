@@ -48,8 +48,15 @@ struct NoteTrack {
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct Lane {
+    /// [time, rough MIDI pitch, strength 0..1]
+    #[serde(default)]
+    notes: Vec<[f64; 3]>,
     phrases: Vec<LanePhrase>,
+    /// A-weighted level in dB for each beat of the grid.
+    #[serde(default)]
+    level_per_beat: Vec<f64>,
 }
 
 #[derive(Deserialize)]

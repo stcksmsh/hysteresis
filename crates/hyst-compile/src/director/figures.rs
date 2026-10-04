@@ -217,25 +217,83 @@ pub fn compile_figures(
         }
     }
 
-    // Keys/guitar lanes: phrase starts where figures may change, and the chord
-    // root (low lane) per phrase as (start, pitch).
-    let lane = |name: &str| {
-        data.note_track
-            .as_ref()
-            .and_then(|n| n.lanes.get(name))
-            .map_or(&[][..], |l| &l.phrases[..])
+    // Leader and second: the loudest and next loudest instrument lane on each
+    // beat (voice and drums do not compete). A challenger takes over once it
+    // has led by 3 dB for four beats, counted from the first of them.
+    let mut lanes: Vec<(&str, &Lane)> = data.note_track.as_ref().map_or(Vec::new(), |n| {
+        n.lanes
+            .iter()
+            .filter(|(name, lane)| {
+                !matches!(name.as_str(), "vocals" | "drums") && !lane.level_per_beat.is_empty()
+            })
+            .map(|(name, lane)| (name.as_str(), lane))
+            .collect()
+    });
+    lanes.sort_by_key(|lane| lane.0);
+    let mut ranks: Vec<[usize; 2]> = Vec::new();
+    if lanes.len() >= 2 {
+        let count = lanes
+            .iter()
+            .map(|l| l.1.level_per_beat.len())
+            .min()
+            .unwrap();
+        let level = |lane: usize, i: usize| {
+            let v = &lanes[lane].1.level_per_beat[i.saturating_sub(2)..(i + 3).min(count)];
+            v.iter().sum::<f64>() / v.len() as f64
+        };
+        let best = |i: usize, skip: usize| {
+            (0..lanes.len())
+                .filter(|l| *l != skip)
+                .max_by(|a, b| level(*a, i).total_cmp(&level(*b, i)))
+                .unwrap()
+        };
+        let (mut leader, mut challenger, mut streak) = (best(0, usize::MAX), usize::MAX, 0);
+        for i in 0..count {
+            let top = best(i, usize::MAX);
+            if top != leader && level(top, i) - level(leader, i) > 3.0 {
+                streak = if challenger == top { streak + 1 } else { 1 };
+                challenger = top;
+                if streak >= 4 {
+                    leader = top;
+                    for (j, rank) in ranks.iter_mut().enumerate().skip(i + 1 - streak) {
+                        *rank = [leader, best(j, leader)];
+                    }
+                    streak = 0;
+                }
+            } else {
+                streak = 0;
+            }
+            ranks.push([leader, best(i, leader)]);
+        }
+    }
+    let rank_at = |t: f64| {
+        let i = ((t - data.musical_memory.beat_zero) / beat).max(0.0) as usize;
+        ranks[i.min(ranks.len() - 1)]
     };
-    let roots: Vec<(f64, f64)> = lane("other_low")
-        .iter()
-        .map(|p| (p.start, p.pitch_median))
-        .collect();
-    let mut decisions: Vec<f64> = lane("other_low")
-        .iter()
-        .chain(lane("other_high"))
-        .map(|p| p.start)
-        .collect();
-    decisions.sort_by(f64::total_cmp);
-    decisions.dedup_by(|b, a| *b - *a < 1.5 * beat);
+    // Where figures may change, and the pitch to compare: the phrases of
+    // whichever lane leads at that time, as (start, pitch).
+    let mut roots: Vec<(f64, f64)> = Vec::new();
+    // Accents for flourishes: notes of whichever lane is second, (time, strength).
+    let mut accents: Vec<(f64, f64)> = Vec::new();
+    if !ranks.is_empty() {
+        for (index, (_, lane)) in lanes.iter().enumerate() {
+            roots.extend(
+                lane.phrases
+                    .iter()
+                    .filter(|p| rank_at(p.start)[0] == index)
+                    .map(|p| (p.start, p.pitch_median)),
+            );
+            accents.extend(
+                lane.notes
+                    .iter()
+                    .filter(|n| rank_at(n[0])[1] == index)
+                    .map(|n| (n[0], n[2])),
+            );
+        }
+    }
+    roots.sort_by(|a, b| a.0.total_cmp(&b.0));
+    roots.dedup_by(|b, a| b.0 - a.0 < 1.5 * beat);
+    accents.sort_by(|a, b| a.0.total_cmp(&b.0));
 
     // (run start, direction, class) for recall lookups.
     let mut chosen: Vec<(f64, f64, &str)> = Vec::new();
@@ -271,9 +329,9 @@ pub fn compile_figures(
         let mut last_step = usize::MAX;
         for k in 0.. {
             let mut step = k % sequence.len();
-            // Keys decide which figure follows: a chord root stepping up picks
-            // the class's most rising figure, a step down its most falling one.
-            if config.keys == 2 {
+            // The leader decides which figure follows: its pitch stepping up
+            // picks the class's most rising figure, a step down its most falling.
+            if config.keys >= 1 {
                 let i = roots.partition_point(|p| p.0 <= t + beat);
                 if i >= 2 && (roots[i - 1].0 - t).abs() <= 2.0 * beat {
                     let way = (roots[i - 1].1 - roots[i - 2].1).signum();
@@ -289,15 +347,15 @@ pub fn compile_figures(
             last_step = step;
             let (name, shape, beats, step_dir) = sequence[step];
             let mut stop = t + beats * beat;
-            // Keys decide when figures change: the figure ends on the lanes'
-            // phrase start nearest its nominal length.
+            // The leader decides when figures change: the figure ends on its
+            // phrase start nearest the figure's nominal length.
             if config.keys >= 1 {
-                let near = decisions
+                let near = roots
                     .iter()
-                    .filter(|p| (0.6 * beats * beat..=1.4 * beats * beat).contains(&(**p - t)))
-                    .min_by(|a, b| (**a - stop).abs().total_cmp(&(**b - stop).abs()));
-                if let Some(&point) = near {
-                    stop = point;
+                    .filter(|p| (0.6 * beats * beat..=1.4 * beats * beat).contains(&(p.0 - t)))
+                    .min_by(|a, b| (a.0 - stop).abs().total_cmp(&(b.0 - stop).abs()));
+                if let Some(point) = near {
+                    stop = point.0;
                 }
             }
             if stop > end - 2.0 * beat {
@@ -333,7 +391,12 @@ pub fn compile_figures(
                     repeat + 1,
                     recall_from.map_or(String::new(), |t| format!(" · returns from {t:.1}s")),
                     activity[0], activity[1], activity[2], activity[3],
-                ),
+                ) + &if config.keys >= 1 && !ranks.is_empty() {
+                    let [lead, second] = rank_at(t);
+                    format!(" · leads {}, second {}", lanes[lead].0, lanes[second].0)
+                } else {
+                    String::new()
+                },
                 profile: Vec::new(),
             });
             t = stop;
@@ -427,7 +490,11 @@ pub fn compile_figures(
             }
         }
         // Strongest melodic-stem onset in each stretch of about sixteen beats.
-        let flourishes = spaced(onsets(sources[3], rate, 0.25), 16.0 * beat);
+        let flourishes = if config.keys == 2 && !accents.is_empty() {
+            spaced(accents.clone(), 16.0 * beat)
+        } else {
+            spaced(onsets(sources[3], rate, 0.25), 16.0 * beat)
+        };
         for (n, (time, strength)) in flourishes.into_iter().enumerate() {
             let clash = moments.iter().any(|m| (m.time - time).abs() < 8.0 * beat);
             let inside = class_at(time - 3.0 * beat) != "silence"

@@ -3,12 +3,11 @@
 
 Usage: python3 scripts/dance_notes.py INPUT_SIDECAR STEM_DIR OUTPUT_SIDECAR
 
-Adds `noteTrack.lanes`: per lane, onsets with a rough pitch, grouped into
-phrases. STEM_DIR holds vocals.wav, drums.wav, bass.wav and other.wav. These are
-source-separation estimates; `other` is everything that is not voice, drums or
-bass (guitar, keys and synths together), so it is split by register only.
-`pitch` is the strongest harmonic series near each onset (often a chord root),
-not a transcription; drum lanes carry no pitch (0).
+Adds `noteTrack.lanes`, one lane per WAV in STEM_DIR (any separation: four
+stems, six stems, or stems split further): onsets with a rough pitch, grouped
+into phrases, and a loudness per beat so a reader can tell which lane leads.
+Stems are source-separation estimates. `pitch` is the strongest harmonic series
+near each onset (often a chord root), not a transcription; drums carry none (0).
 """
 from __future__ import annotations
 
@@ -23,15 +22,13 @@ from scipy.signal import find_peaks, stft
 
 HOP_SECONDS = 0.01
 FFT = 4096
-# lane: (stem, onset band in Hz, MIDI range searched for pitch or None)
-LANES = {
-    "vocals": ("vocals", (150, 5000), (48, 84)),
-    "other_high": ("other", (500, 5000), (60, 88)),
-    "other_low": ("other", (80, 500), (40, 60)),
-    "bass": ("bass", (40, 1000), (28, 55)),
-    "snare_hats": ("drums", (2000, 10000), None),
-    "kick": ("drums", (30, 150), None),
+# stem name: (onset band in Hz, MIDI range searched for pitch or None)
+SETTINGS = {
+    "vocals": ((150, 5000), (48, 84)),
+    "bass": ((40, 1000), (28, 55)),
+    "drums": ((30, 10000), None),
 }
+DEFAULT = ((150, 5000), (40, 88))
 # A pause this long (beats) between onsets ends a phrase.
 GAP_BEATS = 1.25
 # A phrase also ends where the pitch settles this far (semitones) from before.
@@ -109,6 +106,23 @@ def track(audio, sample_rate, beat, band=(150, 5000), pitch_range=(43, 88)):
     return notes, phrases
 
 
+def beat_levels(audio, sample_rate, beat, beat_zero, duration):
+    """A-weighted level in dB (re full scale) for each beat of the grid."""
+    freqs, times, spectrum = stft(audio, sample_rate, nperseg=2048, noverlap=1024, padded=False, boundary=None)
+    f2 = freqs**2
+    weight = (12194**2 * f2**2) / (
+        (f2 + 20.6**2) * np.sqrt((f2 + 107.7**2) * (f2 + 737.9**2)) * (f2 + 12194**2) + 1e-30
+    )
+    power = (np.abs(spectrum) ** 2 * (weight / weight.max())[:, None] ** 2).sum(0)
+    index = np.floor((times - beat_zero) / beat).astype(int)
+    count = int((duration - beat_zero) / beat)
+    out = []
+    for i in range(count):
+        frames = power[index == i]
+        out.append(round(float(10 * np.log10(frames.mean() + 1e-12)), 2) if len(frames) else -120.0)
+    return out
+
+
 def main(argv):
     if len(argv) != 4:
         raise SystemExit(__doc__)
@@ -116,15 +130,25 @@ def main(argv):
     if output_path.resolve() == sidecar_path.resolve() or stem_dir.resolve() in output_path.resolve().parents:
         raise SystemExit("output must differ from the input and lie outside the stem directory")
     sidecar = json.loads(sidecar_path.read_text())
-    beat = float(sidecar["musicalMemory"]["beatPeriod"])
+    memory = sidecar["musicalMemory"]
+    beat, beat_zero, duration = float(memory["beatPeriod"]), float(memory["beatZero"]), float(sidecar["duration"])
+    stems = sorted(stem_dir.glob("*.wav"))
+    if not stems:
+        raise SystemExit(f"no WAV stems in {stem_dir}")
     lanes = {}
-    for name, (stem, band, pitch_range) in LANES.items():
-        audio, sample_rate = sf.read(stem_dir / f"{stem}.wav", dtype="float32", always_2d=True)
-        if abs(len(audio) / sample_rate - float(sidecar["duration"])) > 0.1:
-            raise SystemExit(f"{stem} stem and sidecar duration mismatch (>100 ms)")
-        notes, phrases = track(audio.mean(1), sample_rate, beat, band, pitch_range)
-        lanes[name] = {"stem": stem, "bandHz": band, "notes": notes, "phrases": phrases}
-        print(f"{name}: {len(notes)} notes, {len(phrases)} phrases")
+    for path in stems:
+        audio, sample_rate = sf.read(path, dtype="float32", always_2d=True)
+        if abs(len(audio) / sample_rate - duration) > 0.1:
+            raise SystemExit(f"{path.name} and sidecar duration mismatch (>100 ms)")
+        band, pitch_range = SETTINGS.get(path.stem, DEFAULT)
+        mono = audio.mean(1)
+        notes, phrases = track(mono, sample_rate, beat, band, pitch_range)
+        lanes[path.stem] = {
+            "notes": notes,
+            "phrases": phrases,
+            "levelPerBeat": beat_levels(mono, sample_rate, beat, beat_zero, duration),
+        }
+        print(f"{path.stem}: {len(notes)} notes, {len(phrases)} phrases")
     sidecar["noteTrack"] = {
         "version": 1,
         "method": "stem_flux_onsets_harmonic_sum_pitch_v1",
