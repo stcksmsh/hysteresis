@@ -1042,3 +1042,26 @@ Export `song-figures-16.html`, clip `render-16.mp4`.
   inspected. Clip `render-20.mp4`, export `song-figures-20.html`. No review yet.
 - Alternatives offered for the roll: steady spin scaled by energy; flash toward
   the viewer on arrivals and flourishes. Body step B (whip on moments) not built.
+
+### Wrist roll: jitter, then too little; three drivers under blind review — 2026-10-04
+
+User on version 20: a lot better, wrist "a tad jittery". Measured: 41 roll
+reversals a minute, speed pinned at the 180°/s cap. Version 21 smoothed the
+aim (half-second travel window, easing by travel): 22 reversals a minute, p95
+77°/s. User on version 21: now "not rolling enough; it should move, flourish,
+but not jitter, big difference". So the target is much roll with no reversals.
+
+`CompileConfig::roll` / `--roll` now selects one of three candidates. The
+losers must be deleted after the verdict:
+- `lead` (default for now): face leads the hand's travel, livelier gain.
+  28 reversals a minute, acceleration p95 at the 800°/s² design cap.
+- `spin`: 150° per metre of hand travel, one direction. 0 reversals, speed
+  median 52, p95 123°/s.
+- `twirl`: spin plus an extra half turn eased over three beats across each
+  moment. 1 reversal a minute, speed p95 at the 180°/s cap.
+A fourth idea (turn the face to throw the light at the viewer on moments) was
+written and dropped before review: it needs viewer and light positions.
+
+Blind side-by-side prepared, not yet judged: `blind-roll-side-by-side.mp4`
+(1:24–1:54, A | B | C shuffled), key `blind-roll-key.json` unread by the agent.
+130 CPU tests, clippy, fmt, `ensemble.cjs` pass.

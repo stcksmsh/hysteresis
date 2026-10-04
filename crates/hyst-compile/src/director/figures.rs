@@ -25,6 +25,8 @@ const FLOOR: Zone = Zone {
 };
 /// Hard check enforces this clearance; the solver aims for 1.6 times it.
 const MARGIN_M: f64 = 0.05;
+/// `RollMode::Spin` and `Twirl`: disc turn per metre of hand travel.
+const SPIN_DEGREES_PER_METRE: f64 = 150.0;
 /// Fastest the figure path carries the hand, m/s. A guess, tuned by eye on one
 /// song; moments may exceed it briefly.
 const HAND_SPEED_CAP: f64 = 0.8;
@@ -608,10 +610,32 @@ pub fn compile_figures(
                     .sum::<f64>()
             };
             let (vy, vz) = (across(y), across(z));
-            let aim = vz.atan2(vy).to_degrees();
-            let aim = aim + 180.0 * ((roll - aim) / 180.0).round();
             let pace = vy.hypot(vz) / (8.0 * step);
-            roll += (aim - roll) * 0.12 * (pace / 0.5).min(1.0);
+            let prior = targets[i.saturating_sub(1)].0;
+            let travel = (0..3)
+                .map(|k| (target[k] - prior[k]).powi(2))
+                .sum::<f64>()
+                .sqrt();
+            match config.roll {
+                crate::RollMode::Lead => {
+                    let aim = vz.atan2(vy).to_degrees();
+                    let aim = aim + 180.0 * ((roll - aim) / 180.0).round();
+                    roll += (aim - roll) * 0.3 * (pace / 0.5).min(1.0);
+                }
+                // One direction only: a roll that never reverses cannot jitter.
+                crate::RollMode::Spin => roll += SPIN_DEGREES_PER_METRE * travel,
+                crate::RollMode::Twirl => {
+                    // Spin, plus an extra half turn eased across each moment.
+                    let turned = |t: f64| {
+                        moments
+                            .iter()
+                            .map(|m| smooth((t - m.time) / (3.0 * beat) + 0.5))
+                            .sum::<f64>()
+                    };
+                    roll += SPIN_DEGREES_PER_METRE * travel
+                        + 180.0 * (turned(time) - turned(time - step));
+                }
+            }
             wanted[r] = roll;
         }
         // Hardware follower: each joint chases its solved angle at a design
