@@ -46,6 +46,10 @@ pub struct CompileConfig {
     pub wrist_drag_degrees_per_mps: f64,
     /// Temporary review knob: 0 flourishes as before, 1 none, 2 slow and soft.
     pub flourish: u8,
+    /// Temporary review knob: 0 figures change on fixed beat counts, 1 on the
+    /// keys/guitar lanes' phrase starts, 2 also picks the next figure from the
+    /// chord root's step up or down.
+    pub keys: u8,
 }
 impl Default for CompileConfig {
     fn default() -> Self {
@@ -54,6 +58,7 @@ impl Default for CompileConfig {
             reuse_repeats: true,
             wrist_drag_degrees_per_mps: 240.0,
             flourish: 0,
+            keys: 0,
         }
     }
 }

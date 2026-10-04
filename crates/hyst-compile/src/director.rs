@@ -37,6 +37,26 @@ struct Evidence {
     musical_memory: Memory,
     stem_interpretation: Stems,
     musical_structure: Structure,
+    /// Onsets and phrases per instrument lane (`scripts/dance_notes.py`).
+    #[serde(default)]
+    note_track: Option<NoteTrack>,
+}
+
+#[derive(Deserialize)]
+struct NoteTrack {
+    lanes: std::collections::HashMap<String, Lane>,
+}
+
+#[derive(Deserialize)]
+struct Lane {
+    phrases: Vec<LanePhrase>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LanePhrase {
+    start: f64,
+    pitch_median: f64,
 }
 
 #[derive(Deserialize)]

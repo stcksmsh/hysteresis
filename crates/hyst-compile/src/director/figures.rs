@@ -217,6 +217,26 @@ pub fn compile_figures(
         }
     }
 
+    // Keys/guitar lanes: phrase starts where figures may change, and the chord
+    // root (low lane) per phrase as (start, pitch).
+    let lane = |name: &str| {
+        data.note_track
+            .as_ref()
+            .and_then(|n| n.lanes.get(name))
+            .map_or(&[][..], |l| &l.phrases[..])
+    };
+    let roots: Vec<(f64, f64)> = lane("other_low")
+        .iter()
+        .map(|p| (p.start, p.pitch_median))
+        .collect();
+    let mut decisions: Vec<f64> = lane("other_low")
+        .iter()
+        .chain(lane("other_high"))
+        .map(|p| p.start)
+        .collect();
+    decisions.sort_by(f64::total_cmp);
+    decisions.dedup_by(|b, a| *b - *a < 1.5 * beat);
+
     // (run start, direction, class) for recall lookups.
     let mut chosen: Vec<(f64, f64, &str)> = Vec::new();
     let mut occurrences: HashMap<&str, usize> = HashMap::new();
@@ -248,8 +268,38 @@ pub fn compile_figures(
         }
         chosen.push((start, first_dir, class));
         let mut t = start;
-        for (k, &(name, shape, beats, step_dir)) in sequence.iter().cycle().enumerate() {
+        let mut last_step = usize::MAX;
+        for k in 0.. {
+            let mut step = k % sequence.len();
+            // Keys decide which figure follows: a chord root stepping up picks
+            // the class's most rising figure, a step down its most falling one.
+            if config.keys == 2 {
+                let i = roots.partition_point(|p| p.0 <= t + beat);
+                if i >= 2 && (roots[i - 1].0 - t).abs() <= 2.0 * beat {
+                    let way = (roots[i - 1].1 - roots[i - 2].1).signum();
+                    let lift = |s: &Step| way * ((s.1)(1.0, 1.0)[1] - (s.1)(0.0, 1.0)[1]);
+                    let pick = (0..sequence.len())
+                        .max_by(|a, b| lift(&sequence[*a]).total_cmp(&lift(&sequence[*b])))
+                        .unwrap();
+                    if way != 0.0 && pick != last_step {
+                        step = pick;
+                    }
+                }
+            }
+            last_step = step;
+            let (name, shape, beats, step_dir) = sequence[step];
             let mut stop = t + beats * beat;
+            // Keys decide when figures change: the figure ends on the lanes'
+            // phrase start nearest its nominal length.
+            if config.keys >= 1 {
+                let near = decisions
+                    .iter()
+                    .filter(|p| (0.6 * beats * beat..=1.4 * beats * beat).contains(&(**p - t)))
+                    .min_by(|a, b| (**a - stop).abs().total_cmp(&(**b - stop).abs()));
+                if let Some(&point) = near {
+                    stop = point;
+                }
+            }
             if stop > end - 2.0 * beat {
                 stop = end;
             }
