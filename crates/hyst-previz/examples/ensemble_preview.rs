@@ -99,7 +99,13 @@ fn main() -> io::Result<()> {
                     .collect::<Vec<_>>()
             })
             .collect();
-        frames.push(serde_json::json!([points, frame.cue_index]));
+        // First joint angle per arm, so the preview can turn the base visibly.
+        let yaws: Vec<f64> = frame
+            .agents
+            .iter()
+            .map(|agent| (agent.joints_degrees[0] * 100.0).round() / 100.0)
+            .collect();
+        frames.push(serde_json::json!([points, frame.cue_index, yaws]));
     }
     let data = serde_json::json!({
         "duration":score.duration,"fps":fps,"frames":frames,"cues":cues,"zones":zones,

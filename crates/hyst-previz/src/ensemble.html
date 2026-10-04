@@ -91,7 +91,9 @@
     const agents=a[0].map((arm,j)=>arm.map((point,k)=>point.map((v,axis)=>v+(b[0][j][k][axis]-v)*alpha)));
     const va=score.cues[a[1]], vb=score.cues[b[1]];
     const visual={...va, sourceActivity:va.sourceActivity.map((v,i)=>v+(vb.sourceActivity[i]-v)*alpha), confidence:va.confidence+(vb.confidence-va.confidence)*alpha};
-    return {time:t,agents,cueIndex:a[1],visual};
+    // First joint angle per arm, degrees (absent in old exports).
+    const yaws=a[0].map((_,j)=>{const from=(a[2]||[])[j]||0;return from+(((b[2]||[])[j]||0)-from)*alpha;});
+    return {time:t,agents,yaws,cueIndex:a[1],visual};
   }
   function inspectAt(score,seconds) {
     const frame=frameAt(score,seconds);
@@ -247,7 +249,12 @@
       // Pedestal and a column up to the shoulder.
       drum(arm[0],.15,.012,'#141d25','#1d2a34');
       drum(arm[0],.11,.035,rgb(HOUSING,.8),rgb(HOUSING,1.5));
-      drum(arm[0],.04,arm[1][2],rgb(BODY,.55),rgb(BODY,.9),.035);
+      // Turntable markings turn with the base joint.
+      for(let spoke=0;spoke<3;spoke++) {
+        const angle=state.yaws[id]*Math.PI/180+spoke*2*Math.PI/3, mark=r=>[arm[0][0]+r*Math.cos(angle),arm[0][1]+r*Math.sin(angle),.036];
+        line(mark(.055),mark(.1),spoke?rgb(HOUSING,2.6):colors[id%4],spoke?2:4);
+      }
+      drum(arm[0],.05,arm[1][2],rgb(HOUSING,1),rgb(HOUSING,2),.035);
       paint(arm,id);
     });
     const dark=ctx.createRadialGradient(640,380,300,640,380,820);dark.addColorStop(0,'rgba(0,0,0,0)');dark.addColorStop(1,'rgba(0,0,0,.6)');
