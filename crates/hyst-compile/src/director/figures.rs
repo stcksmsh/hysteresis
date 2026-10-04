@@ -285,16 +285,6 @@ pub fn compile_figures(
         }
     }
 
-    let contour = |name: &str, t: f64| -> (f64, f64) {
-        data.melody_contour
-            .as_ref()
-            .and_then(|m| Some((m.envelope_rate, m.sources.get(name)?)))
-            .filter(|(_, c)| !c.height.is_empty() && c.height.len() == c.salience.len())
-            .map_or((0.5, 0.0), |(rate, c)| {
-                let i = ((t * rate).max(0.0) as usize).min(c.height.len() - 1);
-                (c.height[i], c.salience[i])
-            })
-    };
     let shell = |t: f64| -> [f64; 3] {
         let i = instances
             .partition_point(|x| x.end <= t)
@@ -303,11 +293,6 @@ pub fn compile_figures(
         let u = ((t - x.start) / (x.end - x.start).max(1e-9)).clamp(0.0, 1.0);
         let mut p = scaled((x.shape)(u, x.dir), x.scale);
         p[0] += x.heading + x.turn * u;
-        // Lead melody lifts and lowers the hand; the voice opens the arm.
-        let (lead_height, lead_salience) = contour("other", t);
-        let (voice_height, voice_salience) = contour("vocals", t);
-        p[1] += 0.3 * (lead_height - 0.5) * lead_salience;
-        p[2] += 0.2 * (voice_height - 0.4) * voice_salience;
         p
     };
     let step = beat / 8.0;
