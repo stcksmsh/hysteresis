@@ -105,9 +105,10 @@ fn still(_: f64, _: f64) -> [f64; 3] {
 /// (name, shape, beats, direction multiplier)
 type Step = (&'static str, Shape, f64, f64);
 
-/// Figure sequence per musical class and an overall size. The sequence runs
-/// for as long as the class lasts, mirrored on every repeat.
-fn motif(class: &str) -> (&'static [Step], f64) {
+/// Figure sequence per musical class, an overall size, and how many full turns
+/// the whole figure travels around the base per 32 beats. The sequence runs for
+/// as long as the class lasts, mirrored on every repeat.
+fn motif(class: &str) -> (&'static [Step], f64, f64) {
     const FULL: &[Step] = &[
         ("gather", gather, 8.0, 1.0),
         ("rise", rise, 4.0, 1.0),
@@ -125,13 +126,13 @@ fn motif(class: &str) -> (&'static [Step], f64) {
     const CALM: &[Step] = &[("sway", sway, 16.0, 1.0)];
     const STILL: &[Step] = &[("still", still, 1e9, 1.0)];
     match class {
-        "interlocked" => (FULL, 0.9),
-        "bass-led" => (BASS, 0.85),
-        "vocal-led" => (VOCAL, 0.7),
-        "percussive-open" => (PERC, 0.6),
-        "textural" => (CALM, 0.5),
-        "silence" => (STILL, 1.0),
-        _ => (CALM, 0.35),
+        "interlocked" => (FULL, 0.9, 0.5),
+        "bass-led" => (BASS, 0.85, 1.0),
+        "vocal-led" => (VOCAL, 0.7, 0.5),
+        "percussive-open" => (PERC, 0.6, 1.0),
+        "textural" => (CALM, 0.5, 0.25),
+        "silence" => (STILL, 1.0, 0.0),
+        _ => (CALM, 0.35, 0.25),
     }
 }
 
@@ -144,9 +145,11 @@ struct Instance {
     pulse: f64,
     /// Scaled shell position where the previous figure ended.
     entry: [f64; 3],
-    /// Whole turns (units of 2 = 360 degrees) added to azimuth so this figure
-    /// starts at the nearest equivalent of `entry` instead of unwinding.
-    winding: f64,
+    /// Azimuth offset (1.0 = 180 degrees) that makes this figure start where
+    /// the last one ended. Figures are relative to the current facing: no front.
+    heading: f64,
+    /// Azimuth travelled steadily over the figure, same units.
+    turn: f64,
 }
 
 pub fn compile_figures(
@@ -213,7 +216,7 @@ pub fn compile_figures(
     let mut entry = still(0.0, 1.0);
     for &(start, end, class) in &runs {
         let activity = classify(start, end).1;
-        let (sequence, size) = motif(class);
+        let (sequence, size, travel) = motif(class);
         let n = *occurrences
             .entry(class)
             .and_modify(|n| *n += 1)
@@ -243,7 +246,8 @@ pub fn compile_figures(
             }
             let repeat = k / sequence.len();
             let dir = first_dir * step_dir * if repeat % 2 == 1 { -1.0 } else { 1.0 };
-            let winding = 2.0 * ((entry[0] - scaled(shape(0.0, dir), scale)[0]) / 2.0).round();
+            let heading = entry[0] - scaled(shape(0.0, dir), scale)[0];
+            let turn = first_dir * travel * 2.0 * (stop - t) / (32.0 * beat);
             instances.push(Instance {
                 start: t,
                 end: stop,
@@ -252,10 +256,11 @@ pub fn compile_figures(
                 scale,
                 pulse,
                 entry,
-                winding,
+                heading,
+                turn,
             });
             entry = scaled(shape(1.0, dir), scale);
-            entry[0] += winding;
+            entry[0] += heading + turn;
             cues.push(IntentCue {
                 start: t,
                 end: stop,
@@ -319,8 +324,8 @@ pub fn compile_figures(
         let u = ((at(t) - at(x.start)) / (at(x.end) - at(x.start)).max(1e-9)).clamp(0.0, 1.0);
         let mut here = scaled((x.shape)(u, x.dir), x.scale);
         let mut first = scaled((x.shape)(0.0, x.dir), x.scale);
-        here[0] += x.winding;
-        first[0] += x.winding;
+        here[0] += x.heading + x.turn * u;
+        first[0] += x.heading;
         // Carry the previous figure's end into this one over its first half.
         let carry = 1.0 - smooth(u / 0.5);
         let mut p: [f64; 3] = std::array::from_fn(|k| here[k] + (x.entry[k] - first[k]) * carry);
@@ -345,7 +350,8 @@ pub fn compile_figures(
         .iter()
         .map(|c| c.link_m.iter().map(|v| v * v).sum::<f64>().sqrt())
         .sum();
-    let targets: Vec<[f64; 3]> = (0..raw.len() as isize)
+    // (hand position in metres, unwrapped hand azimuth in degrees)
+    let targets: Vec<([f64; 3], f64)> = (0..raw.len() as isize)
         .map(|i| {
             let (mut sum, mut total) = ([0.0; 3], 0.0);
             for d in -radius..=radius {
@@ -361,11 +367,14 @@ pub fn compile_figures(
             let azimuth = (p[0] * 180.0_f64).to_radians();
             let elevation = (10.0 + 70.0 * p[1].clamp(0.0, 1.0)).to_radians();
             let distance = reach_m * (0.38 + 0.54 * p[2].clamp(0.0, 1.0));
-            [
-                distance * elevation.cos() * azimuth.cos(),
-                distance * elevation.cos() * azimuth.sin(),
-                distance * elevation.sin(),
-            ]
+            (
+                [
+                    distance * elevation.cos() * azimuth.cos(),
+                    distance * elevation.cos() * azimuth.sin(),
+                    distance * elevation.sin(),
+                ],
+                p[0] * 180.0,
+            )
         })
         .collect();
 
@@ -378,14 +387,14 @@ pub fn compile_figures(
         return Err("rig neutral pose intersects a zone".into());
     }
     let mut knots: Vec<JointKnot> = Vec::with_capacity(times.len());
-    for (&time, &target) in times.iter().zip(&targets) {
+    for (&time, &(target, facing)) in times.iter().zip(&targets) {
         if knots.last().is_some_and(|k| time - k.time < 1e-9) {
             continue;
         }
         let (prior, dt) = knots.last().map_or((neutral.clone(), f64::INFINITY), |k| {
             (k.joints_degrees.clone(), time - k.time)
         });
-        let mut q = solve(&rig, &placement, &zones, target, &prior)?;
+        let mut q = solve(&rig, &placement, &zones, target, facing, &prior)?;
         for (j, c) in rig.channels.iter().enumerate() {
             // Largest step a rest-to-rest quintic can make inside both limits,
             // so tangent fitting always has a feasible fallback.
@@ -487,12 +496,14 @@ fn clear(
 }
 
 /// Damped least squares: hand to target, stay near the prior pose (fluid
-/// joints), drift toward neutral, push every link sample out of zones.
+/// joints), base facing the hand, others drifting toward neutral, every link
+/// sample pushed out of zones.
 fn solve(
     rig: &Rig,
     placement: &Placement,
     zones: &[Zone],
     target: [f64; 3],
+    facing_degrees: f64,
     prior: &[f64],
 ) -> Result<Vec<f64>, String> {
     let n = rig.channels.len();
@@ -501,13 +512,14 @@ fn solve(
         let mut r: Vec<f64> = (0..3).map(|i| points[n][i] - target[i]).collect();
         for j in 0..n {
             r.push(4e-4 * (q[j] - prior[j]));
-            // A freely spinning joint has no home angle to drift back to.
+            // A freely spinning joint has no home angle; it faces the hand, which
+            // keeps the arm from flipping over backwards or twisting sideways.
             let c = &rig.channels[j];
             let free = c.max_degrees - c.min_degrees >= 720.0;
             r.push(if free {
-                0.0
+                6e-4 * (q[j] - facing_degrees)
             } else {
-                1e-4 * (q[j] - c.neutral_degrees)
+                3e-4 * (q[j] - c.neutral_degrees)
             });
         }
         r.extend(
@@ -579,10 +591,19 @@ mod tests {
         let json = super::super::tests::fixture(0.7, 0.7);
         let rig = Rig::illustrative_five_axis();
         let free = compile_figures(&json, CompileConfig::default(), rig.clone(), &[]).unwrap();
-        // Zone sits in the hand's unobstructed path.
+        // Zone surrounds where the unobstructed hand is furthest to one side.
+        let far = (0..=960)
+            .map(|i| {
+                *free.sample(8.0 * i as f64 / 960.0).unwrap().agents[0]
+                    .world_points
+                    .last()
+                    .unwrap()
+            })
+            .max_by(|a, b| a[1].abs().total_cmp(&b[1].abs()))
+            .unwrap();
         let zone = Zone {
-            min: [0.15, 0.25, 0.25],
-            max: [0.6, 0.5, 0.6],
+            min: far.map(|v| v - 0.1),
+            max: far.map(|v| v + 0.1),
         };
         let blocked = compile_figures(&json, CompileConfig::default(), rig, &[zone]).unwrap();
         let (mut entered_free, mut low, mut high) = (false, f64::INFINITY, f64::NEG_INFINITY);
