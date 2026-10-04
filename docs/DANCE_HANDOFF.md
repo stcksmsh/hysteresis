@@ -1656,3 +1656,24 @@ closest approach 13.4 cm. Left: arm 0 still has one 11 m/s² kick at 187.9 s
 4.9 m/s² version); arms 4 and 5 have three or four short standstills; cause
 not looked for. `hexagon-38.html`, `hexagon-38-full.mp4`. 136 CPU tests,
 clippy, fmt, `ensemble.cjs` pass; one arm alone identical to version 34.
+
+### Version 39: draw order across arms; canon delays on the beat — 2026-10-05
+
+User on the version 38 video: "the orange one is sometimes rendered below the
+one above it, layering issue"; and "doesn't follow music enough, it's like an
+abstraction, but it needs to be more on point to be better I think".
+
+- Preview: each arm used to be painted whole, in arm order, so a far arm could
+  cover a near one. Every arm's pieces (and its pedestal) now go into one list
+  drawn far to near. Planner data for one arm is unchanged from version 34
+  (the exported file differs only in the page's script).
+- Canon step is a whole number of beats (the move's length / 6, rounded, at
+  least 1); Ripple's is half a beat. A late arm now lands on the beat.
+- "On point" is **not answered**. Four readings were put to the user (accents
+  together; arms joining and leaving with how full the music is; one arm
+  leading the solo or the voice; the single-arm figures themselves being too
+  loose) with a request for two or three timestamps and what the six arms
+  should do there, as the 4:07 note did for the voice. Do not build ensemble
+  behaviour for this before the user answers.
+`hexagon-39.html`, `hexagon-39-full.mp4`. 136 CPU tests, clippy, fmt,
+`ensemble.cjs` pass.

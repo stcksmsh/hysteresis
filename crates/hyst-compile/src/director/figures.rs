@@ -190,9 +190,10 @@ impl Formation {
         index: usize,
         length: f64,
     ) -> (f64, f64, f64) {
-        // A sixth of the move per step (the user: half a second to a second
-        // for a move of three), less where more arms would overrun the move.
-        let step = length / (count as f64).max(6.0);
+        // About a sixth of the move per step (the user: half a second to a
+        // second for a move of three), less where more arms would overrun
+        // the move; in whole beats, so a late arm still lands on the beat.
+        let step = (length / (count as f64).max(6.0)).round().max(1.0);
         let odd = a % 2 == 1;
         let turn = |every: f64, groups: usize| (beats / every) as usize % groups.max(1);
         let on = |dancing: bool| if dancing { 1.0 } else { 0.0 };
@@ -203,11 +204,11 @@ impl Formation {
             Self::Ripple => {
                 let (out, far) = (a.min(count - a), count / 2);
                 let rank = if index % 2 == 1 { far - out } else { out };
-                // Half the canon's step: reversing the order makes the end
-                // arms play alternate moves slower and faster, here by a
-                // quarter (at the full step, by half, which doubled every
-                // accent's acceleration and read as a stutter).
-                (1.0, rank as f64 * 0.5 * step, 1.0)
+                // Half a beat per step, less than the canon's: reversing
+                // the order makes the end arms play alternate moves slower
+                // and faster, and at the canon's step that was by half, which
+                // doubled every accent's acceleration and read as a stutter.
+                (1.0, rank as f64 * 0.5, 1.0)
             }
             Self::Pairs => {
                 let groups = (count / 2).max(1);

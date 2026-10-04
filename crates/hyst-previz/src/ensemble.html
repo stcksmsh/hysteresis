@@ -238,8 +238,11 @@
     // Arm pieces and trail segments sorted far to near together, so the trail
     // passes in front of the arm or behind it as it does in space. Links are cut
     // in four so a long link sorts correctly against a nearby trail segment.
+    // All arms' pieces go into one list, drawn far to near, so a near arm is
+    // never painted under a far one where they reach across each other.
+    const parts=[];
     const paint=(arm,id)=>{
-      const last=arm.length-1, size=k=>.026-.012*k/last, parts=[];
+      const last=arm.length-1, size=k=>.026-.012*k/last;
       for(let k=1;k<last-1;k++) for(let piece=0;piece<4;piece++) {
         if(Math.hypot(...sub(arm[k+1],arm[k]))<=1e-4) continue;
         const span=sub(arm[k+1],arm[k]), a=along(arm[k],span,piece/4), b=along(arm[k],span,(piece+1)/4);
@@ -266,7 +269,6 @@
           ctx.shadowBlur=0;ctx.globalAlpha=1;
         }});
       }
-      parts.sort((a,b)=>b.depth-a.depth).forEach(part=>part.paint());
     };
     // The hand's light pools on the floor under it.
     ctx.save();ctx.beginPath();stage.forEach((q,i)=>i?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1]));ctx.closePath();ctx.clip();
@@ -291,7 +293,9 @@
     state.agents.forEach((arm,id)=>{
       const hand=arm[arm.length-1];
       line(hand,[hand[0],hand[1],.003],'#4d626d',1);
-      // Pedestal and a column up to the shoulder.
+      // Pedestal and a column up to the shoulder: under everything that
+      // stands over it, so a little further back than its own centre.
+      parts.push({depth:project(arm[0])[2]+.2,paint:()=>{
       drum(arm[0],.15,.012,'#141d25','#1d2a34');
       drum(arm[0],.11,.035,rgb(HOUSING,.8),rgb(HOUSING,1.5));
       // Turntable markings turn with the base joint.
@@ -300,8 +304,10 @@
         line(mark(.055),mark(.1),spoke?rgb(HOUSING,2.6):colors[id%4],spoke?2:4);
       }
       drum(arm[0],.05,arm[1][2],rgb(HOUSING,1),rgb(HOUSING,2),.035);
+      }});
       paint(arm,id);
     });
+    parts.sort((a,b)=>b.depth-a.depth).forEach(part=>part.paint());
     const dark=ctx.createRadialGradient(640,380,300,640,380,820);dark.addColorStop(0,'rgba(0,0,0,0)');dark.addColorStop(1,'rgba(0,0,0,.6)');
     ctx.fillStyle=dark;ctx.fillRect(0,0,1280,720);
     ctx.font='15px system-ui';ctx.fillStyle='#c7d6db';ctx.fillText(`${state.agents.length} ${state.agents.length===1?'arm':'arms'} · ${v.formation} · ${v.character}`,24,34);
