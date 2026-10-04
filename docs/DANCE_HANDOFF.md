@@ -1116,3 +1116,23 @@ one-way net drift of the travel part (about 5.5 turns over the song) was not
 raised again; unresolved, low priority. 130 CPU tests, clippy, fmt,
 `ensemble.cjs` pass. Next: body B (whip or wave on moments), with/without
 side by side.
+
+### Body, second attempt: wrist drag, side-by-side pending — 2026-10-04
+
+Plain joint delay died in its blind test. New mechanism: the wrist's preferred
+bend trails the hand's vertical speed (bends back as the hand rises, forward
+as it falls). It is a posture preference inside the solver (`lean` argument of
+`solve`), so shoulder and elbow compensate and the hand keeps its target.
+Knob `CompileConfig::wrist_drag_degrees_per_mps`, flag `--drag`, default 0
+(off) until judged; lean clamped to ±45°.
+
+Measured against drag 0, whole song: hand moves 0.0 cm median at every gain
+(p95 0.4 / 1.0 / 2.0 cm at gain 60 / 120 / 240); the wrist point moves 0.4 /
+0.8 / 1.4 cm median, 1.7 / 3.3 / 5.1 cm p95; wrist bend range −3..74° becomes
+−18..82°, −33..87°, −41..90°. Small in position; whether the changed tool angle
+reads is the question for the eye.
+
+Side-by-side prepared, shuffled, not yet judged: `blind-drag-side-by-side.mp4`
+(1:24–2:04) with gains 0, 120, 240; key `blind-drag-key.json` unread. If no
+difference is seen, delete the knob and `lean`. Body B (whip on moments) still
+unbuilt. 130 CPU tests, clippy, fmt, `ensemble.cjs` pass.

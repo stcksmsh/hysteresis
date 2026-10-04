@@ -34,17 +34,21 @@ pub struct SegmentBounds {
     pub max_acceleration_degrees_per_second2: [f64; 3],
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CompileConfig {
     pub enable_hits: bool,
     /// Recall an earlier measured phrase signature; false uses current content.
     pub reuse_repeats: bool,
+    /// Body: how far the wrist's preferred bend trails the hand's vertical
+    /// speed, degrees per m/s. 0 turns it off. Under side-by-side review.
+    pub wrist_drag_degrees_per_mps: f64,
 }
 impl Default for CompileConfig {
     fn default() -> Self {
         Self {
             enable_hits: true,
             reuse_repeats: true,
+            wrist_drag_degrees_per_mps: 0.0,
         }
     }
 }

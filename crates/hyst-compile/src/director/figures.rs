@@ -582,7 +582,23 @@ pub fn compile_figures(
         let holding = held_target == Some(target);
         held_target = Some(target);
         if !holding || wanted.is_empty() {
-            wanted = solve(&rig, &placement, &zones, target, facing, &prior)?;
+            // Body: the wrist trails the hand's rise and fall like a brush
+            // (bends back as the hand rises, forward as it falls). It is only a
+            // posture preference, so the other joints make up for it and the
+            // hand still reaches its target.
+            let (lo, hi) = (i.saturating_sub(4), (i + 4).min(targets.len() - 1));
+            let rise = (targets[hi].0[2] - targets[lo].0[2]) / (times[hi] - times[lo]).max(1e-9);
+            let lean = (config.wrist_drag_degrees_per_mps * rise).clamp(-45.0, 45.0);
+            let wrist = roll_joint.map_or(rig.channels.len() - 1, |r| r - 1);
+            wanted = solve(
+                &rig,
+                &placement,
+                &zones,
+                target,
+                facing,
+                &prior,
+                (wrist, lean),
+            )?;
         }
         if let Some(r) = roll_joint {
             // Flips: the disc turns to show its other face across each moment,
@@ -801,6 +817,8 @@ fn solve(
     target: [f64; 3],
     facing_degrees: f64,
     prior: &[f64],
+    // (joint, degrees): shifts that joint's home angle for this pose.
+    lean: (usize, f64),
 ) -> Result<Vec<f64>, String> {
     let n = rig.channels.len();
     let residual = |q: &[f64]| -> Result<Vec<f64>, String> {
@@ -815,7 +833,7 @@ fn solve(
             r.push(if free {
                 6e-4 * (q[j] - facing_degrees)
             } else {
-                3e-4 * (q[j] - c.neutral_degrees)
+                3e-4 * (q[j] - c.neutral_degrees - if j == lean.0 { lean.1 } else { 0.0 })
             });
         }
         r.extend(
