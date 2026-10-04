@@ -341,7 +341,7 @@ pub fn compile_figures(
         p[2] += 0.2 * (voice_height - 0.4) * voice_salience;
         p
     };
-    let step = beat / 4.0;
+    let step = beat / 8.0;
     let count = (data.duration / step).ceil() as usize;
     let grid: Vec<f64> = (0..=count)
         .map(|i| (i as f64 * step).min(data.duration))
@@ -465,11 +465,12 @@ pub fn compile_figures(
                 * f64::from(tau < 0.0);
             p[1] -= 0.2 * prepare;
             p[2] -= 0.35 * prepare;
-            // The hand stops turning while it holds. Strength sets how far the
-            // held pose departs from the flowing path, never how still it is.
+            // The hand stops turning only while it holds; a pass-through
+            // flourish keeps travelling so it adds no sideways swing. Strength
+            // sets how far the pose departs from the flowing path.
             let base = flow(time);
             let held = [
-                base[0],
+                if hold > 0.0 { base[0] } else { p[0] },
                 lerp(base[1], pose[0], strength),
                 lerp(base[2], pose[1], strength),
             ];
@@ -479,33 +480,9 @@ pub fn compile_figures(
         }
         p
     };
-    // Knots on the grid, plus exact arrival and hold-end times.
-    let mut times = grid.clone();
-    for m in &moments {
-        times.extend([m.time, (m.time + m.hold_beats * beat).min(data.duration)]);
-    }
-    times.sort_by(f64::total_cmp);
-    let exact: Vec<f64> = moments
-        .iter()
-        .flat_map(|m| [m.time, m.time + m.hold_beats * beat])
-        .collect();
-    let is_exact = |t: f64| exact.iter().any(|e| (e - t).abs() < 1e-9);
-    let mut kept: Vec<f64> = Vec::with_capacity(times.len());
-    for t in times {
-        match kept.last().copied() {
-            // Too close to the previous knot: keep whichever is an exact time.
-            Some(last) if t - last < 0.4 * step => {
-                if is_exact(t) && !is_exact(last) && kept.len() > 1 {
-                    *kept.last_mut().unwrap() = t;
-                }
-            }
-            _ => kept.push(t),
-        }
-    }
-    if let Some(last) = kept.last_mut() {
-        *last = data.duration;
-    }
-    let times = kept;
+    // Uniform knots keep the quintic well-conditioned; a moment lands within
+    // half a knot (about 34 ms at this tempo) of its measured time.
+    let times = grid.clone();
     let reach_m: f64 = rig
         .channels
         .iter()
@@ -541,6 +518,8 @@ pub fn compile_figures(
     }
     let mut knots: Vec<JointKnot> = Vec::with_capacity(times.len());
     let mut held_target: Option<[f64; 3]> = None;
+    let mut wanted: Vec<f64> = Vec::new();
+    let mut speed = vec![0.0; rig.channels.len()];
     for (&time, &(target, facing)) in times.iter().zip(&targets) {
         if knots.last().is_some_and(|k| time - k.time < 1e-9) {
             continue;
@@ -548,20 +527,36 @@ pub fn compile_figures(
         let (prior, dt) = knots.last().map_or((neutral.clone(), f64::INFINITY), |k| {
             (k.joints_degrees.clone(), time - k.time)
         });
-        // A held hand holds the whole arm: no settling toward neutral.
+        // A held hand keeps its solved pose: no settling toward neutral.
         let holding = held_target == Some(target);
         held_target = Some(target);
-        let mut q = if holding {
-            prior.clone()
-        } else {
-            solve(&rig, &placement, &zones, target, facing, &prior)?
-        };
-        for (j, c) in rig.channels.iter().enumerate() {
-            // Largest step a rest-to-rest quintic can make inside both limits,
-            // so tangent fitting always has a feasible fallback.
-            let travel = (c.max_speed_degrees_per_second * dt / 1.875)
-                .min(c.max_acceleration_degrees_per_second2 * dt * dt / 5.7736);
-            q[j] = q[j].clamp(prior[j] - travel, prior[j] + travel);
+        if !holding || wanted.is_empty() {
+            wanted = solve(&rig, &placement, &zones, target, facing, &prior)?;
+        }
+        // Hardware follower: each joint chases its solved angle at a design
+        // acceleration and speed a hobby-class servo arm could plausibly follow,
+        // braking early enough to stop on target (trapezoid profile). The rig's
+        // own limits are the hard validation envelope, reached only when a zone
+        // forces an abrupt stop. Both are assumptions until measured on hardware.
+        let mut q = wanted.clone();
+        if dt.is_finite() {
+            for (j, c) in rig.channels.iter().enumerate() {
+                let top = 0.75 * c.max_speed_degrees_per_second;
+                let accel = 0.1 * c.max_acceleration_degrees_per_second2;
+                let gap = wanted[j] - prior[j];
+                let brake = (2.0 * accel * gap.abs())
+                    .sqrt()
+                    .min(top)
+                    .min(gap.abs() / dt);
+                let v = (gap.signum() * brake).clamp(speed[j] - accel * dt, speed[j] + accel * dt);
+                // Never approach a joint end stop faster than it can brake.
+                let room = |d: f64| (2.0 * accel * (d - 1.0).max(0.0)).sqrt();
+                let v = v.clamp(
+                    -room(prior[j] - c.min_degrees),
+                    room(c.max_degrees - prior[j]),
+                );
+                q[j] = (prior[j] + v * dt).clamp(c.min_degrees + 0.5, c.max_degrees - 0.5);
+            }
         }
         // Hard guarantee: bisect back toward the prior clear pose.
         if !clear(&rig, &placement, &zones, &prior, &q)? {
@@ -576,6 +571,11 @@ pub fn compile_figures(
                 }
             }
             q = (0..q.len()).map(|j| lerp(prior[j], q[j], lo)).collect();
+        }
+        if dt.is_finite() {
+            for j in 0..q.len() {
+                speed[j] = (q[j] - prior[j]) / dt;
+            }
         }
         knots.push(JointKnot {
             time,

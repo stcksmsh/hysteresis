@@ -828,3 +828,32 @@ change during holds median 0.00°, worst 0.94°; hand acceleration p95 3.4 m/s²
 gap in the red-zone check, now six blends per knot at full margin with the
 solver aiming for 1.6× margin. Shoulder at its limit 10.7% of the song.
 174 CPU tests pass. No human review of version 5 or 6 yet.
+
+### Versions 7–8: fewer holds, faster highs, hardware follower — 2026-10-04
+
+User on version 6: better; energetic parts too slow in places; holds too many
+and too long ("they have uses, just not like this"). Version 7: only the 13
+section arrivals stop, for half a beat; the 23 flourishes are reached and passed
+through; energetic figures three quarters as long; shorter moment windows in
+energetic classes; less lingering on sustained notes.
+
+User on version 7: good, but strange flicks remain (0:23) that real hardware
+could not execute. **Hardware execution is the end goal** — treat joint
+dynamics as a real constraint, not preview polish. Version 8:
+- Joint follower in `figures.rs`: each joint chases its solved angle with a
+  trapezoid profile at design limits (0.75 × rig speed, 0.1 × rig acceleration:
+  180°/s and 800°/s² on the illustrative rig), braking before targets and
+  before end stops. Rig limits (240°/s, 8000°/s²) are the hard validation
+  envelope. All four numbers are assumptions until measured on real servos;
+  `--rig` JSON is the calibration knob.
+- Knots uniform at beat/8 (68 ms), no inserted exact knots: uneven knot
+  spacing made the quintic ill-conditioned. Moments land within 34 ms.
+- Flourishes no longer freeze azimuth (that caused the sideways swing at 0:23).
+- Found on the way: the earlier "cannot fit tangents" failures were quintic
+  overshoot past the shoulder end stop, not acceleration.
+
+Measured v7 → v8: joint acceleration max about 3000–3300 → 1600–1800°/s² (one
+shoulder segment 3042); at 0:21–0:25 base 559 → 237, elbow 1817 → 903°/s²;
+hand acceleration max 22.8 → 14.5 m/s². Arrivals now reach zero speed 0–80 ms
+after the event (follower lag; was 0–20 ms). Shoulder within 1° of its end
+stop 11.7% of the song, unresolved. 174 CPU tests pass.

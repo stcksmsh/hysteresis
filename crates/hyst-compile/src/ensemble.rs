@@ -51,8 +51,8 @@ impl Rig {
                 intent_mix_degrees,
                 min_degrees: -110.0,
                 max_degrees: 110.0,
-                max_speed_degrees_per_second: 400.0,
-                max_acceleration_degrees_per_second2: 12000.0,
+                max_speed_degrees_per_second: 240.0,
+                max_acceleration_degrees_per_second2: 8000.0,
             };
         let mut rig = Self {
             channels: vec![
