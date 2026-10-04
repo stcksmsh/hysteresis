@@ -1308,3 +1308,10 @@ User confirmed: the arm's base will rotate a full, continuous 360°. This is a
 settled rig property, not an assumption. Figures may circle through the back
 and accumulate turns (`figures.rs` winding offsets, `circle` figure; illustrative
 rig base yaw unbounded). Other joint limits and speeds remain invented.
+
+### Solid arm render — 2026-10-04
+
+`ensemble.html` now draws the arm as shaded cylinders, sphere joints, turntable
+base, glowing hand and cast floor shadow (canvas 2D, single offline file,
+recorder unchanged). Planner output unchanged. Not reviewed by the user yet.
+Details in `docs/DANCE_HANDOFF.md`.

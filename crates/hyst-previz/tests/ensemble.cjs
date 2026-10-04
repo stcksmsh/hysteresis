@@ -15,6 +15,7 @@ function element(id) { return {id,value:'0',textContent:'',addEventListener(name
 const ids=['audio','ensemble','seek','play','offset','clock','decision','evidence','uncertainty','rig-description'];
 const elements=Object.fromEntries(ids.map(id=>[id,element(id)]));
 const context2d=Object.fromEntries(['fillRect','beginPath','moveTo','lineTo','closePath','fill','stroke','arc','fillText'].map(k=>[k,()=>{}]));
+context2d.createLinearGradient=context2d.createRadialGradient=()=>({addColorStop(){}});
 elements.ensemble.getContext=()=>context2d;
 elements.audio.paused=true;elements.audio.currentTime=0;elements.audio.playCalls=0;
 elements.audio.play=async function(){this.playCalls++;this.paused=false;events['audio:play']();};

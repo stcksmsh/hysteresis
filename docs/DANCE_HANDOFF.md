@@ -897,3 +897,23 @@ User's last requests: better render of the arm ("too shitty"), then continue
 with body, speed smoothing, stillness, keys-decide, many arms with dynamic red
 zones. Hand off to a fresh agent via `docs/DANCE_RESTART_PROMPT.md`.
 Latest export: `song-figures-12.html` (outside git).
+
+### Version 13: solid arm render — 2026-10-04
+
+User called the arm render "too shitty" (thick 2D lines and dots). Rewrote the
+arm drawing in `ensemble.html`, still canvas 2D: the recorder runs headless
+Chrome with `--disable-gpu` and reads the canvas with `toDataURL`, so WebGL was
+the riskier choice and the file stays one offline page. Links are tapered
+cylinders shaded from one world light (gradient across the silhouette from real
+cylinder normals), joints are lit spheres, the base is a turntable with a marker
+toward the shoulder, the hand is a glowing ball, and the arm casts a soft floor
+shadow along the light direction. Depth-sorted. Trail fades with age; stem rings
+dimmed. Critique panel, zones, orbit, drop line and the `draw(t)` hook unchanged.
+
+Planner untouched: before the change a fresh export was byte-identical to
+`song-figures-12.html`. Look is an agent assumption (matte light arm, dark
+stage), not a user choice. Joint housings are spheres because preview frames
+carry joint positions only, not axes. Link radii are invented (15–31 mm).
+Checked: stills at 95, 104, 150, 222 s inspected, no page errors; recorder ran
+unmodified. Clips of 1:24–1:54: `render-12-old.mp4`, `render-13-new.mp4`
+(outside git). No user review yet. Next: step 1 "body".

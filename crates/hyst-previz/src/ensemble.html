@@ -127,56 +127,101 @@
     ctx.strokeStyle=color;ctx.lineWidth=width;ctx.lineCap='round';
     ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.lineTo(q[0],q[1]);ctx.stroke();
   }
-  function point(p,r,color) {
-    const s=project(p);ctx.fillStyle=color;ctx.beginPath();ctx.arc(s[0],s[1],r,0,Math.PI*2);ctx.fill();
+  const LIGHT=norm([-0.35,-0.45,0.85]);
+  const along=(a,b,s)=>a.map((v,i)=>v+b[i]*s);
+  const rgb=(c,i)=>`rgb(${c.map(v=>Math.round(clamp(v*i,0,255))).join(',')})`;
+  const pixels=(metres,depth)=>metres*1800/Math.max(depth,0.1);
+  function fill(points,color) {
+    ctx.fillStyle=color;ctx.beginPath();points.forEach((q,i)=>i?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1]));ctx.closePath();ctx.fill();
   }
+  // Lit tapered cylinder between two world points; radii in metres.
+  function link(a,b,ra,rb,color) {
+    const axis=norm(sub(b,a)), side=cross(axis,forward);
+    if(Math.hypot(...side)<1e-6) return; // seen end-on: its joints cover it
+    const across=norm(side), facing=cross(axis,across), mid=along(a,sub(b,a),.5);
+    const p=project(a), q=project(b), m=project(mid), m2=project(along(mid,across,.01));
+    const length=Math.hypot(m2[0]-m[0],m2[1]-m[1]), nx=(m2[0]-m[0])/length, ny=(m2[1]-m[1])/length;
+    const wa=pixels(ra,p[2]), wb=pixels(rb,q[2]), w=Math.max(wa,wb);
+    const shade=ctx.createLinearGradient(m[0]-nx*w,m[1]-ny*w,m[0]+nx*w,m[1]+ny*w);
+    for(const o of [-1,-.6,-.2,.2,.6,1]) {
+      const round=Math.sqrt(1-o*o), normal=along(facing.map(v=>v*round),across,o);
+      shade.addColorStop((o+1)/2,rgb(color,(.5+.7*Math.max(0,dot(normal,LIGHT)))*(.72+.28*round)));
+    }
+    fill([[p[0]-nx*wa,p[1]-ny*wa],[q[0]-nx*wb,q[1]-ny*wb],[q[0]+nx*wb,q[1]+ny*wb],[p[0]+nx*wa,p[1]+ny*wa]],shade);
+  }
+  // Lit sphere; `glow` makes it emissive (the hand).
+  function ball(centre,radius,color,glow) {
+    const s=project(centre), r=pixels(radius,s[2]), lx=dot(LIGHT,right), ly=-dot(LIGHT,cameraUp);
+    const shade=ctx.createRadialGradient(s[0]+lx*r*.45,s[1]+ly*r*.45,r*.05,s[0],s[1],r);
+    shade.addColorStop(0,rgb(color,glow?1.3:1.5));shade.addColorStop(.55,rgb(color,glow?1:.85));shade.addColorStop(1,rgb(color,glow?.8:.3));
+    if(glow) {ctx.shadowColor=rgb(color,1);ctx.shadowBlur=r*1.6;}
+    ctx.fillStyle=shade;ctx.beginPath();ctx.arc(s[0],s[1],r,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
+  }
+  // Upright cylinder on the floor, centred at `c`.
+  function drum(c,r,height,side,top) {
+    for(let layer=0;layer<=4;layer++) fill(Array.from({length:48},(_,i)=>project([c[0]+r*Math.cos(i*Math.PI/24),c[1]+r*Math.sin(i*Math.PI/24),height*layer/4])),layer<4?side:top);
+  }
+  const BODY=[222,220,210], HOUSING=[66,76,88];
+  const ACCENTS=[[239,184,105],[158,213,220],[213,167,222],[131,207,170]];
   function draw(seconds) {
     const state=inspectAt(data,seconds), v=state.visual;
-    ctx.fillStyle='#101923';ctx.fillRect(0,0,1280,720);
-    const floor=[[-1.65,-1.65,0],[1.65,-1.65,0],[1.65,1.65,0],[-1.65,1.65,0]];
-    ctx.fillStyle='#15252d';ctx.beginPath();floor.forEach((p,i)=>{const q=project(p);i?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1]);});ctx.closePath();ctx.fill();
+    const sky=ctx.createLinearGradient(0,0,0,720);sky.addColorStop(0,'#070b10');sky.addColorStop(1,'#111b25');
+    ctx.fillStyle=sky;ctx.fillRect(0,0,1280,720);
+    const centre=project([0,0,0]), pool=ctx.createRadialGradient(centre[0],centre[1],20,centre[0],centre[1],760);
+    pool.addColorStop(0,'#2a3d48');pool.addColorStop(1,'#0c141b');
+    fill([[-1.65,-1.65,0],[1.65,-1.65,0],[1.65,1.65,0],[-1.65,1.65,0]].map(project),pool);
     for(let r=0.35;r<=1.4;r+=0.35) for(let i=0;i<64;i++) {
       const a=i*Math.PI/32,b=(i+1)*Math.PI/32;
-      line([r*Math.cos(a),r*Math.sin(a),.004],[r*Math.cos(b),r*Math.sin(b),.004],'#29404b',1);
+      line([r*Math.cos(a),r*Math.sin(a),.004],[r*Math.cos(b),r*Math.sin(b),.004],'#24363f',1);
     }
-    const colors=['#efb869','#9ed5dc','#d5a7de','#83cfaa'];
+    const colors=ACCENTS.map(c=>rgb(c,1));
     const activity=v.sourceActivity||[0,0,0,0];
+    ctx.globalAlpha=.45;
     for(let i=0;i<4;i++) {
       const strength=clamp(activity[i],0,1), radius=.22+i*.28+strength*.12;
       for(let j=0;j<24;j++) {
         const a=2*Math.PI*j/24+(i%2)*Math.PI/24,b=a+Math.PI/24;
-        if(strength>.025) line([radius*Math.cos(a),radius*Math.sin(a),.012],[radius*Math.cos(b),radius*Math.sin(b),.012],colors[i],1+4*strength*v.confidence);
+        if(strength>.025) line([radius*Math.cos(a),radius*Math.sin(a),.012],[radius*Math.cos(b),radius*Math.sin(b),.012],colors[i],1+3*strength*v.confidence);
       }
     }
+    ctx.globalAlpha=1;
     (data.zones||[]).forEach(z=>{
       const c=i=>[i&1?z.max[0]:z.min[0],i&2?z.max[1]:z.min[1],i&4?z.max[2]:z.min[2]];
       for(let i=0;i<8;i++) for(const bit of [1,2,4]) if(!(i&bit)) line(c(i),c(i|bit),'#e0524a',2);
     });
-    // Hand path: 1.5 s behind (bright) and 1.5 s ahead (dim).
+    // Hand path: 1.5 s behind (fading) and 1.5 s ahead (dim).
     state.agents.forEach((_,id)=>{
       const tip=t=>{const arm=frameAt(data,t).agents[id];return arm[arm.length-1];};
       for(let k=-22;k<22;k++) {
         const a=state.time+k/15,b=a+1/15;
-        if(a>=0&&b<=data.duration) line(tip(a),tip(b),k<0?'#f4e3b0':'#6f8997',k<0?3:1.5);
+        ctx.globalAlpha=k<0?(k+23)/23:.5;
+        if(a>=0&&b<=data.duration) line(tip(a),tip(b),k<0?colors[id%4]:'#6f8997',k<0?2.5:1.2);
       }
     });
-    // Depth cues: arm shadow on the floor and a drop line under each hand.
-    state.agents.forEach(arm=>{
-      for(let k=0;k<arm.length-1;k++) line([arm[k][0],arm[k][1],.002],[arm[k+1][0],arm[k+1][1],.002],'#060b10',10);
-      const hand=arm[arm.length-1];
-      line(hand,[hand[0],hand[1],.002],'#5d7480',1);
+    ctx.globalAlpha=1;
+    // Soft floor shadow cast by the light, and a drop line under each hand.
+    const cast=p=>[p[0]-LIGHT[0]*p[2]/LIGHT[2],p[1]-LIGHT[1]*p[2]/LIGHT[2],.003];
+    ctx.lineJoin='round';ctx.lineCap='round';ctx.strokeStyle='rgba(0,0,0,.16)';
+    for(const width of [46,32,20]) state.agents.forEach(arm=>{
+      ctx.lineWidth=width;ctx.beginPath();
+      arm.forEach((p,k)=>{const q=project(cast(p));k?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1]);});ctx.stroke();
     });
     const primitives=[];
-    state.agents.forEach((arm,id)=>{for(let k=0;k<arm.length-1;k++) {
-      const p=project(arm[k]),q=project(arm[k+1]);
-      primitives.push({kind:'link',id,k,a:arm[k],b:arm[k+1],depth:(p[2]+q[2])/2});
-    }});
-    state.agents.forEach((arm,id)=>arm.forEach((p,k)=>primitives.push({kind:'joint',id,k,p,depth:project(p)[2]})));
-    primitives.sort((a,b)=>b.depth-a.depth);
-    primitives.forEach(s=>{
-      if(s.kind==='joint') point(s.p,s.k===0?8:6,s.k===0?'#f7f0da':'#e9f6f2');
-      else {line(s.a,s.b,'#07131a',s.k===0?12:16);line(s.a,s.b,colors[s.id%colors.length],s.k===0?6:9);}
+    state.agents.forEach((arm,id)=>{
+      const last=arm.length-1, size=k=>.031-.015*k/last, hand=arm[last];
+      line(hand,[hand[0],hand[1],.003],'#4d626d',1);
+      // Turntable with a marker toward the shoulder, so base rotation is visible.
+      drum(arm[0],.15,.012,'#141d25','#1d2a34');
+      drum(arm[0],.115,.03,rgb(HOUSING,.55),rgb(HOUSING,1.05));
+      line(along(arm[0],[0,0,1],.031),along(arm[1],[0,0,1],.031),colors[id%4],4);
+      for(let k=1;k<last;k++) {
+        if(Math.hypot(...sub(arm[k+1],arm[k]))>1e-4) primitives.push({depth:(project(arm[k])[2]+project(arm[k+1])[2])/2,
+          paint:()=>link(arm[k],arm[k+1],.8*size(k),.8*size(k+1),BODY)});
+        primitives.push({depth:project(arm[k])[2],paint:()=>ball(arm[k],1.18*size(k),HOUSING)});
+      }
+      primitives.push({depth:project(hand)[2],paint:()=>ball(hand,1.5*size(last),ACCENTS[id%4],true)});
     });
+    primitives.sort((a,b)=>b.depth-a.depth).forEach(s=>s.paint());
     ctx.font='15px system-ui';ctx.fillStyle='#c7d6db';ctx.fillText(`${state.agents.length} ${state.agents.length===1?'arm':'arms'} · ${v.formation} · ${v.character}`,24,34);
     ctx.textAlign='right';ctx.fillText(`Score ${state.time.toFixed(2)}s`,1256,34);ctx.textAlign='left';
     const cue=state.cue||{};

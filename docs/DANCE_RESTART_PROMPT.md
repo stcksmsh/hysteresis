@@ -91,7 +91,7 @@ hyst-compile/-output/-previz/-cli, `cargo fmt --all --check`,
 
 ## Next work, in the user's order
 
-0. **Better render (asked last, do first).** The user called the arm render
+0. **Better render (done as version 13, awaiting user review).** The user called the arm render
    "too shitty". It is a 2D canvas of thick lines and dots. Ask one question
    about the look they want if unclear; otherwise make the arm read as a solid
    3D object: shaded links with thickness, joint housings, a base, a visible
