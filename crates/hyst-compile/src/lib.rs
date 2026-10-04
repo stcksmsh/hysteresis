@@ -46,8 +46,9 @@ pub struct CompileConfig {
     pub wrist_drag_degrees_per_mps: f64,
     /// Temporary review knob: 0 flourishes as before, 1 none, 2 slow and soft.
     pub flourish: u8,
-    /// Temporary review knob: figure clock smoothed over this many knots; 0 off.
-    pub dejitter: u8,
+    /// Temporary review knob: elevation the hand gains while the voice sings
+    /// well above its usual pitch. 0 off.
+    pub voice: f64,
 }
 impl Default for CompileConfig {
     fn default() -> Self {
@@ -56,7 +57,7 @@ impl Default for CompileConfig {
             reuse_repeats: true,
             wrist_drag_degrees_per_mps: 240.0,
             flourish: 0,
-            dejitter: 0,
+            voice: 0.0,
         }
     }
 }

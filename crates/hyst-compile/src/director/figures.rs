@@ -327,6 +327,29 @@ pub fn compile_figures(
             from = to;
         }
     }
+    // Voice: how far above its usual pitch it sings on each beat, 0..1 (two
+    // semitones above the song's median note start it, eight are full). The
+    // lane's rough pitch is enough to tell a lifted passage from the rest.
+    let mut voice: Vec<f64> = Vec::new();
+    if let Some(lane) = data.note_track.as_ref().and_then(|n| n.lanes.get("vocals")) {
+        let median = |mut pitches: Vec<f64>| {
+            pitches.sort_by(f64::total_cmp);
+            pitches.get(pitches.len() / 2).copied()
+        };
+        if let Some(usual) = median(lane.notes.iter().map(|n| n[1]).collect()) {
+            voice = (0..lane.level_per_beat.len())
+                .map(|i| {
+                    let from = data.musical_memory.beat_zero + i as f64 * beat;
+                    let here = lane
+                        .notes
+                        .iter()
+                        .filter(|n| (from..from + beat).contains(&n[0]));
+                    median(here.map(|n| n[1]).collect())
+                        .map_or(0.0, |p| ((p - usual - 2.0) / 6.0).clamp(0.0, 1.0))
+                })
+                .collect();
+        }
+    }
     // Smooth in time: beats weighted by a bell one beat wide.
     let swell_at = |t: f64| -> [f64; 2] {
         let x = (t - data.musical_memory.beat_zero) / beat - 0.5;
@@ -600,7 +623,7 @@ pub fn compile_figures(
     // Figure clock. Figures wait out a hold instead of running on underneath it
     // (the release then had to chase a path that kept moving), and never carry
     // the hand faster than HAND_SPEED_CAP; lost time is made up at 15% extra pace.
-    let mut clock = Vec::with_capacity(grid.len());
+    let mut clock: Vec<f64> = Vec::with_capacity(grid.len());
     let mut s = 0.0;
     for &t in &grid {
         clock.push(s);
@@ -639,27 +662,22 @@ pub fn compile_figures(
         };
         s = (s + rate * step).min(t + step);
     }
-    if config.dejitter > 0 {
-        // Smooth the clock itself (bell of this many knots): the figures and
-        // their timing stay, the knot-to-knot alternation of pace goes.
-        let sigma = f64::from(config.dejitter);
-        let radius = (3.0 * sigma).ceil() as isize;
-        clock = (0..clock.len() as isize)
-            .map(|i| {
-                let (mut sum, mut total) = (0.0, 0.0);
-                for d in -radius..=radius {
-                    let w = (-0.5 * (d as f64 / sigma).powi(2)).exp();
-                    sum += w * clock[(i + d).clamp(0, clock.len() as isize - 1) as usize];
-                    total += w;
-                }
-                sum / total
-            })
-            .collect();
-    }
+    // Smooth the clock (bell of two knots). Quick notes of the leader retrigger
+    // the surge every second knot, which made the hand's pace, the base and the
+    // disc alternate knot by knot. The hand stays within 1 cm of the unsmoothed
+    // path; hand acceleration outside moments falls from 5.8 to 1.8 m/s² p95.
+    // The user saw no difference by eye: kept for the hardware.
+    let clock: Vec<f64> = (0..clock.len())
+        .map(|i| bell(&clock, i as f64, 2.0))
+        .collect();
     let waited = |t: f64| -> [f64; 3] {
         let x = (t / step).clamp(0.0, (clock.len() - 1) as f64);
         let i = (x.floor() as usize).min(clock.len() - 2);
         let mut p = flow(lerp(clock[i], clock[i + 1], x - i as f64));
+        // The hand rises while the voice sings well above its usual pitch.
+        let sung = (t - data.musical_memory.beat_zero) / beat - 0.5;
+        let lift = config.voice * bell(&voice, sung, 2.0);
+        (p[1], p[2]) = (p[1] + lift, p[2] + lift);
         // The hand rides higher as the leader's line brightens.
         p[1] += 0.3 * swell_at(t)[1];
         p
@@ -911,6 +929,22 @@ pub fn compile_figures(
     };
     score.validate()?;
     Ok(score)
+}
+
+/// `series` at fractional index `x`, averaged under a bell `sigma` samples
+/// wide; the ends repeat. 0 for an empty series.
+fn bell(series: &[f64], x: f64, sigma: f64) -> f64 {
+    if series.is_empty() {
+        return 0.0;
+    }
+    let (mut sum, mut total) = (0.0, 0.0);
+    let reach = (3.0 * sigma).ceil() as isize;
+    for i in x.round() as isize - reach..=x.round() as isize + reach {
+        let w = (-0.5 * ((i as f64 - x) / sigma).powi(2)).exp();
+        sum += w * series[i.clamp(0, series.len() as isize - 1) as usize];
+        total += w;
+    }
+    sum / total
 }
 
 fn scaled(p: [f64; 3], scale: f64) -> [f64; 3] {

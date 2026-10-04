@@ -35,11 +35,11 @@ fn main() -> io::Result<()> {
                     .and_then(|v| v.parse().ok())
                     .ok_or_else(|| io::Error::other("--drag requires degrees per m/s"))?
             }
-            "--dejitter" => {
-                config.dejitter = args
+            "--voice" => {
+                config.voice = args
                     .next()
                     .and_then(|v| v.parse().ok())
-                    .ok_or_else(|| io::Error::other("--dejitter requires a knot count"))?
+                    .ok_or_else(|| io::Error::other("--voice requires an elevation gain"))?
             }
             "--flourish" => {
                 config.flourish = args
