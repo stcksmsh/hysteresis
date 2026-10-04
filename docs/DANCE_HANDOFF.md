@@ -1342,3 +1342,19 @@ from 11.3 to 1.5 m/s². The `--flourish` knob and its config field are deleted.
 `song-figures-31.html`; the choruses are unchanged from version 30. No test
 covers the soft/sharp choice (the fixture has no flourish). Flourish poses are
 still two fixed shapes alternating high and low.
+
+### Version 32: sections travel round the base in alternating directions — 2026-10-04
+
+The user's "over-focuses on centre" means: the rotation goes mostly one way.
+Measured on version 31: the base netted 12.5 turns in one direction over the
+song (turning that way 56 % of the time, the other 42 %), and every long
+section turned the same way. Two candidates: the steady travel reverses each
+section (3.6 net turns, 51 % / 47 %), or the whole section is mirrored, figures
+included (1.0 net turn, 46 % / 50 %). On a blind 40 s clip (1:10–1:50) the user
+was "genuinely unsure", declined a longer clip and asked for a middle ground.
+Kept: the steady travel reverses each section, figures keep their own side.
+This is the user's instruction, not a blind-test win. The choruses still all
+turn the same way as each other (the sections between them reverse); that falls
+out of the alternation on this song, it is not a rule. The `--travel` knob is
+deleted. `song-figures-32.html`; 133 CPU tests, clippy, fmt, `ensemble.cjs`
+pass. No review knobs remain in the code.

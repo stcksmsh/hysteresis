@@ -397,11 +397,12 @@ pub fn compile_figures(
                 }
             }
         }
-        if config.travel > 0 && travel > 0.0 {
+        // Each section travels round the base the opposite way to the last
+        // (the figures keep their own side). All one way, the base netted 12.5
+        // turns over the song: "mostly one direction" (user). Mirroring the
+        // figures too was the other extreme; the user asked for the middle.
+        if travel > 0.0 {
             way = -way;
-            if config.travel == 2 {
-                first_dir = way;
-            }
         }
         chosen.push((start, first_dir, class));
         let mut t = start;
@@ -413,8 +414,7 @@ pub fn compile_figures(
             let repeat = k / sequence.len();
             let dir = first_dir * step_dir * if repeat % 2 == 1 { -1.0 } else { 1.0 };
             let heading = entry - scaled(shape(0.0, dir), sized(scale, t))[0];
-            let side = if config.travel == 1 { way } else { first_dir };
-            let turn = side * travel * 2.0 * (stop - t) / (32.0 * beat);
+            let turn = way * travel * 2.0 * (stop - t) / (32.0 * beat);
             instances.push(Instance {
                 start: t,
                 end: stop,

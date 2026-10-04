@@ -5,11 +5,11 @@ Continue on branch `keys-decide` (draft pull request open; do not push to
 read-only. Never drive hardware.
 
 First, before any code: read this file, then the `DANCE_HANDOFF.md` entry
-"Versions 28–30", "Version 31" and "Version 27" ("Version 13" onward only
+"Versions 28–30", "Version 31", "Version 32" and "Version 27" ("Version 13" onward only
 if you need the earlier blind-test history). Read `crates/hyst-compile/src/director/figures.rs` in full and skim
 `director.rs`, `ensemble.rs`, `scripts/dance_notes.py`. Run the checks under
 "Commands" and export one preview: it must be byte-identical to
-`song-figures-31.html`. Report in a few lines what you understand and what you
+`song-figures-32.html`. Report in a few lines what you understand and what you
 will do first, then start; do not wait for approval unless you asked a blocking
 question.
 
@@ -137,10 +137,9 @@ muscriptor with the user's HuggingFace token); root disk is nearly full.
 2. **Flourishes per moment: done in version 31** (soft where the leader plays
    a steady stream, sharp among stabs). Left: flourish poses are two fixed
    shapes alternating high and low.
-3. **"Over-focuses on centre"**: the user's complaint, meaning not yet
-   answered (asked three times). Measured: verses sway about one fixed direction
-   (base nets −57° in 2:00–2:30) and the hand stays 0.31–0.55 m from the base
-   axis of 0.77 m reach.
+3. **"Over-focuses on centre": done in version 32.** It meant the base turning
+   mostly one way. Each section's steady travel now reverses (12.5 → 3.6 net
+   turns). A middle ground by the user's instruction, not a blind win.
 4. **Sidecar lanes for the machine**: the measured but unbuilt pipeline (Demucs
    by kind, stereo position within a kind, MuScriptor notes, pYIN voice curve).
    See the handoff entry for scores. The user asked to pause this ("enough for

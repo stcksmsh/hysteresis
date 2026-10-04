@@ -1363,3 +1363,10 @@ numbers: last entry of `docs/DANCE_HANDOFF.md`.
 Version 31. A flourish is slow and soft where the leading lane plays a steady
 stream (verses, break, end) and sharp as before among stabs; the `--flourish`
 knob is gone. Blind-test verdict: sharp in a verse was "too much", soft "ok".
+
+### Travel direction alternates per section — 2026-10-04
+
+Version 32. "Over-focuses on centre" meant the base turning mostly one way
+(12.5 net turns over the song). Now each section's steady travel round the base
+reverses (3.6 net turns). Chosen by the user as a middle ground, not by a blind
+win. No review knobs remain.

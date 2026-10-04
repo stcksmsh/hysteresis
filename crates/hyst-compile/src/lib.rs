@@ -44,9 +44,6 @@ pub struct CompileConfig {
     /// blind side-by-side over 0 and 120; it about triples wrist travel, so
     /// lower it if real wrist or elbow servos cannot keep up.
     pub wrist_drag_degrees_per_mps: f64,
-    /// Temporary review knob, which way figures travel round the base: 0 as
-    /// before, 1 steady travel reversed each section, 2 whole section mirrored.
-    pub travel: u8,
 }
 impl Default for CompileConfig {
     fn default() -> Self {
@@ -54,7 +51,6 @@ impl Default for CompileConfig {
             enable_hits: true,
             reuse_repeats: true,
             wrist_drag_degrees_per_mps: 240.0,
-            travel: 0,
         }
     }
 }
