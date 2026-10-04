@@ -404,7 +404,7 @@ pub fn compile_figures(
             if time > 4.0 * beat && class_at(time + beat) != "silence" {
                 moments.push(Moment {
                     time,
-                    pose: [0.9, 1.0],
+                    pose: [0.72, 1.0],
                     strength: 0.7 + 0.3 * strength,
                     label: "arrival",
                     hold_beats: 1.5,
@@ -511,20 +511,21 @@ pub fn compile_figures(
             p[1] -= 0.2 * prepare;
             p[2] -= 0.35 * prepare;
             // A flourish passes through and keeps travelling. An arrival hold
-            // stays alive: the hand keeps drifting at a fifth of its travel,
-            // lifts and settles, and gives slightly. Only a cut truly freezes.
+            // stays alive: its pose drifts steadily (slow turn, slow rise, slight
+            // give) from before the arrival until after the release, so the hand
+            // never comes to rest. Only a cut truly freezes.
             // Strength sets how far the pose departs from the flowing path.
             let base = flow(time);
             let alive = f64::from(hold > 0.0 && !m.frozen);
-            let w = (tau / hold.max(1e-9)).clamp(0.0, 1.0);
+            let turn = (flow(time + beat)[0] - base[0]).signum();
             let held = [
                 if hold > 0.0 {
-                    base[0] + alive * 0.2 * (p[0] - base[0])
+                    base[0] + alive * (0.2 * (p[0] - base[0]) + 0.06 * turn * tau)
                 } else {
                     p[0]
                 },
-                lerp(base[1], pose[0], strength) + alive * 0.04 * (PI * w).sin(),
-                lerp(base[2], pose[1], strength) - alive * 0.05 * smooth(w),
+                lerp(base[1], pose[0], strength) + alive * 0.04 * tau,
+                lerp(base[2], pose[1], strength) - alive * 0.04 * tau,
             ];
             for k in 0..3 {
                 p[k] = lerp(p[k], held[k], blend);
