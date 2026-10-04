@@ -1397,3 +1397,12 @@ formation per section from the music (unison, mirrored, canon, pairs, one by
 one, drop-out); the rule table is a first guess awaiting review. Each hand
 keeps to its own cell of floor so formations never rely on the cross-check,
 which stays as a safety net. One arm alone is unchanged.
+
+### Arms share the floor — 2026-10-05
+
+Version 36. User: arms too far apart and not synchronized enough; overlapping
+red zones are the "wow". The review hexagon is 0.8 m, reaches overlap, and
+formations are built so they never ask for a collision (a shared keep-out
+circle at the centre; mirrored neighbours keep to their side); the cross-check
+is the net. Rest-heavy formations are gone; choruses unison, verses canon or
+mirrored.

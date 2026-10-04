@@ -1550,3 +1550,40 @@ in the numbers: OneByOne and Pairs leave most arms resting for long (26 s in
 the intro, 40 s in verse 2); hand speed peaks at 2.7 m/s at some formation
 changes; arms still have right of way by index. `hexagon-35.html`,
 `hexagon-35-full.mp4`. 136 CPU tests, clippy, fmt, `ensemble.cjs` pass.
+
+### Version 36: arms share the floor; everyone dances — 2026-10-05
+
+User on the whole-song video of version 35: "Not synchronized enough, too low
+energy maybe? They are also too far apart, dynamic red zones overlapping is
+what makes it WOW level of technical difficulty."
+
+- Closer: the review hexagon is 0.8 m (was 1.1 m), so each arm reaches its
+  neighbours' bases. The per-arm floor cells of version 35 are deleted.
+  Measured on the song: a hand is inside a neighbour's reach 77 % of arm-time
+  and nearer a neighbour's base than its own 14 %; closest approach of an
+  implement to another arm or implement 10.0 cm at 10 cm clearance; every arm
+  at full speed, the six alike (nothing blocked).
+- Why it does not collide: formations that are the same for every arm, turned
+  by the ring's angle, let each arm move through the space its neighbour just
+  left. Two limits, the same for every arm so the picture stays symmetric
+  (`shared` in `compile_ensemble`): no hand enters a circle at the layout's
+  centre where all hands would meet (radius (clearance/2 + implement + 2 cm) /
+  sin(π/N), 30 cm for six); and while the formation is Mirrored each hand stays
+  on its own side of the line half way to its neighbours. The cross-check is
+  the safety net under both.
+- Arms no longer start at the rig's neutral pose in an ensemble (six neutral
+  hands meet in the middle of a tight ring): each starts at its first target,
+  solved on its own. One arm alone still starts at neutral, output unchanged.
+- More together: OneByOne is deleted. Table now: interlocked, bass-led,
+  silence: Unison; vocal-led: Canon, Mirrored alternating; percussive-open:
+  Canon, Unison alternating; sparse: DropOut; anything else: Pairs. Canon is
+  half a beat per arm (a ripple of three beats round six arms). **Still an
+  agent's table, not reviewed.**
+- On this song: intro Canon, verse 1 Canon, chorus 1 Unison, link Mirrored
+  then Unison, verse 2 Canon, pre-break Mirrored, break Canon, vocal return
+  Canon, chorus 2 Unison to the end section, fade DropOut.
+- Open: hexagon size is still the agent's choice; "complements" undefined;
+  right of way by arm index; canon breaks the symmetry, so its safety rests on
+  the cross-check (it held on this song).
+`hexagon-36.html`, `hexagon-36-full.mp4`. 136 CPU tests, clippy, fmt,
+`ensemble.cjs` pass; one arm alone is identical to version 34.
