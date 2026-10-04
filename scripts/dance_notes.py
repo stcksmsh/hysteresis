@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
-"""Add a rough note track of one estimated stem (keys/guitar) to a sidecar.
+"""Add rough note tracks of the estimated stems to a sidecar.
 
-Usage: python3 scripts/dance_notes.py INPUT_SIDECAR STEM_WAV OUTPUT_SIDECAR
+Usage: python3 scripts/dance_notes.py INPUT_SIDECAR STEM_DIR OUTPUT_SIDECAR
 
-Adds `noteTrack`: onsets with a rough pitch, grouped into phrases. The stem is a
-source-separation estimate and usually polyphonic, so `pitch` is the strongest
-harmonic series near each onset (often the chord root), not a transcription.
+Adds `noteTrack.lanes`: per lane, onsets with a rough pitch, grouped into
+phrases. STEM_DIR holds vocals.wav, drums.wav, bass.wav and other.wav. These are
+source-separation estimates; `other` is everything that is not voice, drums or
+bass (guitar, keys and synths together), so it is split by register only.
+`pitch` is the strongest harmonic series near each onset (often a chord root),
+not a transcription; drum lanes carry no pitch (0).
 """
 from __future__ import annotations
 
@@ -20,8 +23,15 @@ from scipy.signal import find_peaks, stft
 
 HOP_SECONDS = 0.01
 FFT = 4096
-# MIDI range searched for the strongest harmonic series, half-semitone steps.
-PITCHES = np.arange(43, 88.5, 0.5)
+# lane: (stem, onset band in Hz, MIDI range searched for pitch or None)
+LANES = {
+    "vocals": ("vocals", (150, 5000), (48, 84)),
+    "other_high": ("other", (500, 5000), (60, 88)),
+    "other_low": ("other", (80, 500), (40, 60)),
+    "bass": ("bass", (40, 1000), (28, 55)),
+    "snare_hats": ("drums", (2000, 10000), None),
+    "kick": ("drums", (30, 150), None),
+}
 # A pause this long (beats) between onsets ends a phrase.
 GAP_BEATS = 1.25
 # A phrase also ends where the pitch settles this far (semitones) from before.
@@ -29,7 +39,7 @@ SHIFT_SEMITONES = 1.5
 MIN_PHRASE_NOTES = 4
 
 
-def track(audio, sample_rate, beat):
+def track(audio, sample_rate, beat, band=(150, 5000), pitch_range=(43, 88)):
     """Return (notes, phrases). notes: [time, midi pitch, strength 0..1]."""
     hop = round(HOP_SECONDS * sample_rate)
     # ponytail: whole-song STFT in memory (about 0.6 GB for six minutes); chunk if songs get long.
@@ -37,12 +47,12 @@ def track(audio, sample_rate, beat):
         audio, sample_rate, nperseg=FFT, noverlap=FFT - hop, padded=False, boundary=None
     )
     magnitude = np.abs(spectrum)
-    # Onsets: rising log-spectrum between 150 Hz and 5 kHz (drops bass bleed and
-    # hiss), from a short window: the long pitch window reports onsets early.
+    # Onsets: rising log-spectrum inside the lane's band, from a short window:
+    # the long pitch window reports onsets early.
     short_freqs, onset_times, short = stft(
         audio, sample_rate, nperseg=FFT // 4, noverlap=FFT // 4 - hop, padded=False, boundary=None
     )
-    band = np.log1p(200 * np.abs(short[(short_freqs >= 150) & (short_freqs <= 5000)]))
+    band = np.log1p(200 * np.abs(short[(short_freqs >= band[0]) & (short_freqs <= band[1])]))
     flux = np.maximum(0, np.diff(band, axis=1, prepend=band[:, :1])).sum(0)
     scale = np.percentile(flux, 99)
     if scale <= 0:
@@ -53,8 +63,10 @@ def track(audio, sample_rate, beat):
     # Same onsets as frame indices of the long window.
     frames = np.searchsorted(times, onset_times[peaks])
 
-    salience = np.zeros((len(PITCHES), magnitude.shape[1]), dtype=np.float32)
-    fundamental = 440 * 2 ** ((PITCHES - 69) / 12)
+    # Strongest harmonic series, half-semitone steps.
+    pitches = np.arange(*pitch_range, 0.5) if pitch_range else np.zeros(1)
+    salience = np.zeros((len(pitches), magnitude.shape[1]), dtype=np.float32)
+    fundamental = 440 * 2 ** ((pitches - 69) / 12)
     for harmonic in range(1, 6):
         bins = np.round(fundamental * harmonic * FFT / sample_rate).astype(int)
         salience += 0.8 ** (harmonic - 1) * magnitude[np.clip(bins, 0, len(freqs) - 1)]
@@ -63,7 +75,7 @@ def track(audio, sample_rate, beat):
     for peak, a, b in zip(peaks, frames, [*frames[1:], magnitude.shape[1]]):
         # Skip the attack; listen for at most 250 ms or until the next onset.
         held = salience[:, a + 5 : max(a + 6, min(b, a + 25))].mean(1)
-        notes.append([float(onset_times[peak]), float(PITCHES[np.argmax(held)]), float(min(1.0, flux[peak]))])
+        notes.append([float(onset_times[peak]), float(pitches[np.argmax(held)]), float(min(1.0, flux[peak]))])
 
     phrases, first = [], 0
     pitch = np.array([n[1] for n in notes])
@@ -100,25 +112,27 @@ def track(audio, sample_rate, beat):
 def main(argv):
     if len(argv) != 4:
         raise SystemExit(__doc__)
-    sidecar_path, stem_path, output_path = map(pathlib.Path, argv[1:])
-    if output_path.resolve() in (sidecar_path.resolve(), stem_path.resolve()):
-        raise SystemExit("output must differ from inputs")
+    sidecar_path, stem_dir, output_path = map(pathlib.Path, argv[1:])
+    if output_path.resolve() == sidecar_path.resolve() or stem_dir.resolve() in output_path.resolve().parents:
+        raise SystemExit("output must differ from the input and lie outside the stem directory")
     sidecar = json.loads(sidecar_path.read_text())
     beat = float(sidecar["musicalMemory"]["beatPeriod"])
-    audio, sample_rate = sf.read(stem_path, dtype="float32", always_2d=True)
-    if abs(len(audio) / sample_rate - float(sidecar["duration"])) > 0.1:
-        raise SystemExit("stem and sidecar duration mismatch (>100 ms)")
-    notes, phrases = track(audio.mean(1), sample_rate, beat)
+    lanes = {}
+    for name, (stem, band, pitch_range) in LANES.items():
+        audio, sample_rate = sf.read(stem_dir / f"{stem}.wav", dtype="float32", always_2d=True)
+        if abs(len(audio) / sample_rate - float(sidecar["duration"])) > 0.1:
+            raise SystemExit(f"{stem} stem and sidecar duration mismatch (>100 ms)")
+        notes, phrases = track(audio.mean(1), sample_rate, beat, band, pitch_range)
+        lanes[name] = {"stem": stem, "bandHz": band, "notes": notes, "phrases": phrases}
+        print(f"{name}: {len(notes)} notes, {len(phrases)} phrases")
     sidecar["noteTrack"] = {
         "version": 1,
         "method": "stem_flux_onsets_harmonic_sum_pitch_v1",
-        "stem": stem_path.name,
         "groundTruth": False,
-        "notes": notes,
-        "phrases": phrases,
+        "lanes": lanes,
     }
     output_path.write_text(json.dumps(sidecar, separators=(",", ":")))
-    print(f"{len(notes)} notes, {len(phrases)} phrases → {output_path}")
+    print(f"→ {output_path}")
 
 
 if __name__ == "__main__":
