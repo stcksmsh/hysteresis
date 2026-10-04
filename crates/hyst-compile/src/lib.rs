@@ -34,22 +34,17 @@ pub struct SegmentBounds {
     pub max_acceleration_degrees_per_second2: [f64; 3],
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CompileConfig {
     pub enable_hits: bool,
     /// Recall an earlier measured phrase signature; false uses current content.
     pub reuse_repeats: bool,
-    /// Body: how far the last joint trails its solved angle, in beats. Joints
-    /// between base and wrist trail in proportion, so motion travels outward
-    /// along the arm. 0 makes every joint follow at once.
-    pub chain_lag_beats: f64,
 }
 impl Default for CompileConfig {
     fn default() -> Self {
         Self {
             enable_hits: true,
             reuse_repeats: true,
-            chain_lag_beats: 0.5,
         }
     }
 }

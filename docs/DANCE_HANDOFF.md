@@ -983,28 +983,3 @@ User decision: a lifelike "wow" render (Blender or similar) comes much later.
 Do not polish the canvas preview further unless asked. Speed cap 0.8 m/s
 accepted by eye on 1:24–1:54 only. Next: restart-prompt step 1 "body".
 Export `song-figures-16.html`, clip `render-16.mp4`.
-
-### Version 17 and body step A (chain lag), blind test pending — 2026-10-04
-
-User on version 16: "stellar"; the base seemed never to rotate. With the
-shoulder on the yaw axis nothing visibly turned. Preview frames now carry each
-arm's first joint angle and the pedestal draws three marks that turn with it
-(`render-17.mp4`).
-
-User chose both body options: A (lag through the chain) everywhere, B (whip or
-wave) on moments. A is built, B is not. A: each joint aims at the pose solved
-a little earlier, in proportion to its place in the chain (base none, wrist
-`chain_lag_beats`), so motion travels outward. Knob: `CompileConfig::
-chain_lag_beats`, flag `--lag BEATS`, default 0.5, 0 = off. Zone braking and the
-hard zone check still apply after it.
-
-Measured against lag 0 over the whole song: at 0.5 beat the hand moves 1.2 cm
-median, 10.5 cm at the 95th percentile; at 1 beat 2.5 cm, 21 cm, worst 57 cm,
-and peak hand speed rises 2.34 to 2.82 m/s. So A is likely subtle at 0.5 and
-distorts figures at 1. Side effect not measured: arrivals land later.
-
-Blind test prepared, not yet judged: `blind-lag-A/B/C.mp4` (1:24–1:54) are lag
-0, 0.5 and 1 in shuffled order; key in `blind-lag-key.json`, unread by the
-agent. If the user sees no difference, delete the lag (rule: layers that fail a
-blind test die) and try a different mechanism for "body". The default 0.5 is
-unverified until then.
