@@ -9,7 +9,7 @@ First, before any code: read this file, then the `DANCE_HANDOFF.md` entry
 if you need the earlier blind-test history). Read `crates/hyst-compile/src/director/figures.rs` in full and skim
 `director.rs`, `ensemble.rs`, `scripts/dance_notes.py`. Run the checks under
 "Commands" and export one preview: it must be byte-identical to
-`song-figures-32.html`. Report in a few lines what you understand and what you
+`song-figures-33.html`. Report in a few lines what you understand and what you
 will do first, then start; do not wait for approval unless you asked a blocking
 question.
 
@@ -109,7 +109,7 @@ node $D/record-ensemble.cjs $D/song-figures-N.html $D/instant-crush.m4a $D/clip.
 python3 scripts/dance_notes.py $D/instant-crush.interpreted.sidecar.json \
   /secondary/hyst-env/stems6/htdemucs_6s/instant-crush-stereo-analysis $D/instant-crush.notes.sidecar.json
 ```
-Checks: `cargo test --workspace --exclude hyst-render` (133 pass), clippy
+Checks: `cargo test --workspace --exclude hyst-render` (134 pass), clippy
 `-D warnings` on hyst-compile/-output/-previz/-cli, `cargo fmt --all --check`,
 `node crates/hyst-previz/tests/ensemble.cjs`,
 `cd scripts && python3 -m unittest test_dance_notes`. No hyst-render tests (GPU).

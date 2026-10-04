@@ -1436,3 +1436,35 @@ tiles face the overhead projector at any time; each throws a small square
 patch on the floor or a faint ray into the room. Not modelled: tiles shading
 each other inside the dents, reflections between tiles. Clip
 `mirrorball-32.mp4` (3:32–4:12). Planner and rig unchanged.
+
+### Version 33: the implement is rig data and is in the zone check — 2026-10-04
+
+User: the ball is good, make it lumpier; next "red-zones for the 3D shape of
+the implement"; "want differing implements to be possible, generalization is
+always good".
+
+- `ensemble.rs`: `Rig` has an `implement` (`Implement { name, radius_m,
+  mirrors }`, `Mirror { centre_m, normal, u, half_size_m, sides, both_faces }`,
+  all in the tool frame: axis 0 along the last link, axis 1 the tool's facing
+  at zero roll). Any set of flat mirrors is an implement; a `--rig` JSON file
+  can carry its own. Built in: `Implement::mirror_ball()` (default) and
+  `Implement::disc()`; the preview example takes `--implement ball|disc`. A rig
+  file without the field loads with the default. `validate` refuses mirrors
+  that are not unit, or that reach past `radius_m`.
+- Zone and floor checks (`figures.rs`, `link_samples`): the hand point keeps
+  the usual margin plus `radius_m` from every zone and the floor, in the
+  solver, the follower's braking and the hard check. It is a bounding sphere,
+  so it holds for any shape and any roll (the roll is driven outside the
+  solver); it wastes room for a flat implement. Marked `ponytail:`.
+- The ball is lumpier: 110 square tiles of 1.1 to 2 cm across, two lobes,
+  ripples, four dents; bounding radius 8.0 cm.
+- The preview draws whatever mirrors the rig carries (`data.rig.implement`);
+  the hard-coded shapes and the `?hand=disc` switch are gone from
+  `ensemble.html`.
+- Effect on the dance: the hand used to dip to 7.9 cm above the floor (the old
+  disc's rim would have been 1.9 cm off it). Now the lowest hand point is
+  15.2 cm with the ball. The hand differs from version 32 by more than 2 cm
+  for 0.8 s of the song, 7.3 cm at most; elsewhere it is the same.
+`song-figures-33.html`, clip `mirrorball-33.mp4` (3:32–4:12). 134 CPU tests,
+clippy, fmt, `ensemble.cjs` pass. Not done: implement against the arm's own
+links, and anything between two arms.

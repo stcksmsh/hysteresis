@@ -22,9 +22,150 @@ pub struct RigChannel {
     pub max_acceleration_degrees_per_second2: f64,
 }
 
+/// One flat mirror of a hand object, in the tool frame: axis 0 runs along the
+/// last link, axis 1 is the tool's facing at zero roll, axis 2 completes them.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Mirror {
+    pub centre_m: [f64; 3],
+    /// Unit normal of the mirrored face.
+    pub normal: [f64; 3],
+    /// Unit vector in the mirror's plane; its outline starts from it.
+    pub u: [f64; 3],
+    /// Centre to corner, metres.
+    pub half_size_m: f64,
+    /// Corners of the outline: 4 is a square tile, 16 reads as a disc.
+    pub sides: u8,
+    /// Mirrored on the back as well.
+    pub both_faces: bool,
+}
+
+/// The object the arm holds at its hand point: any set of flat mirrors.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Implement {
+    pub name: String,
+    /// Every part of the object lies within this distance of the hand point.
+    /// Zone and floor checks keep the hand point this much further away.
+    // ponytail: a sphere, whatever the shape and roll; exact outline if an
+    // implement is long or flat enough for the sphere to waste real room.
+    pub radius_m: f64,
+    pub mirrors: Vec<Mirror>,
+}
+
+impl Default for Implement {
+    fn default() -> Self {
+        Self::mirror_ball()
+    }
+}
+
+impl Implement {
+    /// One mirror disc, 6 cm radius, held by its edge in line with the arm.
+    pub fn disc() -> Self {
+        Self {
+            name: "disc".into(),
+            radius_m: 0.06,
+            mirrors: vec![Mirror {
+                centre_m: [0.0; 3],
+                normal: [0.0, 1.0, 0.0],
+                u: [1.0, 0.0, 0.0],
+                half_size_m: 0.06,
+                sides: 16,
+                both_faces: true,
+            }],
+        }
+    }
+
+    /// A lumpy, dented, not-quite-round ball tiled with small square mirrors
+    /// (the user: like a disco ball, but irregular and non-convex). The shape
+    /// is an invented stand-in; it is fixed, not random per run.
+    pub fn mirror_ball() -> Self {
+        let unit = |v: [f64; 3]| v.map(|x| x / dot(v, v).sqrt());
+        let noise = |i: usize, k: usize| {
+            let x = (i as f64 * 12.9898 + k as f64 * 78.233).sin() * 43758.5453;
+            x - x.floor()
+        };
+        // (direction, depth, width) of each dent.
+        let dents = [
+            (unit([0.3, 0.8, 0.5]), 0.45, 0.10),
+            (unit([-0.5, -0.6, 0.6]), 0.32, 0.14),
+            (unit([0.7, -0.2, -0.7]), 0.40, 0.07),
+            (unit([-0.2, 0.5, -0.8]), 0.28, 0.05),
+        ];
+        // Distance of the surface from the hand point along unit direction d:
+        // two unequal lobes, ripples, dents.
+        let radius = |d: [f64; 3]| {
+            let lobes = 0.60 + 0.34 * (0.8 * d[1] + 0.6 * d[2]).abs().powf(1.4) + 0.10 * d[0];
+            let ripples = 1.0
+                + 0.13 * (5.0 * d[0] + 1.0).sin() * (4.0 * d[1] - 0.5).sin()
+                + 0.09 * (6.0 * d[2] + 2.0).sin();
+            let dent: f64 = dents
+                .iter()
+                .map(|(at, depth, width)| 1.0 - depth * (-(1.0 - dot(d, *at)) / width).exp())
+                .product();
+            0.066 * lobes * ripples * dent
+        };
+        let on = |q: [f64; 3]| {
+            let d = unit(q);
+            d.map(|v| v * radius(d))
+        };
+        const TILES: usize = 110;
+        let mut mirrors = Vec::with_capacity(TILES);
+        let mut reach: f64 = 0.0;
+        for i in 0..TILES {
+            let z = 1.0 - 2.0 * (i as f64 + 0.5) / TILES as f64;
+            let (r, phi) = ((1.0 - z * z).sqrt(), i as f64 * 2.39996);
+            let d = [z, r * phi.cos(), r * phi.sin()];
+            let t1 = unit(cross(
+                d,
+                if d[0].abs() < 0.9 {
+                    [1.0, 0.0, 0.0]
+                } else {
+                    [0.0, 1.0, 0.0]
+                },
+            ));
+            let t2 = cross(d, t1);
+            let at = on(d);
+            let step = |t: [f64; 3]| {
+                let p = on([0, 1, 2].map(|k| d[k] + 0.05 * t[k]));
+                [0, 1, 2].map(|k| p[k] - at[k])
+            };
+            // The tile lies in the surface, a little crooked like a hand-glued one.
+            let flat = unit(cross(step(t1), step(t2)));
+            let normal = unit([0, 1, 2].map(|k| flat[k] + 0.22 * (noise(i, k) - 0.5)));
+            let u = unit(cross(
+                normal,
+                if normal[0].abs() > 0.9 {
+                    [0.0, 1.0, 0.0]
+                } else {
+                    [1.0, 0.0, 0.0]
+                },
+            ));
+            let half_size_m = 0.008 + 0.006 * noise(i, 4);
+            reach = reach.max(dot(at, at).sqrt() + half_size_m);
+            mirrors.push(Mirror {
+                centre_m: at,
+                normal,
+                u,
+                half_size_m,
+                sides: 4,
+                both_faces: false,
+            });
+        }
+        Self {
+            name: "mirror-ball".into(),
+            radius_m: (reach * 1000.0).ceil() / 1000.0,
+            mirrors,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Rig {
     pub channels: Vec<RigChannel>,
+    /// What the arm holds at its hand point (the end of the last link).
+    #[serde(default)]
+    pub implement: Implement,
 }
 
 impl Rig {
@@ -44,6 +185,7 @@ impl Rig {
                 max_acceleration_degrees_per_second2: 8000.0,
             };
         let mut rig = Self {
+            implement: Implement::default(),
             channels: vec![
                 channel(
                     "base_yaw",
@@ -75,9 +217,9 @@ impl Rig {
                     [-6.0, 20.0, 22.0],
                 ),
                 // Rolls the hand object about the wrist link. Its link is a
-                // 5 cm stem plus the 6 cm radius of a disc held by its edge, so
-                // it ends at the disc centre; the roll moves no point of the
-                // chain and only turns the disc's face.
+                // 5 cm stem plus 6 cm into the object, so it ends at the hand
+                // point the implement is built around; the roll moves no point
+                // of the chain and only turns the object.
                 channel(
                     "wrist_roll",
                     [1.0, 0.0, 0.0],
@@ -121,6 +263,20 @@ impl Rig {
             {
                 return Err(format!("invalid rig channel {i}: {}", c.name));
             }
+        }
+        let hand = &self.implement;
+        let unit = |v: [f64; 3]| (dot(v, v).sqrt() - 1.0).abs() < 1e-6;
+        if !(hand.radius_m.is_finite() && hand.radius_m >= 0.0)
+            || hand.mirrors.iter().any(|m| {
+                let shaped = unit(m.normal)
+                    && unit(m.u)
+                    && dot(m.normal, m.u).abs() < 1e-6
+                    && m.half_size_m > 0.0
+                    && m.sides >= 3;
+                !shaped || dot(m.centre_m, m.centre_m).sqrt() + m.half_size_m > hand.radius_m + 1e-9
+            })
+        {
+            return Err(format!("invalid implement: {}", hand.name));
         }
         Ok(())
     }
@@ -535,6 +691,23 @@ fn rotate(v: [f64; 3], axis: [f64; 3], degrees: f64) -> [f64; 3] {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn implements_are_rig_data() {
+        let mut rig = Rig::illustrative_five_axis();
+        assert_eq!(rig.implement.name, "mirror-ball");
+        rig.validate().unwrap();
+        rig.implement = Implement::disc();
+        rig.validate().unwrap();
+        // A rig file from before implements existed still loads.
+        let mut value = serde_json::to_value(&rig).unwrap();
+        value.as_object_mut().unwrap().remove("implement");
+        let old: Rig = serde_json::from_value(value).unwrap();
+        assert_eq!(old.implement, Implement::default());
+        // A mirror that sticks out past the stated radius is refused.
+        rig.implement.radius_m = 0.01;
+        assert!(rig.validate().is_err());
+    }
 
     #[test]
     fn local_yaw_follows_upstream_bend() {

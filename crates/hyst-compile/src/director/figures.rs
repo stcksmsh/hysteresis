@@ -865,14 +865,19 @@ pub fn compile_figures(
         // within its remaining clearance (as for joint end stops above), so the
         // hard check below never has to stop the arm abruptly.
         if dt.is_finite() {
-            let before = link_samples(&forward_kinematics(&rig, &placement, &prior)?);
-            let after = link_samples(&forward_kinematics(&rig, &placement, &q)?);
+            let held = rig.implement.radius_m;
+            let before = link_samples(&forward_kinematics(&rig, &placement, &prior)?, held);
+            let after = link_samples(&forward_kinematics(&rig, &placement, &q)?, held);
             let brake =
                 (0.1 * rig.channels[0].max_acceleration_degrees_per_second2).to_radians() * reach_m;
             let mut scale: f64 = 1.0;
             for (a, b) in before.iter().zip(&after) {
-                let travel = (0..3).map(|k| (b[k] - a[k]).powi(2)).sum::<f64>().sqrt();
-                let limit = (2.0 * brake * (clearance(*a, &zones, MARGIN_M) + 0.005)).sqrt() * dt;
+                let travel = (0..3)
+                    .map(|k| (b.0[k] - a.0[k]).powi(2))
+                    .sum::<f64>()
+                    .sqrt();
+                let limit =
+                    (2.0 * brake * (clearance(a.0, &zones, MARGIN_M + a.1) + 0.005)).sqrt() * dt;
                 if travel > limit {
                     scale = scale.min(limit / travel);
                 }
@@ -995,18 +1000,24 @@ fn clearance(p: [f64; 3], zones: &[Zone], margin: f64) -> f64 {
         .fold(f64::INFINITY, f64::min)
 }
 
-/// Points checked against zones. The base and its first link sit on the mount
-/// surface, so checks start halfway up the second link.
-fn link_samples(points: &[[f64; 3]]) -> Vec<[f64; 3]> {
+/// Points checked against zones, each with the extra room it needs. The base
+/// and its first link sit on the mount surface, so checks start halfway up the
+/// second link. The last point is the hand: it carries the implement, which
+/// reaches `held` metres from it in any direction.
+fn link_samples(points: &[[f64; 3]], held: f64) -> Vec<([f64; 3], f64)> {
     let mut out = Vec::new();
     for k in 1..points.len() - 1 {
         for f in [0.25, 0.5, 0.75, 1.0] {
             if k > 1 || f >= 0.5 {
-                out.push(std::array::from_fn(|i| {
-                    lerp(points[k][i], points[k + 1][i], f)
-                }));
+                out.push((
+                    std::array::from_fn(|i| lerp(points[k][i], points[k + 1][i], f)),
+                    0.0,
+                ));
             }
         }
+    }
+    if let Some(hand) = out.last_mut() {
+        hand.1 = held;
     }
     out
 }
@@ -1023,9 +1034,9 @@ fn clear(
     for u in [1.0 / 6.0, 2.0 / 6.0, 0.5, 4.0 / 6.0, 5.0 / 6.0, 1.0] {
         let q: Vec<f64> = (0..to.len()).map(|j| lerp(from[j], to[j], u)).collect();
         let points = forward_kinematics(rig, placement, &q)?;
-        if link_samples(&points)
+        if link_samples(&points, rig.implement.radius_m)
             .into_iter()
-            .any(|p| penetration(p, zones, MARGIN_M) > 0.0)
+            .any(|(p, extra)| penetration(p, zones, MARGIN_M + extra) > 0.0)
         {
             return Ok(false);
         }
@@ -1063,9 +1074,9 @@ fn solve(
             });
         }
         r.extend(
-            link_samples(&points)
+            link_samples(&points, rig.implement.radius_m)
                 .into_iter()
-                .map(|p| 3.0 * penetration(p, zones, 1.6 * MARGIN_M)),
+                .map(|(p, extra)| 3.0 * penetration(p, zones, 1.6 * MARGIN_M + extra)),
         );
         Ok(r)
     };
@@ -1150,9 +1161,13 @@ mod tests {
         for i in 0..=960 {
             let t = 8.0 * i as f64 / 960.0;
             let inside = |score: &EnsembleScore| {
-                link_samples(&score.sample(t).unwrap().agents[0].world_points)
-                    .into_iter()
-                    .any(|p| penetration(p, &[zone, FLOOR], 0.0) > 0.0)
+                // The implement too: nothing within its radius of the hand.
+                link_samples(
+                    &score.sample(t).unwrap().agents[0].world_points,
+                    score.rig.implement.radius_m,
+                )
+                .into_iter()
+                .any(|(p, extra)| penetration(p, &[zone, FLOOR], extra) > 0.0)
             };
             entered_free |= inside(&free);
             assert!(!inside(&blocked), "link inside zone or floor at {t}");

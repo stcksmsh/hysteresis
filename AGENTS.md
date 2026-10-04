@@ -1370,3 +1370,13 @@ Version 32. "Over-focuses on centre" meant the base turning mostly one way
 (12.5 net turns over the song). Now each section's steady travel round the base
 reverses (3.6 net turns). Chosen by the user as a middle ground, not by a blind
 win. No review knobs remain.
+
+### Implement as rig data, projector overhead — 2026-10-04
+
+Version 33. Concept restated by the user: several arms holding "something with
+mirrors", lit by a projector that shows the visualizer and faces the mounting
+surface head-on (ceiling for a floor arm). The hand object is now data in the
+rig (`Rig.implement`: any set of flat mirrors plus a bounding radius); default
+a lumpy mirror ball, `--implement disc` for the disc. Zone and floor checks
+keep the hand point that radius further away. The preview draws the overhead
+projector's reflections off each mirror. Next: several arms with red zones.

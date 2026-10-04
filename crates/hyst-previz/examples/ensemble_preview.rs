@@ -9,6 +9,7 @@ fn usage() -> &'static str {
      --groove-only    disable hit accents\n\
      --no-reuse       disable recalled musical material\n\
      --drag GAIN      wrist trails the hand's rise and fall, degrees per m/s (default 240)\n\
+     --implement KIND hand object: ball (default, lumpy mirror ball) or disc; a --rig file may carry any other\n\
      --zone BOX       red zone corners in metres, x0,y0,z0,x1,y1,z1 (repeatable)\n\
      --figures        accepted and ignored; the figure planner is the only mode\n\
      Audio starts only after Play. Score and arm trajectories resolve offline for deterministic seek."
@@ -20,6 +21,7 @@ fn main() -> io::Result<()> {
     let mut score_output = None;
     let mut rig_path = None;
     let mut zones = Vec::new();
+    let mut implement = None;
     let mut config = hyst_compile::CompileConfig::default();
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -34,6 +36,13 @@ fn main() -> io::Result<()> {
                     .next()
                     .and_then(|v| v.parse().ok())
                     .ok_or_else(|| io::Error::other("--drag requires degrees per m/s"))?
+            }
+            "--implement" => {
+                implement = Some(match args.next().as_deref() {
+                    Some("disc") => hyst_compile::ensemble::Implement::disc(),
+                    Some("ball") => hyst_compile::ensemble::Implement::mirror_ball(),
+                    _ => return Err(io::Error::other("--implement requires disc or ball")),
+                })
             }
             "--figures" => {}
             "--zone" => {
@@ -80,10 +89,13 @@ fn main() -> io::Result<()> {
     let output = PathBuf::from(&positional[0]);
     let track_url = &positional[1];
     let sidecar = fs::read_to_string(&positional[2])?;
-    let rig = match rig_path {
+    let mut rig: hyst_compile::ensemble::Rig = match rig_path {
         Some(path) => serde_json::from_str(&fs::read_to_string(path)?)?,
         None => hyst_compile::ensemble::Rig::illustrative_five_axis(),
     };
+    if let Some(implement) = implement {
+        rig.implement = implement;
+    }
     let score = hyst_compile::director::figures::compile_figures(&sidecar, config, rig, &zones)
         .map_err(io::Error::other)?;
     let cues = &score.cues;

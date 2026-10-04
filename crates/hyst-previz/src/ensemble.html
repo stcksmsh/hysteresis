@@ -154,24 +154,6 @@
     fill([[p[0]-nx*wa,p[1]-ny*wa],[q[0]-nx*wb,q[1]-ny*wb],[q[0]+nx*wb,q[1]+ny*wb],[p[0]+nx*wa,p[1]+ny*wa]],shade);
     for(const [end,radius] of [[p,wa],[q,wb]]) {ctx.beginPath();ctx.arc(end[0],end[1],radius,0,Math.PI*2);ctx.fill();}
   }
-  // The hand: a disc held by its edge, mirrored on both faces. It flashes when
-  // it throws the light at the camera, so its orientation reads. A stand-in
-  // for a real reflective hand object.
-  // The two faces differ so a turn reads: one warm, one cool with a dark bar.
-  function mirror(centre,facing,radius,color,stem) {
-    const warm=dot(facing,sub(centre,eye))<0, normal=warm?facing:facing.map(v=>-v);
-    const side=cross(normal,up), u=Math.hypot(...side)<1e-6?[1,0,0]:norm(side), v=cross(normal,u);
-    const rim=Array.from({length:32},(_,i)=>{const a=i*Math.PI/16;return project(along(along(centre,u,radius*Math.cos(a)),v,radius*Math.sin(a)));});
-    const view=norm(sub(centre,eye));
-    const bounce=along(view,normal,-2*dot(view,normal));
-    const flash=Math.pow(Math.max(0,dot(bounce,LIGHT)),6);
-    const tint=warm?color:[120,165,205];
-    if(flash>.05) {ctx.shadowColor=rgb(tint,1);ctx.shadowBlur=40*flash;}
-    fill(rim,rgb(tint,(warm?.6:.4)+.9*flash,150*flash));
-    ctx.shadowBlur=0;
-    ctx.strokeStyle=rgb(HOUSING,2.2);ctx.lineWidth=1.5;ctx.stroke();
-    if(!warm) {const bar=cross(normal,stem);line(along(centre,bar,-.8*radius),along(centre,bar,.8*radius),rgb(HOUSING,.8),4);}
-  }
   // Upright cylinder centred at `c`, from height `from` up to `height`.
   function drum(c,r,height,side,top,from=0) {
     const layers=4+Math.ceil(height*400);
@@ -181,46 +163,27 @@
   // The projector faces the mounting surface from straight above the arm
   // (user): on the ceiling for a floor arm. Its height in metres is assumed.
   const PROJECTOR=[0,0,2.5];
-  // Hand object: "shards" (default), a lumpy, dented, not-quite-round ball
-  // tiled with small square mirrors (the user: like a disco ball, but
-  // irregular and non-convex), or "disc" (?hand=disc), one two-faced mirror
-  // held by its edge. The shape is an invented stand-in, fixed, not random.
-  const HAND=/[?&]hand=disc/.test(typeof location==='undefined'?'':location.search)?'disc':'shards';
-  const noise=(i,k)=>{const x=Math.sin(i*12.9898+k*78.233)*43758.5453;return x-Math.floor(x);};
-  // Radius of the ball along unit direction d, metres: two unequal lobes, a
-  // deep dent and a shallow one. Axis 0 is the stem.
-  const DENTS=[[norm([.3,.8,.5]),.45,.1],[norm([-.5,-.6,.6]),.3,.14]];
-  const radius=d=>.062*(.62+.38*Math.pow(Math.abs(.8*d[1]+.6*d[2]),1.4)+.1*d[0])
-    *DENTS.reduce((r,[at,depth,width])=>r*(1-depth*Math.exp(-(1-dot(d,at))/width)),1);
-  const SHARDS=Array.from({length:84},(_,i)=>{
-    const z=1-2*(i+.5)/84, r=Math.sqrt(1-z*z), phi=i*2.39996, d=[z,r*Math.cos(phi),r*Math.sin(phi)];
-    const on=q=>{const n=norm(q);return n.map(v=>v*radius(n));};
-    const t1=norm(cross(d,Math.abs(d[0])<.9?[1,0,0]:[0,1,0])), t2=cross(d,t1), at=on(d);
-    // The tile lies in the surface, a little crooked like a hand-glued one.
-    const flat=norm(cross(sub(on(along(d,t1,.05)),at),sub(on(along(d,t2,.05)),at)));
-    const normal=norm(flat.map((v,k)=>v+.16*(noise(i,k)-.5))), u=norm(cross(normal,Math.abs(normal[0])>.9?[0,1,0]:[1,0,0]));
-    return {at,normal,u,v:cross(normal,u),size:.0105+.003*noise(i,4)};
-  });
-  // The hand's mirrors in the world: {centre, normal, u, v, size, sides, both
-  // faces mirrored}; u and v span the mirror.
+  // The hand's mirrors in the world, from the rig's implement (any set of
+  // flat mirrors in the tool frame: along the stem, facing, across):
+  // {centre, normal, u, v, size, sides, both faces mirrored}.
+  const IMPLEMENT=data.rig.implement||{mirrors:[]};
+  // How far the implement reaches back along the stem: the stem ends there.
+  const BACK=Math.max(0,...IMPLEMENT.mirrors.map(m=>m.halfSizeM-m.centreM[0]));
   function handMirrors(arm,turns) {
     const last=arm.length-1, stem=norm(sub(arm[last],arm[last-1])), facing=discNormal(arm,turns), third=cross(stem,facing);
-    if(HAND==='disc') {
-      const side=cross(facing,up), u=Math.hypot(...side)<1e-6?[1,0,0]:norm(side);
-      return [{centre:arm[last],normal:facing,u,v:cross(facing,u),size:.06,sides:16,both:true}];
-    }
     const world=v=>[0,1,2].map(a=>v[0]*stem[a]+v[1]*facing[a]+v[2]*third[a]);
-    return SHARDS.map(s=>({centre:along(arm[last],world(s.at),1),normal:world(s.normal),u:world(s.u),v:world(s.v),size:s.size,sides:4,both:false}));
+    return IMPLEMENT.mirrors.map(m=>{const normal=world(m.normal), u=world(m.u);
+      return {centre:along(arm[last],world(m.centreM),1),normal,u,v:cross(normal,u),size:m.halfSizeM,sides:m.sides,both:m.bothFaces};});
   }
   const outline=m=>Array.from({length:m.sides},(_,i)=>{const a=(i+.5)*2*Math.PI/m.sides;return along(along(m.centre,m.u,m.size*Math.cos(a)),m.v,m.size*Math.sin(a));});
-  // One tile: dark from behind, bright when it throws the projector's light
-  // at the camera.
+  // One mirror: dark from behind unless both faces are mirrored, bright when
+  // it throws the projector's light at the camera.
   function shard(m) {
-    const rim=outline(m).map(project);
-    if(dot(m.normal,sub(eye,m.centre))<=0) {fill(rim,rgb(HOUSING,1.2));return;}
-    const view=norm(sub(m.centre,eye)), bounce=along(view,m.normal,-2*dot(view,m.normal));
+    const rim=outline(m).map(project), away=dot(m.normal,sub(eye,m.centre))<=0;
+    if(away&&!m.both) {fill(rim,rgb(HOUSING,1.2));return;}
+    const normal=away?m.normal.map(v=>-v):m.normal, view=norm(sub(m.centre,eye)), bounce=along(view,normal,-2*dot(view,normal));
     const lamp=norm(sub(PROJECTOR,m.centre)), glint=Math.pow(Math.max(0,dot(bounce,lamp)),8);
-    fill(rim,rgb([150,175,195],.35+.35*Math.max(0,dot(m.normal,lamp))+.9*glint,170*glint));
+    fill(rim,rgb([150,175,195],.35+.35*Math.abs(dot(normal,lamp))+.9*glint,170*glint));
     ctx.strokeStyle=rgb(HOUSING,1.4);ctx.lineWidth=1;ctx.stroke();
   }
   function discNormal(arm,turns) {
@@ -261,7 +224,7 @@
       if(spot.every(Boolean)) fill(spot.map(project),`rgba(${tint},${.25+.6*caught})`);
       // Always a thin ray from the mirror: to its patch, or out into the room.
       // Many small mirrors: fainter rays.
-      line(centre,land(centre)||along(centre,bounce(centre),1.2),`rgba(${tint},${(.08+.25*caught)*(m.sides===4?.35:1)})`,1);
+      line(centre,land(centre)||along(centre,bounce(centre),1.2),`rgba(${tint},${(.08+.25*caught)/Math.sqrt(IMPLEMENT.mirrors.length)*2})`,1);
     }));
     ctx.globalCompositeOperation='source-over';
     // Soft shadow the arm casts in the projector's light.
@@ -284,15 +247,9 @@
       }
       // Disc held by its edge on a thin stem, centred on the last point. Unrolled
       // it lies in the arm's vertical plane; the last joint rolls it about the stem.
-      const stem=norm(sub(arm[last],arm[last-1])), facing=discNormal(arm,state.turns[id]);
-      if(HAND==='disc') parts.push({depth:project(arm[last])[2],paint:()=>{
-        link(arm[last-1],along(arm[last],stem,-.06),size(last-1),.005,BODY);
-        mirror(arm[last],facing,.06,ACCENTS[id%4],stem);
-      }});
-      else {
-        parts.push({depth:project(arm[last])[2],paint:()=>link(arm[last-1],arm[last],size(last-1),.02,HOUSING)});
-        handMirrors(arm,state.turns[id]).forEach(m=>parts.push({depth:project(m.centre)[2],paint:()=>shard(m)}));
-      }
+      const stem=norm(sub(arm[last],arm[last-1]));
+      parts.push({depth:project(arm[last])[2],paint:()=>link(arm[last-1],along(arm[last],stem,-BACK),size(last-1),.005,BODY)});
+      handMirrors(arm,state.turns[id]).forEach(m=>parts.push({depth:project(m.centre)[2],paint:()=>shard(m)}));
       // Hand path: a ribbon of light 4 s behind.
       const tip=t=>{const pose=frameAt(data,t).agents[id];return pose[pose.length-1];};
       for(let k=-120;k<0;k++) {
