@@ -39,7 +39,7 @@ fn main() -> io::Result<()> {
                 config.dejitter = args
                     .next()
                     .and_then(|v| v.parse().ok())
-                    .ok_or_else(|| io::Error::other("--dejitter requires 0, 1 or 2"))?
+                    .ok_or_else(|| io::Error::other("--dejitter requires a knot count"))?
             }
             "--flourish" => {
                 config.flourish = args
