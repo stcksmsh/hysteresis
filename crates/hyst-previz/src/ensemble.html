@@ -134,7 +134,8 @@
   function fill(points,color) {
     ctx.fillStyle=color;ctx.beginPath();points.forEach((q,i)=>i?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1]));ctx.closePath();ctx.fill();
   }
-  // Lit tapered cylinder between two world points; radii in metres.
+  // Lit tapered capsule between two world points; radii in metres. Round ends
+  // share the body's shading, so a bend needs no separate joint part.
   function link(a,b,ra,rb,color) {
     const axis=norm(sub(b,a)), side=cross(axis,forward);
     if(Math.hypot(...side)<1e-6) return; // seen end-on: its joints cover it
@@ -149,18 +150,20 @@
       shade.addColorStop(clamp((o+1)/2,0,1),rgb(color,(.45+.75*Math.max(0,dot(normal,LIGHT)))*(.6+.4*round),190*Math.pow(Math.max(0,dot(normal,half)),28)));
     }
     fill([[p[0]-nx*wa,p[1]-ny*wa],[q[0]-nx*wb,q[1]-ny*wb],[q[0]+nx*wb,q[1]+ny*wb],[p[0]+nx*wa,p[1]+ny*wa]],shade);
+    for(const [end,radius] of [[p,wa],[q,wb]]) {ctx.beginPath();ctx.arc(end[0],end[1],radius,0,Math.PI*2);ctx.fill();}
   }
   // Lit sphere; `glow` makes it emissive (the hand).
   function ball(centre,radius,color,glow) {
     const s=project(centre), r=pixels(radius,s[2]), lx=dot(LIGHT,right), ly=-dot(LIGHT,cameraUp);
     const shade=ctx.createRadialGradient(s[0]+lx*r*.45,s[1]+ly*r*.45,r*.05,s[0],s[1],r);
-    shade.addColorStop(0,rgb(color,glow?1.3:1.5,glow?60:130));shade.addColorStop(.55,rgb(color,glow?1:.85));shade.addColorStop(1,rgb(color,glow?.8:.3));
+    shade.addColorStop(0,rgb(color,1.3,glow?60:0));shade.addColorStop(.55,rgb(color,glow?1:.85));shade.addColorStop(1,rgb(color,glow?.8:.3));
     if(glow) {ctx.shadowColor=rgb(color,1);ctx.shadowBlur=r*1.6;}
     ctx.fillStyle=shade;ctx.beginPath();ctx.arc(s[0],s[1],r,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
   }
-  // Upright cylinder on the floor, centred at `c`.
-  function drum(c,r,height,side,top) {
-    for(let layer=0;layer<=4;layer++) fill(Array.from({length:48},(_,i)=>project([c[0]+r*Math.cos(i*Math.PI/24),c[1]+r*Math.sin(i*Math.PI/24),height*layer/4])),layer<4?side:top);
+  // Upright cylinder centred at `c`, from height `from` up to `height`.
+  function drum(c,r,height,side,top,from=0) {
+    const layers=4+Math.ceil(height*400);
+    for(let layer=0;layer<=layers;layer++) fill(Array.from({length:48},(_,i)=>project([c[0]+r*Math.cos(i*Math.PI/24),c[1]+r*Math.sin(i*Math.PI/24),from+(height-from)*layer/layers])),layer<layers?side:top);
   }
   const BODY=[118,130,146], HOUSING=[38,44,54];
   const ACCENTS=[[239,184,105],[158,213,220],[213,167,222],[131,207,170]];
@@ -191,13 +194,12 @@
     });
     // Arm parts sorted far to near.
     const paint=(arm,id)=>{
-      const last=arm.length-1, size=k=>.031-.015*k/last, parts=[];
+      const last=arm.length-1, size=k=>.026-.012*k/last, parts=[];
       for(let k=1;k<last;k++) {
         if(Math.hypot(...sub(arm[k+1],arm[k]))>1e-4) parts.push({depth:(project(arm[k])[2]+project(arm[k+1])[2])/2,
-          paint:()=>link(arm[k],arm[k+1],.8*size(k),.8*size(k+1),BODY)});
-        parts.push({depth:project(arm[k])[2],paint:()=>ball(arm[k],1.18*size(k),HOUSING)});
+          paint:()=>link(arm[k],arm[k+1],size(k),size(k+1),BODY)});
       }
-      parts.push({depth:project(arm[last])[2],paint:()=>ball(arm[last],1.5*size(last),ACCENTS[id%4],true)});
+      parts.push({depth:project(arm[last])[2],paint:()=>ball(arm[last],1.9*size(last),ACCENTS[id%4],true)});
       parts.sort((a,b)=>b.depth-a.depth).forEach(part=>part.paint());
     };
     // The hand's light pools on the floor under it.
@@ -233,10 +235,10 @@
     state.agents.forEach((arm,id)=>{
       const hand=arm[arm.length-1];
       line(hand,[hand[0],hand[1],.003],'#4d626d',1);
-      // Turntable with a marker toward the shoulder, so base rotation is visible.
+      // Pedestal and a column up to the shoulder.
       drum(arm[0],.15,.012,'#141d25','#1d2a34');
-      drum(arm[0],.115,.03,rgb(HOUSING,.8),rgb(HOUSING,1.5));
-      line(along(arm[0],[0,0,1],.031),along(arm[1],[0,0,1],.031),colors[id%4],4);
+      drum(arm[0],.11,.035,rgb(HOUSING,.8),rgb(HOUSING,1.5));
+      drum(arm[0],.04,arm[1][2],rgb(BODY,.55),rgb(BODY,.9),.035);
       paint(arm,id);
     });
     const dark=ctx.createRadialGradient(640,380,300,640,380,820);dark.addColorStop(0,'rgba(0,0,0,0)');dark.addColorStop(1,'rgba(0,0,0,.6)');

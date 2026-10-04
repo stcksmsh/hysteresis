@@ -48,7 +48,8 @@ impl Rig {
                 channel(
                     "base_yaw",
                     [0.0, 0.0, 1.0],
-                    [0.08, 0.0, 0.0],
+                    // Shoulder sits on the yaw axis, up a short column.
+                    [0.0, 0.0, 0.08],
                     0.0,
                     [70.0, 0.0, 0.0],
                 ),

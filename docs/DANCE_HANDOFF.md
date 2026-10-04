@@ -944,3 +944,28 @@ rings removed from the stage (numbers stay in the Evidence panel). An arm
 reflection in the floor was tried and dropped (read as detached clutter).
 Look 2 not built. 130 CPU tests, clippy, fmt, `ensemble.cjs` pass. Clip:
 `render-14.mp4`, export `song-figures-14.html`. Awaiting user review.
+
+### Version 15: shoulder on the base axis, capsule links, zone-aware follower — 2026-10-04
+
+User on version 14 (render only; no verdict yet on the speed change): the base
+joint rotates around something that is not the centre of the base plate, and
+the joints look bad and clip through the cylinders.
+
+- Base: true to the rig, which put the shoulder 8 cm sideways from the yaw
+  axis. The illustrative rig now puts it on the axis, 8 cm up
+  (`base_yaw` link `[0, 0, 0.08]`). Still invented geometry. This changes the
+  solved joint angles slightly; hand targets are unchanged.
+- Joints: links were flat-cut quads drawn over larger joint balls. Links are
+  now capsules whose round ends share the body shading; joint balls are gone.
+  The base is a pedestal plus a column to the shoulder.
+- The rig change made `hand_travels_and_no_link_enters_a_red_zone` fail with
+  the known "cannot fit tangents" weak point. Fixed at the root: the follower
+  now limits each link sample's travel per knot to what it could brake within
+  its remaining clearance to any zone (floor included), so the hard bisect no
+  longer stops the arm abruptly. The documented failing combination
+  (`--groove-only --no-reuse --zone 0.15,0.3,0.25,0.6,0.6,0.7`) now compiles.
+  Not tested with more zones or moving zones. Side effect: links skimming the
+  floor are slowed; song hand speed median and p95 unchanged (0.35, 0.83).
+
+130 CPU tests, clippy, fmt, `ensemble.cjs` pass. Stills inspected at 92.5 and
+150 s. Clip `render-15.mp4`, export `song-figures-15.html`. Awaiting review.

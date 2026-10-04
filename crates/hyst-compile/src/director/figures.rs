@@ -597,6 +597,26 @@ pub fn compile_figures(
                 q[j] = (prior[j] + v * dt).clamp(c.min_degrees + 0.5, c.max_degrees - 0.5);
             }
         }
+        // Zone-aware: a link near a zone moves only as fast as it could brake
+        // within its remaining clearance (as for joint end stops above), so the
+        // hard check below never has to stop the arm abruptly.
+        if dt.is_finite() {
+            let before = link_samples(&forward_kinematics(&rig, &placement, &prior)?);
+            let after = link_samples(&forward_kinematics(&rig, &placement, &q)?);
+            let brake =
+                (0.1 * rig.channels[0].max_acceleration_degrees_per_second2).to_radians() * reach_m;
+            let mut scale: f64 = 1.0;
+            for (a, b) in before.iter().zip(&after) {
+                let travel = (0..3).map(|k| (b[k] - a[k]).powi(2)).sum::<f64>().sqrt();
+                let limit = (2.0 * brake * (clearance(*a, &zones, MARGIN_M) + 0.005)).sqrt() * dt;
+                if travel > limit {
+                    scale = scale.min(limit / travel);
+                }
+            }
+            for j in 0..q.len() {
+                q[j] = lerp(prior[j], q[j], scale);
+            }
+        }
         // Hard guarantee: bisect back toward the prior clear pose.
         if !clear(&rig, &placement, &zones, &prior, &q)? {
             let (mut lo, mut hi) = (0.0, 1.0);
@@ -664,6 +684,24 @@ fn penetration(p: [f64; 3], zones: &[Zone], margin: f64) -> f64 {
                 .fold(f64::INFINITY, f64::min)
         })
         .fold(0.0, f64::max)
+}
+
+/// Distance from `p` to the nearest zone grown by `margin`; 0 when inside one.
+fn clearance(p: [f64; 3], zones: &[Zone], margin: f64) -> f64 {
+    zones
+        .iter()
+        .map(|z| {
+            (0..3)
+                .map(|i| {
+                    (z.min[i] - margin - p[i])
+                        .max(p[i] - z.max[i] - margin)
+                        .max(0.0)
+                        .powi(2)
+                })
+                .sum::<f64>()
+                .sqrt()
+        })
+        .fold(f64::INFINITY, f64::min)
 }
 
 /// Points checked against zones. The base and its first link sit on the mount
