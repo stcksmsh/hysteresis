@@ -374,6 +374,7 @@ pub fn compile_figures(
     let mut cues: Vec<IntentCue> = Vec::new();
     // Scaled shell azimuth where the previous figure ended.
     let mut entry = still(0.0, 1.0)[0];
+    let mut way = -1.0;
     for &(start, end, class) in &runs {
         let activity = classify(start, end).1;
         let (sequence, size, travel) = motif(class);
@@ -396,6 +397,12 @@ pub fn compile_figures(
                 }
             }
         }
+        if config.travel > 0 && travel > 0.0 {
+            way = -way;
+            if config.travel == 2 {
+                first_dir = way;
+            }
+        }
         chosen.push((start, first_dir, class));
         let mut t = start;
         for (k, &(name, shape, beats, step_dir)) in sequence.iter().cycle().enumerate() {
@@ -406,7 +413,8 @@ pub fn compile_figures(
             let repeat = k / sequence.len();
             let dir = first_dir * step_dir * if repeat % 2 == 1 { -1.0 } else { 1.0 };
             let heading = entry - scaled(shape(0.0, dir), sized(scale, t))[0];
-            let turn = first_dir * travel * 2.0 * (stop - t) / (32.0 * beat);
+            let side = if config.travel == 1 { way } else { first_dir };
+            let turn = side * travel * 2.0 * (stop - t) / (32.0 * beat);
             instances.push(Instance {
                 start: t,
                 end: stop,
