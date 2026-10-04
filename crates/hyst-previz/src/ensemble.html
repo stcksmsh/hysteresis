@@ -157,17 +157,20 @@
   // The hand: a disc held by its edge, mirrored on both faces. It flashes when
   // it throws the light at the camera, so its orientation reads. A stand-in
   // for a real reflective hand object.
-  function mirror(centre,facing,radius,color) {
-    const normal=dot(facing,sub(centre,eye))>0?facing.map(v=>-v):facing;
+  // The two faces differ so a turn reads: one warm, one cool with a dark bar.
+  function mirror(centre,facing,radius,color,stem) {
+    const warm=dot(facing,sub(centre,eye))<0, normal=warm?facing:facing.map(v=>-v);
     const side=cross(normal,up), u=Math.hypot(...side)<1e-6?[1,0,0]:norm(side), v=cross(normal,u);
     const rim=Array.from({length:32},(_,i)=>{const a=i*Math.PI/16;return project(along(along(centre,u,radius*Math.cos(a)),v,radius*Math.sin(a)));});
     const view=norm(sub(centre,eye));
     const bounce=along(view,normal,-2*dot(view,normal));
     const flash=Math.pow(Math.max(0,dot(bounce,LIGHT)),6);
-    if(flash>.05) {ctx.shadowColor=rgb(color,1);ctx.shadowBlur=40*flash;}
-    fill(rim,rgb(color,.45+.9*flash,150*flash));
+    const tint=warm?color:[120,165,205];
+    if(flash>.05) {ctx.shadowColor=rgb(tint,1);ctx.shadowBlur=40*flash;}
+    fill(rim,rgb(tint,(warm?.6:.4)+.9*flash,150*flash));
     ctx.shadowBlur=0;
     ctx.strokeStyle=rgb(HOUSING,2.2);ctx.lineWidth=1.5;ctx.stroke();
+    if(!warm) {const bar=cross(normal,stem);line(along(centre,bar,-.8*radius),along(centre,bar,.8*radius),rgb(HOUSING,.8),4);}
   }
   // Upright cylinder centred at `c`, from height `from` up to `height`.
   function drum(c,r,height,side,top,from=0) {
@@ -206,18 +209,21 @@
     // in four so a long link sorts correctly against a nearby trail segment.
     const paint=(arm,id)=>{
       const last=arm.length-1, size=k=>.026-.012*k/last, parts=[];
-      for(let k=1;k<last;k++) for(let piece=0;piece<4;piece++) {
+      for(let k=1;k<last-1;k++) for(let piece=0;piece<4;piece++) {
         if(Math.hypot(...sub(arm[k+1],arm[k]))<=1e-4) continue;
         const span=sub(arm[k+1],arm[k]), a=along(arm[k],span,piece/4), b=along(arm[k],span,(piece+1)/4);
         const ra=size(k)+(size(k+1)-size(k))*piece/4, rb=size(k)+(size(k+1)-size(k))*(piece+1)/4;
         parts.push({depth:(project(a)[2]+project(b)[2])/2,paint:()=>link(a,b,ra,rb,BODY)});
       }
-      // Disc held by its edge, centred on the last point. Unrolled it lies in
-      // the arm's vertical plane; the last joint rolls it about the wrist link.
+      // Disc held by its edge on a thin stem, centred on the last point. Unrolled
+      // it lies in the arm's vertical plane; the last joint rolls it about the stem.
       const heading=state.turns[id][0]*Math.PI/180, roll=state.turns[id][1]*Math.PI/180;
       const flat=[-Math.sin(heading),Math.cos(heading),0], stem=norm(sub(arm[last],arm[last-1]));
       const facing=along(flat.map(c=>c*Math.cos(roll)),cross(stem,flat),Math.sin(roll));
-      parts.push({depth:project(arm[last])[2],paint:()=>mirror(arm[last],facing,.06,ACCENTS[id%4])});
+      parts.push({depth:project(arm[last])[2],paint:()=>{
+        link(arm[last-1],along(arm[last],stem,-.06),size(last-1),.005,BODY);
+        mirror(arm[last],facing,.06,ACCENTS[id%4],stem);
+      }});
       // Hand path: a ribbon of light 4 s behind.
       const tip=t=>{const pose=frameAt(data,t).agents[id];return pose[pose.length-1];};
       for(let k=-120;k<0;k++) {

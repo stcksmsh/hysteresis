@@ -70,17 +70,18 @@ impl Rig {
                 channel(
                     "wrist_bend",
                     [0.0, 1.0, 0.0],
-                    [0.10, 0.0, 0.0],
+                    [0.08, 0.0, 0.0],
                     5.0,
                     [-6.0, 20.0, 22.0],
                 ),
-                // Rolls the hand object about the wrist link. Its link ends at
-                // the centre of a disc held by its edge, so the roll moves no
-                // point of the chain and only turns the disc's face.
+                // Rolls the hand object about the wrist link. Its link is a
+                // 5 cm stem plus the 6 cm radius of a disc held by its edge, so
+                // it ends at the disc centre; the roll moves no point of the
+                // chain and only turns the disc's face.
                 channel(
                     "wrist_roll",
                     [1.0, 0.0, 0.0],
-                    [0.06, 0.0, 0.0],
+                    [0.11, 0.0, 0.0],
                     0.0,
                     [0.0, 0.0, 0.0],
                 ),

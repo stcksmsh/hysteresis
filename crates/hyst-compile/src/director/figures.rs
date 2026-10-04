@@ -25,7 +25,9 @@ const FLOOR: Zone = Zone {
 };
 /// Hard check enforces this clearance; the solver aims for 1.6 times it.
 const MARGIN_M: f64 = 0.05;
-/// Hand disc turn per metre of hand travel. Chosen by eye on one passage.
+/// Beats the hand disc takes to turn over at a moment.
+const FLIP_BEATS: f64 = 3.0;
+/// Hand disc turn per metre of fast hand travel.
 const SPIN_DEGREES_PER_METRE: f64 = 150.0;
 /// Fastest the figure path carries the hand, m/s. A guess, tuned by eye on one
 /// song; moments may exceed it briefly.
@@ -568,7 +570,7 @@ pub fn compile_figures(
         let length = c.link_m.iter().map(|v| v * v).sum::<f64>().sqrt();
         (length > 0.0 && (along.abs() - length).abs() < 1e-9).then_some(rig.channels.len() - 1)
     });
-    let mut roll = 0.0;
+    let mut turned = 0.0;
     for (i, (&time, &(target, facing))) in times.iter().zip(&targets).enumerate() {
         if knots.last().is_some_and(|k| time - k.time < 1e-9) {
             continue;
@@ -583,25 +585,40 @@ pub fn compile_figures(
             wanted = solve(&rig, &placement, &zones, target, facing, &prior)?;
         }
         if let Some(r) = roll_joint {
-            // The disc turns with the distance the hand travels, so it is never
-            // re-aimed and cannot jitter. Its direction is the figure's own
-            // left/right sense, averaged over two beats: a mirrored figure
-            // turns the other way, easing through rest at the change.
-            let sense = (-2..=2)
-                .map(|k| {
-                    let at = time + f64::from(k) * 0.5 * beat;
-                    let n = instances.partition_point(|x| x.end <= at);
-                    instances[n.min(instances.len() - 1)].dir
-                })
-                .sum::<f64>()
-                / 5.0;
-            let prior = targets[i.saturating_sub(1)].0;
-            let travel = (0..3)
-                .map(|k| (target[k] - prior[k]).powi(2))
-                .sum::<f64>()
-                .sqrt();
-            roll += SPIN_DEGREES_PER_METRE * travel * sense;
-            wanted[r] = roll;
+            // Flips: the disc turns to show its other face across each moment,
+            // in alternating directions.
+            let flips = 180.0
+                * moments
+                    .iter()
+                    .enumerate()
+                    .map(|(n, m)| {
+                        let way = if n % 2 == 0 { 1.0 } else { -1.0 };
+                        way * smooth((time - m.time) / (FLIP_BEATS * beat) + 0.5)
+                    })
+                    .sum::<f64>();
+            // Travel: in a fast sweep the disc turns with the distance the hand
+            // covers; it rests when the hand is slow. Its direction is the
+            // hand's sweep round the base relative to the figure's steady
+            // travel over the surrounding four beats, so left and right sweeps
+            // turn it opposite ways. (Turning with all travel, one way, read
+            // as constant purposeless rotation: user.)
+            if i > 0 && dt.is_finite() {
+                let (before, bearing) = targets[i - 1];
+                let travel = (0..3)
+                    .map(|k| (target[k] - before[k]).powi(2))
+                    .sum::<f64>()
+                    .sqrt();
+                let fast = smooth((travel / dt - 0.25) / 0.35);
+                let (lo, hi) = (i.saturating_sub(16), (i + 16).min(targets.len() - 1));
+                let steady = (targets[hi].1 - targets[lo].1) / (times[hi] - times[lo]);
+                let way = (((facing - bearing) / dt - steady) / 30.0).tanh();
+                turned += SPIN_DEGREES_PER_METRE * travel * fast * way;
+            }
+            wanted[r] = match config.roll {
+                crate::RollMode::Flip => flips,
+                crate::RollMode::Travel => turned,
+                crate::RollMode::Both => flips + turned,
+            };
         }
         // Hardware follower: each joint chases its solved angle at a design
         // acceleration and speed a hobby-class servo arm could plausibly follow,

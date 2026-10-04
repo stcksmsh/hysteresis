@@ -1078,3 +1078,33 @@ the roll too; the roll is now exempt from zone braking, since it moves no link.
 (1:24–2:04), export `song-figures-22.html`. Not reviewed yet.
 Agreed next: side-by-side tests of the next decisions, starting with body B
 (whip or wave on arrivals and flourishes), then spin rate, then keys-decide.
+
+### Version 23: disc on a stem, distinct faces; roll candidates again — 2026-10-04
+
+Pull request 13 was merged by accident mid-work; this continues on branch
+`wrist-roll` (pull request 14). `master` still carries the earlier three roll
+drivers until 14 merges.
+
+User on version 22: the disc should sit further out and overlap the arm less
+(it clipped); its two sides are hard to tell apart; it "seems to always rotate,
+even when not needed", and always the same way. Then: "I liked the disc being
+tied to travel, but it needs some in-between solution".
+
+- Rig: wrist link 0.08 m, roll link 0.11 m (5 cm stem + 6 cm disc radius);
+  reach 0.74 → 0.77 m. Preview draws a thin stem to the disc's edge.
+- Disc faces differ: one warm, one cool with a dark bar.
+- Measured why spin looked one-way: the figure-sense direction still netted a
+  large one-way drift, and tying direction to the hand's sweep round the base
+  drifted too (+5300°), because figures travel steadily one way round the base.
+- Three candidates, `CompileConfig::roll` / `--roll` (default `both`); the
+  losers must be deleted after the verdict:
+  - `flip`: still; turns over (180°, 3 beats) across each moment, alternating
+    direction. 0 reversals.
+  - `travel`: turns 150° per metre only in fast sweeps (fades in from 0.25 to
+    0.6 m/s); direction is the hand's sweep round the base relative to its
+    steady travel over the surrounding four beats. 5 reversals a minute, speed
+    median 2, p95 111°/s; still nets +2000° over the song.
+  - `both`: sum of the two.
+- Side-by-side prepared, shuffled, not yet judged:
+  `blind-roll-side-by-side.mp4` (1:24–2:04), key `blind-roll-key.json` unread.
+130 CPU tests, clippy, fmt, `ensemble.cjs` pass.

@@ -34,17 +34,30 @@ pub struct SegmentBounds {
     pub max_acceleration_degrees_per_second2: [f64; 3],
 }
 
+/// What drives the wrist roll (the hand disc's face). Candidates under
+/// side-by-side review; the losers get deleted.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RollMode {
+    /// Still, turning over only across each moment.
+    Flip,
+    /// Turning with fast hand travel, the way the hand sweeps round the base.
+    Travel,
+    Both,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CompileConfig {
     pub enable_hits: bool,
     /// Recall an earlier measured phrase signature; false uses current content.
     pub reuse_repeats: bool,
+    pub roll: RollMode,
 }
 impl Default for CompileConfig {
     fn default() -> Self {
         Self {
             enable_hits: true,
             reuse_repeats: true,
+            roll: RollMode::Both,
         }
     }
 }
