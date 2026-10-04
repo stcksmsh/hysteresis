@@ -178,6 +178,13 @@
     for(let layer=0;layer<=layers;layer++) fill(Array.from({length:48},(_,i)=>project([c[0]+r*Math.cos(i*Math.PI/24),c[1]+r*Math.sin(i*Math.PI/24),from+(height-from)*layer/layers])),layer<layers?side:top);
   }
   const BODY=[118,130,146], HOUSING=[38,44,54];
+  // Assumed room, metres: projector in front of the arm, screen wall behind it.
+  const PROJECTOR=[3,0,1.2], WALL=-1.5;
+  function discNormal(arm,turns) {
+    const last=arm.length-1, heading=turns[0]*Math.PI/180, roll=turns[1]*Math.PI/180;
+    const flat=[-Math.sin(heading),Math.cos(heading),0], stem=norm(sub(arm[last],arm[last-1]));
+    return along(flat.map(c=>c*Math.cos(roll)),cross(stem,flat),Math.sin(roll));
+  }
   const ACCENTS=[[239,184,105],[158,213,220],[213,167,222],[131,207,170]];
   function draw(seconds) {
     const state=inspectAt(data,seconds), v=state.visual;
@@ -197,6 +204,27 @@
       const c=i=>[i&1?z.max[0]:z.min[0],i&2?z.max[1]:z.min[1],i&4?z.max[2]:z.min[2]];
       for(let i=0;i<8;i++) for(const bit of [1,2,4]) if(!(i&bit)) line(c(i),c(i|bit),'#e0524a',2);
     });
+    // The projector's light off each disc, as a patch on the screen wall or the
+    // floor. Room layout is an assumption, not the installation's.
+    line(along(PROJECTOR,up,-.05),along(PROJECTOR,up,.05),'#c7d6db',6);
+    const wall=[[WALL,-2,0],[WALL,2,0],[WALL,2,2.5],[WALL,-2,2.5]];
+    fill(wall.map(project),'rgba(60,80,95,.25)');
+    ctx.globalCompositeOperation='lighter';
+    state.agents.forEach((arm,id)=>{
+      const centre=arm[arm.length-1], normal=discNormal(arm,state.turns[id]);
+      const side=cross(normal,up), u=Math.hypot(...side)<1e-6?[1,0,0]:norm(side), w=cross(normal,u);
+      const spot=[], caught=Math.abs(dot(norm(sub(centre,PROJECTOR)),normal));
+      for(let i=0;i<16;i++) {
+        const rim=along(along(centre,u,.06*Math.cos(i*Math.PI/8)),w,.06*Math.sin(i*Math.PI/8));
+        const beam=norm(sub(rim,PROJECTOR)), out=along(beam,normal,-2*dot(beam,normal));
+        const toWall=(WALL-rim[0])/out[0], toFloor=-rim[2]/out[2];
+        const hit=toWall>0?along(rim,out,toWall):null;
+        if(hit&&Math.abs(hit[1])<=2&&hit[2]>=0&&hit[2]<=2.5) spot.push(hit);
+        else if(toFloor>0&&toFloor<8) spot.push(along(rim,out,toFloor));
+      }
+      if(spot.length===16) fill(spot.map(project),`rgba(${ACCENTS[id%4].join(',')},${.25+.6*caught})`);
+    });
+    ctx.globalCompositeOperation='source-over';
     // Soft floor shadow cast by the light.
     const cast=p=>[p[0]-LIGHT[0]*p[2]/LIGHT[2],p[1]-LIGHT[1]*p[2]/LIGHT[2],.003];
     ctx.lineJoin='round';ctx.lineCap='round';ctx.strokeStyle='rgba(0,0,0,.13)';
@@ -217,9 +245,7 @@
       }
       // Disc held by its edge on a thin stem, centred on the last point. Unrolled
       // it lies in the arm's vertical plane; the last joint rolls it about the stem.
-      const heading=state.turns[id][0]*Math.PI/180, roll=state.turns[id][1]*Math.PI/180;
-      const flat=[-Math.sin(heading),Math.cos(heading),0], stem=norm(sub(arm[last],arm[last-1]));
-      const facing=along(flat.map(c=>c*Math.cos(roll)),cross(stem,flat),Math.sin(roll));
+      const stem=norm(sub(arm[last],arm[last-1])), facing=discNormal(arm,state.turns[id]);
       parts.push({depth:project(arm[last])[2],paint:()=>{
         link(arm[last-1],along(arm[last],stem,-.06),size(last-1),.005,BODY);
         mirror(arm[last],facing,.06,ACCENTS[id%4],stem);

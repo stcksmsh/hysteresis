@@ -1366,3 +1366,25 @@ The user watched the whole song at version 32 (60 fps, on-screen clock,
 reported. The single-arm motion is accepted for now. Agreed order from here:
 the hand object, then several arms with red zones. Open before the hand object
 can be built: what the object is in numbers, and what the mirror aims at.
+
+### Hand object, first step: where the disc throws the projector's light — 2026-10-04
+
+The user restated the whole-project concept: several arms with "something with
+mirrors" on the end, and a projector fires the visualizer (the Julia and
+Mandelbulb fractals) onto them and the wall. So the light is the projector's
+image. The object, the room layout and whether the mirrors aim are not decided.
+
+Measured on version 32 with an **assumed** room (projector 3 m in front of the
+arm at 1.2 m height, screen wall 1.5 m behind it, both mirror faces): the
+reflection lands on the screen wall 43 % of the song, the floor 36 %, the
+ceiling 12 %, side walls 8 %, back at the audience 1 %. The disc is nearly
+edge-on to the beam 25 % of the time. A spot on the wall moves at 2.1 m/s
+median, 14 m/s p95, and stays there 0.5 s median at a stretch. With the hand
+where the dance puts it, some roll angle would put a usable spot on the screen
+wall in 93 % of the song: the roll alone could steer it.
+
+The preview (`ensemble.html`) now draws that room: a screen wall, a projector
+mark, and the reflected patch on the wall or floor. Constants `PROJECTOR` and
+`WALL` are assumptions. The planner is unchanged (still version 32). Clip
+`mirror-light-32.mp4` (3:32–4:12) sent to the user. The disc rim is still not
+in the zone check.
