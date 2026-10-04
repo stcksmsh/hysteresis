@@ -1335,3 +1335,14 @@ whip on moments, suspension at figure peaks, three other roll drivers. Planner
 fixes: follower brakes near zones; roll exempt from that; last knot keeps its
 slope. Next is keys-decide in a fresh session; start from
 `docs/DANCE_RESTART_PROMPT.md`.
+
+### Instrument lanes and leading lane — 2026-10-04
+
+Version 27, branch `keys-decide`. `scripts/dance_notes.py` writes one lane per
+stem into the sidecar (`noteTrack.lanes`: onsets, rough pitch, phrases, level
+per beat). The planner ranks the lanes per beat and, while the leading lane
+plays stabs, the hand surges after each stab (blind-test winner). Figure
+snapping and picking by the leader lost and were deleted. A Songsterr tab is
+the validation reference (never input). MuScriptor, pYIN voice curve and
+stereo lane discovery were measured but are not in the repo. Details and
+numbers: last entry of `docs/DANCE_HANDOFF.md`.

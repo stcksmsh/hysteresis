@@ -46,10 +46,6 @@ pub struct CompileConfig {
     pub wrist_drag_degrees_per_mps: f64,
     /// Temporary review knob: 0 flourishes as before, 1 none, 2 slow and soft.
     pub flourish: u8,
-    /// Temporary review knob for how the hand travels while the leading
-    /// instrument plays stabs: 0 evenly, 1 it pushes off on each stab, 2 it
-    /// arrives on each stab.
-    pub keys: u8,
 }
 impl Default for CompileConfig {
     fn default() -> Self {
@@ -58,7 +54,6 @@ impl Default for CompileConfig {
             reuse_repeats: true,
             wrist_drag_degrees_per_mps: 240.0,
             flourish: 0,
-            keys: 0,
         }
     }
 }

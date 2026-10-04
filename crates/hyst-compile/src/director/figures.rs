@@ -363,7 +363,7 @@ pub fn compile_figures(
                     repeat + 1,
                     recall_from.map_or(String::new(), |t| format!(" · returns from {t:.1}s")),
                     activity[0], activity[1], activity[2], activity[3],
-                ) + &if config.keys >= 1 && !ranks.is_empty() {
+                ) + &if !ranks.is_empty() {
                     let [lead, second] = rank_at(t);
                     format!(" · leads {}, second {}", lanes[lead].0, lanes[second].0)
                 } else {
@@ -567,19 +567,18 @@ pub fn compile_figures(
             .sqrt()
             / step;
         // While the leader plays stabs the hand travels in pulses along its
-        // path: fastest just after a stab (1) or just before one (2), slow
-        // between. A steady leader keeps the even pace.
-        let pulse = if config.keys == 0 || stabs.is_empty() {
+        // path: it surges just after each stab and eases between (the user
+        // chose this in a blind side-by-side over even travel and over
+        // arriving on the stab). A steady leader keeps the even pace.
+        let pulse = if stabs.is_empty() {
             1.0
         } else {
             let index = ((t - data.musical_memory.beat_zero) / beat).max(0.0) as usize;
-            let next = hits.partition_point(|h| *h <= t);
-            let gap = if config.keys == 1 {
-                next.checked_sub(1).map(|i| t - hits[i])
-            } else {
-                hits.get(next).map(|h| h - t)
-            };
-            let bump = gap.map_or(0.0, |g| (-g / (0.35 * beat)).exp());
+            let since = hits
+                .partition_point(|h| *h <= t)
+                .checked_sub(1)
+                .map(|i| t - hits[i]);
+            let bump = since.map_or(0.0, |g| (-g / (0.35 * beat)).exp());
             lerp(1.0, 0.3 + 1.9 * bump, stabs[index.min(stabs.len() - 1)])
         };
         let rate = if held {
@@ -1052,6 +1051,45 @@ mod tests {
         assert!(entered_free, "fixture zone must obstruct the free path");
         assert!(high - low > 0.4, "hand lateral travel {:.3} m", high - low);
         assert_eq!(free.cues[0].character, "gather");
+    }
+
+    #[test]
+    fn hand_surges_after_each_stab_of_the_leading_lane() {
+        let mut value: serde_json::Value =
+            serde_json::from_str(&super::super::tests::fixture(0.7, 0.7)).unwrap();
+        // Leader hits every second beat (stabs); a quieter lane plays steadily.
+        let stabs: Vec<[f64; 3]> = (0..8).map(|i| [i as f64, 60.0, 1.0]).collect();
+        let steady: Vec<[f64; 3]> = (0..16).map(|i| [0.5 * i as f64, 40.0, 1.0]).collect();
+        value["noteTrack"] = serde_json::json!({"lanes": {
+            "keys": {"notes": stabs, "levelPerBeat": vec![-10.0; 16]},
+            "bass": {"notes": steady, "levelPerBeat": vec![-30.0; 16]},
+        }});
+        let config = CompileConfig {
+            enable_hits: false,
+            ..CompileConfig::default()
+        };
+        let rig = Rig::illustrative_five_axis();
+        let score = compile_figures(&value.to_string(), config, rig, &[]).unwrap();
+        let tip = |t: f64| {
+            *score.sample(t).unwrap().agents[0]
+                .world_points
+                .last()
+                .unwrap()
+        };
+        let travel = |a: f64, b: f64| {
+            let (p, q) = (tip(a), tip(b));
+            (0..3).map(|k| (p[k] - q[k]).powi(2)).sum::<f64>().sqrt()
+        };
+        let (mut after, mut before) = (0.0, 0.0);
+        for hit in [2.0, 3.0, 4.0, 5.0, 6.0] {
+            after += travel(hit + 0.05, hit + 0.3);
+            before += travel(hit - 0.3, hit - 0.05);
+        }
+        assert!(
+            after > 1.3 * before,
+            "after {after:.3} m, before {before:.3} m"
+        );
+        assert!(score.cues[0].reason.contains("leads keys"));
     }
 
     #[test]

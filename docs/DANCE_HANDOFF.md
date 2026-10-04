@@ -1211,3 +1211,63 @@ bend −41°..90°, elbow 10°..110° (limit 110°), shoulder −109.5°..−21�
 eye this session.
 
 `docs/DANCE_RESTART_PROMPT.md` rewritten for a fresh agent. Next: keys-decide.
+
+### Version 27: instrument lanes, leading lane, pulsed travel on stabs — 2026-10-04
+
+Branch `keys-decide`. User intent stated this session: the note data is for the
+whole installation ("the machine behind it"), lives in the sidecar, and must
+work for other songs (e.g. twin guitars left and right). Target per instrument:
+timing, relative pitch, some loudness. The voice is not an instrument but a
+fluid up/down/stop/loudness.
+
+**Tracker.** `scripts/dance_notes.py INPUT_SIDECAR STEM_DIR OUTPUT_SIDECAR` adds
+`noteTrack.lanes`: one lane per WAV in `STEM_DIR` (any separation), each with
+onsets `[time, rough pitch, strength]`, phrases, and `levelPerBeat` (A-weighted
+dB). Onsets are spectral flux; pitch is a harmonic sum (often the chord root).
+The song's sidecar is now `$D/instant-crush.notes.sidecar.json`, built from
+six-stem Demucs stems (`/secondary/hyst-env/stems6/`). An older sidecar without
+`noteTrack` still compiles and gives version 26 byte for byte.
+
+**References found (validation only, never planner input).** A Songsterr tab
+(14 tracks, full length) aligned to the recording; a midifind MIDI that turned
+out to be derived from the same tab with a simplified chorus. Guitar and piano
+tab tracks have capo 1. Assets and scratch scripts: `$D/tracker-scratch/`, see
+the memory note `reference_dance_tracker_assets.md`.
+
+**Measured against the tab** (note start within 50 ms): flux onsets on the
+six-stem guitar stem 0.94; guitar and keys as one lane 0.92; keys via a stereo
+"wide" split of `other` 0.85; voice (basic-pitch, filtered) 0.73; bass 0.67.
+MuScriptor small (July 2026, CC BY-NC, gated): bass 0.95 and 0.93 right note;
+guitar and keys on the `other` stem 0.95 and 0.67 right note; voice 0.84 with an
+instrument hint; it gives no separate keys lane and constant velocity. Voice as
+a pYIN curve: up/down 0.90, singing or silent 0.88, phrase stops weak. Not
+solved: up/down of chord lines (0.3 to 0.6 by every method), the break solo's
+line (under half its notes found), separate keys lane. Lane discovery by stereo
+position separates simulated twin guitars at 35 % pan or more (0.91 to 0.97),
+fails at 15 %. None of the MuScriptor, pYIN or stereo work is in the repo.
+
+**Planner.** `compile_figures` ranks the instrument lanes per beat by level
+(voice and drums do not compete; a challenger needs 3 dB for four beats,
+backdated). On this song: guitar leads to 90.4 s, synths to 125.3, guitar to
+188.8, the lead line to 212.7, synths after. Blind tests:
+- Figures snapping to the leader's phrase starts, figures picked by its pitch
+  step, accents from the second lane: lost. User: they follow the stabs but
+  wobble up and down across the travel line. Deleted.
+- Pulsed travel while the leader plays stabs (empty beats between its hits):
+  user chose "surge just after each stab" over even travel and over "arrive on
+  the stab". Now constant: pace 0.3 to 2.2 times even, decay 0.35 beat, the
+  speed cap may be exceeded by half during a surge. Active only in the two
+  choruses and the end; verses and break are unchanged.
+`song-figures-27.html` is byte-identical to the chosen clip. Whole song: hand
+speed median 0.34, p95 1.03, max 1.88 m/s; acceleration outside moments p95 5.6
+m/s² (version 26: 1.4). That is a hardware and jitter risk the user has seen
+only at 3:32 to 4:12.
+
+**Open.** The `--flourish` knob (0 as before, 1 none, 2 soft) is still in the
+code: user said all three have a part, per moment; the cause of the flick at
+2:19 is a flourish placed on an arbitrary guitar note. Next agreed step: the
+fluid half, for when the leader is a single flowing line (the break): size and
+height follow its swell. User's unanswered point: the arm "over-focuses on
+centre"; measured that verses sway about one fixed direction and the hand stays
+0.31 to 0.55 m from the base axis. 131 CPU tests, clippy, fmt, `ensemble.cjs`,
+tracker test pass.

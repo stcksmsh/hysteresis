@@ -5,12 +5,12 @@ done. Do not push to `master` directly. Communicate terse and exact. Frozen
 `src/` and `tools/` are read-only. Never drive hardware.
 
 First, before any code: read this file, then every `DANCE_HANDOFF.md` entry dated
-2026-10-04 from "Version 13" onward (older entries and most of `AGENTS.md` §5
+2026-10-04 from "Version 13" onward (the last, "Version 27", holds the note tracker and leading-lane work) (older entries and most of `AGENTS.md` §5
 describe deleted code; skip them). Read `crates/hyst-compile/src/director/figures.rs`
 in full and skim `director.rs`, `ensemble.rs`, `crates/hyst-previz/src/ensemble.html`
 and `examples/ensemble_preview.rs`. Run the checks under "Commands" and export one
 preview to confirm the tree works (it should be byte-identical to
-`song-figures-26.html`). Then report to the user in a few lines: what you
+`song-figures-27.html`). Then report to the user in a few lines: what you
 understand the goal and state to be, what you will do first, and any question
 that blocks it. Start work after that report; do not wait for approval unless
 you asked a blocking question.
@@ -102,7 +102,7 @@ bisects back if still needed. The roll is exempt from zone braking.
 ```
 D=/home/stcksmsh/Documents/Codex/2026-09-23-can-you-check-the-programming-github/output/music-arm
 cargo run --release -p hyst-previz --example ensemble_preview -- \
-  $D/song-figures-N.html instant-crush.m4a $D/instant-crush.interpreted.sidecar.json \
+  $D/song-figures-N.html instant-crush.m4a $D/instant-crush.notes.sidecar.json \
   [--score OUT.json] [--zone x0,y0,z0,x1,y1,z1] [--groove-only] [--no-reuse] [--drag GAIN]
 node $D/record-ensemble.cjs $D/song-figures-N.html $D/instant-crush.m4a $D/clip.mp4 START SECONDS
 ```
