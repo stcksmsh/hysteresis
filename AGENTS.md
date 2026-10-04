@@ -1308,3 +1308,10 @@ no live audio. Added `scripts/dance_melody.py` (`melodyContour`), longer
 continuous figure sequences, lead-paced progress, contour-driven height and
 extension, low-passed hand path, wider azimuth, 60 fps preview. 174 CPU tests
 pass. Second review pending. Details in `docs/DANCE_HANDOFF.md`.
+
+### Confirmed rig fact — continuous base rotation (2026-10-04)
+
+User confirmed: the arm's base will rotate a full, continuous 360°. This is a
+settled rig property, not an assumption. Figures may circle through the back
+and accumulate turns (`figures.rs` winding offsets, `circle` figure; illustrative
+rig base yaw unbounded). Other joint limits and speeds remain invented.

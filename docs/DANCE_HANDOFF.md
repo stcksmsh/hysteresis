@@ -776,3 +776,23 @@ Keys-as-decision-maker is only approximated by pacing, not by choosing figures.
 
 External: instant-crush.melody.sidecar.json, song-figures-2.html (first export
 song-figures.html kept for comparison).
+
+### Depth cues, orbit camera, full 360° — 2026-10-04
+
+User thought the render was broken because the arm never seemed to go behind
+its base. Measured: hand was behind 28–34% of the high sections; the fixed
+camera with no depth cues hid it. Preview now draws a floor shadow and a drop
+line under the hand, and the stage can be dragged to orbit.
+
+User then asked for 360° in the floor plane and rejected the agent's
+servo-seam objection ("that's how dancing should work"), then confirmed the
+base will rotate a full continuous 360°: settled rig fact. Implemented:
+unbounded azimuth with per-figure winding offsets (no unwinding), a `circle`
+figure replacing the two arcs in the high-section sequence, illustrative base
+yaw unbounded, no neutral-angle bias on free joints.
+
+Measured (song-figures-4.html): hand azimuth spans the full ±180° in both high
+sections; five circles, base travel 270–350° each; base speed max 142°/s; hand
+acceleration p95 about 2 m/s²; base ends about 1000° from start. 174 CPU tests
+pass. Not reviewed by eye yet. Only `circle` crosses the back; other classes
+keep their narrower figures. song-figures-3.html is the ±170° intermediate.
