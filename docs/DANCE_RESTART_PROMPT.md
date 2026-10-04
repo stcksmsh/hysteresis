@@ -126,7 +126,7 @@ friends score tracker lanes against the tab; `scrub*.py` make the piano-roll
 videos. Environments under `/secondary/hyst-env` (basic-pitch, demucs,
 muscriptor with the user's HuggingFace token); root disk is nearly full.
 
-## Where it stands (version 37)
+## Where it stands (version 38)
 
 The single arm was approved on a whole-song review at version 32. Since then:
 the hand object is rig data (`Rig.implement`, default a lumpy mirror ball,
@@ -135,7 +135,7 @@ the hand object is rig data (`Rig.implement`, default a lumpy mirror ball,
 are planned by `compile_ensemble` with a cross-check between them; in a ring
 every arm faces the centre; the planner picks a formation per section (Unison,
 Mirrored, Canon, Ripple, Pairs, DropOut). Read the handoff entries "Version 33"
-to "Version 37". Export the hexagon with `--ring 6,0.8`; whole-song review
+to "Version 38". Export the hexagon with `--ring 6,0.8`; whole-song review
 videos are made by `tracker-scratch`-style scripts outside git (record in 40 s
 chunks, concatenate, add a clock, keep under 30 MiB).
 
@@ -144,11 +144,11 @@ The user's words on the ensemble: synchronized dancing is "a different game"
 "decide itself"; version 35 was "not synchronized enough, too low energy" and
 "too far apart, dynamic red zones overlapping is what makes it WOW"; canon
 should delay each arm by a fraction of the move, circular or spreading both
-ways and back. Version 37 answers those but **has not been reviewed**.
+ways and back. Version 37 was reviewed once: the user found a stutter in the ripple (fixed in 38). Version 38 **has not been reviewed**.
 
 ## Next work
 
-1. **The user's verdict on the version 37 video** (`hexagon-37-full.mp4`).
+1. **The user's verdict on the version 38 video** (`hexagon-38-full.mp4`).
    Do not build further ensemble choreography before it.
 2. **Overlap outside unison.** Canon, Ripple and Mirrored keep each hand on its
    own side of the line to its neighbours, because out-of-step neighbours

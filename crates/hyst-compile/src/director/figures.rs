@@ -203,7 +203,11 @@ impl Formation {
             Self::Ripple => {
                 let (out, far) = (a.min(count - a), count / 2);
                 let rank = if index % 2 == 1 { far - out } else { out };
-                (1.0, rank as f64 * step, 1.0)
+                // Half the canon's step: reversing the order makes the end
+                // arms play alternate moves slower and faster, here by a
+                // quarter (at the full step, by half, which doubled every
+                // accent's acceleration and read as a stutter).
+                (1.0, rank as f64 * 0.5 * step, 1.0)
             }
             Self::Pairs => {
                 let groups = (count / 2).max(1);
@@ -918,14 +922,28 @@ pub fn compile_ensemble(
                 |&(p, facing): &([f64; 3], f64)| ([p[0], flip * p[1], p[2]], flip * facing);
             targets.iter().map(flipped).collect()
         } else {
-            let part = |t: f64| {
+            // This arm's part at the start of move `index`, as seen at time `t`.
+            let at_move = |index: usize, t: f64| {
                 let run = formations.partition_point(|f| f.0 <= t).saturating_sub(1);
                 let (start, formation) = formations[run];
+                let length = (instances[index].end - instances[index].start) / beat;
+                formation.part(a, count, ((t - start) / beat).max(0.0), index, length)
+            };
+            let part = |t: f64| {
                 let index = instances
                     .partition_point(|x| x.end <= t)
                     .min(instances.len() - 1);
-                let length = (instances[index].end - instances[index].start) / beat;
-                formation.part(a, count, ((t - start) / beat).max(0.0), index, length)
+                let (side, delay, on) = at_move(index, t);
+                // The delay runs evenly from this move's to the next one's
+                // across the move: the arm starts each move on its turn and
+                // plays it a little faster or slower. (A delay that jumped at
+                // each move made the end arms of a ripple stall, then race:
+                // the user saw it as a stutter.)
+                let x = &instances[index];
+                let next = (index + 1).min(instances.len() - 1);
+                let then = at_move(next, instances[next].start).1;
+                let along = ((t - x.start) / (x.end - x.start).max(1e-9)).clamp(0.0, 1.0);
+                (side, lerp(delay, then, along), on)
             };
             let parts: Vec<(f64, f64, f64)> = times.iter().map(|&t| part(t)).collect();
             let column =
@@ -970,10 +988,12 @@ pub fn compile_ensemble(
         // spot and the cross-check would hold them there.
         let around = PI / count as f64;
         let own = (o[1] - middle[1]).atan2(o[0] - middle[0]);
-        // Half the clearance, the implement, and room for the solver to work
-        // without leaning on the cross-check.
-        let ball = 0.5 * clearance_m + held + 0.05;
-        let keep_out = ball / around.sin();
+        // Half the clearance and the implement. In the middle 2 cm more is
+        // enough: in unison the hands arrive together. At the line between
+        // neighbours it is 12 cm: out of step, an elbow reaches past its hand,
+        // and with less the cross-check stopped arms dead there.
+        let ball = 0.5 * clearance_m + held;
+        let keep_out = (ball + 0.02) / around.sin();
         // 1 while the arms are out of step, from two beats before to two
         // beats after, so the line holds while a change of formation eases in.
         let apart: Vec<f64> = times
@@ -1000,8 +1020,16 @@ pub fn compile_ensemble(
             let out = out.max(keep_out)
                 + 0.2 * keep_out * (-(out - keep_out).max(0.0) / (0.2 * keep_out)).exp();
             let off = (y.atan2(x) - own + PI).rem_euclid(TAU) - PI;
-            let half = (around - (ball / out).min(1.0).asin()).max(0.0);
-            let inside = half * (off / half.max(1e-9)).tanh();
+            let half = (around - ((ball + 0.12) / out).min(1.0).asin()).max(0.0);
+            // Untouched over the inner 70 % of the sector, eased into its
+            // edge beyond. (Squeezing the whole sector bent the hand's path
+            // over its own base, into a joint limit and out with a kick.)
+            let (knee, edge) = (0.7 * half, (0.3 * half).max(1e-9));
+            let inside = if off.abs() <= knee {
+                off
+            } else {
+                off.signum() * (knee + edge * ((off.abs() - knee) / edge).tanh())
+            };
             let angle = own + lerp(off, inside, bell(&apart, i as f64, 6.0));
             [
                 middle[0] + out * angle.cos(),

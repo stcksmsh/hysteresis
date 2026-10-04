@@ -1624,3 +1624,35 @@ the two next to it, then the next two, then the last one, then backwards).
   approach 10.0 cm at 10 cm clearance; hand speed p95 0.88 m/s per arm.
 `hexagon-37.html`, `hexagon-37-full.mp4`. 136 CPU tests, clippy, fmt,
 `ensemble.cjs` pass; one arm alone identical to version 34.
+
+### Version 38: the ripple's stall and dash; two more ensemble defects — 2026-10-05
+
+User on the version 37 video: at 3:08 to 3:16 the orange arm on the right
+"stutters/breaks formation", maybe a wrong canon or a jitter bug.
+
+Measured: that is the Ripple of the break (185–204 s). The orange arm is arm 0,
+where the ripple starts; its delay flipped between none and three steps at
+every move because the order reverses. Applied as a jump eased by a bell, that
+made it stand still about a second (hand speed 0.00 at 193–194.5 s) and then
+race (1.1 m/s at 190 s); the opposite arm did the reverse. No arm was within
+30 cm; it was not the cross-check.
+
+- Delays now run evenly from one move's value to the next across the move
+  (`part` in `compile_ensemble`): an arm starts each move on its turn and plays
+  it a little slower or faster. No stall.
+- Ripple's step is half the canon's (a twelfth of the move): reversing the
+  order then changes an end arm's pace by a quarter, not a half.
+- The "own side of the line" limit squeezed the whole sector with a tanh, which
+  bent hand paths over their own base, into the shoulder's limit and out with a
+  kick. It now leaves the inner 70 % of the sector untouched.
+- In the mirrored verse arms were stopped dead at the line (elbows reach past
+  the hand). The margin there is 12 cm beyond clearance and implement; the
+  centre circle keeps its 2 cm.
+Hexagon 0.8 m, whole song: arm 0 has no stall in 186–198 s; accelerations over
+9 m/s² across the six arms 74 → 57 (about five per arm are the single arm's
+own chorus accents); standstills over 0.3 s inside the song 3–5 → 1–4 per arm;
+closest approach 13.4 cm. Left: arm 0 still has one 11 m/s² kick at 187.9 s
+(shoulder at its limit as the hand passes over the base; the single arm has a
+4.9 m/s² version); arms 4 and 5 have three or four short standstills; cause
+not looked for. `hexagon-38.html`, `hexagon-38-full.mp4`. 136 CPU tests,
+clippy, fmt, `ensemble.cjs` pass; one arm alone identical to version 34.
