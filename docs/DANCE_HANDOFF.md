@@ -1065,3 +1065,16 @@ written and dropped before review: it needs viewer and light positions.
 Blind side-by-side prepared, not yet judged: `blind-roll-side-by-side.mp4`
 (1:24–1:54, A | B | C shuffled), key `blind-roll-key.json` unread by the agent.
 130 CPU tests, clippy, fmt, `ensemble.cjs` pass.
+
+**Verdict and version 22.** User: B best, "a tight race", minus: always turns
+the same way. Key: A twirl, B spin, C lead. `lead`, `twirl`, `RollMode` and
+`--roll` deleted. Kept: the disc turns 150° per metre of hand travel. Its
+direction is now the figure's own left/right sense averaged over two beats, so
+a mirrored figure turns the other way and the roll eases through rest at the
+change. Measured: 5 reversals a minute, speed median 48, p95 123°/s. The zone
+test then failed ("cannot fit tangents", channel 4): zone braking was scaling
+the roll too; the roll is now exempt from zone braking, since it moves no link.
+130 CPU tests, clippy, fmt, `ensemble.cjs` pass. Clip `render-22.mp4`
+(1:24–2:04), export `song-figures-22.html`. Not reviewed yet.
+Agreed next: side-by-side tests of the next decisions, starting with body B
+(whip or wave on arrivals and flourishes), then spin rate, then keys-decide.

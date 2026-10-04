@@ -25,7 +25,7 @@ const FLOOR: Zone = Zone {
 };
 /// Hard check enforces this clearance; the solver aims for 1.6 times it.
 const MARGIN_M: f64 = 0.05;
-/// `RollMode::Spin` and `Twirl`: disc turn per metre of hand travel.
+/// Hand disc turn per metre of hand travel. Chosen by eye on one passage.
 const SPIN_DEGREES_PER_METRE: f64 = 150.0;
 /// Fastest the figure path carries the hand, m/s. A guess, tuned by eye on one
 /// song; moments may exceed it briefly.
@@ -583,59 +583,24 @@ pub fn compile_figures(
             wanted = solve(&rig, &placement, &zones, target, facing, &prior)?;
         }
         if let Some(r) = roll_joint {
-            // The disc's face leads the hand: turn its normal toward the hand's
-            // travel across the wrist link. Both faces are mirrors, so half
-            // turns are equal; take the nearer.
-            let points = forward_kinematics(&rig, &placement, &wanted)?;
-            let (tip, wrist) = (points[points.len() - 1], points[points.len() - 2]);
-            let d: [f64; 3] =
-                std::array::from_fn(|k| (tip[k] - wrist[k]) / rig.channels[r].link_m[0]);
-            let yaw = wanted[0].to_radians();
-            let y = [-yaw.sin(), yaw.cos(), 0.0];
-            let z = [
-                d[1] * y[2] - d[2] * y[1],
-                d[2] * y[0] - d[0] * y[2],
-                d[0] * y[1] - d[1] * y[0],
-            ];
-            // Travel over about half a second, and the roll eases toward its
-            // aim in proportion to that travel: slow or wavering motion barely
-            // moves it. Aiming knot by knot made the wrist jitter (user).
-            let (before, after) = (
-                targets[i.saturating_sub(4)].0,
-                targets[(i + 4).min(targets.len() - 1)].0,
-            );
-            let across = |axis: [f64; 3]| {
-                (0..3)
-                    .map(|k| (after[k] - before[k]) * axis[k])
-                    .sum::<f64>()
-            };
-            let (vy, vz) = (across(y), across(z));
-            let pace = vy.hypot(vz) / (8.0 * step);
+            // The disc turns with the distance the hand travels, so it is never
+            // re-aimed and cannot jitter. Its direction is the figure's own
+            // left/right sense, averaged over two beats: a mirrored figure
+            // turns the other way, easing through rest at the change.
+            let sense = (-2..=2)
+                .map(|k| {
+                    let at = time + f64::from(k) * 0.5 * beat;
+                    let n = instances.partition_point(|x| x.end <= at);
+                    instances[n.min(instances.len() - 1)].dir
+                })
+                .sum::<f64>()
+                / 5.0;
             let prior = targets[i.saturating_sub(1)].0;
             let travel = (0..3)
                 .map(|k| (target[k] - prior[k]).powi(2))
                 .sum::<f64>()
                 .sqrt();
-            match config.roll {
-                crate::RollMode::Lead => {
-                    let aim = vz.atan2(vy).to_degrees();
-                    let aim = aim + 180.0 * ((roll - aim) / 180.0).round();
-                    roll += (aim - roll) * 0.3 * (pace / 0.5).min(1.0);
-                }
-                // One direction only: a roll that never reverses cannot jitter.
-                crate::RollMode::Spin => roll += SPIN_DEGREES_PER_METRE * travel,
-                crate::RollMode::Twirl => {
-                    // Spin, plus an extra half turn eased across each moment.
-                    let turned = |t: f64| {
-                        moments
-                            .iter()
-                            .map(|m| smooth((t - m.time) / (3.0 * beat) + 0.5))
-                            .sum::<f64>()
-                    };
-                    roll += SPIN_DEGREES_PER_METRE * travel
-                        + 180.0 * (turned(time) - turned(time - step));
-                }
-            }
+            roll += SPIN_DEGREES_PER_METRE * travel * sense;
             wanted[r] = roll;
         }
         // Hardware follower: each joint chases its solved angle at a design
@@ -663,6 +628,8 @@ pub fn compile_figures(
                 q[j] = (prior[j] + v * dt).clamp(c.min_degrees + 0.5, c.max_degrees - 0.5);
             }
         }
+        // The roll moves no link, so zone braking below must not disturb it.
+        let rolled = roll_joint.map(|r| (r, q[r]));
         // Zone-aware: a link near a zone moves only as fast as it could brake
         // within its remaining clearance (as for joint end stops above), so the
         // hard check below never has to stop the arm abruptly.
@@ -696,6 +663,9 @@ pub fn compile_figures(
                 }
             }
             q = (0..q.len()).map(|j| lerp(prior[j], q[j], lo)).collect();
+        }
+        if let Some((r, angle)) = rolled {
+            q[r] = angle;
         }
         if dt.is_finite() {
             for j in 0..q.len() {
