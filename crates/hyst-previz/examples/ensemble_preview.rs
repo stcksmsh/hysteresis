@@ -35,12 +35,6 @@ fn main() -> io::Result<()> {
                     .and_then(|v| v.parse().ok())
                     .ok_or_else(|| io::Error::other("--drag requires degrees per m/s"))?
             }
-            "--swell" => {
-                config.swell = args
-                    .next()
-                    .and_then(|v| v.parse().ok())
-                    .ok_or_else(|| io::Error::other("--swell requires a gain"))?
-            }
             "--flourish" => {
                 config.flourish = args
                     .next()

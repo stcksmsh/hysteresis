@@ -303,7 +303,7 @@ pub fn compile_figures(
     // for the pitch of a flowing line, which cannot be read reliably.
     let mut swell: Vec<[f64; 2]> = Vec::new();
     let bright = |lane: usize| &lanes[lane].1.brightness_per_beat;
-    if config.swell > 0.0 && (0..lanes.len()).all(|l| bright(l).len() >= ranks.len()) {
+    if (0..lanes.len()).all(|l| bright(l).len() >= ranks.len()) {
         let mut from = 0;
         while from < ranks.len() {
             let lead = ranks[from][0];
@@ -339,9 +339,10 @@ pub fn compile_figures(
         }
         sum.map(|v| if total > 0.0 { v / total } else { 0.0 })
     };
-    // A figure grows and shrinks with the leader's loudness.
-    let sized =
-        |scale: f64, t: f64| (scale * (1.0 + 0.35 * config.swell * swell_at(t)[0])).min(1.0);
+    // A figure grows and shrinks with the leader's loudness. The user chose
+    // this strength (with the height below) over half of it and over none, on
+    // the break's solo and on a strummed verse.
+    let sized = |scale: f64, t: f64| (scale * (1.0 + 0.35 * swell_at(t)[0])).min(1.0);
 
     // (run start, direction, class) for recall lookups.
     let mut chosen: Vec<(f64, f64, &str)> = Vec::new();
@@ -643,7 +644,7 @@ pub fn compile_figures(
         let i = (x.floor() as usize).min(clock.len() - 2);
         let mut p = flow(lerp(clock[i], clock[i + 1], x - i as f64));
         // The hand rides higher as the leader's line brightens.
-        p[1] += 0.3 * config.swell * swell_at(t)[1];
+        p[1] += 0.3 * swell_at(t)[1];
         p
     };
     let hand = |t: f64| -> [f64; 3] {
@@ -1148,15 +1149,16 @@ mod tests {
         // The leader plays a steady stream (no stabs): dull for eight beats,
         // then bright. A quieter lane keeps it company.
         let steady: Vec<[f64; 3]> = (0..16).map(|i| [0.5 * i as f64, 60.0, 1.0]).collect();
-        let brightness: Vec<f64> = (0..16).map(|i| if i < 8 { 60.0 } else { 72.0 }).collect();
-        value["noteTrack"] = serde_json::json!({"lanes": {
-            "lead": {"notes": steady, "levelPerBeat": vec![-10.0; 16], "brightnessPerBeat": brightness},
-            "bass": {"notes": steady, "levelPerBeat": vec![-30.0; 16], "brightnessPerBeat": vec![40.0; 16]},
-        }});
-        let climb = |swell: f64| {
+        let mut climb = |step: f64| {
+            let brightness: Vec<f64> = (0..16)
+                .map(|i| if i < 8 { 72.0 - step } else { 72.0 })
+                .collect();
+            value["noteTrack"] = serde_json::json!({"lanes": {
+                "lead": {"notes": steady, "levelPerBeat": vec![-10.0; 16], "brightnessPerBeat": brightness},
+                "bass": {"notes": steady, "levelPerBeat": vec![-30.0; 16], "brightnessPerBeat": vec![40.0; 16]},
+            }});
             let config = CompileConfig {
                 enable_hits: false,
-                swell,
                 ..CompileConfig::default()
             };
             let rig = Rig::illustrative_five_axis();
@@ -1175,10 +1177,10 @@ mod tests {
             };
             height(5.5) - height(1.5)
         };
-        let (with, without) = (climb(1.0), climb(0.0));
+        let (with, without) = (climb(12.0), climb(0.0));
         assert!(
             with > without + 0.05,
-            "climb with swell {with:.3} m, without {without:.3} m"
+            "climb with a brightening leader {with:.3} m, with a flat one {without:.3} m"
         );
     }
 
