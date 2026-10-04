@@ -46,6 +46,9 @@ pub struct CompileConfig {
     pub wrist_drag_degrees_per_mps: f64,
     /// Temporary review knob: 0 flourishes as before, 1 none, 2 slow and soft.
     pub flourish: u8,
+    /// Temporary review knob: how far hand size and height follow the leading
+    /// lane's swell. 0 off.
+    pub swell: f64,
 }
 impl Default for CompileConfig {
     fn default() -> Self {
@@ -54,6 +57,7 @@ impl Default for CompileConfig {
             reuse_repeats: true,
             wrist_drag_degrees_per_mps: 240.0,
             flourish: 0,
+            swell: 0.0,
         }
     }
 }

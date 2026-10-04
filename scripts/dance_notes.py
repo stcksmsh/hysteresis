@@ -5,7 +5,8 @@ Usage: python3 scripts/dance_notes.py INPUT_SIDECAR STEM_DIR OUTPUT_SIDECAR
 
 Adds `noteTrack.lanes`, one lane per WAV in STEM_DIR (any separation: four
 stems, six stems, or stems split further): onsets with a rough pitch, grouped
-into phrases, and a loudness per beat so a reader can tell which lane leads.
+into phrases, and a loudness and brightness per beat so a reader can tell
+which lane leads and how it swells.
 Stems are source-separation estimates. `pitch` is the strongest harmonic series
 near each onset (often a chord root), not a transcription; drums carry none (0).
 """
@@ -107,20 +108,27 @@ def track(audio, sample_rate, beat, band=(150, 5000), pitch_range=(43, 88)):
 
 
 def beat_levels(audio, sample_rate, beat, beat_zero, duration):
-    """A-weighted level in dB (re full scale) for each beat of the grid."""
+    """Per beat of the grid: (A-weighted level in dB re full scale, brightness).
+
+    Brightness is the A-weighted spectral centroid as a MIDI pitch: it rises
+    when a line climbs or is played harder. 0 where the beat is silent.
+    """
     freqs, times, spectrum = stft(audio, sample_rate, nperseg=2048, noverlap=1024, padded=False, boundary=None)
     f2 = freqs**2
     weight = (12194**2 * f2**2) / (
         (f2 + 20.6**2) * np.sqrt((f2 + 107.7**2) * (f2 + 737.9**2)) * (f2 + 12194**2) + 1e-30
     )
-    power = (np.abs(spectrum) ** 2 * (weight / weight.max())[:, None] ** 2).sum(0)
     index = np.floor((times - beat_zero) / beat).astype(int)
     count = int((duration - beat_zero) / beat)
-    out = []
+    bins = np.abs(spectrum) ** 2 * (weight / weight.max())[:, None] ** 2
+    levels, brightness = [], []
     for i in range(count):
-        frames = power[index == i]
-        out.append(round(float(10 * np.log10(frames.mean() + 1e-12)), 2) if len(frames) else -120.0)
-    return out
+        frames = bins[:, index == i].mean(1) if (index == i).any() else np.zeros(len(freqs))
+        total = frames.sum()
+        levels.append(round(float(10 * np.log10(total + 1e-12)), 2) if total > 0 else -120.0)
+        centroid = (frames * freqs).sum() / total if total > 1e-12 else 0.0
+        brightness.append(round(float(69 + 12 * np.log2(centroid / 440)), 2) if centroid > 0 else 0.0)
+    return levels, brightness
 
 
 def main(argv):
@@ -143,10 +151,12 @@ def main(argv):
         band, pitch_range = SETTINGS.get(path.stem, DEFAULT)
         mono = audio.mean(1)
         notes, phrases = track(mono, sample_rate, beat, band, pitch_range)
+        levels, brightness = beat_levels(mono, sample_rate, beat, beat_zero, duration)
         lanes[path.stem] = {
             "notes": notes,
             "phrases": phrases,
-            "levelPerBeat": beat_levels(mono, sample_rate, beat, beat_zero, duration),
+            "levelPerBeat": levels,
+            "brightnessPerBeat": brightness,
         }
         print(f"{path.stem}: {len(notes)} notes, {len(phrases)} phrases")
     sidecar["noteTrack"] = {

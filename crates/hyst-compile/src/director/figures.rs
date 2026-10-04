@@ -297,6 +297,52 @@ pub fn compile_figures(
             .collect();
     }
 
+    // Swell of the leading lane per beat, [loudness, brightness], each -1..1
+    // about its median over the stretch that lane leads (3 dB and 4 semitones
+    // are full scale), fading out where it plays stabs. Brightness stands in
+    // for the pitch of a flowing line, which cannot be read reliably.
+    let mut swell: Vec<[f64; 2]> = Vec::new();
+    let bright = |lane: usize| &lanes[lane].1.brightness_per_beat;
+    if config.swell > 0.0 && (0..lanes.len()).all(|l| bright(l).len() >= ranks.len()) {
+        let mut from = 0;
+        while from < ranks.len() {
+            let lead = ranks[from][0];
+            let to = (from..ranks.len())
+                .find(|i| ranks[*i][0] != lead)
+                .unwrap_or(ranks.len());
+            let part = |series: &[f64], full: f64| -> Vec<f64> {
+                let mut sorted = series[from..to].to_vec();
+                sorted.sort_by(f64::total_cmp);
+                let median = sorted[sorted.len() / 2];
+                (from..to)
+                    .map(|i| ((series[i] - median) / full).clamp(-1.0, 1.0) * (1.0 - stabs[i]))
+                    .collect()
+            };
+            let loud = part(&lanes[lead].1.level_per_beat, 3.0);
+            swell.extend(
+                loud.into_iter()
+                    .zip(part(bright(lead), 4.0))
+                    .map(<[f64; 2]>::from),
+            );
+            from = to;
+        }
+    }
+    // Smooth in time: beats weighted by a bell one beat wide.
+    let swell_at = |t: f64| -> [f64; 2] {
+        let x = (t - data.musical_memory.beat_zero) / beat - 0.5;
+        let (mut sum, mut total) = ([0.0; 2], 0.0);
+        let (first, last) = ((x - 3.0).max(0.0) as usize, (x + 4.0).max(0.0) as usize);
+        for (i, at) in swell.iter().enumerate().take(last).skip(first) {
+            let w = (-0.5 * (i as f64 - x).powi(2)).exp();
+            sum = [sum[0] + w * at[0], sum[1] + w * at[1]];
+            total += w;
+        }
+        sum.map(|v| if total > 0.0 { v / total } else { 0.0 })
+    };
+    // A figure grows and shrinks with the leader's loudness.
+    let sized =
+        |scale: f64, t: f64| (scale * (1.0 + 0.35 * config.swell * swell_at(t)[0])).min(1.0);
+
     // (run start, direction, class) for recall lookups.
     let mut chosen: Vec<(f64, f64, &str)> = Vec::new();
     let mut occurrences: HashMap<&str, usize> = HashMap::new();
@@ -335,7 +381,7 @@ pub fn compile_figures(
             }
             let repeat = k / sequence.len();
             let dir = first_dir * step_dir * if repeat % 2 == 1 { -1.0 } else { 1.0 };
-            let heading = entry - scaled(shape(0.0, dir), scale)[0];
+            let heading = entry - scaled(shape(0.0, dir), sized(scale, t))[0];
             let turn = first_dir * travel * 2.0 * (stop - t) / (32.0 * beat);
             instances.push(Instance {
                 start: t,
@@ -346,7 +392,7 @@ pub fn compile_figures(
                 heading,
                 turn,
             });
-            entry = scaled(shape(1.0, dir), scale)[0] + heading + turn;
+            entry = scaled(shape(1.0, dir), sized(scale, stop))[0] + heading + turn;
             cues.push(IntentCue {
                 start: t,
                 end: stop,
@@ -384,7 +430,7 @@ pub fn compile_figures(
             .min(instances.len() - 1);
         let x = &instances[i];
         let u = ((t - x.start) / (x.end - x.start).max(1e-9)).clamp(0.0, 1.0);
-        let mut p = scaled((x.shape)(u, x.dir), x.scale);
+        let mut p = scaled((x.shape)(u, x.dir), sized(x.scale, t));
         p[0] += x.heading + x.turn * u;
         p
     };
@@ -595,7 +641,10 @@ pub fn compile_figures(
     let waited = |t: f64| -> [f64; 3] {
         let x = (t / step).clamp(0.0, (clock.len() - 1) as f64);
         let i = (x.floor() as usize).min(clock.len() - 2);
-        flow(lerp(clock[i], clock[i + 1], x - i as f64))
+        let mut p = flow(lerp(clock[i], clock[i + 1], x - i as f64));
+        // The hand rides higher as the leader's line brightens.
+        p[1] += 0.3 * config.swell * swell_at(t)[1];
+        p
     };
     let hand = |t: f64| -> [f64; 3] {
         let mut p = waited(t);

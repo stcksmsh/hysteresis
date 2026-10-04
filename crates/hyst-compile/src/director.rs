@@ -56,6 +56,9 @@ struct Lane {
     /// A-weighted level in dB for each beat of the grid.
     #[serde(default)]
     level_per_beat: Vec<f64>,
+    /// A-weighted spectral centroid as a MIDI pitch for each beat; 0 if silent.
+    #[serde(default)]
+    brightness_per_beat: Vec<f64>,
 }
 
 #[derive(Deserialize)]
