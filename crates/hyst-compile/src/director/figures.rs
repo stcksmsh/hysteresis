@@ -110,10 +110,10 @@ type Step = (&'static str, Shape, f64, f64);
 /// as long as the class lasts, mirrored on every repeat.
 fn motif(class: &str) -> (&'static [Step], f64, f64) {
     const FULL: &[Step] = &[
-        ("gather", gather, 8.0, 1.0),
-        ("rise", rise, 4.0, 1.0),
-        ("open", open, 4.0, 1.0),
-        ("circle", circle, 16.0, 1.0),
+        ("gather", gather, 6.0, 1.0),
+        ("rise", rise, 3.0, 1.0),
+        ("open", open, 3.0, 1.0),
+        ("circle", circle, 12.0, 1.0),
     ];
     const BASS: &[Step] = &[
         ("arc", arc, 8.0, 1.0),
@@ -303,7 +303,7 @@ pub fn compile_figures(
     let mut pace = vec![0.0; flux.len() + 1];
     for i in 0..flux.len() {
         let t = i as f64 / rate;
-        pace[i + 1] = pace[i] + 0.35 + mean(flux, rate, t - 0.3, t + 0.3);
+        pace[i + 1] = pace[i] + 0.6 + mean(flux, rate, t - 0.3, t + 0.3);
     }
     let paced = |t: f64| {
         let x = (t * rate).clamp(0.0, flux.len() as f64);
@@ -370,62 +370,95 @@ pub fn compile_figures(
         std::array::from_fn(|k| lerp(flowing[i][k], flowing[i + 1][k], x - i as f64))
     };
 
-    // Moments: a few measured events the arm prepares for, arrives at exactly,
-    // holds, and releases. (time, [elevation, extension] pose, strength, label)
-    let mut moments: Vec<(f64, [f64; 2], f64, &str)> = Vec::new();
+    // Moments: a few measured events the arm prepares for and arrives at
+    // exactly. Only section arrivals stop and hold, briefly; melodic flourishes
+    // are reached and passed through. Energetic classes use shorter windows.
+    struct Moment {
+        time: f64,
+        /// [elevation, extension]
+        pose: [f64; 2],
+        strength: f64,
+        label: &'static str,
+        hold_beats: f64,
+        /// Beats to prepare, to arrive, and to release (each).
+        span: f64,
+    }
+    let mut moments: Vec<Moment> = Vec::new();
     if config.enable_hits {
         let class_at = |t: f64| {
             runs.iter()
                 .find(|r| t >= r.0 && t < r.1)
                 .map_or("silence", |r| r.2)
         };
+        let span_for = |class: &str| {
+            if matches!(class, "interlocked" | "bass-led") {
+                1.5
+            } else {
+                2.0
+            }
+        };
         for &(time, strength) in &arrivals {
             if time > 4.0 * beat && class_at(time + beat) != "silence" {
-                moments.push((time, [0.9, 1.0], 0.7 + 0.3 * strength, "arrival"));
+                moments.push(Moment {
+                    time,
+                    pose: [0.9, 1.0],
+                    strength: 0.7 + 0.3 * strength,
+                    label: "arrival",
+                    hold_beats: 0.5,
+                    span: span_for(class_at(time + beat)),
+                });
             }
         }
         // Strongest melodic-stem onset in each stretch of about sixteen beats.
         let flourishes = spaced(onsets(sources[3], rate, 0.25), 16.0 * beat);
         for (n, (time, strength)) in flourishes.into_iter().enumerate() {
-            let clash = moments.iter().any(|m| (m.0 - time).abs() < 8.0 * beat);
+            let clash = moments.iter().any(|m| (m.time - time).abs() < 8.0 * beat);
             let inside = class_at(time - 3.0 * beat) != "silence"
                 && class_at(time + 3.0 * beat) != "silence";
             if inside && !clash {
                 let pose = if n % 2 == 0 { [0.8, 0.95] } else { [0.15, 1.0] };
-                moments.push((time, pose, 0.5 + 0.5 * strength, "flourish"));
+                moments.push(Moment {
+                    time,
+                    pose,
+                    strength: 0.5 + 0.5 * strength,
+                    label: "flourish",
+                    hold_beats: 0.0,
+                    span: 0.75 * span_for(class_at(time)),
+                });
             }
         }
-        moments.sort_by(|a, b| a.0.total_cmp(&b.0));
+        moments.sort_by(|a, b| a.time.total_cmp(&b.time));
     }
-    for &(time, _, _, label) in &moments {
+    for &Moment { time, label, .. } in &moments {
         let i = cues.partition_point(|c| c.end <= time).min(cues.len() - 1);
         cues[i].anticipation = Some(time);
         cues[i]
             .reason
             .push_str(&format!(" · {label} moment at {time:.2}s"));
     }
-    const HOLD_BEATS: f64 = 1.0;
     let hand = |t: f64| -> [f64; 3] {
         let mut p = flow(t);
-        for &(time, pose, strength, _) in &moments {
+        for m in &moments {
+            let (time, pose, strength, hold, span) =
+                (m.time, m.pose, m.strength, m.hold_beats, m.span);
             let tau = (t - time) / beat;
-            if !(-4.0..HOLD_BEATS + 2.0).contains(&tau) {
+            if !(-2.0 * span..hold + span).contains(&tau) {
                 continue;
             }
-            // Arrive smoothly over two beats, stop, hold, release over two.
-            let blend = if tau < -2.0 {
+            // Arrive smoothly, stop (or pass through), release.
+            let blend = if tau < -span {
                 0.0
             } else if tau < 0.0 {
-                smooth((tau + 2.0) / 2.0)
-            } else if tau < HOLD_BEATS {
+                smooth((tau + span) / span)
+            } else if tau < hold {
                 1.0
             } else {
-                1.0 - smooth((tau - HOLD_BEATS) / 2.0)
+                1.0 - smooth((tau - hold) / span)
             };
             // Prepare by sinking and pulling in, opposite to the arrival.
             let prepare = strength
-                * if tau < -2.0 {
-                    smooth((tau + 4.0) / 2.0)
+                * if tau < -span {
+                    smooth((tau + 2.0 * span) / span)
                 } else {
                     1.0 - blend.min(1.0)
                 }
@@ -449,12 +482,12 @@ pub fn compile_figures(
     // Knots on the grid, plus exact arrival and hold-end times.
     let mut times = grid.clone();
     for m in &moments {
-        times.extend([m.0, (m.0 + HOLD_BEATS * beat).min(data.duration)]);
+        times.extend([m.time, (m.time + m.hold_beats * beat).min(data.duration)]);
     }
     times.sort_by(f64::total_cmp);
     let exact: Vec<f64> = moments
         .iter()
-        .flat_map(|m| [m.0, m.0 + HOLD_BEATS * beat])
+        .flat_map(|m| [m.time, m.time + m.hold_beats * beat])
         .collect();
     let is_exact = |t: f64| exact.iter().any(|e| (e - t).abs() < 1e-9);
     let mut kept: Vec<f64> = Vec::with_capacity(times.len());
