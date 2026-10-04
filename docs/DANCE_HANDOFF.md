@@ -1424,3 +1424,15 @@ implement: "a strange shape with mirrors all over, scattered".
   image content. The planner and the rig are unchanged (version 32): the rig's
   last link still ends at a 6 cm disc radius and nothing of the hand object is
   in the zone check. Clips `shards-32.mp4` and `disc-32.mp4` (3:32–4:12).
+
+**Shards, second form, same day.** User: "Shards is better, make it more like
+a discoball, but not quite, not spherical, irregular a tad", then "non-convex
+sort of". The preview's default hand is now a lumpy ball tiled with 84 small
+square mirrors (about 1.5 to 1.9 cm across, each a little crooked): two unequal
+lobes with a waist between them, one deep dent and one shallow, 3 to 7 cm from
+the hand point (`radius`, `DENTS`, `SHARDS` in `ensemble.html`). Tiles follow
+the surface, so the dents hold mirrors that face each other. About half the
+tiles face the overhead projector at any time; each throws a small square
+patch on the floor or a faint ray into the room. Not modelled: tiles shading
+each other inside the dents, reflections between tiles. Clip
+`mirrorball-32.mp4` (3:32–4:12). Planner and rig unchanged.
