@@ -1468,3 +1468,40 @@ always good".
 `song-figures-33.html`, clip `mirrorball-33.mp4` (3:32–4:12). 134 CPU tests,
 clippy, fmt, `ensemble.cjs` pass. Not done: implement against the arm's own
 links, and anything between two arms.
+
+### Version 34: several arms that keep clear of each other — 2026-10-04
+
+User: "we need crosscheck with arms, red zone is a zone around arms to avoid
+collision (tunable radius)"; six arms, concentric, symmetric, like a hexagon;
+and the synchronized dancing itself (together, inverses, one by one, drop-outs,
+pairs, complements) is "a different game", not this step.
+
+- `figures.rs`: `compile_ensemble(json, config, rig, zones, arms, clearance_m)`
+  with `ArmPlan { placement, mirrored }`; `compile_figures` is the one-arm case
+  and its output is unchanged from version 33 (preview data identical). Every
+  arm dances the same figures in its own frame (rotated by its yaw, optionally
+  left-right mirrored).
+- Cross-check (`Obstacles`): at each knot the arms are solved in order. Each
+  sees the others' current poses as points (`body_samples`: the checked link
+  points plus the base column) and keeps `clearance_m` plus the implements'
+  radii from them, in the solver (which aims 3 cm wider), in the follower's
+  braking (half the gap, since the other arm may be closing too) and in the
+  hard check. Earlier arms have right of way. Fixed zones work as before.
+- Preview example: `--ring N,R` (N arms on a circle of radius R, facing
+  outward), `--mirror-odd` (every second arm mirrored), `--clearance M`
+  (default 0.1). The camera backs off to hold the layout.
+- Measured, hexagon of radius 0.9 m, on dense points along the played curves:
+  unison never needs the check (closest implement surface 11.3 cm). With every
+  second arm mirrored and clearance 0.10 m the closest is 9.5 cm; with 0.25 m,
+  24.0 cm; with 0 m the implements overlap by 1.1 cm. So the played curve cuts
+  up to about 1 cm inside the checked knots. Six arms compile in 12 s.
+- Limits: a ring of 0.6 m (bases closer than one reach) fails with "cannot fit
+  tangents": a blocked arm is stopped within one knot and the quintic fit
+  cannot honour the rig limits (the known `fit_tangents` cascade). 0.7 m and up
+  work. The implement is not checked against its own arm. Priority by arm order
+  is arbitrary. A test covers two arms side by side.
+- Not done, by the user's decision: any ensemble choreography. `--mirror-odd`
+  exists only to make arms meet so the check can be seen.
+`song-figures-34.html` (one arm), `hexagon-34-unison.{html,mp4}` and
+`hexagon-34-mirrored.{html,mp4}` (3:32–4:12). 135 CPU tests, clippy, fmt,
+`ensemble.cjs` pass.

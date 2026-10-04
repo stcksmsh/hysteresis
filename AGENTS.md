@@ -1380,3 +1380,12 @@ rig (`Rig.implement`: any set of flat mirrors plus a bounding radius); default
 a lumpy mirror ball, `--implement disc` for the disc. Zone and floor checks
 keep the hand point that radius further away. The preview draws the overhead
 projector's reflections off each mirror. Next: several arms with red zones.
+
+### Several arms with a cross-check — 2026-10-04
+
+Version 34. `compile_ensemble` plans any number of arms (the user's target: six
+on a hexagon); each keeps a tunable clearance from the others' links and
+implements, earlier arms having right of way. All arms dance the same figures
+in their own frame; ensemble choreography (together, inverses, one by one,
+drop-outs, pairs) is the next, separate task. `compile_figures` is the one-arm
+case, unchanged.

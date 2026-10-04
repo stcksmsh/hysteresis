@@ -157,12 +157,46 @@ struct Instance {
     turn: f64,
 }
 
+/// One arm of an ensemble: where it stands, and whether it dances the
+/// left-right mirror image of the figures.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ArmPlan {
+    pub placement: Placement,
+    pub mirrored: bool,
+}
+
+/// One arm at the origin.
 pub fn compile_figures(
     json: &str,
     config: CompileConfig,
     rig: Rig,
     zones: &[Zone],
 ) -> Result<EnsembleScore, String> {
+    let alone = ArmPlan {
+        placement: Placement {
+            origin_m: [0.0; 3],
+            yaw_degrees: 0.0,
+        },
+        mirrored: false,
+    };
+    compile_ensemble(json, config, rig, zones, &[alone], 0.0)
+}
+
+/// Every arm dances the same figures in its own frame. Each arm treats the
+/// others as moving red zones: no checked point of one arm comes within
+/// `clearance_m` of a checked point of another (plus the implements' radii).
+/// Arms are solved in order at each knot, so earlier arms have right of way.
+pub fn compile_ensemble(
+    json: &str,
+    config: CompileConfig,
+    rig: Rig,
+    zones: &[Zone],
+    arms: &[ArmPlan],
+    clearance_m: f64,
+) -> Result<EnsembleScore, String> {
+    if arms.is_empty() || !(clearance_m.is_finite() && clearance_m >= 0.0) {
+        return Err("ensemble needs an arm and a finite clearance >= 0".into());
+    }
     let data: Evidence = serde_json::from_str(json).map_err(|error| error.to_string())?;
     validate(&data)?;
     rig.validate()?;
@@ -753,18 +787,8 @@ pub fn compile_figures(
     let times = grid.clone();
     let targets: Vec<([f64; 3], f64)> = times.iter().map(|&t| place(hand(t))).collect();
 
-    let placement = Placement {
-        origin_m: [0.0; 3],
-        yaw_degrees: 0.0,
-    };
     let neutral: Vec<f64> = rig.channels.iter().map(|c| c.neutral_degrees).collect();
-    if !clear(&rig, &placement, &zones, &neutral, &neutral)? {
-        return Err("rig neutral pose intersects a zone".into());
-    }
-    let mut knots: Vec<JointKnot> = Vec::with_capacity(times.len());
-    let mut held_target: Option<[f64; 3]> = None;
-    let mut wanted: Vec<f64> = Vec::new();
-    let mut speed = vec![0.0; rig.channels.len()];
+    let held = rig.implement.radius_m;
     // A last joint that turns about its own link is a tool roll: it moves no
     // point of the chain, so it is driven here, not by the position solver.
     let roll_joint = rig.channels.last().and_then(|c| {
@@ -772,179 +796,267 @@ pub fn compile_figures(
         let length = c.link_m.iter().map(|v| v * v).sum::<f64>().sqrt();
         (length > 0.0 && (along.abs() - length).abs() < 1e-9).then_some(rig.channels.len() - 1)
     });
-    let mut turned = 0.0;
-    for (i, (&time, &(target, facing))) in times.iter().zip(&targets).enumerate() {
-        if knots.last().is_some_and(|k| time - k.time < 1e-9) {
+    struct Arm<'a> {
+        placement: &'a Placement,
+        /// (hand target in the world, base facing in the arm's own frame).
+        targets: Vec<([f64; 3], f64)>,
+        knots: Vec<JointKnot>,
+        held_target: Option<[f64; 3]>,
+        wanted: Vec<f64>,
+        speed: Vec<f64>,
+        turned: f64,
+    }
+    let mut dancers: Vec<Arm> = arms
+        .iter()
+        .map(|arm| {
+            let side = if arm.mirrored { -1.0 } else { 1.0 };
+            let (sin, cos) = arm.placement.yaw_degrees.to_radians().sin_cos();
+            Arm {
+                placement: &arm.placement,
+                targets: targets
+                    .iter()
+                    .map(|&(p, facing)| {
+                        let (x, y) = (p[0], side * p[1]);
+                        let o = arm.placement.origin_m;
+                        (
+                            [
+                                o[0] + cos * x - sin * y,
+                                o[1] + sin * x + cos * y,
+                                o[2] + p[2],
+                            ],
+                            side * facing,
+                        )
+                    })
+                    .collect(),
+                knots: Vec::with_capacity(times.len()),
+                held_target: None,
+                wanted: Vec::new(),
+                speed: vec![0.0; rig.channels.len()],
+                turned: 0.0,
+            }
+        })
+        .collect();
+    // Where each arm is now, as points the other arms must keep away from.
+    let mut bodies: Vec<Vec<([f64; 3], f64)>> = Vec::new();
+    for arm in &dancers {
+        bodies.push(body_samples(
+            &forward_kinematics(&rig, arm.placement, &neutral)?,
+            held,
+        ));
+    }
+    let others_of = |bodies: &[Vec<([f64; 3], f64)>], a: usize| -> Vec<([f64; 3], f64)> {
+        let rest = bodies.iter().enumerate().filter(|(b, _)| *b != a);
+        rest.flat_map(|(_, body)| body.iter().copied()).collect()
+    };
+    for (a, arm) in dancers.iter().enumerate() {
+        let others = others_of(&bodies, a);
+        let world = Obstacles {
+            zones: &zones,
+            others: &others,
+            radius: clearance_m,
+        };
+        if !clear(&rig, arm.placement, &world, &neutral, &neutral)? {
+            return Err("rig neutral pose intersects a zone or another arm".into());
+        }
+    }
+    for (i, &time) in times.iter().enumerate() {
+        if i > 0 && time - times[i - 1] < 1e-9 {
             continue;
         }
-        let (prior, dt) = knots.last().map_or((neutral.clone(), f64::INFINITY), |k| {
-            (k.joints_degrees.clone(), time - k.time)
-        });
-        // A held hand keeps its solved pose: no settling toward neutral.
-        let holding = held_target == Some(target);
-        held_target = Some(target);
-        if !holding || wanted.is_empty() {
-            // Body: the wrist trails the hand's rise and fall like a brush
-            // (bends back as the hand rises, forward as it falls). It is only a
-            // posture preference, so the other joints make up for it and the
-            // hand still reaches its target.
-            let (lo, hi) = (i.saturating_sub(4), (i + 4).min(targets.len() - 1));
-            let rise = (targets[hi].0[2] - targets[lo].0[2]) / (times[hi] - times[lo]).max(1e-9);
-            let lean = (config.wrist_drag_degrees_per_mps * rise).clamp(-45.0, 45.0);
-            let wrist = roll_joint.map_or(rig.channels.len() - 1, |r| r - 1);
-            wanted = solve(
-                &rig,
-                &placement,
-                &zones,
-                target,
-                facing,
-                &prior,
-                (wrist, lean),
-            )?;
-        }
-        if let Some(r) = roll_joint {
-            // Flips: the disc turns to show its other face across each moment,
-            // in alternating directions.
-            let flips = 180.0
-                * moments
-                    .iter()
-                    .enumerate()
-                    .map(|(n, m)| {
-                        let way = if n % 2 == 0 { 1.0 } else { -1.0 };
-                        way * smooth((time - m.time) / (FLIP_BEATS * beat) + 0.5)
-                    })
-                    .sum::<f64>();
-            // Travel: in a fast sweep the disc turns with the distance the hand
-            // covers; it rests when the hand is slow. Its direction is the
-            // hand's sweep round the base relative to the figure's steady
-            // travel over the surrounding four beats, so left and right sweeps
-            // turn it opposite ways. (Turning with all travel, one way, read
-            // as constant purposeless rotation: user.)
-            if i > 0 && dt.is_finite() {
-                let (before, bearing) = targets[i - 1];
-                let travel = (0..3)
-                    .map(|k| (target[k] - before[k]).powi(2))
-                    .sum::<f64>()
-                    .sqrt();
-                let fast = smooth((travel / dt - 0.25) / 0.35);
-                let (lo, hi) = (i.saturating_sub(16), (i + 16).min(targets.len() - 1));
-                let steady = (targets[hi].1 - targets[lo].1) / (times[hi] - times[lo]);
-                let way = (((facing - bearing) / dt - steady) / 30.0).tanh();
-                turned += SPIN_DEGREES_PER_METRE * travel * fast * way;
+        for (a, arm) in dancers.iter_mut().enumerate() {
+            let others = others_of(&bodies, a);
+            let world = Obstacles {
+                zones: &zones,
+                others: &others,
+                radius: clearance_m,
+            };
+            let (placement, targets) = (arm.placement, &arm.targets);
+            let (target, facing) = targets[i];
+            let (prior, dt) = arm
+                .knots
+                .last()
+                .map_or((neutral.clone(), f64::INFINITY), |k| {
+                    (k.joints_degrees.clone(), time - k.time)
+                });
+            // A held hand keeps its solved pose: no settling toward neutral.
+            let holding = arm.held_target == Some(target);
+            arm.held_target = Some(target);
+            if !holding || arm.wanted.is_empty() {
+                // Body: the wrist trails the hand's rise and fall like a brush
+                // (bends back as the hand rises, forward as it falls). It is only a
+                // posture preference, so the other joints make up for it and the
+                // hand still reaches its target.
+                let (lo, hi) = (i.saturating_sub(4), (i + 4).min(targets.len() - 1));
+                let rise =
+                    (targets[hi].0[2] - targets[lo].0[2]) / (times[hi] - times[lo]).max(1e-9);
+                let lean = (config.wrist_drag_degrees_per_mps * rise).clamp(-45.0, 45.0);
+                let wrist = roll_joint.map_or(rig.channels.len() - 1, |r| r - 1);
+                arm.wanted = solve(
+                    &rig,
+                    placement,
+                    &world,
+                    target,
+                    facing,
+                    &prior,
+                    (wrist, lean),
+                )?;
             }
-            wanted[r] = flips + turned;
-        }
-        // Hardware follower: each joint chases its solved angle at a design
-        // acceleration and speed a hobby-class servo arm could plausibly follow,
-        // braking early enough to stop on target (trapezoid profile). The rig's
-        // own limits are the hard validation envelope, reached only when a zone
-        // forces an abrupt stop. Both are assumptions until measured on hardware.
-        let mut q = wanted.clone();
-        if dt.is_finite() {
-            for (j, c) in rig.channels.iter().enumerate() {
-                let top = 0.75 * c.max_speed_degrees_per_second;
-                let accel = 0.1 * c.max_acceleration_degrees_per_second2;
-                let gap = wanted[j] - prior[j];
-                let brake = (2.0 * accel * gap.abs())
-                    .sqrt()
-                    .min(top)
-                    .min(gap.abs() / dt);
-                let v = (gap.signum() * brake).clamp(speed[j] - accel * dt, speed[j] + accel * dt);
-                // Never approach a joint end stop faster than it can brake.
-                let room = |d: f64| (2.0 * accel * (d - 1.0).max(0.0)).sqrt();
-                let v = v.clamp(
-                    -room(prior[j] - c.min_degrees),
-                    room(c.max_degrees - prior[j]),
-                );
-                q[j] = (prior[j] + v * dt).clamp(c.min_degrees + 0.5, c.max_degrees - 0.5);
+            if let Some(r) = roll_joint {
+                // Flips: the disc turns to show its other face across each moment,
+                // in alternating directions.
+                let flips = 180.0
+                    * moments
+                        .iter()
+                        .enumerate()
+                        .map(|(n, m)| {
+                            let way = if n % 2 == 0 { 1.0 } else { -1.0 };
+                            way * smooth((time - m.time) / (FLIP_BEATS * beat) + 0.5)
+                        })
+                        .sum::<f64>();
+                // Travel: in a fast sweep the disc turns with the distance the hand
+                // covers; it rests when the hand is slow. Its direction is the
+                // hand's sweep round the base relative to the figure's steady
+                // travel over the surrounding four beats, so left and right sweeps
+                // turn it opposite ways. (Turning with all travel, one way, read
+                // as constant purposeless rotation: user.)
+                if i > 0 && dt.is_finite() {
+                    let (before, bearing) = targets[i - 1];
+                    let travel = (0..3)
+                        .map(|k| (target[k] - before[k]).powi(2))
+                        .sum::<f64>()
+                        .sqrt();
+                    let fast = smooth((travel / dt - 0.25) / 0.35);
+                    let (lo, hi) = (i.saturating_sub(16), (i + 16).min(targets.len() - 1));
+                    let steady = (targets[hi].1 - targets[lo].1) / (times[hi] - times[lo]);
+                    let way = (((facing - bearing) / dt - steady) / 30.0).tanh();
+                    arm.turned += SPIN_DEGREES_PER_METRE * travel * fast * way;
+                }
+                arm.wanted[r] = flips + arm.turned;
             }
-        }
-        // The roll moves no link, so zone braking below must not disturb it.
-        let rolled = roll_joint.map(|r| (r, q[r]));
-        // Zone-aware: a link near a zone moves only as fast as it could brake
-        // within its remaining clearance (as for joint end stops above), so the
-        // hard check below never has to stop the arm abruptly.
-        if dt.is_finite() {
-            let held = rig.implement.radius_m;
-            let before = link_samples(&forward_kinematics(&rig, &placement, &prior)?, held);
-            let after = link_samples(&forward_kinematics(&rig, &placement, &q)?, held);
-            let brake =
-                (0.1 * rig.channels[0].max_acceleration_degrees_per_second2).to_radians() * reach_m;
-            let mut scale: f64 = 1.0;
-            for (a, b) in before.iter().zip(&after) {
-                let travel = (0..3)
-                    .map(|k| (b.0[k] - a.0[k]).powi(2))
-                    .sum::<f64>()
-                    .sqrt();
-                let limit =
-                    (2.0 * brake * (clearance(a.0, &zones, MARGIN_M + a.1) + 0.005)).sqrt() * dt;
-                if travel > limit {
-                    scale = scale.min(limit / travel);
+            // Hardware follower: each joint chases its solved angle at a design
+            // acceleration and speed a hobby-class servo arm could plausibly follow,
+            // braking early enough to stop on target (trapezoid profile). The rig's
+            // own limits are the hard validation envelope, reached only when a zone
+            // forces an abrupt stop. Both are assumptions until measured on hardware.
+            let wanted = &arm.wanted;
+            let speed = &mut arm.speed;
+            let mut q = wanted.clone();
+            if dt.is_finite() {
+                for (j, c) in rig.channels.iter().enumerate() {
+                    let top = 0.75 * c.max_speed_degrees_per_second;
+                    let accel = 0.1 * c.max_acceleration_degrees_per_second2;
+                    let gap = wanted[j] - prior[j];
+                    let brake = (2.0 * accel * gap.abs())
+                        .sqrt()
+                        .min(top)
+                        .min(gap.abs() / dt);
+                    let v =
+                        (gap.signum() * brake).clamp(speed[j] - accel * dt, speed[j] + accel * dt);
+                    // Never approach a joint end stop faster than it can brake.
+                    let room = |d: f64| (2.0 * accel * (d - 1.0).max(0.0)).sqrt();
+                    let v = v.clamp(
+                        -room(prior[j] - c.min_degrees),
+                        room(c.max_degrees - prior[j]),
+                    );
+                    q[j] = (prior[j] + v * dt).clamp(c.min_degrees + 0.5, c.max_degrees - 0.5);
                 }
             }
-            for j in 0..q.len() {
-                q[j] = lerp(prior[j], q[j], scale);
-            }
-        }
-        // Hard guarantee: bisect back toward the prior clear pose.
-        if !clear(&rig, &placement, &zones, &prior, &q)? {
-            let (mut lo, mut hi) = (0.0, 1.0);
-            for _ in 0..24 {
-                let mid = 0.5 * (lo + hi);
-                let trial: Vec<f64> = (0..q.len()).map(|j| lerp(prior[j], q[j], mid)).collect();
-                if clear(&rig, &placement, &zones, &prior, &trial)? {
-                    lo = mid;
-                } else {
-                    hi = mid;
+            // The roll moves no link, so zone braking below must not disturb it.
+            let rolled = roll_joint.map(|r| (r, q[r]));
+            // Zone-aware: a link near a zone moves only as fast as it could brake
+            // within its remaining clearance (as for joint end stops above), so the
+            // hard check below never has to stop the arm abruptly.
+            if dt.is_finite() {
+                let before = link_samples(&forward_kinematics(&rig, placement, &prior)?, held);
+                let after = link_samples(&forward_kinematics(&rig, placement, &q)?, held);
+                let brake = (0.1 * rig.channels[0].max_acceleration_degrees_per_second2)
+                    .to_radians()
+                    * reach_m;
+                let mut scale: f64 = 1.0;
+                for (a, b) in before.iter().zip(&after) {
+                    let travel = (0..3)
+                        .map(|k| (b.0[k] - a.0[k]).powi(2))
+                        .sum::<f64>()
+                        .sqrt();
+                    let limit = (2.0 * brake * (world.room(a.0, a.1) + 0.005)).sqrt() * dt;
+                    if travel > limit {
+                        scale = scale.min(limit / travel);
+                    }
+                }
+                for j in 0..q.len() {
+                    q[j] = lerp(prior[j], q[j], scale);
                 }
             }
-            q = (0..q.len()).map(|j| lerp(prior[j], q[j], lo)).collect();
-        }
-        if let Some((r, angle)) = rolled {
-            q[r] = angle;
-        }
-        if dt.is_finite() {
-            for j in 0..q.len() {
-                speed[j] = (q[j] - prior[j]) / dt;
-            }
-        }
-        knots.push(JointKnot {
-            time,
-            velocity_degrees_per_second: vec![0.0; q.len()],
-            joints_degrees: q,
-        });
-    }
-    for i in 1..knots.len() - 1 {
-        let span = knots[i + 1].time - knots[i - 1].time;
-        // An arrival stops dead: no tangent into a held pose.
-        let holds = (0..rig.channels.len())
-            .all(|j| (knots[i + 1].joints_degrees[j] - knots[i].joints_degrees[j]).abs() < 0.05);
-        knots[i].velocity_degrees_per_second = (0..rig.channels.len())
-            .map(|j| {
-                if holds {
-                    0.0
-                } else {
-                    (knots[i + 1].joints_degrees[j] - knots[i - 1].joints_degrees[j]) / span
+            // Hard guarantee: bisect back toward the prior clear pose.
+            if !clear(&rig, placement, &world, &prior, &q)? {
+                let (mut lo, mut hi) = (0.0, 1.0);
+                for _ in 0..24 {
+                    let mid = 0.5 * (lo + hi);
+                    let trial: Vec<f64> = (0..q.len()).map(|j| lerp(prior[j], q[j], mid)).collect();
+                    if clear(&rig, placement, &world, &prior, &trial)? {
+                        lo = mid;
+                    } else {
+                        hi = mid;
+                    }
                 }
-            })
-            .collect();
+                q = (0..q.len()).map(|j| lerp(prior[j], q[j], lo)).collect();
+            }
+            if let Some((r, angle)) = rolled {
+                q[r] = angle;
+            }
+            if dt.is_finite() {
+                for j in 0..q.len() {
+                    speed[j] = (q[j] - prior[j]) / dt;
+                }
+            }
+            bodies[a] = body_samples(&forward_kinematics(&rig, placement, &q)?, held);
+            arm.knots.push(JointKnot {
+                time,
+                velocity_degrees_per_second: vec![0.0; q.len()],
+                joints_degrees: q,
+            });
+        }
     }
-    // A score that ends mid-motion keeps its last slope; zero there would ask
-    // a moving joint to stop within one knot.
-    if let [.., before, last] = &mut knots[..] {
-        let dt = last.time - before.time;
-        last.velocity_degrees_per_second = (0..rig.channels.len())
-            .map(|j| (last.joints_degrees[j] - before.joints_degrees[j]) / dt)
-            .collect();
+    let mut tracks = Vec::with_capacity(dancers.len());
+    for (id, arm) in dancers.into_iter().enumerate() {
+        let mut knots = arm.knots;
+        for i in 1..knots.len() - 1 {
+            let span = knots[i + 1].time - knots[i - 1].time;
+            // An arrival stops dead: no tangent into a held pose.
+            let holds = (0..rig.channels.len()).all(|j| {
+                (knots[i + 1].joints_degrees[j] - knots[i].joints_degrees[j]).abs() < 0.05
+            });
+            knots[i].velocity_degrees_per_second = (0..rig.channels.len())
+                .map(|j| {
+                    if holds {
+                        0.0
+                    } else {
+                        (knots[i + 1].joints_degrees[j] - knots[i - 1].joints_degrees[j]) / span
+                    }
+                })
+                .collect();
+        }
+        // A score that ends mid-motion keeps its last slope; zero there would ask
+        // a moving joint to stop within one knot.
+        if let [.., before, last] = &mut knots[..] {
+            let dt = last.time - before.time;
+            last.velocity_degrees_per_second = (0..rig.channels.len())
+                .map(|j| (last.joints_degrees[j] - before.joints_degrees[j]) / dt)
+                .collect();
+        }
+        let mut track = AgentTrack {
+            id: id as u32,
+            knots,
+        };
+        fit_tangents(&mut track, &rig)?;
+        tracks.push(track);
     }
-    let mut track = AgentTrack { id: 0, knots };
-    fit_tangents(&mut track, &rig)?;
     let score = EnsembleScore {
         duration: data.duration,
         rig,
-        placements: vec![placement],
+        placements: arms.iter().map(|arm| arm.placement.clone()).collect(),
         cues,
-        tracks: vec![track],
+        tracks,
     };
     score.validate()?;
     Ok(score)
@@ -1000,6 +1112,52 @@ fn clearance(p: [f64; 3], zones: &[Zone], margin: f64) -> f64 {
         .fold(f64::INFINITY, f64::min)
 }
 
+/// What an arm must stay out of: fixed zones, and the other arms as they
+/// stand now (points with their own extra room), `radius` apart.
+struct Obstacles<'a> {
+    zones: &'a [Zone],
+    others: &'a [([f64; 3], f64)],
+    radius: f64,
+}
+
+impl Obstacles<'_> {
+    fn gap(&self, p: [f64; 3], extra: f64) -> f64 {
+        self.others
+            .iter()
+            .map(|(q, more)| {
+                (0..3).map(|k| (p[k] - q[k]).powi(2)).sum::<f64>().sqrt() - extra - more
+            })
+            .fold(f64::INFINITY, f64::min)
+    }
+    /// How deep `p` (needing `extra` room) is inside something; 0 when clear.
+    /// `slack` widens every margin: the solver aims for more than the check.
+    fn depth(&self, p: [f64; 3], extra: f64, slack: f64) -> f64 {
+        penetration(p, self.zones, slack * MARGIN_M + extra)
+            // The same extra width as for zones, whatever the radius, so the
+            // solver steers away before the hard check has to stop the arm.
+            .max(self.radius + (slack - 1.0) * MARGIN_M - self.gap(p, extra))
+            .max(0.0)
+    }
+    /// Free distance from `p` to the nearest obstacle; 0 when inside one.
+    fn room(&self, p: [f64; 3], extra: f64) -> f64 {
+        // Half the gap to another arm: it may be closing in at the same rate.
+        clearance(p, self.zones, MARGIN_M + extra)
+            .min((0.5 * (self.gap(p, extra) - self.radius)).max(0.0))
+    }
+}
+
+/// Points of a whole arm that other arms keep away from: the checked points
+/// plus the base column, which never meets a zone but can meet a neighbour.
+fn body_samples(points: &[[f64; 3]], held: f64) -> Vec<([f64; 3], f64)> {
+    let mut out = link_samples(points, held);
+    out.extend([(points[0], 0.0), (points[1], 0.0)]);
+    out.push((
+        std::array::from_fn(|i| lerp(points[1][i], points[2][i], 0.25)),
+        0.0,
+    ));
+    out
+}
+
 /// Points checked against zones, each with the extra room it needs. The base
 /// and its first link sit on the mount surface, so checks start halfway up the
 /// second link. The last point is the hand: it carries the implement, which
@@ -1027,7 +1185,7 @@ fn link_samples(points: &[[f64; 3]], held: f64) -> Vec<([f64; 3], f64)> {
 fn clear(
     rig: &Rig,
     placement: &Placement,
-    zones: &[Zone],
+    world: &Obstacles,
     from: &[f64],
     to: &[f64],
 ) -> Result<bool, String> {
@@ -1036,7 +1194,7 @@ fn clear(
         let points = forward_kinematics(rig, placement, &q)?;
         if link_samples(&points, rig.implement.radius_m)
             .into_iter()
-            .any(|(p, extra)| penetration(p, zones, MARGIN_M + extra) > 0.0)
+            .any(|(p, extra)| world.depth(p, extra, 1.0) > 0.0)
         {
             return Ok(false);
         }
@@ -1050,7 +1208,7 @@ fn clear(
 fn solve(
     rig: &Rig,
     placement: &Placement,
-    zones: &[Zone],
+    world: &Obstacles,
     target: [f64; 3],
     facing_degrees: f64,
     prior: &[f64],
@@ -1076,7 +1234,7 @@ fn solve(
         r.extend(
             link_samples(&points, rig.implement.radius_m)
                 .into_iter()
-                .map(|(p, extra)| 3.0 * penetration(p, zones, 1.6 * MARGIN_M + extra)),
+                .map(|(p, extra)| 3.0 * world.depth(p, extra, 1.6)),
         );
         Ok(r)
     };
@@ -1301,6 +1459,51 @@ mod tests {
         assert!(
             with > without + 0.1,
             "climb with a high voice {with:.3} m, with a level one {without:.3} m"
+        );
+    }
+
+    #[test]
+    fn arms_keep_the_clearance_from_each_other() {
+        let json = super::super::tests::fixture(0.7, 0.7);
+        let rig = Rig::illustrative_five_axis();
+        // Two arms side by side, 0.6 m apart, one dancing the mirror image.
+        let arm = |y: f64, mirrored: bool| ArmPlan {
+            placement: Placement {
+                origin_m: [0.0, y, 0.0],
+                yaw_degrees: 0.0,
+            },
+            mirrored,
+        };
+        let pair = [arm(-0.3, false), arm(0.3, true)];
+        let closest = |clearance: f64| {
+            let config = CompileConfig::default();
+            let score =
+                compile_ensemble(&json, config, rig.clone(), &[], &pair, clearance).unwrap();
+            let held = score.rig.implement.radius_m;
+            let mut closest = f64::INFINITY;
+            for i in 0..=960 {
+                let frame = score.sample(8.0 * i as f64 / 960.0).unwrap();
+                let bodies: Vec<_> = frame
+                    .agents
+                    .iter()
+                    .map(|agent| body_samples(&agent.world_points, held))
+                    .collect();
+                for (p, extra) in &bodies[0] {
+                    for (q, more) in &bodies[1] {
+                        let apart = (0..3).map(|k| (p[k] - q[k]).powi(2)).sum::<f64>().sqrt();
+                        closest = closest.min(apart - extra - more);
+                    }
+                }
+            }
+            closest
+        };
+        // Left alone they would pass through each other.
+        assert!(closest(0.0) < 0.05, "free arms came {:.3} m", closest(0.0));
+        // Between knots the curve may cut a little inside the checked poses.
+        let kept = closest(0.15);
+        assert!(
+            kept > 0.13,
+            "arms came within {kept:.3} m, clearance 0.15 m"
         );
     }
 
