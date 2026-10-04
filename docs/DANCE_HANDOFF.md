@@ -969,3 +969,17 @@ the joints look bad and clip through the cylinders.
 
 130 CPU tests, clippy, fmt, `ensemble.cjs` pass. Stills inspected at 92.5 and
 150 s. Clip `render-15.mp4`, export `song-figures-15.html`. Awaiting review.
+
+### Version 16: trail sorted with the arm; render parked — 2026-10-04
+
+User on version 15: speed OK now, look much better, "looks and feels better";
+but the hand trail was always behind the arm. It was drawn as one layer before
+the arm. Trail segments are now depth-sorted together with the arm, links cut
+in four pieces so long links sort correctly; plain blending instead of additive
+(additive burned to white where the trail crossed a lit link); gloss lowered.
+Planner unchanged from version 15.
+
+User decision: a lifelike "wow" render (Blender or similar) comes much later.
+Do not polish the canvas preview further unless asked. Speed cap 0.8 m/s
+accepted by eye on 1:24–1:54 only. Next: restart-prompt step 1 "body".
+Export `song-figures-16.html`, clip `render-16.mp4`.
