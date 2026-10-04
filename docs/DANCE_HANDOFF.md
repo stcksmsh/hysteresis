@@ -1009,3 +1009,12 @@ Export `song-figures-16.html`, clip `render-16.mp4`.
   roll (base, shoulder, elbow, forearm roll, wrist bend). A sixth (tool roll)
   is needed only for a hand that is not rotationally symmetric. Not decided.
 - Open artistic question: what the mirror aims at. Next work depends on it.
+- Version 19, user correction: the disc is **held by its edge, in line with
+  the arm** ("---0", like a hand mirror), not square to the last link. So its
+  normal is perpendicular to the last link and a roll about that link turns the
+  disc visibly. This supersedes the "forearm roll" reasoning above: the natural
+  fifth axis is a **wrist roll about the last link** (base, shoulder, elbow,
+  wrist bend, wrist roll), which can be continuous because the mirror is
+  passive. Not yet confirmed by the user; the rig still has the unused elbow
+  twist and no roll. The preview draws the disc in the arm's vertical plane
+  (`render-19.mp4`).
