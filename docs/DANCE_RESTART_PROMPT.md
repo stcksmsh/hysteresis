@@ -1,9 +1,19 @@
 # Fresh-agent prompt — continue the single-arm dance
 
-Work on branch `dance-figures` (pushed). Communicate terse and exact. Frozen
-`src/` and `tools/` are read-only. Never drive hardware. Do not push to `master`.
-Read this file, then the last four entries of `docs/DANCE_HANDOFF.md`. You do not
-need the older history.
+This work was merged into `master` (pull request 12). Start from current
+`master` on a new branch; open a pull request when a slice is done. Do not push
+to `master` directly. Communicate terse and exact. Frozen `src/` and `tools/`
+are read-only. Never drive hardware.
+
+First, before any code: read this file, then the last four entries of
+`docs/DANCE_HANDOFF.md` (older entries and most of `AGENTS.md` §5 describe
+deleted code; skip them). Read `crates/hyst-compile/src/director/figures.rs` in
+full and skim `director.rs`, `ensemble.rs`, `crates/hyst-previz/src/ensemble.html`
+and `examples/ensemble_preview.rs`. Run the checks under "Commands" and export one
+preview to confirm the tree works. Then report to the user in a few lines: what
+you understand the goal and state to be, what you will do first, and any
+question that blocks it. Start work after that report; do not wait for approval
+unless you asked a blocking question.
 
 ## What the user wants (their words, settled)
 
