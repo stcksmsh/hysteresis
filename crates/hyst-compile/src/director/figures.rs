@@ -721,14 +721,10 @@ pub fn compile_ensemble(
         // Everyone dances nearly all the time (the user found resting arms
         // low in energy and not synchronized enough).
         let formation = match class {
-            "interlocked" | "bass-led" | "silence" => Formation::Unison,
-            "vocal-led" => match std::env::var("HYST_VERSE").as_deref() {
-                Ok("ripple") => Formation::Ripple,
-                Ok("unison") => Formation::Unison,
-                Ok("mirrored") => Formation::Mirrored,
-                _ => [Formation::Mirrored, Formation::Unison][n % 2],
-            },
-            "percussive-open" => [Formation::Unison, Formation::Mirrored][n % 2],
+            // Verses in step: mirrored verses stood idle longest and the user
+            // found them the worst of mirrored, ripple and unison.
+            "interlocked" | "bass-led" | "silence" | "vocal-led" => Formation::Unison,
+            "percussive-open" => [Formation::Mirrored, Formation::Unison][n % 2],
             "sparse" => Formation::DropOut,
             _ => Formation::Pairs,
         };
@@ -1881,8 +1877,8 @@ mod tests {
 
     #[test]
     fn mirrored_arms_keep_apart_without_stopping() {
-        // Voice without bass: every second arm dances the mirror image.
-        let json = super::super::tests::fixture(0.7, 0.2);
+        // Drums without voice or bass: every second arm dances the mirror image.
+        let json = super::super::tests::fixture(0.1, 0.2);
         let ring: Vec<ArmPlan> = (0..6)
             .map(|k| {
                 let degrees = 60.0 * k as f64;

@@ -11,7 +11,7 @@ earlier blind-test history). Read `crates/hyst-compile/src/director/figures.rs`
 in full (`compile_ensemble` is the entry; `compile_figures` is its one-arm
 case) and skim `director.rs`, `ensemble.rs`, `crates/hyst-previz/src/ensemble.html`.
 Run the checks under "Commands" and export the hexagon: it must be
-byte-identical to `hexagon-43.html`. Report in a few lines what you understand
+byte-identical to `hexagon-44.html`. Report in a few lines what you understand
 and what you will do first, then start; do not wait for approval unless you
 asked a blocking question.
 
@@ -30,9 +30,11 @@ Two parts:
    Unison only by choice of formation: Mirrored cannot overlap (mirror
    neighbours meet in the plane between them at the same moment) and the
    flourishes are single moves. The user found version 42 idle, "resetting" and
-   less musical; version 43 dropped the linear turn, and a blind side-by-side
-   of the verse as mirrored, ripple or unison is **pending** (last handoff
-   entry; knob `HYST_VERSE`). Whether more overlap is still
+   less musical; version 43 dropped the linear turn, and version 44 put the
+   verses in unison after a side-by-side (last handoff entry; idle 32 s → 20 s,
+   not yet reviewed). If the hanging around remains, the verse moves themselves
+   (reach tucking in every eight beats, slow sway) are the suspect; changing
+   them changes the single arm approved at version 32, so ask first. Whether more overlap is still
    wanted is the user's call. Arms that are stopped or stutter are a defect
    the user spots at once (see version 38).
 2. **Red zones as a general tool**: the arms must be kept off equipment or
@@ -172,7 +174,7 @@ node $D/record-ensemble.cjs $D/OUT.html $D/instant-crush.m4a $D/clip.mp4 START S
 ```
 Without `--ring` it plans one arm (`song-figures-34.html` holds the same
 planned motion; the page script has changed since, so compare the data, not
-the file). With `--ring 6,0.8` it must reproduce `hexagon-43.html` exactly.
+the file). With `--ring 6,0.8` it must reproduce `hexagon-44.html` exactly.
 
 Checks: `cargo test --workspace --exclude hyst-render` (138 pass; the six-arm
 tests take about 15 s each), clippy `-D warnings` on hyst-compile/-output/-previz/

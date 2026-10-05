@@ -1890,3 +1890,36 @@ what "follow the music" should look like for six arms; the user was asked.
 138 CPU tests, clippy, fmt, `ensemble.cjs` pass. New helpers in
 `$D/tracker-scratch/ensemble/`: `idle.py`, `wall.py`, `turn.py`, `pulse.py`,
 `cmp.py`, `verse.sh`.
+
+### Version 44: verses in unison — 2026-10-05
+
+Verdict on the verse side-by-side: "Genuinely dont know, I think B is the worst
+maybe? Unsure." B was mirrored (key: A ripple, B mirrored, C unison); the user
+asked whether B had the most idle time, so the key was read and the test is
+over. It supports "mirrored is worst for verses" only weakly and does not
+separate ripple from unison. The user accepted the agent's recommendation of
+unison (numbers near equal; the user had said ripple is a flourish).
+
+Changes to the formation table of `compile_ensemble`:
+- vocal-led is Unison; the `HYST_VERSE` variable is deleted.
+- percussive-open alternates starting with Mirrored (was Unison first). The
+  agent's choice, not asked of the user: with unison verses the old order left
+  4.6 s of mirror in the whole song, and the user likes the mirror. One token
+  to revert.
+
+Measured, whole song (`hexagon-44.html`, `hexagon-44-full.mp4`):
+
+| | version 43 | version 44 |
+|---|---|---|
+| Unison / Mirrored | 196 s / 135 s | 286 s / 45 s (0:03–0:29, 3:05–3:23) |
+| idle | 32 s | 20 s |
+| hands past half way, all | 7.4 % | 13.3 % |
+| stalled | 1.7 % | 1.4 % |
+| kicks | 44 | 45 |
+| closest implement gap | 13.1 cm | 13.0 cm |
+
+The mirrored test's fixture is now drums without voice (`fixture(0.1, 0.2)`).
+138 CPU tests, clippy, fmt pass. Not reviewed by the user. Not answered: the
+"snap back to centre" (no clock times given) and whether the remaining 20 s of
+idle needs the verse moves changed. `tmp-verse-*.html` and `tmp-surge-*.html`
+in the output directory are spent and may be deleted.
