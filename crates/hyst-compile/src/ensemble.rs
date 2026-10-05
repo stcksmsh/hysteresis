@@ -633,6 +633,16 @@ pub(crate) fn fit_tangents(track: &mut AgentTrack, rig: &Rig) -> Result<(), Stri
                         .iter()
                         .map(|k| (k.joints_degrees[j] * 10.0).round() / 10.0)
                         .collect::<Vec<_>>()
+                ) + &format!(
+                    "; times {:?}; velocities {:?}",
+                    track.knots[i.saturating_sub(4)..(i + 5).min(len)]
+                        .iter()
+                        .map(|k| (k.time * 1e4).round() / 1e4)
+                        .collect::<Vec<_>>(),
+                    track.knots[i.saturating_sub(4)..(i + 5).min(len)]
+                        .iter()
+                        .map(|k| (k.velocity_degrees_per_second[j] * 10.0).round() / 10.0)
+                        .collect::<Vec<_>>()
                 ));
             }
         }

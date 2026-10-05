@@ -10,9 +10,10 @@ without colliding, and are lit by a projector showing the visualizer. The
 single arm was approved at version 32 and the ensemble accepted at version 39.
 Version 44 was accepted on Instant Crush ("Its nice now"). A second song,
 "Five Years" (live tempo, wide dynamics), and a third, "Presence" (Justice,
-instrumental), followed: version 46 changed the planner for them (intensity,
-class rule by share of the sound, no resting formations, contrast phrases) and
-awaits the user's verdict on all three songs. Tempo map and grid refit live
+instrumental), followed. The user found "Five Years" OK and listed jerks and
+weak spots on the other two; version 47 answers them (moments limited in
+speed, surge stretched to the note spacing, arrivals that rise at a drop,
+calmer without drums, honest class names) and awaits the verdict on all three. Tempo map and grid refit live
 outside the repo; see the last `DANCE_HANDOFF.md` entries.
 Open: overlap in the mirrored formation, and red zones as a general tool for
 keeping arms off equipment (shapes wait for the user's answer).
@@ -1496,3 +1497,12 @@ class rule now counts voice and drums by their share of mean power, which
 removes a phantom voice on the instrumental, reads its drum-led intro and
 clears the label patchwork on "Five Years". Every class but the calm ones has
 a contrast phrase. Version 45 was never shown; 46 replaces it. Not reviewed.
+
+### Version 47: jerks, drops and labels — 2026-10-06
+
+User on version 46: "Five Years" OK; Instant Crush jerks at 3:52, 4:08, 4:36;
+"Presence" strange moments, low energy after drops, no payoff at the 3:52
+drop, wrong labels. Nearly all jerks were sharp flourishes or arrivals (hand
+1.5–2.3 m/s) and the stab surge idling then bursting on sparse notes. Fixed in
+the planner; also the "cannot fit tangents" abort (a hold test that mistook the
+song's last, milliseconds-short knot for a hold). Not reviewed.

@@ -135,9 +135,9 @@ fn motif(class: &str) -> (&'static [Step], f64, f64) {
     const STILL: &[Step] = &[("still", still, 1e9, 1.0)];
     match class {
         "interlocked" => (FULL, 0.9, 0.5),
-        "bass-led" => (BASS, 0.85, 1.0),
+        "bass-led" | "melody-led" => (BASS, 0.85, 1.0),
         "vocal-led" => (VOCAL, 0.7, 0.5),
-        "percussive-open" => (PERC, 0.6, 1.0),
+        "percussive-open" | "kick-led" => (PERC, 0.6, 1.0),
         "textural" => (CALM, 0.5, 0.25),
         "silence" => (STILL, 1.0, 0.0),
         _ => (CALM, 0.35, 0.25),
@@ -513,9 +513,9 @@ pub fn compile_ensemble(
         // contrasting one once, at its own size, and so on.
         let contrast = match class {
             "vocal-led" => motif("percussive-open").0,
-            "percussive-open" => motif("vocal-led").0,
+            "percussive-open" | "kick-led" => motif("vocal-led").0,
             "interlocked" => motif("bass-led").0,
-            "bass-led" => motif("interlocked").0,
+            "bass-led" | "melody-led" => motif("interlocked").0,
             _ => &[],
         };
         let length: f64 = sequence.iter().map(|s| s.2).sum();
@@ -642,7 +642,7 @@ pub fn compile_ensemble(
                 .map_or("silence", |r| r.2)
         };
         let span_for = |class: &str| {
-            if matches!(class, "interlocked" | "bass-led") {
+            if matches!(class, "interlocked" | "bass-led" | "melody-led") {
                 1.5
             } else {
                 2.0
@@ -650,12 +650,28 @@ pub fn compile_ensemble(
         };
         for &(time, strength) in &arrivals {
             if time > 4.0 * beat && class_at(time + beat) != "silence" {
+                // Which way the music goes at the arrival. Where it lifts (a
+                // drop after a build) the arms rise high and hold longer: the
+                // user saw a build "danced well" that did not pay off. Where
+                // it falls away the arrival is small, not a big gesture into a
+                // quiet break.
+                // Eight beats back: the last bar of a build is often a loud fill.
+                let before = mean(&level, rate, time - 8.0 * beat, time - 0.5 * beat);
+                let after = mean(&level, rate, time + 0.5 * beat, time + 4.0 * beat);
+                let change = after / before.max(1e-9);
+                // Music starting from near nothing is an entry, not a lift.
+                let lift = if before < 0.15 * loud {
+                    0.0
+                } else {
+                    ((change - 1.0) / 0.5).clamp(0.0, 1.0)
+                };
                 moments.push(Moment {
                     time,
-                    pose: [0.72, 1.0],
-                    strength: (0.7 + 0.3 * strength) * intensity(time),
+                    pose: [lerp(0.72, 1.0, lift), 1.0],
+                    strength: ((0.7 + 0.3 * strength) * intensity(time)).max(lift)
+                        * change.clamp(0.3, 1.0),
                     label: "arrival",
-                    hold_beats: 1.5,
+                    hold_beats: lerp(1.5, 2.5, lift),
                     span: span_for(class_at(time + beat)),
                     frozen: false,
                 });
@@ -751,7 +767,7 @@ pub fn compile_ensemble(
         // for minutes). Verses in step: mirrored verses stood idle longest and
         // the user found them the worst of mirrored, ripple and unison.
         let formation = match class {
-            "percussive-open" => [Formation::Mirrored, Formation::Unison][n % 2],
+            "percussive-open" | "kick-led" => [Formation::Mirrored, Formation::Unison][n % 2],
             _ => Formation::Unison,
         };
         let short = end - start < 24.0 * beat && !formations.is_empty();
@@ -845,26 +861,49 @@ pub fn compile_ensemble(
             1.0
         } else {
             let index = ((t - data.musical_memory.beat_zero) / beat).max(0.0) as usize;
-            let since = hits
-                .partition_point(|h| *h <= t)
-                .checked_sub(1)
-                .map(|i| t - hits[i]);
-            let bump = since.map_or(0.0, |g| (-g / (0.35 * beat)).exp());
-            // Less so in a gentle passage.
-            lerp(
-                1.0,
-                0.3 + 1.9 * bump,
-                stabs[index.min(stabs.len() - 1)] * intensity(t),
-            )
+            // The surge stretches with the spacing of the leader's notes, so
+            // the pace averages the same whether they come every beat or every
+            // four (set on a song where they come about every beat; with
+            // sparse notes the hand idled at a third of its pace, then burst
+            // to catch up). The clock never runs ahead of the music, so a
+            // stretched surge is partly clipped: sparse notes surge less.
+            // Notes further apart than four beats leave the pace even.
+            // And one accent at a time: no surge within two beats of a moment
+            // (a surge under a flourish carried the hand at 1.8 m/s).
+            let accent = moments.iter().any(|m| (t - m.time).abs() < 2.0 * beat);
+            let at = hits.partition_point(|h| *h <= t);
+            match (at.checked_sub(1).map(|i| hits[i]), hits.get(at)) {
+                (Some(last), Some(&next)) if next - last <= 4.0 * beat && !accent => {
+                    let gap = ((next - last) / beat).max(0.9);
+                    let bump = (-(t - last) / (0.35 * beat * gap / 0.9)).exp();
+                    // Less so in a gentle passage.
+                    lerp(
+                        1.0,
+                        0.3 + 1.9 * bump,
+                        stabs[index.min(stabs.len() - 1)] * intensity(t),
+                    )
+                }
+                _ => 1.0,
+            }
         };
         let rate = if held {
             0.0
         } else {
-            f64::min(
-                pulse * if s < t { 1.15 } else { 1.0 },
-                // A pulse may exceed the cap by as much as it exceeds even pace.
-                HAND_SPEED_CAP * pulse.clamp(1.0, 1.5) / pace.max(1e-9),
-            )
+            // Calmer where the drums are out (the user: too fast in a break
+            // where most of the music had dropped away).
+            let drums = mean(
+                &sources[1].whole_track_activity,
+                rate,
+                t - 2.0 * beat,
+                t + 2.0 * beat,
+            );
+            let drive = lerp(0.65, 1.0, (drums / 0.08).clamp(0.0, 1.0));
+            drive
+                * f64::min(
+                    pulse * if s < t { 1.15 } else { 1.0 },
+                    // A pulse may exceed the cap by as much as it exceeds even pace.
+                    HAND_SPEED_CAP * pulse.clamp(1.0, 1.5) / pace.max(1e-9),
+                )
         };
         s = (s + rate * step).min(t + step);
     }
@@ -889,6 +928,27 @@ pub fn compile_ensemble(
         p[1] += 0.3 * swell_at(t)[1];
         p
     };
+    // A moment adds no more than 0.6 m/s to the hand's travel along its
+    // figure, so the two together stay near a surge's top speed: it takes as
+    // long as its travel needs (from the prepared pose to the arrival; a smooth
+    // blend peaks at 1.5 times its mean speed). Sharp flourishes threw the
+    // hand at 1.5 to 2.3 m/s, which the user saw as jerks on two songs.
+    for m in moments.iter_mut().filter(|m| !m.frozen) {
+        let base = waited(m.time);
+        let from = [
+            base[0],
+            base[1] - 0.2 * m.strength,
+            base[2] - 0.35 * m.strength,
+        ];
+        let to = [
+            base[0],
+            lerp(base[1], m.pose[0], m.strength),
+            lerp(base[2], m.pose[1], m.strength),
+        ];
+        let (a, b) = (place(from).0, place(to).0);
+        let travel = (0..3).map(|k| (a[k] - b[k]).powi(2)).sum::<f64>().sqrt();
+        m.span = m.span.max(1.5 * travel / (0.6 * beat));
+    }
     let hand = |t: f64| -> [f64; 3] {
         let mut p = waited(t);
         for m in &moments {
@@ -1378,11 +1438,15 @@ pub fn compile_ensemble(
     let mut tracks = Vec::with_capacity(dancers.len());
     for (id, arm) in dancers.into_iter().enumerate() {
         let mut knots = arm.knots;
+        let step = knots[1].time - knots[0].time;
         for i in 1..knots.len() - 1 {
             let span = knots[i + 1].time - knots[i - 1].time;
-            // An arrival stops dead: no tangent into a held pose.
+            // An arrival stops dead: no tangent into a held pose. Held means
+            // under 0.05 degrees per regular knot; the song's last knot can
+            // follow within milliseconds, and a moving joint cannot stop there.
+            let still = 0.05 * (knots[i + 1].time - knots[i].time) / step;
             let holds = (0..rig.channels.len()).all(|j| {
-                (knots[i + 1].joints_degrees[j] - knots[i].joints_degrees[j]).abs() < 0.05
+                (knots[i + 1].joints_degrees[j] - knots[i].joints_degrees[j]).abs() < still
             });
             knots[i].velocity_degrees_per_second = (0..rig.channels.len())
                 .map(|j| {
@@ -1731,11 +1795,13 @@ mod tests {
         };
         let (mut after, mut before) = (0.0, 0.0);
         for hit in [2.0, 3.0, 4.0, 5.0, 6.0] {
-            after += travel(hit + 0.05, hit + 0.3);
-            before += travel(hit - 0.3, hit - 0.05);
+            // Close either side of the hit: the figure's own pace varies
+            // tenfold over a second.
+            after += travel(hit + 0.03, hit + 0.18);
+            before += travel(hit - 0.2, hit - 0.05);
         }
         assert!(
-            after > 1.3 * before,
+            after > 1.1 * before,
             "after {after:.3} m, before {before:.3} m"
         );
         assert!(score.cues[0].reason.contains("leads keys"));

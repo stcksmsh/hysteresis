@@ -2135,3 +2135,117 @@ Open: the thresholds remain tuned on three
 songs; beat tracking (tempo map, grid refit) is outside the repo; "cannot fit
 tangents" on a wrong grid is uninvestigated; entering Mirrored from a wide
 heading is unsafe (dodged for short runs only).
+
+### Version 47: the user's review of three songs — 2026-10-06
+
+The user on version 46:
+- "Five years is generally OK, its a difficult song for this and for dancing
+  in general so its OK"
+- Instant Crush: "at 3:52 has a strange jerk also at 4:08-4:09, the 4:36
+  flourish is also sortof jerky"
+- Presence: "a really strange moment at ~0:24-0:26 and again at ~0:41 and
+  ~0:49 and ~1:00 (its also all labeled as percussive open, the only
+  percussive is kick drum on a simple slower pattern)"; "similar strange stuff"
+  at 1:13; after the "quasi drop/start" at 1:32 "really slow and low-energy"
+  until ~1:50, "label is bass-led now (the most prominent instrument there for
+  me is keys ...)"; "a jerk at 2:03/2:04"; "at 2:24 theyre too fast (but in the
+  like 10secs before/after it they actually look like theyre following the
+  flute being played)"; the next bass-led "low energy even though the main
+  instrument (some high keys/pluc/synth thing) is really nice and emotional
+  and has energy and could be followed"; at 2:55–3:00 "the spins fit it
+  nicely"; "3:06 is quite a rough stop/slowdown at once"; "3:17 is too fast,
+  most of the music dropped out so we should be slower right (and we know a
+  buildup and a drop is coming soon due to sidecar)"; "at ~3:29 it says vocal
+  led but no vocals exist"; "the buildup until ~3:52 is 'danced' well but it
+  doesnt pay off (they could RISE HIGH for it or smth, now they just continue
+  like nothing happened)"; after it "again `bass-led` even though an electric
+  guitar is the MAIN item"; "the ending is nice but at 4:26 they jitter into a
+  stop and then turn quickly again".
+
+Measured causes (`jolts.py`, `spans.py`, `look5.py`):
+- Instant Crush 3:52, 4:09, 4:36 and Presence 0:41, 0:49, 1:00, 1:13: sharp
+  flourishes; hand 1.5–2.3 m/s, 14–22 m/s². The 0.8 m/s cap is on the figure
+  clock; a moment's blend rode on top of it, and a surge under it added more.
+  The Instant Crush ones were in version 44 too.
+- Presence 0:24, 2:03, 2:24, 3:06, 3:17, low energy 1:32–1:50 and 2:31–2:55:
+  the stab surge. Its decay (0.35 beat) suits notes about a beat apart; with
+  sparse lead notes the pace sat at 0.3 for seconds, the clock fell behind,
+  then caught up at the cap (1.2 m/s, base at 160–185°/s).
+- 4:26: an arrival at a point where the music falls away, then catch-up.
+- 3:52: an arrival existed, with the same pose as any other.
+
+Changes:
+1. **Moment speed limit.** After the clock is built each moment's `span` is
+   widened so its blend adds at most 0.6 m/s (travel from the prepared pose to
+   the arrival, 1.5 × mean for a smooth blend). The arrival time stays exact;
+   the preparation starts earlier. No surge within two beats of a moment.
+2. **Surge stretched to the note spacing**: decay 0.35 beat × gap/0.9 for gaps
+   of 0.9 to 4 beats (average pace about 1 at any spacing), even pace where
+   the leader's notes are more than four beats apart. Because the clock never
+   runs ahead of the music, a stretched surge is partly clipped, so sparse
+   notes surge less than dense ones; letting the clock lead by half a beat
+   restored it but brought back 1.9 m/s flourishes on Instant Crush and was
+   reverted. The surge test now measures close either side of each hit with a
+   1.1 threshold (was 1.3 over windows a quarter second out, which fell where
+   the fixture's figure changes pace tenfold).
+3. **Arrivals have a direction**: level over the eight beats before against
+   the four after. Lift (rise of 50 % or more is full): pose elevation 0.72 →
+   1.0, hold 1.5 → 2.5 beats, strength at least the lift. Falling away:
+   strength × the ratio (floor 0.3). An entry from near silence is not a lift.
+4. **Calmer without drums**: the clock's rate × 0.65 where drum activity over
+   ±2 beats is nil (full from 0.08). The clock then lags and catches up at
+   15 % over the next section.
+5. **Class names** (same dances): `melody-led` = bass-led rule with the "other"
+   stem over 1.5 × the bass's power (motif BASS); `kick-led` = drums over 40 %
+   of the power but under the activity mark (motif PERC, formation as
+   percussive-open). The voice counts by activity only with 15 % of the "other"
+   stem's power beside it. **Not done:** the dance does not yet follow keys or
+   guitar any differently than before; the leader lane already drives surge
+   and swell in every class. The user's "could be followed" is open.
+6. **Abort fixed**: "cannot fit tangents" came from the tangent pass treating
+   a joint change under 0.05° between knots as a hold. The last knot sits at
+   the song's end, milliseconds after the grid's last, so a moving arm looked
+   held, its velocity was zeroed and no fit existed. Now 0.05° per regular
+   knot interval. It needed arms still moving at the last instant (Presence;
+   Five Years on its first, wrong grid). The error message now prints knot
+   times and velocities.
+
+Measured, version 46 → 47:
+
+| | Instant Crush | Five Years | Presence |
+|---|---|---|---|
+| jolts (any arm over 9 m/s²) | 7 → 5 | 5 → 2 | 13 → 15 |
+| kicks (per arm) | 36 → 26 | 25 → 10 | 66 → 76 |
+| top hand speed | 2.30 → 1.49 m/s | 1.26 → 1.22 | 2.60 → 1.73 |
+| peak hand acceleration | 20.0 → 19.1 m/s² | 22.7 → 10.4 | 21.7 → 21.4 |
+| closest implement gap | 11.2 → 13.0 cm | 14.1 → 17.5 | 13.2 → 12.9 |
+
+The user's moments (hand speed m/s, peak acceleration m/s², top base turn °/s):
+- Instant Crush 3:50–3:54: top 2.02, 20.0 → 1.2–1.5, 11; 4:07–4:11: top 2.30,
+  17.5 → 0.98, 4.4; 4:34–4:38: top 1.32, 14.3 → 1.04, 6.4.
+- Presence 0:23–0:27 turn 185 → 144, acceleration 8.5 → 4.2; 0:40–0:42 14.7 →
+  6.8; 1:00–1:02 21.7 → 7.8; 1:12–1:15 13.7 → 4.4; 1:32–1:50 mean speed 0.19
+  → 0.46, slow share 20 % → 6 %; 2:02–2:06 acceleration 6.2 → 2.9 (still
+  0.93 m/s mean: fast arcs); 2:22–2:26 top 1.73 → 0.65 (acceleration still 11);
+  2:31–2:55 mean 0.30 → 0.39, slow share 16 % → 6 %; 3:04–3:08 slow share 27 %
+  → 0; 3:15–3:20 mean 0.62 → 0.35, top 1.22 → 0.81; 4:24–4:29 top 1.68, 19.9,
+  turn 188 → 0.51, 1.7, 106.
+- Drops: hand height at 1:32 and 3:52 reaches 0.70 m (the top of the reach),
+  2:31 0.67 m. Instant Crush's chorus entries 0.61 → 0.66 m.
+
+Still jolting: Presence 0:48 (a flourish passed round as a ripple in the
+mirrored intro, 1.73 m/s), 1:56, 3:11 (flourishes passed round), and one
+four-arm event near 3:43 on Instant Crush (19 m/s², inter-arm braking). The
+jolt count moves by several with any change of heading: arms in unison brake
+for each other at geometry-dependent moments, and no change here addressed
+that mechanism.
+
+Presence classes now: kick-led 0:00–1:10 (Mirrored), textural to 1:32,
+melody-led and bass-led alternating 1:32–2:16 and 2:31–3:15 (the bass's share
+crosses the 1.5 mark; same dance), textural breaks, a 4 s vocal-led at 3:26
+(share 0.09 beside a lone synth: passes the 15 % test), kick-led 3:30–3:49,
+melody-led and bass-led to 4:23.
+
+Files: `hexagon-47.html`, `hexagon-47-full.mp4`, `five-years-hexagon(.html,
+-full.mp4)`, `presence-hexagon(.html, -full.mp4)`. New scratch: `jolts.py`,
+`spans.py`, `lv.py`. 139 CPU tests, clippy, fmt. Not reviewed.
