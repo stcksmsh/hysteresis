@@ -2060,3 +2060,78 @@ Files: `hexagon-45.html`, `hexagon-45-full.mp4`, `five-years-hexagon.html`,
 rule; the test fixture's stem levels now follow their activity), clippy, fmt.
 Not reviewed. Still open from before: the planner's "cannot fit tangents"
 failure on a wrong beat grid; the tempo map outside the repo.
+
+### Version 46: a third song, classes by share of the sound — 2026-10-05
+
+Version 45 was never shown to the user (its videos were recording when the
+third song arrived); 46 replaces it and its files were deleted.
+
+Third song: `~/Downloads/Justice_-_Presence_Official_Audio.wav` (4:31,
+instrumental, steady 130.0 bpm), slug `presence`, usual pipeline (`song.sh`).
+- **Grid 45 ms late.** `analyze.ts`'s causal beat tracker lags and
+  `dance_memory.py` fits its grid to those beats: strong drum onsets fell an
+  eighth of a beat before the grid through the whole song. `regrid.py` (scratch,
+  librosa) refits period and phase to strong drum onsets (0.46160 s, drum hits a
+  median 2 ms from a beat, 99 % within 30 ms) and replaces the sidecar's beats;
+  `songtail.sh` reruns the later steps. Mix onsets against the grid: median
+  46 → 9 ms. Instant Crush was not rechecked this way (its mix onsets sit 5 ms
+  from its grid). **Belongs in `dance_memory.py`**; not moved there.
+- **Phantom voice.** The voice stem holds under 2 % of the power but peaks
+  against itself, so two passages were vocal-led.
+- **Drum-led intro missed.** Drums carry 40–75 % of the power for 70 s at an
+  activity of 0.15–0.16, under the 0.17 mark: "textural", one slow sway.
+
+Changes to version 45:
+- `character` takes every stem's share of mean power (mean of squares; the
+  mean level squared under-counts drums). Sung = activity over 0.3 with a
+  share over 0.04, or a share over 0.14. Percussive-open = drum activity over
+  0.17 or drum share over 0.4, with no voice by activity or by share.
+- Contrast phrases for all four main classes (vocal-led ↔ percussive-open,
+  interlocked ↔ bass-led), still after about 128 beats.
+
+Classes now (video clock):
+- Instant Crush: as version 44 but 2:54–2:57 is percussive-open (was
+  textural) and the 3 s vocal-led blip in the last chorus merged.
+- Five Years: still to 0:09, percussive-open (drums alone) to 0:19, vocal-led
+  0:19–1:35 and 1:44–2:36 (sparse and bass-led for 9 s between), interlocked
+  2:36–4:18, percussive-open (drums alone) to 4:38. The patchwork of version
+  45 is gone.
+- Presence: percussive-open 0:00–1:10 (Mirrored), textural to 1:32, bass-led
+  1:32–2:16 and 2:31–3:15 with textural breaks, a 6 s "vocal-led" at 3:24 (share
+  0.09 in a drumless break; may be a voice-like synth), percussive-open
+  3:30–3:52, bass-led to 4:23.
+
+Measured (version 46):
+
+| | Instant Crush | Five Years | Presence |
+|---|---|---|---|
+| Unison / Mirrored | 314 s / 26 s | 284 s / 0 | 200 s / 70 s |
+| median hand speed | 0.28 m/s | 0.22 | 0.27 |
+| stalled | 2.7 % | 3.2 % | 1.0 % |
+| kicks (per arm) | 36 | 25 | 66 |
+| jolts (any arm over 9 m/s², `jolts.py`) | not counted | 5 | 13 |
+| closest implement gap | 11.2 cm | 14.1 | 13.2 |
+
+Five Years' largest jolt (22.7 m/s²) is the last frame of the song; the others
+are in the climax. Presence's are flourishes and arrivals. Instant Crush's
+mirror fell from 54 s to 26 s: the 18 s drum passage at 3:05 is the third
+percussive-open run now and alternates to Unison. Closest gap on Instant Crush
+fell from 12.8 to 11.2 cm (clearance 10).
+
+Files: `hexagon-46.html`, `hexagon-46-full.mp4`, `five-years-hexagon(.html,
+-full.mp4)`, `presence-hexagon(.html, -full.mp4)`; the version 44 "Five Years"
+video is `five-years-hexagon-44-full.mp4`. Scratch in
+`tracker-scratch/newsong/`: `song.sh`, `regrid.py`, `songtail.sh`, `phase.py`,
+`three.sh`, `jolts.py`, `acts.py`, `classes.py`, `look5.py`, and the tempo-map
+set (`beatmap.py`, `warp.py`, `song2.sh`, `songvideo.sh`). 139 CPU tests,
+clippy, fmt. Not reviewed.
+
+The user's four moments on "Five Years", version 44 → 46: 0:10–0:17 three
+arms flick and stop → all six at 0.1–0.7 m/s, peak acceleration 1.4; 0:45
+0.70 m/s at 15.5 m/s² → 0.04–0.23 at 1.0; 1:31–1:35 18.2 m/s² and a 187°/s
+turn → 1.6 and 66°/s; 2:22–2:25 0.04–0.07 m/s → 0.14–0.35.
+
+Open: the thresholds remain tuned on three
+songs; beat tracking (tempo map, grid refit) is outside the repo; "cannot fit
+tangents" on a wrong grid is uninvestigated; entering Mirrored from a wide
+heading is unsafe (dodged for short runs only).

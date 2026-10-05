@@ -9,10 +9,11 @@ chosen automatically from offline sidecars, work inside each other's reach
 without colliding, and are lit by a projector showing the visualizer. The
 single arm was approved at version 32 and the ensemble accepted at version 39.
 Version 44 was accepted on Instant Crush ("Its nice now"). A second song,
-"Five Years" (live tempo, wide dynamics), is in review: version 45 changed the
-planner for it (intensity, class rule, no resting formations, contrast phrase)
-and awaits the user's verdict on both songs. Its tempo map lives outside the
-repo; see the last `DANCE_HANDOFF.md` entries.
+"Five Years" (live tempo, wide dynamics), and a third, "Presence" (Justice,
+instrumental), followed: version 46 changed the planner for them (intensity,
+class rule by share of the sound, no resting formations, contrast phrases) and
+awaits the user's verdict on all three songs. Tempo map and grid refit live
+outside the repo; see the last `DANCE_HANDOFF.md` entries.
 Open: overlap in the mirrored formation, and red zones as a general tool for
 keeping arms off equipment (shapes wait for the user's answer).
 The only dance path is `hyst_compile::director::figures::compile_ensemble`
@@ -1486,3 +1487,12 @@ by its share of the sound and a loud sung passage is "interlocked"; drop-out
 and pairs are deleted, everyone dances; long vocal-led and interlocked runs
 play a contrasting phrase after about 128 beats; runs under 24 beats keep the
 formation before them. Instant Crush measured nearly unchanged. Not reviewed.
+
+### Third song and version 46 — 2026-10-05
+
+"Presence" (Justice), instrumental and steady. Its grid was 45 ms late (the
+base analysis's tracker lags; refit to drum hits by a scratch script). The
+class rule now counts voice and drums by their share of mean power, which
+removes a phantom voice on the instrumental, reads its drum-led intro and
+clears the label patchwork on "Five Years". Every class but the calm ones has
+a contrast phrase. Version 45 was never shown; 46 replaces it. Not reviewed.

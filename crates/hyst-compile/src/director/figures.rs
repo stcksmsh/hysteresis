@@ -300,10 +300,15 @@ pub fn compile_ensemble(
         } else {
             mean(&data.rms_envelope, data.envelope_rate, start, end)
         };
-        let power = |s: &&Source| mean(&s.absolute_rms, rate, start, end).powi(2);
-        let voice = power(&sources[2]) / sources.iter().map(power).sum::<f64>().max(1e-12);
+        // Mean power, not the mean level squared: drums are short spikes.
+        let power = |s: &&Source| {
+            let squares: Vec<f64> = s.absolute_rms.iter().map(|v| v * v).collect();
+            mean(&squares, rate, start, end)
+        };
+        let total = sources.iter().map(power).sum::<f64>().max(1e-12);
+        let share = std::array::from_fn(|i| power(&sources[i]) / total);
         let loudness = mean(&level, rate, start, end) / loud;
-        (character(activity, rms, voice, loudness).0, activity)
+        (character(activity, rms, share, loudness).0, activity)
     };
     // Runs: neighbouring spans of one class dance one continuous sequence.
     let mut runs: Vec<(f64, f64, &str)> = Vec::new();
@@ -508,7 +513,9 @@ pub fn compile_ensemble(
         // contrasting one once, at its own size, and so on.
         let contrast = match class {
             "vocal-led" => motif("percussive-open").0,
+            "percussive-open" => motif("vocal-led").0,
             "interlocked" => motif("bass-led").0,
+            "bass-led" => motif("interlocked").0,
             _ => &[],
         };
         let length: f64 = sequence.iter().map(|s| s.2).sum();

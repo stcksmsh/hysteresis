@@ -317,13 +317,20 @@ fn phrase_at(phrases: &[Phrase], time: f64) -> &Phrase {
     &phrases[i]
 }
 
-/// `a`: each stem's level against its own loudest. `voice`: the voice's share
+/// `a`: each stem's level against its own loudest. `share`: each stem's share
 /// of the sound's power. `loudness`: the level against the song's loud
-/// passages. A voice that ranges from soft to screaming reads as absent by `a`
-/// while it carries the verse, and a climax whose bass is buried is still the
-/// song at full strength.
-fn character(a: [f64; 4], rms: f64, voice: f64, loudness: f64) -> (&'static str, &'static str) {
-    let sung = a[2] > 0.3 || voice > 0.14;
+/// passages. By `a` alone a voice that ranges from soft to screaming reads as
+/// absent while it carries the verse, the near-empty voice stem of an
+/// instrumental reads as singing, and drums that carry an intro can miss
+/// their mark; and a climax whose bass is buried is still the song at full
+/// strength.
+fn character(
+    a: [f64; 4],
+    rms: f64,
+    share: [f64; 4],
+    loudness: f64,
+) -> (&'static str, &'static str) {
+    let sung = a[2] > 0.3 && share[2] > 0.04 || share[2] > 0.14;
     if rms < 0.005 {
         ("silence", "breathe")
     } else if a[0] > 0.43 && a[2] > 0.35 || sung && loudness > 0.7 {
@@ -332,7 +339,7 @@ fn character(a: [f64; 4], rms: f64, voice: f64, loudness: f64) -> (&'static str,
         ("vocal-led", "canon")
     } else if a[0] > 0.43 {
         ("bass-led", "unison")
-    } else if a[1] > 0.17 && a[2] < 0.15 {
+    } else if (a[1] > 0.17 || share[1] > 0.4) && (a[2] < 0.15 || share[2] < 0.04) {
         ("percussive-open", "wave")
     } else if a[3] > 0.3 {
         ("textural", "scatter")
@@ -490,12 +497,27 @@ mod tests {
     fn a_soft_voice_leads_and_a_loud_sung_passage_is_the_song_at_full() {
         // "Five Years": steady bass, a voice far below its own loudest.
         let verse = [0.7, 0.15, 0.25, 0.1];
-        assert_eq!(super::character(verse, 0.1, 0.05, 0.4).0, "bass-led");
-        assert_eq!(super::character(verse, 0.1, 0.45, 0.4).0, "vocal-led");
+        let voice = |v: f64| [0.2, 0.2, v, 0.6 - v];
+        assert_eq!(super::character(verse, 0.1, voice(0.05), 0.4).0, "bass-led");
+        assert_eq!(
+            super::character(verse, 0.1, voice(0.45), 0.4).0,
+            "vocal-led"
+        );
         // Its climax: the bass buried, everything loud.
         let climax = [0.3, 0.25, 0.55, 0.8];
-        assert_eq!(super::character(climax, 0.2, 0.3, 0.6).0, "vocal-led");
-        assert_eq!(super::character(climax, 0.2, 0.3, 0.9).0, "interlocked");
+        assert_eq!(
+            super::character(climax, 0.2, voice(0.3), 0.6).0,
+            "vocal-led"
+        );
+        assert_eq!(
+            super::character(climax, 0.2, voice(0.3), 0.9).0,
+            "interlocked"
+        );
+        // "Presence", an instrumental: the voice stem is nearly empty but
+        // peaks against itself, and the drums carry the intro.
+        let intro = [0.0, 0.16, 0.75, 0.5];
+        let class = super::character(intro, 0.1, [0.0, 0.6, 0.01, 0.39], 0.4).0;
+        assert_eq!(class, "percussive-open");
     }
 
     pub(super) fn fixture(vocal: f64, bass: f64) -> String {
