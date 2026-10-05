@@ -8,8 +8,9 @@ facing its centre) that hold mirrored objects, dance in synchronized formations
 chosen automatically from offline sidecars, work inside each other's reach
 without colliding, and are lit by a projector showing the visualizer. The
 single arm was approved at version 32 and the ensemble accepted at version 39.
-Next, chosen by the user: arms overlapping in every formation, not only unison,
-and red zones as a general tool for keeping arms off equipment.
+Version 40 (canon and ripple arms inside each other's reach) awaits review.
+Open: overlap in the mirrored formation, and red zones as a general tool for
+keeping arms off equipment (shapes wait for the user's answer).
 The only dance path is `hyst_compile::director::figures::compile_ensemble`
 (`compile_figures` is its one-arm case), previewed by `hyst-previz`'s
 `ensemble_preview`; all older dance planners were deleted on the user's
@@ -1427,3 +1428,13 @@ on the beat, and the user accepted the six-arm ensemble ("It's good now").
 The restart prompt is rewritten for the ensemble. Next task, the user's
 choice: overlap of the arms' reaches in every formation, and general red zones
 against equipment.
+
+### Out-of-step arms share space — 2026-10-05
+
+Version 40, not yet reviewed. The "own sector" limit of canon, ripple and
+mirrored now applies only where arms posed alone would come within the
+clearance, half a beat either side. Ripple is never limited, canon about a
+tenth of the time; hands past half way to a neighbour 0 % → 7–9 % in those
+formations, with fewer stalls and kicks than version 39. Mirrored cannot
+overlap by its geometry. Nothing is retimed. A test now covers an ensemble
+against a box; red-zone shapes wait for the user's answer on the equipment.

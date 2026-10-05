@@ -11,7 +11,7 @@ earlier blind-test history). Read `crates/hyst-compile/src/director/figures.rs`
 in full (`compile_ensemble` is the entry; `compile_figures` is its one-arm
 case) and skim `director.rs`, `ensemble.rs`, `crates/hyst-previz/src/ensemble.html`.
 Run the checks under "Commands" and export the hexagon: it must be
-byte-identical to `hexagon-39.html`. Report in a few lines what you understand
+byte-identical to `hexagon-40.html`. Report in a few lines what you understand
 and what you will do first, then start; do not wait for approval unless you
 asked a blocking question.
 
@@ -24,23 +24,25 @@ equipment or whatever, it's supposed to be generalized right?"
 Two parts:
 
 1. **Arms working inside each other's space in every formation, not only
-   unison.** Today canon, ripple and mirrored keep each hand on its own side of
-   the line half way to its neighbours (`shared` in `compile_ensemble`),
-   because out-of-step neighbours reached for the same place and the
-   cross-check held them still (four arms stood for 8 s). The user's "wow" is
-   "dynamic red zones overlapping" as "technical difficulty". Getting it needs
-   paths whose timing interleaves, not a clamp and not blocking. Not started;
-   no approach is chosen. Arms that are stopped or stutter are a defect the
-   user spots at once (see version 38).
+   unison.** Version 40 did the first step and is **not yet reviewed**
+   (`hexagon-40-full.mp4` sent): the "own sector" limit applies only where
+   arms posed alone would come within the clearance (`apart` in
+   `compile_ensemble`), half a beat either side. Ripple is never limited,
+   canon 12–14 % of its long runs. Left: Mirrored cannot overlap (mirror
+   neighbours meet in the plane between them at the same moment; it needs a
+   delay or one arm passing over the other, the user's choice, asked); and
+   nothing is retimed, so a canon still keeps to its sectors for a few
+   seconds at a time. Arms that are stopped or stutter are a defect the user
+   spots at once (see version 38).
 2. **Red zones as a general tool**: the arms must be kept off equipment or
    anything else in the room. What exists: fixed zones are axis-aligned boxes
    in the world (`Zone`, `--zone x0,y0,z0,x1,y1,z1`, repeatable); every arm of
    an ensemble respects them through `Obstacles`; the implement counts by its
    bounding radius; other arms count as moving zones with a tunable
-   `--clearance`. Not known: which shapes the user needs (boxes only, or
-   cylinders, tilted boxes, a wall), and whether zones may change over time.
-   A test covers one arm against a box; none covers an ensemble against a box.
-   Ask the user what equipment they have in mind before inventing shapes.
+   `--clearance`. Tests cover one arm and two arms against a box. Not known:
+   which shapes the user needs (boxes only, or cylinders, tilted boxes, a
+   wall), and whether zones may change over time. The user was asked what
+   equipment they have in mind; do not invent shapes before they answer.
 
 ## What the user wants (their words, settled)
 
@@ -107,7 +109,8 @@ leader's phrase starts, figures picked by the leader's pitch step, accents from
 the second lane, arriving on the stab. Lesson: small posture pulses and small
 timing shifts are invisible; structural changes read.
 
-Ensemble record. Accepted at version 39 ("It's good now"). Rejected on the
+Ensemble record. Accepted at version 39 ("It's good now"); version 40 awaits
+review. Rejected on the
 way: resting formations (one by one, long pairs), a 1.1 m hexagon, a ripple
 whose end arms stalled and raced, a draw-order bug. "Doesn't follow music
 enough, needs to be more on point" was said of version 38 and not explained;
@@ -144,7 +147,8 @@ in beats and dancing or resting; the arm's path is the single-arm path at its
 own delayed time, bearing times its side, eased toward a rest pose when it
 sits out. Delays run evenly across each move. `shared` then applies two
 limits that are the same for every arm: no hand enters a circle at the
-layout's centre; and, except in Unison, each hand stays in its own sector.
+layout's centre; and each hand stays in its own sector where out-of-step arms,
+posed alone, would come within the clearance (`apart`).
 Arms are solved in order at each knot; `Obstacles` makes fixed zones and the
 other arms' current poses things to keep clear of, in the solver, the
 follower's braking and a hard check. One arm alone bypasses all of it.
@@ -161,10 +165,10 @@ node $D/record-ensemble.cjs $D/OUT.html $D/instant-crush.m4a $D/clip.mp4 START S
 ```
 Without `--ring` it plans one arm (`song-figures-34.html` holds the same
 planned motion; the page script has changed since, so compare the data, not
-the file). With `--ring 6,0.8` it must reproduce `hexagon-39.html` exactly.
+the file). With `--ring 6,0.8` it must reproduce `hexagon-40.html` exactly.
 
-Checks: `cargo test --workspace --exclude hyst-render` (136 pass; the six-arm
-test takes about 10 s), clippy `-D warnings` on hyst-compile/-output/-previz/
+Checks: `cargo test --workspace --exclude hyst-render` (138 pass; the six-arm
+tests take about 15 s each), clippy `-D warnings` on hyst-compile/-output/-previz/
 -cli, `cargo fmt --all --check`, `node crates/hyst-previz/tests/ensemble.cjs`,
 `cd scripts && python3 -m unittest test_dance_notes`. No hyst-render tests (GPU).
 The recorder draws the canvas only, max 40 s per call, 30 fps. `$D` is outside
@@ -180,18 +184,19 @@ Helpers outside git:
   approach between arms), `ensstat.py` (formation and speed per section),
   `kicks.py` (sharp accelerations and standstills per arm), `stut.py FILE T0 T1`
   and `peak.py FILE T0 T1 ARM` (one window in detail), `overlap.py` (how much
-  arms share space), `who.py FILE T…` (which parts are closest), `hexreview.sh
+  arms share space), `byform.py` (the same per formation, with stalls and
+  kicks), `when.py` (clock times of out-of-step overlap), `who.py FILE T…` (which parts are closest), `hexreview.sh
   SOURCE.html OUT.mp4 [CRF]` (whole song with a clock), `mirror2.py` (where the
   implement throws the projector's light). Paths inside point at that folder.
 Environments under `/secondary/hyst-env`; root disk is nearly full.
 
 ## Known weak points
 
-- Ensemble: overlap only in unison (the task above). Right of way between
+- Ensemble: no overlap in Mirrored; canon limited for seconds at a time (the
+  task above). Six arms compile in about 16 s. Right of way between
   arms is by arm index. The formation table is an agent's guess; the unison
-  from 3:33 to 5:23 is long; "complements" is undefined. Arm 0 has one
-  11 m/s² kick at 187.9 s (shoulder at its limit). Arms 4 and 5 have a few
-  short standstills, cause not looked for. A ring under about 0.7 m fails
+  from 3:33 to 5:23 is long; "complements" is undefined. Version 40 removed the 187.9 s kick and the
+  short standstills of version 39 (arm 5 keeps one). A ring under about 0.7 m fails
   (`fit_tangents` or the start poses). The implement is a bounding sphere and
   is not checked against its own arm. Hexagon radius 0.8 m, projector height
   2.5 m and the ball's 8 cm radius are assumptions.

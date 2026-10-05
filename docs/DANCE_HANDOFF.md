@@ -1698,3 +1698,71 @@ in every formation, and red zones as a general tool against equipment. Nothing
 of either is started. The measuring and recording scripts of this session are
 saved outside git in `$D/tracker-scratch/ensemble/`. A hexagon export from the
 current tree is byte-identical to `hexagon-39.html`. Tree clean, branch pushed.
+
+### Version 40: out-of-step arms share space — 2026-10-05
+
+Task 1 of the restart prompt (overlap outside unison). Not yet reviewed by the
+user; `hexagon-40-full.mp4` was sent.
+
+Measured first, on the 0.8 m hexagon. With the "own sector" limit switched off
+entirely, canon and ripple mostly work: hands go past half way to a neighbour
+14.6 % (canon) and 6.7 % (ripple) of arm-time, against 15.8 % in unison. The
+cost was local: arms stood still 9 % of the canon, and the mirrored verse
+jammed (34 % still, then all six stopped from 175 to 185 s). So out-of-step
+arms rarely want the same place; the version 37 limit was on all the time to
+cover a few seconds.
+
+- Rule (`apart` in `compile_ensemble`): before the real solve, each arm is
+  posed alone along its unlimited path at every second knot. Where two arms'
+  checked points come within the clearance (and the formation is not Unison),
+  every hand keeps to its own sector from half a beat before to half a beat
+  after, eased as before. Elsewhere no sector limit. The limit is still the
+  same for all arms at once, so the picture stays symmetric. The centre circle
+  is unchanged. `shared` now takes the limit's weight; the per-formation flag
+  is gone.
+- Margin and window were swept. Wider (10 cm, two beats): less shared space,
+  no fewer stalls. Narrower than the clearance: the cross-check stops arms
+  (1.1 % still in canon). Kept: the clearance itself, half a beat.
+- Limit active, share of each run: ripples 0 %; canons 12 %, 1 %, 1 %, 14 %;
+  mirrored 68 % and 97 %.
+
+| per formation | past half way, v39 | v40 | still, v39 | v40 |
+|---|---|---|---|---|
+| Unison | 15.5 % | 15.7 % | 1.4 % | 1.4 % |
+| Ripple | 0 % | 6.7 % | 0.1 % | 0.1 % |
+| Canon | 0 % | 9.0 % | 1.4 % | 0.1 % |
+| Mirrored | 0 % | 0 % | 0.2 % | 0.1 % |
+
+Whole song: hands nearer a neighbour's base than their own 6 % → 10 % of
+arm-time; kicks over 9 m/s² 59 → 44; standstills over 0.3 s per arm 1–2 → 0
+(arm 5: 1); closest implement surface to another arm 13.4 → 13.0 cm at 10 cm
+clearance; closest hand centres 34 → 29 cm. One arm alone is byte-identical to
+the tree before. Six arms compile in about 16 s (was 12 s): the lone posing is
+the extra.
+
+**Mirrored cannot share space as it is.** Mirror neighbours are images of each
+other in the plane between them, so two arms that cross it meet in it, at the
+same moment. Overlap there needs a different formation (a mirror with a delay,
+or one arm passing over the other); that is an artistic choice, put to the
+user, not built.
+
+**Not what the restart prompt asked for in one respect.** It said overlap
+"needs paths whose timing interleaves, not a clamp". Version 40 does not
+retime anything: it found that the existing canon and ripple timing already
+interleaves most of the time, and keeps the old clamp for the seconds where it
+does not. Canon is still limited 12–14 % of its two long runs. Retiming those
+moments (a different step for that move) is not tried.
+
+Tests: `arms_out_of_step_share_space_without_stopping` (a six-arm ripple:
+hands cross half way, no arm stands, implements stay apart; it fails with the
+limit always on) and `every_arm_of_an_ensemble_stays_out_of_a_red_zone` (two
+arms against a box; this closes the test gap of task 2). 138 CPU tests, clippy,
+fmt, `ensemble.cjs` pass.
+
+Task 2 (red zones against equipment) is otherwise not started: the user has
+not said what the equipment is. Question put to them: which things (projector
+stand, speakers, a wall, people's walkway), so shapes are not invented.
+
+New helpers in `$D/tracker-scratch/ensemble/`: `byform.py FILE` (per formation:
+past half way, speed, still, kicks, closest), `when.py FILE` (clock times where
+two or more out-of-step hands are past half way).
