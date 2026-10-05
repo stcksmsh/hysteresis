@@ -1686,3 +1686,15 @@ which reading of "more on point" they had meant, so treat that question as
 closed by this verdict but not as answered: do not add ensemble behaviour for
 it unless they raise it again. The six-arm ensemble on a 0.8 m hexagon is
 accepted for now as it stands in version 39.
+
+### Handover — 2026-10-05
+
+Asked what comes next, the user chose overlap outside unison ("1. is most
+important, we want to be able to make red zones so that it doesn't hit
+equipment or whatever, it's supposed to be generalized right?") and asked for
+a handoff to a fresh session. `docs/DANCE_RESTART_PROMPT.md` is rewritten for
+the ensemble and states that task in two parts: arms inside each other's reach
+in every formation, and red zones as a general tool against equipment. Nothing
+of either is started. The measuring and recording scripts of this session are
+saved outside git in `$D/tracker-scratch/ensemble/`. A hexagon export from the
+current tree is byte-identical to `hexagon-39.html`. Tree clean, branch pushed.

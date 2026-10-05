@@ -1,16 +1,21 @@
 # AGENTS.md — Hysteresis (native Rust rewrite)
 
-## Current user priority — 2026-10-04 single-arm figure dance
+## Current user priority — 2026-10-05 six-arm mirror ensemble
 
 Read `docs/DANCE_RESTART_PROMPT.md` first (branch `keys-decide`), then the last entries of
-`docs/DANCE_HANDOFF.md`. Goal: one 3D arm that dances beautifully to the song,
-planned automatically from offline sidecars, executable on real servo hardware.
-Many arms and projection come later. The base rotates a continuous 360°.
-The only dance path is `hyst_compile::director::figures::compile_figures`,
-previewed by `hyst-previz`'s `ensemble_preview`; all older dance planners were
-deleted on the user's decision (kept in history at branch `dance-checkpoint`).
-The user reviews short clips by eye; unverified layers are settled by blind
-ablation. Human timings in `scripts/instant_crush.acceptance.json` are
+`docs/DANCE_HANDOFF.md`. Goal: several servo arms (target six, on a hexagon,
+facing its centre) that hold mirrored objects, dance in synchronized formations
+chosen automatically from offline sidecars, work inside each other's reach
+without colliding, and are lit by a projector showing the visualizer. The
+single arm was approved at version 32 and the ensemble accepted at version 39.
+Next, chosen by the user: arms overlapping in every formation, not only unison,
+and red zones as a general tool for keeping arms off equipment.
+The only dance path is `hyst_compile::director::figures::compile_ensemble`
+(`compile_figures` is its one-arm case), previewed by `hyst-previz`'s
+`ensemble_preview`; all older dance planners were deleted on the user's
+decision (kept in history at branch `dance-checkpoint`). The user reviews by
+eye: blind side-by-sides for single-arm motion, whole-song videos with a clock
+for the ensemble. Human timings in `scripts/instant_crush.acceptance.json` are
 validation-only. Frozen `src/` and `tools/` remain read-only.
 
 Older dance entries in §5 below describe deleted code and rejected directions;
@@ -1414,3 +1419,11 @@ ring; Ripple spreads from one arm both ways to the opposite arm and comes back
 on the next move. Arms now part freely after meeting, and every formation but
 unison keeps each hand on its own side of the line to its neighbours, so
 overlapping reaches happen in unison only.
+
+### Ensemble accepted; handover — 2026-10-05
+
+Version 39: the preview draws all arms far to near together, canon delays fall
+on the beat, and the user accepted the six-arm ensemble ("It's good now").
+The restart prompt is rewritten for the ensemble. Next task, the user's
+choice: overlap of the arms' reaches in every formation, and general red zones
+against equipment.
