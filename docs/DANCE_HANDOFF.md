@@ -1982,3 +1982,81 @@ Instant Crush's (0.15 against 0.29 m/s).
 If songs with a live tempo are to be supported properly: the tempo map belongs
 in the sidecar and in score playback (page, `ChoreographyOutput`), and the
 beat tracker in `scripts/`. Not built; waits for the user's verdict.
+
+### Version 45: the planner meets a quiet, dynamic song — 2026-10-05
+
+The user on the first "Five Years" video (version 44 planner):
+- "The arms only start moving at 0:15, then 3 of them flick, then they stop
+  again for a little while"
+- "0:45 is REALLY jerky, too too fast, as if it doesnt even know the
+  tempo/energy/emotion of the song, like its raving"
+- "1:31-1:34 is EXTREMELY jerky, especially the lowest arm at the end, the
+  spin afterwards is also WAAAY to fast"
+- "2:22 to 2:25 is almost no movement"
+- "most of the song says `bass-led` even though it isnt, at least it catches
+  `vocal led` well, but if its `vocal led` for long enough it seems to get a
+  bit 'boring'?"
+
+Measured causes (video clock; `look5.py`, `acts.py`, `classes.py` in
+`tracker-scratch/newsong/`):
+- 0:15, 0:45, 1:31: each a **flourish in its sharp form** (hand 0.7–1.1 m/s,
+  acceleration 15–18 m/s²). The planner chose sharp wherever the lead lane
+  plays separated notes, whatever the loudness. 0:15 was danced by three arms
+  (DropOut); the "spin" at 1:34 was three arms swinging to their rest pose at
+  187°/s as a DropOut run began.
+- 2:22–2:25: hands at 0.04–0.07 m/s; partly the stab surge idling between
+  sparse stabs. Now 0.09–0.23 m/s; still the slowest spot, cause not isolated.
+- Labels: `wholeTrackActivity` is each stem against its own loudest. The voice
+  goes from soft to screaming, so the verses read as voiceless and the steady
+  bass won, though the voice carried 40–55 % of the power and the bass under
+  20 %. The climax (2:36–4:18) was vocal-led (reach, sway for 107 s) because
+  its bass is buried.
+
+Changes (`figures.rs`, `director.rs`):
+1. `intensity(t)`: stem power summed, mean over ±4 beats, against half the
+   song's 90th percentile, capped at 1. Below 0.75 a flourish is soft; arrival
+   strength and the surge's depth are multiplied by it. Instant Crush is at 1
+   nearly throughout (verses 0.55–0.66 of the 90th percentile, choruses 0.8).
+2. `character` takes the voice's share of power and the loudness: sung =
+   activity over 0.3 or share over 0.14; sung and louder than 0.7 of the 90th
+   percentile is "interlocked". **Fragile by construction:** a song with flat
+   dynamics would make every sung passage interlocked; thresholds sit between
+   Instant Crush's verse (0.66) and chorus (0.73).
+3. `Formation::Pairs` and `DropOut` deleted; every class but percussive-open
+   is Unison. `part` still returns a dancing flag, now always 1; the resting
+   pose code behind it is unused and could go.
+4. A vocal-led or interlocked run plays the percussive-open or bass-led phrase
+   once after about 128 beats of its own, and again. At 64 beats it changed
+   Instant Crush's verses, and the different heading into the first chorus
+   brought whole-ensemble kicks (45 → 64), so 128, which leaves Instant Crush's
+   verses and all but its last chorus alone. On "Five Years" this gives one
+   contrast in the climax; the boredom fix there is mostly the class change.
+5. A run under 24 beats (was 8) keeps the formation before it: the ten-second
+   mirrored passage at 4:19 entered from a turning chorus, neighbours met,
+   braked at 20 m/s² and stood for two seconds. **A dodge, not a fix:** entering
+   Mirrored from a wide heading is still unsafe for longer runs.
+
+Measured:
+
+| | Five Years, 44 | Five Years, 45 | Instant Crush, 44 | Instant Crush, 45 |
+|---|---|---|---|---|
+| arms resting (DropOut, Pairs) | 80 s | 0 | 9 s | 0 |
+| kicks | 24 | 14 | 45 | 41 |
+| peak hand acceleration | 22.8 m/s² | 11.7 | 23.0 | 23.0 |
+| fastest base turn | 199°/s | 150 | 190 | 188 |
+| median hand speed | 0.15 m/s | 0.21 | 0.29 | 0.27 |
+| idle | n/a | n/a | 20 s | 19 s |
+| closest implement gap | 13.9 cm | 13.9 | 13.0 | 12.8 |
+
+"Five Years" classes now: sparse 0:09–0:30, bass-led to 0:40, vocal-led
+0:40–1:35, a patchwork of sparse, bass-led, vocal-led and textural 1:35–2:36
+(runs of 3–15 s, each with an arrival; **not fixed**), interlocked 2:36–4:18.
+Instant Crush's classes are the same but for one 3 s vocal-led blip inside the
+last chorus that merged.
+
+Files: `hexagon-45.html`, `hexagon-45-full.mp4`, `five-years-hexagon.html`,
+`five-years-hexagon-full.mp4` (the version 44 video kept as
+`five-years-hexagon-44-full.mp4`). 139 CPU tests (one new, for the class
+rule; the test fixture's stem levels now follow their activity), clippy, fmt.
+Not reviewed. Still open from before: the planner's "cannot fit tangents"
+failure on a wrong beat grid; the tempo map outside the repo.

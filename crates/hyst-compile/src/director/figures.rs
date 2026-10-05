@@ -172,31 +172,18 @@ enum Formation {
     /// arm opposite (1, then 2 and 6, then 3 and 5, then 4); the next move
     /// starts there and comes back.
     Ripple,
-    /// Opposite arms pair up; the pairs take turns of eight beats.
-    Pairs,
-    /// Every second arm sits out.
-    DropOut,
 }
 
 impl Formation {
-    /// For arm `a` of `count`, `beats` into the run, during the song's
+    /// For arm `a` of `count`, during the song's
     /// `index`-th move, which lasts `length` beats: (side: 1 as planned, -1
     /// mirrored; delay in beats; 1 dancing or 0 resting).
-    fn part(
-        self,
-        a: usize,
-        count: usize,
-        beats: f64,
-        index: usize,
-        length: f64,
-    ) -> (f64, f64, f64) {
+    fn part(self, a: usize, count: usize, index: usize, length: f64) -> (f64, f64, f64) {
         // About a sixth of the move per step (the user: half a second to a
         // second for a move of three), less where more arms would overrun
         // the move; in whole beats, so a late arm still lands on the beat.
         let step = (length / (count as f64).max(6.0)).round().max(1.0);
         let odd = a % 2 == 1;
-        let turn = |every: f64, groups: usize| (beats / every) as usize % groups.max(1);
-        let on = |dancing: bool| if dancing { 1.0 } else { 0.0 };
         match self {
             Self::Unison => (1.0, 0.0, 1.0),
             Self::Mirrored => (if odd { -1.0 } else { 1.0 }, 0.0, 1.0),
@@ -210,11 +197,6 @@ impl Formation {
                 // doubled every accent's acceleration and read as a stutter.
                 (1.0, rank as f64 * 0.5, 1.0)
             }
-            Self::Pairs => {
-                let groups = (count / 2).max(1);
-                (1.0, 0.0, on(a % groups == turn(8.0, groups)))
-            }
-            Self::DropOut => (1.0, 0.0, on(!odd)),
         }
     }
 }
@@ -272,6 +254,23 @@ pub fn compile_ensemble(
     let rate = data.stem_interpretation.envelope_rate;
     let sources: [&Source; 4] =
         std::array::from_fn(|i| &data.stem_interpretation.sources[SOURCES[i]]);
+    // How loud the music is round a time against the song's own loud passages:
+    // 1 from half their level up, less in a gentle passage. A song with a wide
+    // dynamic range ("Five Years") was danced as hard in its quiet opening as
+    // in its climax, which the user called raving.
+    let frames = sources.iter().map(|s| s.absolute_rms.len()).min().unwrap();
+    let level: Vec<f64> = (0..frames)
+        .map(|i| {
+            let power = sources.iter().map(|s| s.absolute_rms[i].powi(2));
+            power.sum::<f64>().sqrt()
+        })
+        .collect();
+    let mut sorted = level.clone();
+    sorted.sort_by(f64::total_cmp);
+    let loud = sorted[sorted.len() * 9 / 10].max(1e-9);
+    let intensity = |t: f64| -> f64 {
+        (mean(&level, rate, t - 4.0 * beat, t + 4.0 * beat) / (0.5 * loud)).min(1.0)
+    };
 
     // Measured transitions, strongest first, at least eight beats apart.
     let mut arrivals: Vec<(f64, f64)> = Vec::new();
@@ -301,7 +300,10 @@ pub fn compile_ensemble(
         } else {
             mean(&data.rms_envelope, data.envelope_rate, start, end)
         };
-        (character(activity, rms).0, activity)
+        let power = |s: &&Source| mean(&s.absolute_rms, rate, start, end).powi(2);
+        let voice = power(&sources[2]) / sources.iter().map(power).sum::<f64>().max(1e-12);
+        let loudness = mean(&level, rate, start, end) / loud;
+        (character(activity, rms, voice, loudness).0, activity)
     };
     // Runs: neighbouring spans of one class dance one continuous sequence.
     let mut runs: Vec<(f64, f64, &str)> = Vec::new();
@@ -501,13 +503,30 @@ pub fn compile_ensemble(
             way = -way;
         }
         chosen.push((start, first_dir, class));
+        // A long run would repeat one short phrase for minutes (the user:
+        // "boring"). After about 128 beats of its own phrase it plays a
+        // contrasting one once, at its own size, and so on.
+        let contrast = match class {
+            "vocal-led" => motif("percussive-open").0,
+            "interlocked" => motif("bass-led").0,
+            _ => &[],
+        };
+        let length: f64 = sequence.iter().map(|s| s.2).sum();
+        let (own, phrases) = if contrast.is_empty() {
+            (1, 1)
+        } else {
+            let own = (128.0 / length).ceil() as usize;
+            (own, own + 1)
+        };
+        let phrase = [sequence.repeat(own).as_slice(), contrast].concat();
         let mut t = start;
-        for (k, &(name, shape, beats, step_dir)) in sequence.iter().cycle().enumerate() {
+        for (k, &(name, shape, beats, step_dir)) in phrase.iter().cycle().enumerate() {
             let mut stop = t + beats * beat;
             if stop > end - 2.0 * beat {
                 stop = end;
             }
-            let repeat = k / sequence.len();
+            let repeat =
+                k / phrase.len() * phrases + (k % phrase.len() / sequence.len()).min(phrases - 1);
             let dir = first_dir * step_dir * if repeat % 2 == 1 { -1.0 } else { 1.0 };
             let heading = entry - scaled(shape(0.0, dir), sized(scale, t))[0];
             let turn = way * travel * 2.0 * (stop - t) / (32.0 * beat);
@@ -627,7 +646,7 @@ pub fn compile_ensemble(
                 moments.push(Moment {
                     time,
                     pose: [0.72, 1.0],
-                    strength: 0.7 + 0.3 * strength,
+                    strength: (0.7 + 0.3 * strength) * intensity(time),
                     label: "arrival",
                     hold_beats: 1.5,
                     span: span_for(class_at(time + beat)),
@@ -644,9 +663,10 @@ pub fn compile_ensemble(
             // Among stabs a flourish lands on a hit that stands out. In a
             // steady stream it lands on an arbitrary note, so there it is slow
             // and soft (blind side-by-side: the sharp one was "too much", and
-            // the user picked soft over none).
+            // the user picked soft over none). The same in a gentle passage.
             let index = ((time - data.musical_memory.beat_zero) / beat).max(0.0) as usize;
-            let soft = !stabs.is_empty() && stabs[index.min(stabs.len() - 1)] < 0.5;
+            let soft = !stabs.is_empty() && stabs[index.min(stabs.len() - 1)] < 0.5
+                || intensity(time) < 0.75;
             if inside && !clash {
                 let pose = if n % 2 == 0 { [0.8, 0.95] } else { [0.15, 1.0] };
                 moments.push(Moment {
@@ -712,23 +732,22 @@ pub fn compile_ensemble(
     // Ensemble formation of each run, chosen from its class and how often that
     // class has come round. The user: all together looks best, the mirror
     // image is liked too, and a canon or ripple is a flourish, not a way to
-    // dance a section. A run shorter than eight beats keeps the formation
-    // before it.
+    // dance a section. A run shorter than 24 beats keeps the formation before
+    // it: ten seconds of mirror entered from a turning chorus had neighbours
+    // meet, brake hard and stand for two seconds ("Five Years", 4:25).
     let mut formations: Vec<(f64, Formation)> = Vec::new();
     let mut seen: HashMap<&str, usize> = HashMap::new();
     for &(start, end, class) in &runs {
         let n = *seen.entry(class).and_modify(|n| *n += 1).or_insert(0);
-        // Everyone dances nearly all the time (the user found resting arms
-        // low in energy and not synchronized enough).
+        // Everyone dances all the time (the user found resting arms low in
+        // energy and not synchronized enough, and on a quiet song they rested
+        // for minutes). Verses in step: mirrored verses stood idle longest and
+        // the user found them the worst of mirrored, ripple and unison.
         let formation = match class {
-            // Verses in step: mirrored verses stood idle longest and the user
-            // found them the worst of mirrored, ripple and unison.
-            "interlocked" | "bass-led" | "silence" | "vocal-led" => Formation::Unison,
             "percussive-open" => [Formation::Mirrored, Formation::Unison][n % 2],
-            "sparse" => Formation::DropOut,
-            _ => Formation::Pairs,
+            _ => Formation::Unison,
         };
-        let short = end - start < 8.0 * beat && !formations.is_empty();
+        let short = end - start < 24.0 * beat && !formations.is_empty();
         let formation = if short {
             formations[formations.len() - 1].1
         } else {
@@ -824,7 +843,12 @@ pub fn compile_ensemble(
                 .checked_sub(1)
                 .map(|i| t - hits[i]);
             let bump = since.map_or(0.0, |g| (-g / (0.35 * beat)).exp());
-            lerp(1.0, 0.3 + 1.9 * bump, stabs[index.min(stabs.len() - 1)])
+            // Less so in a gentle passage.
+            lerp(
+                1.0,
+                0.3 + 1.9 * bump,
+                stabs[index.min(stabs.len() - 1)] * intensity(t),
+            )
         };
         let rate = if held {
             0.0
@@ -960,12 +984,10 @@ pub fn compile_ensemble(
             // This arm's part at the start of move `index`, as seen at time `t`.
             let at_move = |index: usize, t: f64| {
                 let run = formations.partition_point(|f| f.0 <= t).saturating_sub(1);
-                let (start, formation) = formations[run];
+                let formation = formations[run].1;
                 let length = (instances[index].end - instances[index].start) / beat;
-                let (side, delay, on) =
-                    formation.part(a, count, ((t - start) / beat).max(0.0), index, length);
-                let delay =
-                    accents[index].map_or(delay, |f| f.part(a, count, 0.0, index, length).1);
+                let (side, delay, on) = formation.part(a, count, index, length);
+                let delay = accents[index].map_or(delay, |f| f.part(a, count, index, length).1);
                 (side, delay, on)
             };
             let part = |t: f64| {

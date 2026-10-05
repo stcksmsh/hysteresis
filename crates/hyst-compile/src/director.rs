@@ -317,12 +317,18 @@ fn phrase_at(phrases: &[Phrase], time: f64) -> &Phrase {
     &phrases[i]
 }
 
-fn character(a: [f64; 4], rms: f64) -> (&'static str, &'static str) {
+/// `a`: each stem's level against its own loudest. `voice`: the voice's share
+/// of the sound's power. `loudness`: the level against the song's loud
+/// passages. A voice that ranges from soft to screaming reads as absent by `a`
+/// while it carries the verse, and a climax whose bass is buried is still the
+/// song at full strength.
+fn character(a: [f64; 4], rms: f64, voice: f64, loudness: f64) -> (&'static str, &'static str) {
+    let sung = a[2] > 0.3 || voice > 0.14;
     if rms < 0.005 {
         ("silence", "breathe")
-    } else if a[0] > 0.43 && a[2] > 0.35 {
+    } else if a[0] > 0.43 && a[2] > 0.35 || sung && loudness > 0.7 {
         ("interlocked", "mirror")
-    } else if a[2] > 0.3 {
+    } else if sung {
         ("vocal-led", "canon")
     } else if a[0] > 0.43 {
         ("bass-led", "unison")
@@ -480,8 +486,20 @@ fn source_distance(data: &Evidence, now: f64, earlier: f64) -> f64 {
 mod tests {
     use serde_json::json;
 
+    #[test]
+    fn a_soft_voice_leads_and_a_loud_sung_passage_is_the_song_at_full() {
+        // "Five Years": steady bass, a voice far below its own loudest.
+        let verse = [0.7, 0.15, 0.25, 0.1];
+        assert_eq!(super::character(verse, 0.1, 0.05, 0.4).0, "bass-led");
+        assert_eq!(super::character(verse, 0.1, 0.45, 0.4).0, "vocal-led");
+        // Its climax: the bass buried, everything loud.
+        let climax = [0.3, 0.25, 0.55, 0.8];
+        assert_eq!(super::character(climax, 0.2, 0.3, 0.6).0, "vocal-led");
+        assert_eq!(super::character(climax, 0.2, 0.3, 0.9).0, "interlocked");
+    }
+
     pub(super) fn fixture(vocal: f64, bass: f64) -> String {
-        let source = |activity: f64| json!({"absoluteRms":vec![0.1;160],"wholeTrackActivity":vec![activity;160],"spectralFlux":vec![0.55;160],"transientDensity":vec![0.4;160],"candidates":[]});
+        let source = |activity: f64| json!({"absoluteRms":vec![0.2*activity;160],"wholeTrackActivity":vec![activity;160],"spectralFlux":vec![0.55;160],"transientDensity":vec![0.4;160],"candidates":[]});
         json!({"duration":8.0,"envelopeRate":20.0,"rmsEnvelope":vec![0.2;160],
             "musicalMemory":{"version":1,"beatPeriod":0.5,"beatZero":0.0,"phrases":[{"start":0.0,"end":8.0,"rhythm":vec![0.5;32],"lowRhythm":vec![0.5;32],"highRhythm":vec![0.5;32],"similarity":0.0}]},
             "stemInterpretation":{"version":1,"duration":8.0,"envelopeRate":20.0,"sources":{"bass":source(bass),"drums":source(0.3),"vocals":source(vocal),"other":source(0.4)}},

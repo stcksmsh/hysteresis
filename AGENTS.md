@@ -8,9 +8,11 @@ facing its centre) that hold mirrored objects, dance in synchronized formations
 chosen automatically from offline sidecars, work inside each other's reach
 without colliding, and are lit by a projector showing the visualizer. The
 single arm was approved at version 32 and the ensemble accepted at version 39.
-Version 44 stands, not yet reviewed: verses and choruses in unison, the
-drums-only passages (intro, 3:05) mirrored; canon and ripple as one-move
-flourishes. Still open from the user: arms hanging around and "resetting".
+Version 44 was accepted on Instant Crush ("Its nice now"). A second song,
+"Five Years" (live tempo, wide dynamics), is in review: version 45 changed the
+planner for it (intensity, class rule, no resting formations, contrast phrase)
+and awaits the user's verdict on both songs. Its tempo map lives outside the
+repo; see the last `DANCE_HANDOFF.md` entries.
 Open: overlap in the mirrored formation, and red zones as a general tool for
 keeping arms off equipment (shapes wait for the user's answer).
 The only dance path is `hyst_compile::director::figures::compile_ensemble`
@@ -1471,3 +1473,16 @@ The user judged the mirrored verse the worst of the side-by-side (weakly; could
 not separate ripple from unison) and accepted unison. Verses are Unison; the
 drums-only passages start Mirrored, so the mirror stays in the song (45 s). The
 `HYST_VERSE` knob is deleted. Idle 32 s → 20 s. Not yet reviewed.
+
+### Second song and version 45 — 2026-10-05
+
+The user accepted version 44 and asked for "Five Years" (Bowie). Its live,
+drifting tempo needed a tempo map (scratch scripts outside the repo; the
+interactive page has none, use the video). The user's critique (arms resting,
+jerky "raving" flourishes in the quiet opening, wrong "bass-led" label, long
+vocal-led stretches boring) led to version 45: loudness against the song's own
+loud passages softens flourishes, arrivals and the stab surge; the voice counts
+by its share of the sound and a loud sung passage is "interlocked"; drop-out
+and pairs are deleted, everyone dances; long vocal-led and interlocked runs
+play a contrasting phrase after about 128 beats; runs under 24 beats keep the
+formation before them. Instant Crush measured nearly unchanged. Not reviewed.

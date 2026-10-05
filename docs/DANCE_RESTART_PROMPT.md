@@ -11,7 +11,7 @@ earlier blind-test history). Read `crates/hyst-compile/src/director/figures.rs`
 in full (`compile_ensemble` is the entry; `compile_figures` is its one-arm
 case) and skim `director.rs`, `ensemble.rs`, `crates/hyst-previz/src/ensemble.html`.
 Run the checks under "Commands" and export the hexagon: it must be
-byte-identical to `hexagon-44.html`. Report in a few lines what you understand
+byte-identical to `hexagon-45.html`. Report in a few lines what you understand
 and what you will do first, then start; do not wait for approval unless you
 asked a blocking question.
 
@@ -147,9 +147,9 @@ zones.
 
 Ensemble in one paragraph: `compile_ensemble(json, config, rig, zones, arms,
 clearance_m)`. Each run of the song gets a `Formation` from its class and how
-often that class has come round (interlocked, bass-led, vocal-led, silence:
-Unison; percussive-open: Mirrored, Unison in turn;
-sparse: DropOut; else Pairs). The move holding a melodic flourish is passed
+often that class has come round (percussive-open: Mirrored, Unison in turn;
+every other class Unison; a run under 24 beats keeps the formation before it;
+no formation rests an arm). The move holding a melodic flourish is passed
 round the ring (`accents`: ripple and canon in turn; six beats or longer,
 under 120° of sweep). `Formation::part` gives each arm a side, a delay
 in beats and dancing or resting; the arm's path is the single-arm path at its
@@ -174,7 +174,7 @@ node $D/record-ensemble.cjs $D/OUT.html $D/instant-crush.m4a $D/clip.mp4 START S
 ```
 Without `--ring` it plans one arm (`song-figures-34.html` holds the same
 planned motion; the page script has changed since, so compare the data, not
-the file). With `--ring 6,0.8` it must reproduce `hexagon-44.html` exactly.
+the file). With `--ring 6,0.8` it must reproduce `hexagon-45.html` exactly.
 
 Checks: `cargo test --workspace --exclude hyst-render` (138 pass; the six-arm
 tests take about 15 s each), clippy `-D warnings` on hyst-compile/-output/-previz/
