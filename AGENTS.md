@@ -8,7 +8,8 @@ facing its centre) that hold mirrored objects, dance in synchronized formations
 chosen automatically from offline sidecars, work inside each other's reach
 without colliding, and are lit by a projector showing the visualizer. The
 single arm was approved at version 32 and the ensemble accepted at version 39.
-Version 40 (canon and ripple arms inside each other's reach) awaits review.
+Version 41 (ripple arms inside each other's reach; canon only for short
+runs) awaits review.
 Open: overlap in the mirrored formation, and red zones as a general tool for
 keeping arms off equipment (shapes wait for the user's answer).
 The only dance path is `hyst_compile::director::figures::compile_ensemble`
@@ -1438,3 +1439,10 @@ tenth of the time; hands past half way to a neighbour 0 % → 7–9 % in those
 formations, with fewer stalls and kicks than version 39. Mirrored cannot
 overlap by its geometry. Nothing is retimed. A test now covers an ensemble
 against a box; red-zone shapes wait for the user's answer on the equipment.
+
+### Canon only for short runs — 2026-10-05
+
+Version 41, not yet reviewed. The user found a long canon unsynchronized
+(it has no symmetry) and the ripple fine. A canon longer than sixteen beats is
+now a ripple; two short canons remain on this song. Ripple hands are past half
+way to a neighbour 12 % of arm-time; no arm stands still.

@@ -1766,3 +1766,27 @@ stand, speakers, a wall, people's walkway), so shapes are not invented.
 New helpers in `$D/tracker-scratch/ensemble/`: `byform.py FILE` (per formation:
 past half way, speed, still, kicks, closest), `when.py FILE` (clock times where
 two or more out-of-step hands are past half way).
+
+### Version 41: a canon only for short runs — 2026-10-05
+
+User on version 40, after asking how long the canon sections are (61 s in
+verse 1): "too long at times, too unsynchronized if cannon or whatever stays
+too long, ripple is ok, I think its cuz it breaks symmetry?" They also asked
+whether "inverse pairs" exist (arms 1, 3, 5 do X, arms 2, 4, 6 the inverse
+positions). Answer given: Mirrored is that for left and right only (2:14 to
+2:57); no formation inverts high and low or in and out.
+
+- A run that would be a Canon and is longer than sixteen beats is a Ripple
+  (`compile_ensemble`, formation choice). The threshold is the agent's guess.
+  On this song: verse 1 (0:29–1:30) and 4:24–4:41 ripple; two canons remain,
+  2:09–2:14 and 2:57–3:05, one and two moves long. Ripple now runs 0:03–1:30
+  without a break (87 s), not reviewed.
+- Measured: ripple hands past half way to a neighbour 12.0 % of arm-time (the
+  limit of version 40 seldom fires in a ripple); whole song 11.4 %; kicks 44 →
+  40; no standstill over 0.3 s on any arm; closest implement surface 13.4 cm.
+  One arm alone identical.
+`hexagon-41.html`, `hexagon-41-full.mp4` (sent, not yet reviewed). 138 CPU
+tests, clippy, fmt, `ensemble.cjs` pass. Open with the user: whether an
+"inverse" formation in two groups of three is wanted and what inverse means
+(high/low, in/out, or a group one step late); Mirrored without overlap; red
+zone equipment.

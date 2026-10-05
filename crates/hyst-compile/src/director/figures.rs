@@ -725,6 +725,14 @@ pub fn compile_ensemble(
             "sparse" => Formation::DropOut,
             _ => Formation::Pairs,
         };
+        // A canon goes once round the ring and has no symmetry: held for a
+        // whole verse it read as unsynchronized (user). Past sixteen beats
+        // the run ripples instead, which the user found fine.
+        let formation = if formation == Formation::Canon && end - start > 16.0 * beat {
+            Formation::Ripple
+        } else {
+            formation
+        };
         let short = end - start < 8.0 * beat && !formations.is_empty();
         let formation = if short {
             formations[formations.len() - 1].1

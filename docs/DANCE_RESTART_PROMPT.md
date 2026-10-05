@@ -11,7 +11,7 @@ earlier blind-test history). Read `crates/hyst-compile/src/director/figures.rs`
 in full (`compile_ensemble` is the entry; `compile_figures` is its one-arm
 case) and skim `director.rs`, `ensemble.rs`, `crates/hyst-previz/src/ensemble.html`.
 Run the checks under "Commands" and export the hexagon: it must be
-byte-identical to `hexagon-40.html`. Report in a few lines what you understand
+byte-identical to `hexagon-41.html`. Report in a few lines what you understand
 and what you will do first, then start; do not wait for approval unless you
 asked a blocking question.
 
@@ -24,8 +24,8 @@ equipment or whatever, it's supposed to be generalized right?"
 Two parts:
 
 1. **Arms working inside each other's space in every formation, not only
-   unison.** Version 40 did the first step and is **not yet reviewed**
-   (`hexagon-40-full.mp4` sent): the "own sector" limit applies only where
+   unison.** Versions 40 and 41 did the first step and are **not yet
+   reviewed** (`hexagon-41-full.mp4` sent): the "own sector" limit applies only where
    arms posed alone would come within the clearance (`apart` in
    `compile_ensemble`), half a beat either side. Ripple is never limited,
    canon 12–14 % of its long runs. Left: Mirrored cannot overlap (mirror
@@ -109,8 +109,9 @@ leader's phrase starts, figures picked by the leader's pitch step, accents from
 the second lane, arriving on the stab. Lesson: small posture pulses and small
 timing shifts are invisible; structural changes read.
 
-Ensemble record. Accepted at version 39 ("It's good now"); version 40 awaits
-review. Rejected on the
+Ensemble record. Accepted at version 39 ("It's good now"); version 41 awaits
+review. On version 40 the user found a long canon "too unsynchronized" (no
+symmetry) and the ripple "ok"; a canon over sixteen beats is now a ripple. Rejected on the
 way: resting formations (one by one, long pairs), a 1.1 m hexagon, a ripple
 whose end arms stalled and raced, a draw-order bug. "Doesn't follow music
 enough, needs to be more on point" was said of version 38 and not explained;
@@ -142,6 +143,7 @@ Ensemble in one paragraph: `compile_ensemble(json, config, rig, zones, arms,
 clearance_m)`. Each run of the song gets a `Formation` from its class and how
 often that class has come round (interlocked, bass-led, silence: Unison;
 vocal-led: Canon, Ripple, Mirrored in turn; percussive-open: Ripple, Canon;
+a Canon over sixteen beats becomes a Ripple;
 sparse: DropOut; else Pairs). `Formation::part` gives each arm a side, a delay
 in beats and dancing or resting; the arm's path is the single-arm path at its
 own delayed time, bearing times its side, eased toward a rest pose when it
@@ -165,7 +167,7 @@ node $D/record-ensemble.cjs $D/OUT.html $D/instant-crush.m4a $D/clip.mp4 START S
 ```
 Without `--ring` it plans one arm (`song-figures-34.html` holds the same
 planned motion; the page script has changed since, so compare the data, not
-the file). With `--ring 6,0.8` it must reproduce `hexagon-40.html` exactly.
+the file). With `--ring 6,0.8` it must reproduce `hexagon-41.html` exactly.
 
 Checks: `cargo test --workspace --exclude hyst-render` (138 pass; the six-arm
 tests take about 15 s each), clippy `-D warnings` on hyst-compile/-output/-previz/
