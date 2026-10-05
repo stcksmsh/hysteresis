@@ -1923,3 +1923,62 @@ The mirrored test's fixture is now drums without voice (`fixture(0.1, 0.2)`).
 "snap back to centre" (no clock times given) and whether the remaining 20 s of
 idle needs the verse moves changed. `tmp-verse-*.html` and `tmp-surge-*.html`
 in the output directory are spent and may be deleted.
+
+### Second song: "Five Years" (Bowie) — 2026-10-05
+
+The user accepted version 44 ("Its nice now") and asked for a totally
+different song. Source `~/Downloads/Five_Years_2012_Remaster.wav` (4:44,
+48 kHz). Nothing in the planner was changed for it. Not yet reviewed.
+
+What broke, in order:
+1. `dance_structure.py` crashed when the stem folder had no
+   `separation.json`. Fixed (committed).
+2. **The fixed beat grid does not hold for a live drummer.** The song is in a
+   triple feel (pulse about 1.16 s, three subdivisions of about 0.386 s) and
+   speeds up 6.5 % from start to end. `analyze.ts` reported 114 bpm;
+   `dance_memory.py`'s single period and phase put measured onsets a median
+   134 ms from the grid (chance level; Instant Crush 5 ms). A steady grid and
+   the real beats differ by up to 2.3 s.
+3. On that wrong grid the planner failed outright: "cannot fit tangents
+   segment 4280 channel 0 … accel 71110/8000". **Not investigated**; reproduce
+   with `five-years.notes.sidecar.json`.
+
+Workaround, all outside the repo (`$D/tracker-scratch/newsong/`):
+`beatmap.py` tracks the subdivisions on the drum stem with librosa (basic-pitch
+environment), smooths them and finds the pulse phase (drum strength by
+subdivision mod 3: 4.2 / 1.2 / 2.1, the same phase in every sixth of the song,
+so no slips; strong drum onsets a median 26 ms from a subdivision). `warp.py`
+resamples the mix and all stems so the subdivisions are steady (pitch moves
+with tempo, under half a semitone) and writes `five-years.tempomap.json`.
+`song2.sh` runs the usual pipeline on the warped audio (slug
+`five-years-steady`), with the sidecar's beats replaced by the steady grid.
+The dance beat is 1.5 subdivisions (0.58 s, 103.5 bpm): two beats per pulse, so
+an eight-beat move is one bar of four pulses and the pace matches what the
+planner was tuned on. The agent's choice. Mix onsets are then a median 42 ms
+from the grid and the structure pass calls the grid reliable.
+`record-ensemble.cjs` gained `HYST_TEMPO_MAP=file.json`: it draws the score at
+the mapped time, so the video is on the real beats. **The interactive HTML has
+no tempo map** and drifts up to 2.3 s against its audio; use the video.
+
+Result (`five-years-hexagon.html`, `five-years-hexagon-full.mp4`, 283.7 s):
+
+| formation | seconds | median hand speed | stalled |
+|---|---|---|---|
+| Unison | 193.5 | 0.18 m/s | 5.9 % |
+| DropOut | 57.5 | 0.02 m/s | 49.6 % |
+| Pairs | 22.2 | 0.04 m/s | 47.6 % |
+| Mirrored | 10.5 | 0.18 m/s | 1.0 % |
+
+Kicks 24, closest implement gap 13.9 cm. Runs: still to 0:09; sparse/textural
+(DropOut, Pairs) for most of 0:09–2:13 with bass-led unison between; unison
+2:13–4:19 (vocal-led, then interlocked); mirrored 4:19–4:29; drop-out and
+still to the end. So for the first two minutes most arms rest or barely move:
+the class thresholds were set on Instant Crush and read the quiet opening
+(voice, piano, drums) as "sparse", and sparse → DropOut, textural → Pairs are
+the two rest-heavy rows left in the table. Whether that reads as a build or as
+the idleness the user dislikes is for the user. Hand speed overall is half of
+Instant Crush's (0.15 against 0.29 m/s).
+
+If songs with a live tempo are to be supported properly: the tempo map belongs
+in the sidecar and in score playback (page, `ChoreographyOutput`), and the
+beat tracker in `scripts/`. Not built; waits for the user's verdict.
