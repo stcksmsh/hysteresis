@@ -147,8 +147,8 @@ zones.
 
 Ensemble in one paragraph: `compile_ensemble(json, config, rig, zones, arms,
 clearance_m)`. Each run of the song gets a `Formation` from its class and how
-often that class has come round (interlocked, bass-led, silence: Unison;
-vocal-led: Mirrored, Unison in turn; percussive-open: Unison, Mirrored;
+often that class has come round (interlocked, bass-led, vocal-led, silence:
+Unison; percussive-open: Mirrored, Unison in turn;
 sparse: DropOut; else Pairs). The move holding a melodic flourish is passed
 round the ring (`accents`: ripple and canon in turn; six beats or longer,
 under 120° of sweep). `Formation::part` gives each arm a side, a delay
