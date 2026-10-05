@@ -722,7 +722,12 @@ pub fn compile_ensemble(
         // low in energy and not synchronized enough).
         let formation = match class {
             "interlocked" | "bass-led" | "silence" => Formation::Unison,
-            "vocal-led" => [Formation::Mirrored, Formation::Unison][n % 2],
+            "vocal-led" => match std::env::var("HYST_VERSE").as_deref() {
+                Ok("ripple") => Formation::Ripple,
+                Ok("unison") => Formation::Unison,
+                Ok("mirrored") => Formation::Mirrored,
+                _ => [Formation::Mirrored, Formation::Unison][n % 2],
+            },
             "percussive-open" => [Formation::Unison, Formation::Mirrored][n % 2],
             "sparse" => Formation::DropOut,
             _ => Formation::Pairs,
@@ -753,9 +758,9 @@ pub fn compile_ensemble(
             let i = instances
                 .partition_point(|x| x.end <= m.time)
                 .min(instances.len() - 1);
-            // Only a move that sweeps under 120 degrees round the base: it
-            // is danced in line with the centre while it goes round (below),
-            // and a wide circle or arc cannot be without a lurch of the base.
+            // Only a move that sweeps under 120 degrees round the base. The
+            // wide circles and arcs belong to the choruses, which stay in
+            // step (the user: all together looks best).
             let x = &instances[i];
             let sweep = (0..=16).map(|k| {
                 let u = k as f64 / 16.0;
@@ -941,19 +946,6 @@ pub fn compile_ensemble(
     let count = arms.len();
     let rest = place(still(0.0, 1.0)).0;
     let (rest_out, rest_up) = (rest[0].hypot(rest[1]), rest[2]);
-    // Per knot: the move it belongs to, and 1 where that move is passed round.
-    let moves: Vec<usize> = times
-        .iter()
-        .map(|&t| {
-            instances
-                .partition_point(|x| x.end <= t)
-                .min(instances.len() - 1)
-        })
-        .collect();
-    let lined: Vec<f64> = moves
-        .iter()
-        .map(|&m| f64::from(accents[m].is_some()))
-        .collect();
     let mut locals: Vec<Vec<([f64; 3], f64)>> = Vec::with_capacity(count);
     // Centre of the layout.
     let middle: [f64; 2] = std::array::from_fn(|k| {
@@ -1009,18 +1001,8 @@ pub fn compile_ensemble(
                     (p, flip * parts[i].0 * bearing)
                 })
                 .collect();
-            for i in 0..times.len() {
+            for (i, &(p, want)) in placed.iter().enumerate() {
                 let on = bell(&dancing, i as f64, 6.0);
-                let (p, want) = placed[i];
-                // A move passed round the ring is danced in line with the
-                // centre: the arm turns to face straight in or straight out
-                // (whichever is nearer at the middle of the move) and only
-                // rises, falls, reaches and draws in. The user: canon and
-                // ripple work well with such "linear" movements.
-                let x = &instances[moves[i]];
-                let mid = ((0.5 * (x.start + x.end) / step) as usize).min(times.len() - 1);
-                let line = (2.0 * bell(&lined, i as f64, 16.0) - 1.0).max(0.0);
-                let want = lerp(want, 180.0 * (placed[mid].1 / 180.0).round(), line);
                 let aimed = lerp(360.0 * (want / 360.0).round(), want, on);
                 // Turns are counted from the last bearing, so a change of side
                 // swings the nearer way round and not back through every turn.

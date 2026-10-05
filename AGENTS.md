@@ -8,8 +8,9 @@ facing its centre) that hold mirrored objects, dance in synchronized formations
 chosen automatically from offline sidecars, work inside each other's reach
 without colliding, and are lit by a projector showing the visualizer. The
 single arm was approved at version 32 and the ensemble accepted at version 39.
-Version 42 (sections in unison or mirrored; canon and ripple as one-move
-flourishes in line with the centre) awaits review.
+Version 43 (sections in unison or mirrored; canon and ripple as one-move
+flourishes) stands; the verse's formation is under blind review
+(`HYST_VERSE` knob, see the last `DANCE_HANDOFF.md` entry).
 Open: overlap in the mirrored formation, and red zones as a general tool for
 keeping arms off equipment (shapes wait for the user's answer).
 The only dance path is `hyst_compile::director::figures::compile_ensemble`
@@ -1455,3 +1456,11 @@ suit "linear" movement in line with the centre. Sections are now Unison or
 Mirrored; the move holding a melodic flourish is passed round the ring as a
 ripple or canon while the arms turn in line with the centre. Wide moves are
 never passed round. No test covers the flourish.
+
+### Version 43; verse formation under blind review — 2026-10-05
+
+The user found version 42 idle at times, "resetting" and following the music
+less. The linear turn is deleted (version 43). A stronger stab surge was
+measured and not adopted. A shuffled side-by-side of the verse as mirrored,
+ripple or unison is with the user; the review knob `HYST_VERSE` stays in the
+tree until the verdict.

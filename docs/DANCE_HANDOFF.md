@@ -1838,3 +1838,55 @@ the centerpoint), but thats just an idea".
 `hexagon-42.html`, `hexagon-42-full.mp4` (sent, not yet reviewed). New helpers
 in `$D/tracker-scratch/ensemble/`: `runs.py` (formation runs and their moves),
 `accents.py` (moves passed round), `still.py` (standstills by clock time).
+
+### Version 43 and a verse side-by-side pending — 2026-10-05
+
+User on version 42: "They have a lot of 'free time' now like 1:59-2:03, they
+just sortof hang around doing nothing. They also have moments where they just
+snap back to center, as if theyre 'resetting'. They follow music less now that
+this is all here. We could maybe increase what we did for it to follow the
+stabs?"
+
+Measured:
+- The choruses of version 42 are identical to version 39. At 1:59–2:03 the
+  chorus ends on gather and rise (hands 27–29 cm from their bases, 0.2 m/s),
+  as it did in version 39; then the verse followed as a ripple, now it is in
+  step.
+- The "linear" turn of version 42 (the agent's reading of the user's idea)
+  held arms on the line to the centre for a whole move, nearly still. Deleted.
+  Idle time (six-hand mean under 0.15 m/s for 1.5 s or more) 35 → 32 s only,
+  so it was a small part.
+- Likely main cause, not confirmed by the user: the verse vocabulary. "reach"
+  goes out and tucks back in every eight beats and "sway" is slow; six arms in
+  step or mirrored do that together, which reads as a reset and a wait. In
+  version 39 the canon and ripple delays hid it. Hands slow at the centre
+  circle: 2 s of the song, not the cause.
+- A stronger surge after stabs (1.7 and 2.5 times) changed the chorus hand
+  speed spread little (p90/p10 6.1 → 7.5; the speed cap and the clock's catch-up
+  bound it) and brought stalls (0.9 % → 4 % in Unison) and kicks (44 → 67).
+  Not adopted; knob removed.
+
+Version 43 = version 42 without the linear turn (`hexagon-43.html`; its video
+was recorded but not sent). Kicks 44, closest 13.1 cm, one pause of 0.3–0.7 s
+at 0:49.
+
+**Pending review, key unread:** `blind-verse-side-by-side.mp4` (0:29–1:09, A
+and B on top, C below, clock) with key `blind-verse-key.json`. The verse
+(vocal-led) as mirrored, ripple or unison; same single-arm dance in all three.
+Measured, whole song with every vocal-led run in that formation:
+
+| verse as | idle | hands past half way, verse formation | kicks |
+|---|---|---|---|
+| mirrored | 32 s | 0 % | 44 |
+| ripple | 19 s | 16.1 % | 38 |
+| unison | 21 s | 14.8 % | 43 |
+
+**A review knob is in the tree until the verdict:** environment variable
+`HYST_VERSE=mirrored|ripple|unison` in the formation table of
+`compile_ensemble`. Unset, the table is version 43's. On the verdict: make the
+winner the table's entry, delete the variable, re-export, and compare against
+`hexagon-43.html` only if mirrored wins. Not answered either way by this test:
+what "follow the music" should look like for six arms; the user was asked.
+138 CPU tests, clippy, fmt, `ensemble.cjs` pass. New helpers in
+`$D/tracker-scratch/ensemble/`: `idle.py`, `wall.py`, `turn.py`, `pulse.py`,
+`cmp.py`, `verse.sh`.

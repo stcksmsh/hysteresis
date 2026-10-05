@@ -11,7 +11,7 @@ earlier blind-test history). Read `crates/hyst-compile/src/director/figures.rs`
 in full (`compile_ensemble` is the entry; `compile_figures` is its one-arm
 case) and skim `director.rs`, `ensemble.rs`, `crates/hyst-previz/src/ensemble.html`.
 Run the checks under "Commands" and export the hexagon: it must be
-byte-identical to `hexagon-42.html`. Report in a few lines what you understand
+byte-identical to `hexagon-43.html`. Report in a few lines what you understand
 and what you will do first, then start; do not wait for approval unless you
 asked a blocking question.
 
@@ -29,8 +29,10 @@ Two parts:
    formations (see the ensemble record below), so today the arms overlap in
    Unison only by choice of formation: Mirrored cannot overlap (mirror
    neighbours meet in the plane between them at the same moment) and the
-   flourishes are danced in line with the centre. Version 42 is **not yet
-   reviewed** (`hexagon-42-full.mp4` sent). Whether more overlap is still
+   flourishes are single moves. The user found version 42 idle, "resetting" and
+   less musical; version 43 dropped the linear turn, and a blind side-by-side
+   of the verse as mirrored, ripple or unison is **pending** (last handoff
+   entry; knob `HYST_VERSE`). Whether more overlap is still
    wanted is the user's call. Arms that are stopped or stutter are a defect
    the user spots at once (see version 38).
 2. **Red zones as a general tool**: the arms must be kept off equipment or
@@ -147,7 +149,7 @@ often that class has come round (interlocked, bass-led, silence: Unison;
 vocal-led: Mirrored, Unison in turn; percussive-open: Unison, Mirrored;
 sparse: DropOut; else Pairs). The move holding a melodic flourish is passed
 round the ring (`accents`: ripple and canon in turn; six beats or longer,
-under 120° of sweep) while each arm turns in line with the centre. `Formation::part` gives each arm a side, a delay
+under 120° of sweep). `Formation::part` gives each arm a side, a delay
 in beats and dancing or resting; the arm's path is the single-arm path at its
 own delayed time, bearing times its side, eased toward a rest pose when it
 sits out. Delays run evenly across each move. `shared` then applies two
@@ -170,7 +172,7 @@ node $D/record-ensemble.cjs $D/OUT.html $D/instant-crush.m4a $D/clip.mp4 START S
 ```
 Without `--ring` it plans one arm (`song-figures-34.html` holds the same
 planned motion; the page script has changed since, so compare the data, not
-the file). With `--ring 6,0.8` it must reproduce `hexagon-42.html` exactly.
+the file). With `--ring 6,0.8` it must reproduce `hexagon-43.html` exactly.
 
 Checks: `cargo test --workspace --exclude hyst-render` (138 pass; the six-arm
 tests take about 15 s each), clippy `-D warnings` on hyst-compile/-output/-previz/
@@ -199,7 +201,7 @@ Environments under `/secondary/hyst-env`; root disk is nearly full.
 ## Known weak points
 
 - Ensemble: no overlap in Mirrored (135 s of the song). No test covers a
-  flourish. A linear reach pauses 0.3 s where it turns round (0:49). Arms
+  flourish. Arms pause 0.3–0.7 s at 0:49. Arms
   drift out of step over the move before a flourish. Six arms compile in about 16 s. Right of way between
   arms is by arm index. The formation table is an agent's guess; the unison
   from 3:33 to 5:23 is long; "complements" is undefined. Version 40 removed the 187.9 s kick and the
