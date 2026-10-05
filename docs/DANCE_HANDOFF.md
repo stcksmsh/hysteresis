@@ -1677,3 +1677,12 @@ abstraction, but it needs to be more on point to be better I think".
   behaviour for this before the user answers.
 `hexagon-39.html`, `hexagon-39-full.mp4`. 136 CPU tests, clippy, fmt,
 `ensemble.cjs` pass.
+
+### Version 39 accepted — 2026-10-05
+
+The user watched the version 39 whole-song video and said: "It's good now".
+That followed the layering fix and the beat-aligned delays. They did not say
+which reading of "more on point" they had meant, so treat that question as
+closed by this verdict but not as answered: do not add ensemble behaviour for
+it unless they raise it again. The six-arm ensemble on a 0.8 m hexagon is
+accepted for now as it stands in version 39.

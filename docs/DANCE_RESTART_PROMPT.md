@@ -144,11 +144,11 @@ The user's words on the ensemble: synchronized dancing is "a different game"
 "decide itself"; version 35 was "not synchronized enough, too low energy" and
 "too far apart, dynamic red zones overlapping is what makes it WOW"; canon
 should delay each arm by a fraction of the move, circular or spreading both
-ways and back. Version 37 was reviewed once: the user found a stutter in the ripple (fixed in 38). Version 38 was reviewed: a draw-order bug (fixed) and "does not follow the music enough, needs to be more on point" (open). Version 39 **has not been reviewed**.
+ways and back. Version 37 was reviewed once: the user found a stutter in the ripple (fixed in 38). Version 38 was reviewed: a draw-order bug (fixed) and "does not follow the music enough, needs to be more on point" (open). Version 39 was accepted ("It's good now").
 
 ## Next work
 
-1. **The user's verdict on the version 39 video** (`hexagon-39-full.mp4`), and their answer to "what does on point mean" (four readings were offered; see the handoff).
+1. **Version 39 is accepted.** Ask the user what comes next; candidates follow.
    Do not build further ensemble choreography before it.
 2. **Overlap outside unison.** Canon, Ripple and Mirrored keep each hand on its
    own side of the line to its neighbours, because out-of-step neighbours
