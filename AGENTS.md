@@ -8,8 +8,8 @@ facing its centre) that hold mirrored objects, dance in synchronized formations
 chosen automatically from offline sidecars, work inside each other's reach
 without colliding, and are lit by a projector showing the visualizer. The
 single arm was approved at version 32 and the ensemble accepted at version 39.
-Version 41 (ripple arms inside each other's reach; canon only for short
-runs) awaits review.
+Version 42 (sections in unison or mirrored; canon and ripple as one-move
+flourishes in line with the centre) awaits review.
 Open: overlap in the mirrored formation, and red zones as a general tool for
 keeping arms off equipment (shapes wait for the user's answer).
 The only dance path is `hyst_compile::director::figures::compile_ensemble`
@@ -1446,3 +1446,12 @@ Version 41, not yet reviewed. The user found a long canon unsynchronized
 (it has no symmetry) and the ripple fine. A canon longer than sixteen beats is
 now a ripple; two short canons remain on this song. Ripple hands are past half
 way to a neighbour 12 % of arm-time; no arm stands still.
+
+### Unison and mirror; canon and ripple as flourishes — 2026-10-05
+
+Version 42, not yet reviewed; version 41 was superseded unseen. The user:
+unison looks best, mirror is liked, canon and ripple are flourish moves and
+suit "linear" movement in line with the centre. Sections are now Unison or
+Mirrored; the move holding a melodic flourish is passed round the ring as a
+ripple or canon while the arms turn in line with the centre. Wide moves are
+never passed round. No test covers the flourish.

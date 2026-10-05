@@ -1790,3 +1790,51 @@ tests, clippy, fmt, `ensemble.cjs` pass. Open with the user: whether an
 "inverse" formation in two groups of three is wanted and what inverse means
 (high/low, in/out, or a group one step late); Mirrored without overlap; red
 zone equipment.
+
+### Version 42: unison and mirror for sections; canon and ripple as flourishes — 2026-10-05
+
+Version 41 was never reviewed (its video was not sent). The user, before
+seeing it: "the best looking one is sync. I also like mirror, for me cannon
+was more of a flurish move, same with ripple"; then: "Cannon and ripple work
+well especially with 'linear' movements (where the joints are co-linear with
+the centerpoint), but thats just an idea".
+
+- Sections are Unison or Mirrored only. Table: interlocked, bass-led, silence:
+  Unison; vocal-led: Mirrored, Unison in turn; percussive-open: Unison,
+  Mirrored in turn; sparse: DropOut; else Pairs. Still an agent's table. The
+  sixteen-beat canon rule of version 41 is deleted.
+- Flourish (`accents` in `compile_ensemble`): the move that holds a melodic
+  flourish moment is passed round the ring, as a ripple and a canon in turn.
+  Only the delay changes; arms keep the run's sides. Conditions: the move is
+  six beats or longer and sweeps under 120° round the base.
+- Linear: while a move is passed round, each arm turns to face straight in or
+  straight out (the nearer at the middle of the move) and keeps only the
+  rise, fall, reach and draw-in. This is the agent's reading of the user's
+  "co-linear with the centerpoint". Without the 120° condition the wide
+  moves (circle, arc, eight) lurched: 64 kicks, arms 9.7 cm apart, so they
+  are never passed round.
+- The delay still runs evenly from one move's value to the next (version 38),
+  so arms drift out of step over the move before a flourish and close up
+  during it. Whether that reads as a flourish is for the user.
+- The "would meet" limit of version 40 now applies in every formation; the
+  Unison exemption is dropped (the choruses kept their kicks and closest
+  approach, so the limit seems not to fire there; not checked directly).
+- On this song: Unison 0:00–0:29, Mirrored 0:29–1:30, Unison 1:30–2:09,
+  Mirrored 2:09–2:57, Unison 2:57–3:23, Mirrored 3:23–3:32, Unison 3:32–4:24,
+  Mirrored 4:24–4:41, Unison 4:41–5:23, DropOut, still. Passed round: 0:20
+  (eight, canon), 0:37, 0:46, 0:55 (reach; ripple, canon, ripple), 1:17 (sway,
+  ripple), 2:27 and 3:09 (sway, canon), 4:33 (reach, ripple), 5:10 (rise,
+  canon), 5:23 (sway in the drop-out). None in the two choruses' circles.
+- Measured: kicks over 9 m/s² 47; closest implement surface 13.4 cm; hands
+  past half way to a neighbour 12.2 % of arm-time in Unison, 0 % in Mirrored
+  (now 135 s of the song), 7.0 % overall. Standstills: only 0:49–0:50, 0.3 to
+  0.4 s on five arms, where the linear reach turns round. One arm alone
+  identical.
+- Tests: the out-of-step test of version 40 became
+  `mirrored_arms_keep_apart_without_stopping`; the six-arm unison test now
+  also requires a hand past half way. **No test covers a flourish or the
+  linear turn** (the fixture has no flourish moment). 138 CPU tests, clippy,
+  fmt, `ensemble.cjs` pass.
+`hexagon-42.html`, `hexagon-42-full.mp4` (sent, not yet reviewed). New helpers
+in `$D/tracker-scratch/ensemble/`: `runs.py` (formation runs and their moves),
+`accents.py` (moves passed round), `still.py` (standstills by clock time).

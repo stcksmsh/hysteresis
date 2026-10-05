@@ -11,7 +11,7 @@ earlier blind-test history). Read `crates/hyst-compile/src/director/figures.rs`
 in full (`compile_ensemble` is the entry; `compile_figures` is its one-arm
 case) and skim `director.rs`, `ensemble.rs`, `crates/hyst-previz/src/ensemble.html`.
 Run the checks under "Commands" and export the hexagon: it must be
-byte-identical to `hexagon-41.html`. Report in a few lines what you understand
+byte-identical to `hexagon-42.html`. Report in a few lines what you understand
 and what you will do first, then start; do not wait for approval unless you
 asked a blocking question.
 
@@ -23,17 +23,16 @@ equipment or whatever, it's supposed to be generalized right?"
 
 Two parts:
 
-1. **Arms working inside each other's space in every formation, not only
-   unison.** Versions 40 and 41 did the first step and are **not yet
-   reviewed** (`hexagon-41-full.mp4` sent): the "own sector" limit applies only where
-   arms posed alone would come within the clearance (`apart` in
-   `compile_ensemble`), half a beat either side. Ripple is never limited,
-   canon 12–14 % of its long runs. Left: Mirrored cannot overlap (mirror
-   neighbours meet in the plane between them at the same moment; it needs a
-   delay or one arm passing over the other, the user's choice, asked); and
-   nothing is retimed, so a canon still keeps to its sectors for a few
-   seconds at a time. Arms that are stopped or stutter are a defect the user
-   spots at once (see version 38).
+1. **Arms working inside each other's space.** Version 40 lifted the "own
+   sector" limit except where arms posed alone would come within the
+   clearance (`apart` in `compile_ensemble`). The user then changed the
+   formations (see the ensemble record below), so today the arms overlap in
+   Unison only by choice of formation: Mirrored cannot overlap (mirror
+   neighbours meet in the plane between them at the same moment) and the
+   flourishes are danced in line with the centre. Version 42 is **not yet
+   reviewed** (`hexagon-42-full.mp4` sent). Whether more overlap is still
+   wanted is the user's call. Arms that are stopped or stutter are a defect
+   the user spots at once (see version 38).
 2. **Red zones as a general tool**: the arms must be kept off equipment or
    anything else in the room. What exists: fixed zones are axis-aligned boxes
    in the world (`Zone`, `--zone x0,y0,z0,x1,y1,z1`, repeatable); every arm of
@@ -109,9 +108,12 @@ leader's phrase starts, figures picked by the leader's pitch step, accents from
 the second lane, arriving on the stab. Lesson: small posture pulses and small
 timing shifts are invisible; structural changes read.
 
-Ensemble record. Accepted at version 39 ("It's good now"); version 41 awaits
-review. On version 40 the user found a long canon "too unsynchronized" (no
-symmetry) and the ripple "ok"; a canon over sixteen beats is now a ripple. Rejected on the
+Ensemble record. Accepted at version 39 ("It's good now"); version 42 awaits
+review. After version 40 the user said: a long canon is "too unsynchronized";
+"the best looking one is sync. I also like mirror"; canon and ripple are
+"more of a flurish move" and "work well especially with 'linear' movements
+(where the joints are co-linear with the centerpoint)". Version 42 is built
+on that. Rejected on the
 way: resting formations (one by one, long pairs), a 1.1 m hexagon, a ripple
 whose end arms stalled and raced, a draw-order bug. "Doesn't follow music
 enough, needs to be more on point" was said of version 38 and not explained;
@@ -142,9 +144,10 @@ zones.
 Ensemble in one paragraph: `compile_ensemble(json, config, rig, zones, arms,
 clearance_m)`. Each run of the song gets a `Formation` from its class and how
 often that class has come round (interlocked, bass-led, silence: Unison;
-vocal-led: Canon, Ripple, Mirrored in turn; percussive-open: Ripple, Canon;
-a Canon over sixteen beats becomes a Ripple;
-sparse: DropOut; else Pairs). `Formation::part` gives each arm a side, a delay
+vocal-led: Mirrored, Unison in turn; percussive-open: Unison, Mirrored;
+sparse: DropOut; else Pairs). The move holding a melodic flourish is passed
+round the ring (`accents`: ripple and canon in turn; six beats or longer,
+under 120° of sweep) while each arm turns in line with the centre. `Formation::part` gives each arm a side, a delay
 in beats and dancing or resting; the arm's path is the single-arm path at its
 own delayed time, bearing times its side, eased toward a rest pose when it
 sits out. Delays run evenly across each move. `shared` then applies two
@@ -167,7 +170,7 @@ node $D/record-ensemble.cjs $D/OUT.html $D/instant-crush.m4a $D/clip.mp4 START S
 ```
 Without `--ring` it plans one arm (`song-figures-34.html` holds the same
 planned motion; the page script has changed since, so compare the data, not
-the file). With `--ring 6,0.8` it must reproduce `hexagon-41.html` exactly.
+the file). With `--ring 6,0.8` it must reproduce `hexagon-42.html` exactly.
 
 Checks: `cargo test --workspace --exclude hyst-render` (138 pass; the six-arm
 tests take about 15 s each), clippy `-D warnings` on hyst-compile/-output/-previz/
@@ -187,15 +190,17 @@ Helpers outside git:
   `kicks.py` (sharp accelerations and standstills per arm), `stut.py FILE T0 T1`
   and `peak.py FILE T0 T1 ARM` (one window in detail), `overlap.py` (how much
   arms share space), `byform.py` (the same per formation, with stalls and
-  kicks), `when.py` (clock times of out-of-step overlap), `who.py FILE T…` (which parts are closest), `hexreview.sh
+  kicks), `when.py` (clock times of out-of-step overlap), `runs.py`, `accents.py`,
+  `still.py`, `who.py FILE T…` (which parts are closest), `hexreview.sh
   SOURCE.html OUT.mp4 [CRF]` (whole song with a clock), `mirror2.py` (where the
   implement throws the projector's light). Paths inside point at that folder.
 Environments under `/secondary/hyst-env`; root disk is nearly full.
 
 ## Known weak points
 
-- Ensemble: no overlap in Mirrored; canon limited for seconds at a time (the
-  task above). Six arms compile in about 16 s. Right of way between
+- Ensemble: no overlap in Mirrored (135 s of the song). No test covers a
+  flourish. A linear reach pauses 0.3 s where it turns round (0:49). Arms
+  drift out of step over the move before a flourish. Six arms compile in about 16 s. Right of way between
   arms is by arm index. The formation table is an agent's guess; the unison
   from 3:33 to 5:23 is long; "complements" is undefined. Version 40 removed the 187.9 s kick and the
   short standstills of version 39 (arm 5 keeps one). A ring under about 0.7 m fails

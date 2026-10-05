@@ -710,8 +710,10 @@ pub fn compile_ensemble(
             .push_str(&format!(" · {label} moment at {time:.2}s"));
     }
     // Ensemble formation of each run, chosen from its class and how often that
-    // class has come round. A first rule table, not reviewed by the user. A run
-    // shorter than eight beats keeps the formation before it.
+    // class has come round. The user: all together looks best, the mirror
+    // image is liked too, and a canon or ripple is a flourish, not a way to
+    // dance a section. A run shorter than eight beats keeps the formation
+    // before it.
     let mut formations: Vec<(f64, Formation)> = Vec::new();
     let mut seen: HashMap<&str, usize> = HashMap::new();
     for &(start, end, class) in &runs {
@@ -720,18 +722,10 @@ pub fn compile_ensemble(
         // low in energy and not synchronized enough).
         let formation = match class {
             "interlocked" | "bass-led" | "silence" => Formation::Unison,
-            "vocal-led" => [Formation::Canon, Formation::Ripple, Formation::Mirrored][n % 3],
-            "percussive-open" => [Formation::Ripple, Formation::Canon][n % 2],
+            "vocal-led" => [Formation::Mirrored, Formation::Unison][n % 2],
+            "percussive-open" => [Formation::Unison, Formation::Mirrored][n % 2],
             "sparse" => Formation::DropOut,
             _ => Formation::Pairs,
-        };
-        // A canon goes once round the ring and has no symmetry: held for a
-        // whole verse it read as unsynchronized (user). Past sixteen beats
-        // the run ripples instead, which the user found fine.
-        let formation = if formation == Formation::Canon && end - start > 16.0 * beat {
-            Formation::Ripple
-        } else {
-            formation
         };
         let short = end - start < 8.0 * beat && !formations.is_empty();
         let formation = if short {
@@ -746,6 +740,37 @@ pub fn compile_ensemble(
                 .filter(|c| c.start >= start && c.start < end)
             {
                 cue.reason.push_str(&format!(" · ensemble {formation:?}"));
+            }
+        }
+    }
+    // Per move: the move that holds a melodic flourish passes round the ring,
+    // as a ripple and a canon in turn. Only its timing changes; the arms keep
+    // the sides of the run's formation. Moves under six beats stay together.
+    let mut accents: Vec<Option<Formation>> = vec![None; instances.len()];
+    if arms.len() > 1 {
+        let flourishes = moments.iter().filter(|m| m.label == "flourish");
+        for (n, m) in flourishes.enumerate() {
+            let i = instances
+                .partition_point(|x| x.end <= m.time)
+                .min(instances.len() - 1);
+            // Only a move that sweeps under 120 degrees round the base: it
+            // is danced in line with the centre while it goes round (below),
+            // and a wide circle or arc cannot be without a lurch of the base.
+            let x = &instances[i];
+            let sweep = (0..=16).map(|k| {
+                let u = k as f64 / 16.0;
+                scaled((x.shape)(u, x.dir), x.scale)[0] + x.turn * u
+            });
+            let (low, high) = sweep.fold((f64::INFINITY, f64::NEG_INFINITY), |(low, high), v| {
+                (low.min(v), high.max(v))
+            });
+            let narrow = 180.0 * (high - low) < 120.0;
+            if narrow && x.end - x.start >= 6.0 * beat && accents[i].is_none() {
+                let accent = [Formation::Ripple, Formation::Canon][n % 2];
+                accents[i] = Some(accent);
+                cues[i]
+                    .reason
+                    .push_str(&format!(" · passed round as {accent:?}"));
             }
         }
     }
@@ -916,6 +941,19 @@ pub fn compile_ensemble(
     let count = arms.len();
     let rest = place(still(0.0, 1.0)).0;
     let (rest_out, rest_up) = (rest[0].hypot(rest[1]), rest[2]);
+    // Per knot: the move it belongs to, and 1 where that move is passed round.
+    let moves: Vec<usize> = times
+        .iter()
+        .map(|&t| {
+            instances
+                .partition_point(|x| x.end <= t)
+                .min(instances.len() - 1)
+        })
+        .collect();
+    let lined: Vec<f64> = moves
+        .iter()
+        .map(|&m| f64::from(accents[m].is_some()))
+        .collect();
     let mut locals: Vec<Vec<([f64; 3], f64)>> = Vec::with_capacity(count);
     // Centre of the layout.
     let middle: [f64; 2] = std::array::from_fn(|k| {
@@ -936,7 +974,11 @@ pub fn compile_ensemble(
                 let run = formations.partition_point(|f| f.0 <= t).saturating_sub(1);
                 let (start, formation) = formations[run];
                 let length = (instances[index].end - instances[index].start) / beat;
-                formation.part(a, count, ((t - start) / beat).max(0.0), index, length)
+                let (side, delay, on) =
+                    formation.part(a, count, ((t - start) / beat).max(0.0), index, length);
+                let delay =
+                    accents[index].map_or(delay, |f| f.part(a, count, 0.0, index, length).1);
+                (side, delay, on)
             };
             let part = |t: f64| {
                 let index = instances
@@ -960,11 +1002,25 @@ pub fn compile_ensemble(
             let (delays, dancing) = (column(|p| p.1), column(|p| p.2));
             let mut bearings: Vec<f64> = Vec::with_capacity(times.len());
             let mut reach: Vec<[f64; 2]> = Vec::with_capacity(times.len());
-            for (i, &time) in times.iter().enumerate() {
+            let placed: Vec<([f64; 3], f64)> = (0..times.len())
+                .map(|i| {
+                    let late = beat * bell(&delays, i as f64, 12.0);
+                    let (p, bearing) = place(hand((times[i] - late).max(0.0)));
+                    (p, flip * parts[i].0 * bearing)
+                })
+                .collect();
+            for i in 0..times.len() {
                 let on = bell(&dancing, i as f64, 6.0);
-                let late = beat * bell(&delays, i as f64, 12.0);
-                let (p, bearing) = place(hand((time - late).max(0.0)));
-                let want = flip * parts[i].0 * bearing;
+                let (p, want) = placed[i];
+                // A move passed round the ring is danced in line with the
+                // centre: the arm turns to face straight in or straight out
+                // (whichever is nearer at the middle of the move) and only
+                // rises, falls, reaches and draws in. The user: canon and
+                // ripple work well with such "linear" movements.
+                let x = &instances[moves[i]];
+                let mid = ((0.5 * (x.start + x.end) / step) as usize).min(times.len() - 1);
+                let line = (2.0 * bell(&lined, i as f64, 16.0) - 1.0).max(0.0);
+                let want = lerp(want, 180.0 * (placed[mid].1 / 180.0).round(), line);
                 let aimed = lerp(360.0 * (want / 360.0).round(), want, on);
                 // Turns are counted from the last bearing, so a change of side
                 // swings the nearer way round and not back through every turn.
@@ -1052,7 +1108,7 @@ pub fn compile_ensemble(
     if count > 1 {
         let mut poses = vec![neutral.clone(); count];
         let mut meets = vec![false; times.len()];
-        for (i, &t) in times.iter().enumerate().step_by(2) {
+        for i in (0..times.len()).step_by(2) {
             let mut bodies = Vec::with_capacity(count);
             for (a, plan) in arms.iter().enumerate() {
                 let (p, facing) = locals[a][i];
@@ -1071,18 +1127,16 @@ pub fn compile_ensemble(
                     held,
                 ));
             }
-            let run = formations.partition_point(|f| f.0 <= t).saturating_sub(1);
-            meets[i] = formations[run].1 != Formation::Unison
-                && (0..count).any(|a| {
-                    let others = Obstacles {
-                        zones: &[],
-                        others: &bodies[(a + 1)..].concat(),
-                        radius: clearance_m,
-                    };
-                    bodies[a]
-                        .iter()
-                        .any(|(p, extra)| others.depth(*p, *extra, 1.0) > 0.0)
-                });
+            meets[i] = (0..count).any(|a| {
+                let others = Obstacles {
+                    zones: &[],
+                    others: &bodies[(a + 1)..].concat(),
+                    radius: clearance_m,
+                };
+                bodies[a]
+                    .iter()
+                    .any(|(p, extra)| others.depth(*p, *extra, 1.0) > 0.0)
+            });
         }
         for (i, weight) in apart.iter_mut().enumerate() {
             let around = &meets[i.saturating_sub(4)..(i + 5).min(meets.len())];
@@ -1802,6 +1856,7 @@ mod tests {
         assert!(score.cues[0].reason.contains("ensemble Unison"));
         let held = score.rig.implement.radius_m;
         let (mut closest, mut middle, mut moved) = (f64::INFINITY, f64::INFINITY, [0.0f64; 6]);
+        let mut across = false;
         for i in 0..=480 {
             let frame = score.sample(8.0 * i as f64 / 480.0).unwrap();
             let bodies: Vec<_> = frame
@@ -1813,6 +1868,10 @@ mod tests {
                 let hand = frame.agents[a].world_points.last().unwrap();
                 let origin = ring[a].placement.origin_m;
                 moved[a] = moved[a].max((hand[0] - origin[0]).hypot(hand[1] - origin[1]));
+                let to = |b: &ArmPlan| {
+                    (hand[0] - b.placement.origin_m[0]).hypot(hand[1] - b.placement.origin_m[1])
+                };
+                across |= ring.iter().any(|b| to(b) < to(&ring[a]) - 1e-9);
                 middle = middle.min(hand[0].hypot(hand[1]));
                 for b in a + 1..6 {
                     for (p, extra) in &bodies[a] {
@@ -1832,13 +1891,16 @@ mod tests {
         // (0.4 m), yet none enters the circle in the middle where all six
         // would meet.
         assert!(moved.iter().all(|m| *m > 0.5), "reach {moved:?}");
+        // Nearer a neighbour's base than its own: no sector limit applies
+        // while the arms, posed alone, would not meet.
+        assert!(across, "no hand went past half way to a neighbour");
         assert!(middle > 0.27, "a hand came {middle:.3} m from the centre");
     }
 
     #[test]
-    fn arms_out_of_step_share_space_without_stopping() {
-        // Drums without voice: the six arms dance a ripple.
-        let json = super::super::tests::fixture(0.1, 0.2);
+    fn mirrored_arms_keep_apart_without_stopping() {
+        // Voice without bass: every second arm dances the mirror image.
+        let json = super::super::tests::fixture(0.7, 0.2);
         let ring: Vec<ArmPlan> = (0..6)
             .map(|k| {
                 let degrees = 60.0 * k as f64;
@@ -1855,7 +1917,7 @@ mod tests {
         let rig = Rig::illustrative_five_axis();
         let score =
             compile_ensemble(&json, CompileConfig::default(), rig, &[], &ring, 0.1).unwrap();
-        assert!(score.cues[0].reason.contains("ensemble Ripple"));
+        assert!(score.cues[0].reason.contains("ensemble Mirrored"));
         let held = score.rig.implement.radius_m;
         let hands = |t: f64| -> Vec<[f64; 3]> {
             let frame = score.sample(t).unwrap();
@@ -1863,19 +1925,13 @@ mod tests {
             frame.agents.iter().map(last).collect()
         };
         let apart = |p: [f64; 3], q: [f64; 3]| (p[0] - q[0]).hypot(p[1] - q[1]);
-        let (mut closest, mut across, mut still) = (f64::INFINITY, 0, [0; 6]);
+        let (mut closest, mut still) = (f64::INFINITY, [0; 6]);
         for i in 40..=440 {
             let (now, soon) = (
                 hands(8.0 * i as f64 / 480.0),
                 hands(8.0 * (i + 1) as f64 / 480.0),
             );
             for a in 0..6 {
-                let own = apart(now[a], ring[a].placement.origin_m);
-                // Past half way: nearer a neighbour's base than its own.
-                across += usize::from(
-                    ring.iter()
-                        .any(|b| apart(now[a], b.placement.origin_m) < own - 1e-9),
-                );
                 still[a] += usize::from(apart(now[a], soon[a]) * 60.0 < 0.02);
                 for b in a + 1..6 {
                     let gap = (0..3)
@@ -1886,7 +1942,6 @@ mod tests {
                 }
             }
         }
-        assert!(across > 0, "no hand went past half way to a neighbour");
         assert!(closest > 0.08, "implements came within {closest:.3} m");
         // No arm stands for a third of a second in all.
         assert!(
