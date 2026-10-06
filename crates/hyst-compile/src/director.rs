@@ -37,6 +37,28 @@ struct Evidence {
     musical_memory: Memory,
     stem_interpretation: Stems,
     musical_structure: Structure,
+    /// Onsets and phrases per instrument lane (`scripts/dance_notes.py`).
+    #[serde(default)]
+    note_track: Option<NoteTrack>,
+}
+
+#[derive(Deserialize)]
+struct NoteTrack {
+    lanes: std::collections::HashMap<String, Lane>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Lane {
+    /// [time, rough MIDI pitch, strength 0..1]
+    #[serde(default)]
+    notes: Vec<[f64; 3]>,
+    /// A-weighted level in dB for each beat of the grid.
+    #[serde(default)]
+    level_per_beat: Vec<f64>,
+    /// A-weighted spectral centroid as a MIDI pitch for each beat; 0 if silent.
+    #[serde(default)]
+    brightness_per_beat: Vec<f64>,
 }
 
 #[derive(Deserialize)]
@@ -295,17 +317,40 @@ fn phrase_at(phrases: &[Phrase], time: f64) -> &Phrase {
     &phrases[i]
 }
 
-fn character(a: [f64; 4], rms: f64) -> (&'static str, &'static str) {
+/// `a`: each stem's level against its own loudest. `share`: each stem's share
+/// of the sound's power. `loudness`: the level against the song's loud
+/// passages. By `a` alone a voice that ranges from soft to screaming reads as
+/// absent while it carries the verse, and the near-empty voice stem of an
+/// instrumental reads as singing; and a climax whose bass is buried is still
+/// the song at full strength.
+fn character(
+    a: [f64; 4],
+    rms: f64,
+    share: [f64; 4],
+    loudness: f64,
+) -> (&'static str, &'static str) {
+    // An active voice stem counts only with a sixth of the power of the
+    // melodic instruments beside it.
+    let sung = a[2] > 0.3 && share[2] > 0.15 * share[3] || share[2] > 0.14;
     if rms < 0.005 {
         ("silence", "breathe")
-    } else if a[0] > 0.43 && a[2] > 0.35 {
+    } else if a[0] > 0.43 && a[2] > 0.35 || sung && loudness > 0.7 {
         ("interlocked", "mirror")
-    } else if a[2] > 0.3 {
+    } else if sung {
         ("vocal-led", "canon")
     } else if a[0] > 0.43 {
-        ("bass-led", "unison")
-    } else if a[1] > 0.17 && a[2] < 0.15 {
+        // Same dance; the name says what the user hears in front.
+        if share[3] > 1.5 * share[0] {
+            ("melody-led", "unison")
+        } else {
+            ("bass-led", "unison")
+        }
+    } else if a[1] > 0.17 && (a[2] < 0.15 || share[2] < 0.04) {
         ("percussive-open", "wave")
+    } else if share[1] > 0.4 && (a[2] < 0.15 || share[2] < 0.04) {
+        // Same dance. A sparse kick carries the power (drums are spikes)
+        // without being a percussion passage to the ear.
+        ("kick-led", "wave")
     } else if a[3] > 0.3 {
         ("textural", "scatter")
     } else {
@@ -458,8 +503,39 @@ fn source_distance(data: &Evidence, now: f64, earlier: f64) -> f64 {
 mod tests {
     use serde_json::json;
 
+    #[test]
+    fn a_soft_voice_leads_and_a_loud_sung_passage_is_the_song_at_full() {
+        // "Five Years": steady bass, a voice far below its own loudest.
+        let verse = [0.7, 0.15, 0.25, 0.1];
+        let voice = |v: f64| [0.5 - v, 0.2, v, 0.3];
+        assert_eq!(super::character(verse, 0.1, voice(0.05), 0.4).0, "bass-led");
+        assert_eq!(
+            super::character(verse, 0.1, voice(0.45), 0.4).0,
+            "vocal-led"
+        );
+        // Its climax: the bass buried, everything loud.
+        let climax = [0.3, 0.25, 0.55, 0.8];
+        assert_eq!(
+            super::character(climax, 0.2, voice(0.3), 0.6).0,
+            "vocal-led"
+        );
+        assert_eq!(
+            super::character(climax, 0.2, voice(0.3), 0.9).0,
+            "interlocked"
+        );
+        // "Presence", an instrumental: the voice stem is nearly empty but
+        // peaks against itself; a lone kick carries the intro; and keys in
+        // front of an active bass lead.
+        let intro = [0.0, 0.16, 0.75, 0.5];
+        let class = super::character(intro, 0.1, [0.0, 0.6, 0.01, 0.39], 0.4).0;
+        assert_eq!(class, "kick-led");
+        let drop = [0.7, 0.19, 0.1, 0.7];
+        let class = super::character(drop, 0.2, [0.23, 0.3, 0.0, 0.47], 0.9).0;
+        assert_eq!(class, "melody-led");
+    }
+
     pub(super) fn fixture(vocal: f64, bass: f64) -> String {
-        let source = |activity: f64| json!({"absoluteRms":vec![0.1;160],"wholeTrackActivity":vec![activity;160],"spectralFlux":vec![0.55;160],"transientDensity":vec![0.4;160],"candidates":[]});
+        let source = |activity: f64| json!({"absoluteRms":vec![0.2*activity;160],"wholeTrackActivity":vec![activity;160],"spectralFlux":vec![0.55;160],"transientDensity":vec![0.4;160],"candidates":[]});
         json!({"duration":8.0,"envelopeRate":20.0,"rmsEnvelope":vec![0.2;160],
             "musicalMemory":{"version":1,"beatPeriod":0.5,"beatZero":0.0,"phrases":[{"start":0.0,"end":8.0,"rhythm":vec![0.5;32],"lowRhythm":vec![0.5;32],"highRhythm":vec![0.5;32],"similarity":0.0}]},
             "stemInterpretation":{"version":1,"duration":8.0,"envelopeRate":20.0,"sources":{"bass":source(bass),"drums":source(0.3),"vocals":source(vocal),"other":source(0.4)}},

@@ -1,158 +1,214 @@
-# Fresh-agent prompt — continue the single-arm dance
+# Fresh-agent prompt — the dancing arm ensemble (state at version 47, 2026-10-06)
 
-Start from current `master` on a new branch; open a pull request when a slice is
-done. Do not push to `master` directly. Communicate terse and exact. Frozen
-`src/` and `tools/` are read-only. Never drive hardware.
+Continue on branch `keys-decide` (draft pull request open; never push to
+`master`). Frozen `src/` and `tools/` are read-only. Never drive hardware.
+Write to the user in plain, short sentences with numbers; they judge by eye and
+answer by clock time.
 
-First, before any code: read this file, then every `DANCE_HANDOFF.md` entry dated
-2026-10-04 from "Version 13" onward (older entries and most of `AGENTS.md` §5
-describe deleted code; skip them). Read `crates/hyst-compile/src/director/figures.rs`
-in full and skim `director.rs`, `ensemble.rs`, `crates/hyst-previz/src/ensemble.html`
-and `examples/ensemble_preview.rs`. Run the checks under "Commands" and export one
-preview to confirm the tree works (it should be byte-identical to
-`song-figures-26.html`). Then report to the user in a few lines: what you
-understand the goal and state to be, what you will do first, and any question
-that blocks it. Start work after that report; do not wait for approval unless
-you asked a blocking question.
+## Read this first: what you can and cannot do
+
+**Everything the dance is made from lives outside git, on the user's machine:**
+the audio, the sidecars the planner reads, the separated stems, the exported
+previews, the videos, the video recorder and all measuring scripts. If you run
+somewhere without that machine's disk (a web or cloud session), you have the
+code and the tests and nothing else. Then:
+
+- You **can** read and change the planner, run the tests, clippy and fmt, and
+  reason from the measurements recorded in `docs/DANCE_HANDOFF.md`.
+- You **cannot** plan a real song, reproduce `hexagon-47.html`, measure a
+  change on a song, or make a video. Say so plainly; do not claim a change
+  improved the dance. A change to the planner is unverified until someone
+  exports and measures it on the user's machine.
+- If the task needs real songs, ask the user to either run a local session or
+  have the sidecars committed (about 12 MB of JSON for three songs; analysis
+  data, not audio; not done so far because nothing outside code was ever
+  committed).
+
+On the user's machine the paths are under "Commands" below.
+
+## What this is
+
+Six servo arms on a hexagon, facing its centre, each holding an irregular
+mirror ball, dancing to a song. The dance is planned offline from a "sidecar"
+(a JSON analysis of the song) by one function,
+`hyst_compile::director::figures::compile_ensemble` (`compile_figures` is its
+one-arm case). `hyst-previz`'s `ensemble_preview` example turns the plan into a
+self-contained HTML preview; a script outside git records that into a video.
+A projector showing the visualizer (the other half of the project) will light
+the arms. Real hardware is the end goal; nothing has been built or driven.
+
+## Where we are
+
+Three songs have been danced with the same planner:
+
+| Song | Why it matters | User's verdict |
+|---|---|---|
+| Daft Punk, "Instant Crush" | the song everything was tuned on; steady tempo | version 44: "Its nice now"; version 46: jerks at 3:52, 4:08–4:09, 4:36 |
+| Bowie, "Five Years" | live drummer, triple feel, tempo speeds up 6.5 %, soft opening to loud climax | version 46: "generally OK, its a difficult song for this and for dancing in general" |
+| Justice, "Presence" | instrumental, steady 130 bpm, builds and drops | version 46: a long list of jerks, low-energy stretches, wrong labels, no payoff at the drop |
+
+**Version 47 answers that review and has not been reviewed.** The three
+whole-song videos were made and reported to the user; no verdict yet. Three
+questions are open with the user:
+
+1. Are Instant Crush's flourishes now too tame? (Their sharp form won a blind
+   test; version 47 slowed them.)
+2. Does the rise at the "Presence" drops read as a payoff, or does it need more?
+3. What next: moves that follow the lead instrument's melody, or the remaining
+   jolts?
+
+Do not start either piece of work before the user answers; they are large and
+the user chooses the order.
+
+## What version 47 does that version 44 did not
+
+All in `crates/hyst-compile/src/director/figures.rs` and `director.rs`; each
+has its reason and numbers in the last five entries of `docs/DANCE_HANDOFF.md`
+(second song, versions 45, 46, 47).
+
+- **Intensity**: loudness round a time against the song's own loud passages.
+  Gentle passages get the soft flourish, smaller arrivals, less surge.
+- **Classes by share of the sound.** Each stretch of the song gets a class
+  (`character` in `director.rs`) from the four stems (bass, drums, vocals,
+  other): each stem's level against its own loudest, and now also its share of
+  mean power and the overall loudness. Names: silence, interlocked (the song at
+  full; chorus moves), vocal-led, bass-led, melody-led (bass rule, but the
+  "other" stem outweighs the bass; same dance), percussive-open, kick-led (a
+  sparse kick carries the power; same dance as percussive-open), textural,
+  sparse. **The thresholds are tuned on three songs and are fragile**; a song
+  with flat loudness would make every sung passage "interlocked".
+- **No arm rests.** The drop-out and pairs formations are deleted. Every class
+  is Unison except percussive-open and kick-led, which alternate Mirrored and
+  Unison; a run under 24 beats keeps the formation before it.
+- **Contrast phrase**: a run longer than about 128 beats plays another class's
+  phrase once, then returns.
+- **Moments limited in speed.** A flourish or arrival takes as long as its
+  travel needs so that it adds at most 0.6 m/s to the hand; it still lands on
+  time. No stab surge within two beats of a moment.
+- **Surge stretched to the note spacing** of the lead instrument (it idled and
+  burst where notes were sparse). The figure clock never runs ahead of the
+  music, so sparse notes surge less than dense ones; that is known and kept.
+- **Arrivals have a direction.** Where the music lifts (a drop), the arms rise
+  to full height and hold longer; where it falls away, the arrival is small.
+- **Calmer without drums**: the figure clock runs at 0.65 where the drum stem
+  is silent.
+- **Abort fixed**: "cannot fit tangents" when arms were still moving at the
+  song's last instant.
 
 ## What the user wants (their words, settled)
 
 - A viewer should think "beautiful", then "impressive", then "how did they do
   this". Idea source: OK Go "Love" (robot arms with mirrors).
-- One arm that truly dances is the goal now. Many arms and projection come
-  after, and need "dynamic red zones" (each arm a moving zone for the others).
-- Interpretation must be automatic. Human timestamps in
-  `scripts/instant_crush.acceptance.json` are validation only, never input.
-- Dance works from offline sidecars only. No live audio.
-- **Real hardware is the end goal.** Motion no servo arm could execute is a defect.
-- **Rig, settled:** five servos: base yaw (continuous 360°), shoulder, elbow,
-  wrist bend, wrist roll. No more axes for now. Lengths, limits and speeds are
-  invented until measured.
-- **Hand, settled:** a reflective, non-spherical object, for the first demo a
-  mirror disc held by its edge in line with the arm ("---0"). Never a ball.
-  Its orientation matters. What exactly it is remains open, so checks that need
-  its shape (disc rim against floor and zones) wait.
-- A lifelike render (Blender or similar) comes much later. Do not polish the
-  canvas preview unless asked.
-- The user's own model of dancing this song: percussion is the floor, the
-  keys/guitar are the decision-maker (their flourishes cue movement from state to
-  state), vocals give the emotion. In the break the guitar solo leads.
-- A hold is almost never a dead stop: small slow movement. A true freeze only
-  on a cut (dense, nothing, dense). This song has none.
-- This song has no sharp passages; flicks are wrong here. Jitter is a defect;
-  purposeless constant motion is also a defect.
-- Keep scope finite: "we want this to actually work and be finished".
-- Test song stays Instant Crush.
+- Six arms, concentric, symmetric. All dancing all the time: resting arms were
+  rejected as low energy and not synchronized. "The best looking one is sync. I
+  also like mirror"; canon and ripple are "more of a flurish move".
+- The arms sharing each other's reach is the "wow"; they must never collide.
+- Interpretation must be automatic, from offline sidecars only; no live audio.
+  Human timestamps (`scripts/instant_crush.acceptance.json`) and published
+  tabs are for checking, never planner input.
+- The dominant instrument should lead the arm. The voice is not an instrument
+  but a fluid up, down, stop and loudness.
+- A hold is almost never a dead stop. Jitter and jerks are defects the user
+  spots at once; so is purposeless constant motion, and so is hanging around.
+- Motion no servo arm could execute is a defect.
+- Rig, settled: five servos (base yaw continuous 360°, shoulder, elbow, wrist
+  bend, wrist roll). Lengths, limits and speeds are invented until measured.
+- Hand: a reflective, non-spherical object; the lumpy mirror ball is preferred
+  over the disc. Other implements must stay possible.
+- Do not polish the canvas preview unless asked.
 
-## How the user reviews (keep this loop)
+## How the user reviews
 
-The user judges by eye and is fast and precise. For every decision, send a
-**shuffled side-by-side**: three variants of the same 30–40 s passage in one
-synced video (A | B | C), key written to a file and left unread until the
-verdict. Winners become constants; losers and their flags are deleted the same
-turn. `$CLAUDE_JOB_DIR`-style scratch scripts did this in the last session; the
-recipe is: export three HTMLs with a temporary flag, record each with
-`record-ensemble.cjs`, `ffmpeg hstack` with `drawtext` labels.
-Numbers are evidence about motion, never proof of dance. Do not claim to have
-watched or heard anything. Measure before sending: twice a variant turned out
-to be broken or a no-op, which a quick measurement caught.
+By eye, on whole-song videos with a clock in the corner, reporting clock times.
+For a single yes-or-no choice between variants: one shuffled, synced
+side-by-side (A | B | C) with the key in a file left unread until the verdict;
+the winner becomes a constant and the losers and their switches are deleted in
+the same turn. Measure before you send, give a table of what changed, and tell
+the user what to look for and when. Never claim to have watched or heard
+anything. Ask before artistic choices the user has not made.
 
-Blind-test record so far. Kept: hand-path low-pass, figure clock with 0.8 m/s
-cap, wrist drag (strong), disc roll = travel + flips, spin 280°/m. Died: beat
-pulse, keys pacing, figure carry, melody contour, plain joint lag, wrist whip
-on moments, suspension at figure peaks, three other roll drivers (lead, spin
-one-way, twirl). Lesson: small posture pulses and small timing shifts are
-invisible; structural changes and changes to the hand object read.
+Lessons from the record: small posture or timing changes are invisible,
+structural changes read; nearly every "jerk" the user has reported turned out
+to be a flourish, an arrival or the stab surge, so measure the named clock time
+before theorising (`jolts.py`, `spans.py`, `look5.py`).
 
-## What exists
+## Known weak points (none of these is fixed)
 
-- `scripts/dance_memory.py`, `dance_stems.py`, `dance_structure.py` build the
-  sidecar (`musicalMemory`, `stemInterpretation`, `musicalStructure`) from audio
-  and Demucs stems.
-- `crates/hyst-compile/src/director.rs`: sidecar parsing and evidence helpers.
-- `crates/hyst-compile/src/director/figures.rs` (about 990 lines):
-  `compile_figures`, the planner.
-- `crates/hyst-compile/src/ensemble.rs`: rig, forward kinematics, score type,
-  quintic sampling and validation.
-- `crates/hyst-previz/examples/ensemble_preview.rs` + `src/ensemble.html`:
-  browser preview at 60 fps, canvas 2D, one offline file: shaded capsule links,
-  pedestal with marks that turn with the base, mirror disc on a stem (two
-  distinct faces), cast shadow, depth-sorted hand trail, drag-to-orbit, red
-  zones, critique panel.
-
-Planner in one paragraph: the song is cut at measured transitions and phrase
-edges; each stretch gets a class from stem levels; each class has a sequence of
-hand figures in arm-relative coordinates, mirrored on each repeat, travelling
-round the base. The hand path is low-passed. A **figure clock** stops during
-holds, caps path speed at 0.8 m/s and makes lost time up at 15% extra pace.
-Moments: section arrivals (prepare, arrive, living hold, release) and
-keys/guitar flourishes (passed through); a true freeze only on a cut. Joints
-are solved per knot (damped least squares, base faces the hand, zone
-penalties) with a **wrist drag** posture preference (wrist trails the hand's
-rise and fall; the other joints compensate, so the hand path is unchanged).
-The **wrist roll** is driven outside the solver: 280° per metre of hand travel
-in fast sweeps only, direction from the sweep relative to the figure's steady
-travel, plus a half turn across each moment in alternating directions. A
-follower then limits each joint's speed and acceleration, brakes before end
-stops and **near zones** in proportion to clearance; a hard zone check
-bisects back if still needed. The roll is exempt from zone braking.
+- **Arms braking for each other.** In unison the arms brake for their
+  neighbours at moments that depend on where the figures happen to point. Any
+  change to the plan moves these jolts around by several per song. The
+  mechanism (the follower's braking and the hard check in `compile_ensemble`)
+  has not been touched.
+- "Presence" still has hard jolts at 0:48, 1:56 and 3:11 (flourishes passed
+  round the ring); Instant Crush one four-arm jolt near 3:43; 3:52 is softer,
+  not gone.
+- **Following the lead instrument.** Only the label says "melody-led". The
+  lead lane drives the surge and the swell in every class, as before; it does
+  not shape the moves. The user asked for exactly that on "Presence"
+  (2:31–2:55: "really nice and emotional and has energy and could be followed").
+- **Beat tracking is outside the repo.** "Five Years" needs a tempo map
+  (tracked beats, audio warped to a steady grid for analysis, video played back
+  through the map; the interactive page has no map and drifts up to 2.3 s).
+  "Presence" needed its grid refitted to the drum hits (it was 45 ms late; the
+  base analysis's beat tracker lags). Both are scratch scripts using librosa.
+  They belong in `scripts/dance_memory.py` and in score playback.
+- Entering Mirrored from a widely turned heading makes neighbours meet and
+  stop; dodged for short runs only.
+- Red zones for keeping arms off equipment: axis-aligned boxes exist
+  (`--zone`), tested with one and two arms and with a ring. Which shapes the
+  user needs is unanswered; do not invent shapes.
+- The preview's light is plain patches. Follower limits are guesses for hobby
+  servos; no load or gravity model. Six arms compile in about 16 s.
+- `AGENTS.md` is very long; only its top section and its last few entries are
+  current.
 
 ## Commands
 
+Anywhere:
+```
+cargo test --workspace --exclude hyst-render      # 139 pass; six-arm tests take ~15 s each
+cargo clippy -p hyst-compile -p hyst-output -p hyst-previz -p hyst-cli --all-targets -- -D warnings
+cargo fmt --all --check
+node crates/hyst-previz/tests/ensemble.cjs
+cd scripts && python3 -m unittest discover -p "test_dance_*.py"
+```
+`hyst-render` needs a GPU; leave it out.
+
+On the user's machine only:
 ```
 D=/home/stcksmsh/Documents/Codex/2026-09-23-can-you-check-the-programming-github/output/music-arm
 cargo run --release -p hyst-previz --example ensemble_preview -- \
-  $D/song-figures-N.html instant-crush.m4a $D/instant-crush.interpreted.sidecar.json \
-  [--score OUT.json] [--zone x0,y0,z0,x1,y1,z1] [--groove-only] [--no-reuse] [--drag GAIN]
-node $D/record-ensemble.cjs $D/song-figures-N.html $D/instant-crush.m4a $D/clip.mp4 START SECONDS
+  $D/OUT.html SONG.m4a $D/SONG.notes.sidecar.json --ring 6,0.8 \
+  [--clearance 0.1] [--implement ball|disc] [--zone x0,y0,z0,x1,y1,z1] [--score OUT.json]
 ```
-Open the HTML from disk (audio sits beside it). The recorder draws the canvas
-only, max 40 s, fixed camera. `$D` is outside git; never commit media. Stems are
-in `$D/stem-analysis/`; the Demucs environment is gone, do not regenerate.
-Checks: `cargo test --workspace --exclude hyst-render`, clippy `-D warnings` on
-hyst-compile/-output/-previz/-cli, `cargo fmt --all --check`,
-`node crates/hyst-previz/tests/ensemble.cjs`. Do not run hyst-render tests (GPU).
-Shell note: commands that contain the `$D` path together with pipes or `&&`
-chains may be refused by the worktree guard; put such steps in a script file.
+Sidecars: `instant-crush.notes.sidecar.json`, `five-years-steady.notes.sidecar.json`
+(with `five-years.tempomap.json`), `presence.notes.sidecar.json`. The export
+must reproduce `hexagon-47.html`, `five-years-hexagon.html`,
+`presence-hexagon.html`.
 
-## Next work, in the user's order
+Tools in `$D/tracker-scratch/newsong/`:
+- A new song: `song.sh SOURCE SLUG` (resample, base sidecar, memory, Demucs
+  four and six stems, stems, structure, notes, export). Check the printed grid
+  support. Grid late or early: `regrid.py`, then `songtail.sh SLUG`. Tempo
+  drifts: `beatmap.py`, then `song2.sh SLUG`.
+- All three songs at once: `three.sh TAG` (exports and prints classes,
+  formations, kicks, jolts).
+- One song: `classes.py`, `acts.py` (stem activity and share per 10 s),
+  `jolts.py` (every hard jolt with its move and moment), `spans.py A B T0 T1 …`
+  (two versions over clock windows), `look5.py` (half-second detail).
+- Videos: `songvideo.sh SLUG SECONDS` and `hexreview.sh SOURCE.html OUT.mp4`
+  (whole song with a clock; about ten minutes each). The recorder
+  `$D/record-ensemble.cjs` reads `HYST_TEMPO_MAP`.
 
-1. **Keys decide** (the main job, for this fresh iteration). The user: "follows
-   music OK, could be a tad better". Nothing follows keys/guitar/voice directly.
-   Two earlier attempts (pace from keys activity, hand height from a pitch
-   proxy) were invisible and deleted. The next attempt must be structural:
-   build a note tracker on the `other` stem (onsets, rough pitch contour,
-   phrase starts and ends), then let it choose **when figures change** and
-   which figure follows, instead of fixed beat counts. Judge by side-by-side
-   against the current version.
-2. **Hand object.** Decide what the hand holds (disc, faceted mirror), then
-   include its shape in floor and zone checks, and decide whether the roll
-   should aim it (at a light or the viewer) on moments.
-3. **Many arms** with dynamic red zones, as moving zones inside the figure
-   planner. Zone braking exists; untested with several or moving zones.
-
-## Known weak points
-
-- Follower limits (design 180°/s, 800°/s²; envelope 240°/s, 8000°/s²) are
-  guesses for hobby-class servos; no load, gravity or inertia model. Wrist drag
-  about triples wrist travel and runs the wrist near the acceleration cap;
-  `--drag` is the knob if a real wrist servo cannot keep up.
-- The disc rim (6 cm past its centre) is not in the floor/zone check.
-- The roll's travel part nets about one direction over the song.
-- `fit_tangents` still cascades: one infeasible segment zeroes neighbouring
-  tangents until fast segments fail. The last two triggers were fixed at their
-  source (zone braking of the roll; zero tangent on the last knot). Its error
-  now prints the neighbouring knots.
-- Shoulder reaches −109.5° of a −110° limit; within 1° of it about 3% of the song.
-- Stretch class comes from fixed thresholds on stem levels.
-- Arrival and flourish poses are two or three fixed shapes.
-- Cut detector is tested only on a synthetic fixture.
-- Arrivals stop 0–80 ms late (follower lag); knots are 68 ms apart.
-- Only 1:24–2:04 of the song has been reviewed by eye in the last session.
-- `AGENTS.md` is long; trimming it into a history file was proposed, not done.
+Environments are under `/secondary/hyst-env` (Demucs; librosa is in the
+`basic-pitch` one); the root disk is nearly full. A shell guard there refuses
+commands that mix the `$D` path with pipes, `&&`, loops or heredocs: put such
+steps in a script file and run that.
 
 ## Rules of engagement
 
-Ask the user before artistic choices they have not made. Do not stack layers
-without a side-by-side. Keep code small: delete what loses. Append an honest
-entry to `docs/DANCE_HANDOFF.md` and `AGENTS.md` when you stop.
+Keep code small; delete what loses. Stay inside `hyst-compile` and
+`hyst-previz` for dance work. Additive sidecar changes only. Append an honest
+entry to `docs/DANCE_HANDOFF.md` (what changed, measured numbers, what is not
+verified) and a short one to `AGENTS.md` when you stop, then commit and push
+to `keys-decide`.

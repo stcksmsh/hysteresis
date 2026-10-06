@@ -1211,3 +1211,1041 @@ bend −41°..90°, elbow 10°..110° (limit 110°), shoulder −109.5°..−21�
 eye this session.
 
 `docs/DANCE_RESTART_PROMPT.md` rewritten for a fresh agent. Next: keys-decide.
+
+### Version 27: instrument lanes, leading lane, pulsed travel on stabs — 2026-10-04
+
+Branch `keys-decide`. User intent stated this session: the note data is for the
+whole installation ("the machine behind it"), lives in the sidecar, and must
+work for other songs (e.g. twin guitars left and right). Target per instrument:
+timing, relative pitch, some loudness. The voice is not an instrument but a
+fluid up/down/stop/loudness.
+
+**Tracker.** `scripts/dance_notes.py INPUT_SIDECAR STEM_DIR OUTPUT_SIDECAR` adds
+`noteTrack.lanes`: one lane per WAV in `STEM_DIR` (any separation), each with
+onsets `[time, rough pitch, strength]`, phrases, and `levelPerBeat` (A-weighted
+dB). Onsets are spectral flux; pitch is a harmonic sum (often the chord root).
+The song's sidecar is now `$D/instant-crush.notes.sidecar.json`, built from
+six-stem Demucs stems (`/secondary/hyst-env/stems6/`). An older sidecar without
+`noteTrack` still compiles and gives version 26 byte for byte.
+
+**References found (validation only, never planner input).** A Songsterr tab
+(14 tracks, full length) aligned to the recording; a midifind MIDI that turned
+out to be derived from the same tab with a simplified chorus. Guitar and piano
+tab tracks have capo 1. Assets and scratch scripts: `$D/tracker-scratch/`, see
+the memory note `reference_dance_tracker_assets.md`.
+
+**Measured against the tab** (note start within 50 ms): flux onsets on the
+six-stem guitar stem 0.94; guitar and keys as one lane 0.92; keys via a stereo
+"wide" split of `other` 0.85; voice (basic-pitch, filtered) 0.73; bass 0.67.
+MuScriptor small (July 2026, CC BY-NC, gated): bass 0.95 and 0.93 right note;
+guitar and keys on the `other` stem 0.95 and 0.67 right note; voice 0.84 with an
+instrument hint; it gives no separate keys lane and constant velocity. Voice as
+a pYIN curve: up/down 0.90, singing or silent 0.88, phrase stops weak. Not
+solved: up/down of chord lines (0.3 to 0.6 by every method), the break solo's
+line (under half its notes found), separate keys lane. Lane discovery by stereo
+position separates simulated twin guitars at 35 % pan or more (0.91 to 0.97),
+fails at 15 %. None of the MuScriptor, pYIN or stereo work is in the repo.
+
+**Planner.** `compile_figures` ranks the instrument lanes per beat by level
+(voice and drums do not compete; a challenger needs 3 dB for four beats,
+backdated). On this song: guitar leads to 90.4 s, synths to 125.3, guitar to
+188.8, the lead line to 212.7, synths after. Blind tests:
+- Figures snapping to the leader's phrase starts, figures picked by its pitch
+  step, accents from the second lane: lost. User: they follow the stabs but
+  wobble up and down across the travel line. Deleted.
+- Pulsed travel while the leader plays stabs (empty beats between its hits):
+  user chose "surge just after each stab" over even travel and over "arrive on
+  the stab". Now constant: pace 0.3 to 2.2 times even, decay 0.35 beat, the
+  speed cap may be exceeded by half during a surge. Active only in the two
+  choruses and the end; verses and break are unchanged.
+`song-figures-27.html` is byte-identical to the chosen clip. Whole song: hand
+speed median 0.34, p95 1.03, max 1.88 m/s; acceleration outside moments p95 5.6
+m/s² (version 26: 1.4). That is a hardware and jitter risk the user has seen
+only at 3:32 to 4:12.
+
+**Open.** The `--flourish` knob (0 as before, 1 none, 2 soft) is still in the
+code: user said all three have a part, per moment; the cause of the flick at
+2:19 is a flourish placed on an arbitrary guitar note. Next agreed step: the
+fluid half, for when the leader is a single flowing line (the break): size and
+height follow its swell. User's unanswered point: the arm "over-focuses on
+centre"; measured that verses sway about one fixed direction and the hand stays
+0.31 to 0.55 m from the base axis. 131 CPU tests, clippy, fmt, `ensemble.cjs`,
+tracker test pass.
+
+### Versions 28–30: leader's swell, smoothed figure clock, voice lift — 2026-10-04
+
+Branch `keys-decide`. All three were settled by side-by-sides with the user.
+
+**Sidecar.** `scripts/dance_notes.py` now also writes `brightnessPerBeat` per
+lane: the A-weighted spectral centroid as a MIDI pitch, 0 for a silent beat.
+Old fields are unchanged; `$D/instant-crush.notes.sidecar.json` was regenerated.
+A sidecar without the field compiles, without the swell.
+
+**Version 28, swell of the leading lane (the "fluid half").** Measured on the
+break: the solo's loudness is nearly flat (−27 to −23.5 dB over 187–204 s, then
+fading to −38 dB by 212 s); its brightness carries the contour (89–98). Rule:
+per beat, the leader's level and brightness about their medians over the
+stretch that lane leads (3 dB and 4 semitones are full scale), faded out where
+it plays stabs, smoothed with a bell one beat wide. Level scales the figure by
+up to 35 %; brightness shifts hand elevation by up to 0.3. The user chose full
+strength over half and none, blind on the break (3:00–3:40) and open on a verse
+(2:05–2:45). There is no gate for "single flowing line": the rule runs wherever
+the leader plays no stabs, verses included.
+
+**Version 29, smoothed figure clock.** The user reported possible jitter or
+micro-stutter. Measured: clips are 30 fps with no dropped or duplicate frames.
+The motion did chatter: when the leader plays quick notes the surge retriggers
+every second knot, so the hand's step alternated about 26 and 35 mm per knot
+and the base and disc followed (163 knot-to-knot acceleration reversals of the
+base over the song, mostly in the choruses). The joint follower was not the
+cause; it reproduces its targets. Two first candidates (a run of quick notes
+surges once; eased surge) shifted figure timing by 35–65 cm of hand position,
+so the user could not compare them; deleted. Kept: a bell of two knots over the
+figure clock. Hand within 1 cm of version 28; base reversals 163 → 1; hand
+acceleration outside moments 5.8 → 1.7 m/s² p95. **The user saw no difference
+by eye**; it is kept for the hardware only, against the "no difference means
+delete" rule, and the user was told. So the jitter the user sees is something
+else: candidates are the disc roll (still 81 reversals; its spin target is
+faster than the roll limit, so it chases at full acceleration) and the 30 fps
+recording. Smoothing the roll's direction signal changed almost nothing and was
+deleted.
+
+**Version 30, voice lift.** The user, on 4:07: the vocals are high and
+important there, the arm should go a lot higher. Measured: the vocal lane's
+rough pitch jumps from about 65 to 73 at 247.5 s and stays until about 262 s,
+at the song's loudest vocal level; its brightness does not show it. Rule: per
+beat, the median pitch of the vocal lane's notes above the song's median note
+(2 semitones start it, 8 are full), smoothed with a bell two beats wide, adds
+up to 0.65 to both elevation and extension. The user put the strength between
+0.45 and 0.9 in a blind side-by-side on 3:52–4:32. Median hand height in
+247–262 s: 0.39 → 0.61 m. It also lifts other high vocal stretches (165–185 s:
+0.37 → 0.50 m), which the user has not reviewed.
+
+**State.** `song-figures-30.html`. Whole song: hand speed median 0.34, p95 0.97,
+max 2.25 m/s. 133 CPU tests, clippy, fmt, `ensemble.cjs`, tracker test pass.
+An old sidecar no longer reproduces version 26 (the clock smoothing applies to
+every sidecar). Still open: the `--flourish` knob, the roll chatter, the leader
+change found at 188.8 s (the user hears 185), "over-focuses on centre".
+
+### Version 31: flourishes soft where the leader plays a steady stream — 2026-10-04
+
+Measured cause of the flick at 2:19: a flourish is the strongest onset of the
+melodic stem per ~16 beats. In the choruses that is a stab of the leading
+synth, a hit that stands out (9 of 23). In the verses, the break and the end
+the leader plays a steady stream, every strum has the same strength, and the
+flourish lands on an arbitrary one (14 of 23). Rule: where the stab weight of
+the leading lane is under 0.5 at the flourish's beat, the flourish is slow and
+soft (half strength, twice the window); among stabs it is as before. Blind
+side-by-side on 2:05–2:45: the user called the sharp one "a bit too much" and
+the soft one "ok"; "none" was not chosen. Peak hand acceleration at 2:19 falls
+from 11.3 to 1.5 m/s². The `--flourish` knob and its config field are deleted.
+`song-figures-31.html`; the choruses are unchanged from version 30. No test
+covers the soft/sharp choice (the fixture has no flourish). Flourish poses are
+still two fixed shapes alternating high and low.
+
+### Version 32: sections travel round the base in alternating directions — 2026-10-04
+
+The user's "over-focuses on centre" means: the rotation goes mostly one way.
+Measured on version 31: the base netted 12.5 turns in one direction over the
+song (turning that way 56 % of the time, the other 42 %), and every long
+section turned the same way. Two candidates: the steady travel reverses each
+section (3.6 net turns, 51 % / 47 %), or the whole section is mirrored, figures
+included (1.0 net turn, 46 % / 50 %). On a blind 40 s clip (1:10–1:50) the user
+was "genuinely unsure", declined a longer clip and asked for a middle ground.
+Kept: the steady travel reverses each section, figures keep their own side.
+This is the user's instruction, not a blind-test win. The choruses still all
+turn the same way as each other (the sections between them reverse); that falls
+out of the alternation on this song, it is not a rule. The `--travel` knob is
+deleted. `song-figures-32.html`; 133 CPU tests, clippy, fmt, `ensemble.cjs`
+pass. No review knobs remain in the code.
+
+### Version 32 approved on a whole-song review — 2026-10-04
+
+The user watched the whole song at version 32 (60 fps, on-screen clock,
+`review-32-full-60fps.mp4`) and said: "I think it's all good". No jitter was
+reported. The single-arm motion is accepted for now. Agreed order from here:
+the hand object, then several arms with red zones. Open before the hand object
+can be built: what the object is in numbers, and what the mirror aims at.
+
+### Hand object, first step: where the disc throws the projector's light — 2026-10-04
+
+The user restated the whole-project concept: several arms with "something with
+mirrors" on the end, and a projector fires the visualizer (the Julia and
+Mandelbulb fractals) onto them and the wall. So the light is the projector's
+image. The object, the room layout and whether the mirrors aim are not decided.
+
+Measured on version 32 with an **assumed** room (projector 3 m in front of the
+arm at 1.2 m height, screen wall 1.5 m behind it, both mirror faces): the
+reflection lands on the screen wall 43 % of the song, the floor 36 %, the
+ceiling 12 %, side walls 8 %, back at the audience 1 %. The disc is nearly
+edge-on to the beam 25 % of the time. A spot on the wall moves at 2.1 m/s
+median, 14 m/s p95, and stays there 0.5 s median at a stretch. With the hand
+where the dance puts it, some roll angle would put a usable spot on the screen
+wall in 93 % of the song: the roll alone could steer it.
+
+The preview (`ensemble.html`) now draws that room: a screen wall, a projector
+mark, and the reflected patch on the wall or floor. Constants `PROJECTOR` and
+`WALL` are assumptions. The planner is unchanged (still version 32). Clip
+`mirror-light-32.mp4` (3:32–4:12) sent to the user. The disc rim is still not
+in the zone check.
+
+**Correction, same day: the projector is above the arm.** User: if the arm is
+on the floor the projector is on the ceiling; if the arm is on a wall the
+projector is perpendicular to that wall. So the projector faces the mounting
+surface head-on and that surface is also the screen. The front projector and
+back wall above were a wrong assumption and are gone from the preview.
+Re-measured on version 32, projector 2.5 m straight above the base (4 m gives
+the same shares): the disc faces the beam with 62 % of its area (median) and is
+nearly edge-on 17 % of the song; the reflection falls back on the mounting
+surface 60 % (within 1.5 m of the base 45 %), leaves sideways 18 %, upward
+23 %; the beam's direction turns at 54°/s median, 373°/s p95. The roll alone
+could always keep the disc facing the beam (never under 20 %, median 95 %).
+The preview now puts the projector overhead, casts the arm's shadow from it,
+and draws the reflection as a patch where it falls back on the surface and as a
+beam where it leaves for the room. Height 2.5 m is assumed. Clip
+`mirror-light-32b.mp4`. Not decided by the user: the object, the projector's
+distance, where the audience is, whether the mirrors aim.
+
+### Hand object "shards": a cluster of small mirrors — 2026-10-04
+
+User on the overhead-projector clip: "a ray from mirror to reflection sometimes
+appears"; after that is fixed "I think it's OK". Then asked for a new
+implement: "a strange shape with mirrors all over, scattered".
+
+- Ray: it was drawn only when the reflection left for the room. Now every lit
+  mirror always has one thin ray, to its patch or 1.2 m out into the room.
+- New hand object in the preview, the default: `SHARDS`, sixteen small round
+  mirrors (1.6–3 cm radius) at 3.5–7 cm from the hand point, each tilted off
+  the radial direction, one-sided. The layout is a fixed invented stand-in. It
+  turns with the wrist roll like the disc did. Each mirror that faces the
+  projector throws its own patch or ray. The disc remains as `?hand=disc` on
+  the preview URL.
+- Not modelled: one shard shading another, the arm blocking the beam, the
+  image content. The planner and the rig are unchanged (version 32): the rig's
+  last link still ends at a 6 cm disc radius and nothing of the hand object is
+  in the zone check. Clips `shards-32.mp4` and `disc-32.mp4` (3:32–4:12).
+
+**Shards, second form, same day.** User: "Shards is better, make it more like
+a discoball, but not quite, not spherical, irregular a tad", then "non-convex
+sort of". The preview's default hand is now a lumpy ball tiled with 84 small
+square mirrors (about 1.5 to 1.9 cm across, each a little crooked): two unequal
+lobes with a waist between them, one deep dent and one shallow, 3 to 7 cm from
+the hand point (`radius`, `DENTS`, `SHARDS` in `ensemble.html`). Tiles follow
+the surface, so the dents hold mirrors that face each other. About half the
+tiles face the overhead projector at any time; each throws a small square
+patch on the floor or a faint ray into the room. Not modelled: tiles shading
+each other inside the dents, reflections between tiles. Clip
+`mirrorball-32.mp4` (3:32–4:12). Planner and rig unchanged.
+
+### Version 33: the implement is rig data and is in the zone check — 2026-10-04
+
+User: the ball is good, make it lumpier; next "red-zones for the 3D shape of
+the implement"; "want differing implements to be possible, generalization is
+always good".
+
+- `ensemble.rs`: `Rig` has an `implement` (`Implement { name, radius_m,
+  mirrors }`, `Mirror { centre_m, normal, u, half_size_m, sides, both_faces }`,
+  all in the tool frame: axis 0 along the last link, axis 1 the tool's facing
+  at zero roll). Any set of flat mirrors is an implement; a `--rig` JSON file
+  can carry its own. Built in: `Implement::mirror_ball()` (default) and
+  `Implement::disc()`; the preview example takes `--implement ball|disc`. A rig
+  file without the field loads with the default. `validate` refuses mirrors
+  that are not unit, or that reach past `radius_m`.
+- Zone and floor checks (`figures.rs`, `link_samples`): the hand point keeps
+  the usual margin plus `radius_m` from every zone and the floor, in the
+  solver, the follower's braking and the hard check. It is a bounding sphere,
+  so it holds for any shape and any roll (the roll is driven outside the
+  solver); it wastes room for a flat implement. Marked `ponytail:`.
+- The ball is lumpier: 110 square tiles of 1.1 to 2 cm across, two lobes,
+  ripples, four dents; bounding radius 8.0 cm.
+- The preview draws whatever mirrors the rig carries (`data.rig.implement`);
+  the hard-coded shapes and the `?hand=disc` switch are gone from
+  `ensemble.html`.
+- Effect on the dance: the hand used to dip to 7.9 cm above the floor (the old
+  disc's rim would have been 1.9 cm off it). Now the lowest hand point is
+  15.2 cm with the ball. The hand differs from version 32 by more than 2 cm
+  for 0.8 s of the song, 7.3 cm at most; elsewhere it is the same.
+`song-figures-33.html`, clip `mirrorball-33.mp4` (3:32–4:12). 134 CPU tests,
+clippy, fmt, `ensemble.cjs` pass. Not done: implement against the arm's own
+links, and anything between two arms.
+
+### Version 34: several arms that keep clear of each other — 2026-10-04
+
+User: "we need crosscheck with arms, red zone is a zone around arms to avoid
+collision (tunable radius)"; six arms, concentric, symmetric, like a hexagon;
+and the synchronized dancing itself (together, inverses, one by one, drop-outs,
+pairs, complements) is "a different game", not this step.
+
+- `figures.rs`: `compile_ensemble(json, config, rig, zones, arms, clearance_m)`
+  with `ArmPlan { placement, mirrored }`; `compile_figures` is the one-arm case
+  and its output is unchanged from version 33 (preview data identical). Every
+  arm dances the same figures in its own frame (rotated by its yaw, optionally
+  left-right mirrored).
+- Cross-check (`Obstacles`): at each knot the arms are solved in order. Each
+  sees the others' current poses as points (`body_samples`: the checked link
+  points plus the base column) and keeps `clearance_m` plus the implements'
+  radii from them, in the solver (which aims 3 cm wider), in the follower's
+  braking (half the gap, since the other arm may be closing too) and in the
+  hard check. Earlier arms have right of way. Fixed zones work as before.
+- Preview example: `--ring N,R` (N arms on a circle of radius R, facing
+  outward), `--mirror-odd` (every second arm mirrored), `--clearance M`
+  (default 0.1). The camera backs off to hold the layout.
+- Measured, hexagon of radius 0.9 m, on dense points along the played curves:
+  unison never needs the check (closest implement surface 11.3 cm). With every
+  second arm mirrored and clearance 0.10 m the closest is 9.5 cm; with 0.25 m,
+  24.0 cm; with 0 m the implements overlap by 1.1 cm. So the played curve cuts
+  up to about 1 cm inside the checked knots. Six arms compile in 12 s.
+- Limits: a ring of 0.6 m (bases closer than one reach) fails with "cannot fit
+  tangents": a blocked arm is stopped within one knot and the quintic fit
+  cannot honour the rig limits (the known `fit_tangents` cascade). 0.7 m and up
+  work. The implement is not checked against its own arm. Priority by arm order
+  is arbitrary. A test covers two arms side by side.
+- Not done, by the user's decision: any ensemble choreography. `--mirror-odd`
+  exists only to make arms meet so the check can be seen.
+`song-figures-34.html` (one arm), `hexagon-34-unison.{html,mp4}` and
+`hexagon-34-mirrored.{html,mp4}` (3:32–4:12). 135 CPU tests, clippy, fmt,
+`ensemble.cjs` pass.
+
+### Version 35: the ensemble picks its own formations; forward is the centre — 2026-10-05
+
+User: the ensemble "should be able to do both mirrored and unison and all of
+the others, should decide itself (canon for instance)"; and in a ring "there is
+a rough forward for the arms, towards the center ... it should be 360 but
+center is the center".
+
+- Forward: `--ring N,R` now faces every arm toward the ring's centre (yaw =
+  its angle + 180°). Bearings are in the arm's frame, 0 = forward. Figures
+  still travel all the way round the base.
+- `Formation` (`figures.rs`): Unison, Mirrored (every second arm the mirror
+  image about its forward line), Canon (each arm one beat after the last),
+  Pairs (opposite arms pair up, pairs take turns of eight beats), OneByOne
+  (four beats each round the ring), DropOut (every second arm rests).
+  `Formation::part` gives each arm a side, a delay and dancing or resting.
+- Chosen per run from its class and how often that class has come round:
+  interlocked: Unison, Mirrored alternating; vocal-led: Canon, Mirrored, Pairs
+  in turn; percussive-open: OneByOne, Canon; bass-led: Mirrored; silence:
+  Unison; anything else: DropOut. A run under eight beats keeps the formation
+  before it. **This table is an agent's first guess, not reviewed.** The
+  choice is appended to each cue's reason (" · ensemble Canon").
+- Each arm's hand path is built from the single-arm path: sampled at its own
+  delayed time, bearing times its side, blended toward a rest pose (drawn in,
+  low, facing forward) when it sits out. Delay and rest weights are eased with
+  bells (16 and 6 knots) and the bearing with one of 5 knots, counted from the
+  last bearing so a change of side swings the nearer way. One arm alone skips
+  all of this and is identical to version 34.
+- Cells: at 1.1 m a mirrored chorus had neighbours reach for the same spot and
+  the cross-check stopped them (median hand speed 0.25 against 0.48 m/s when
+  they cannot meet). Now each hand stays within its own cell of floor: radius
+  = half the distance to the nearest arm, less the clearance and the implement
+  (0.42 m on a 1.1 m hexagon), easing into the edge. The mirrored chorus runs
+  at 0.41 m/s. A ring too tight for an arm to rest in its cell is refused
+  (0.9 m hexagon: 0.32 m cell, needs 0.37 m). The cross-check stays as the
+  safety net; closest approach on the song is 9.8 cm at 10 cm clearance.
+- `--mirror-odd` is gone (the Mirrored formation covers it); `ArmPlan.mirrored`
+  remains as a per-arm fixed flip.
+On this song (hexagon 1.1 m): intro OneByOne, verse 1 Canon, chorus 1 Unison,
+verse 2 Pairs, break OneByOne, vocal return Mirrored, chorus 2 Mirrored, then
+Unison, Canon, Mirrored, Mirrored (bass-led), DropOut, still. Weak points seen
+in the numbers: OneByOne and Pairs leave most arms resting for long (26 s in
+the intro, 40 s in verse 2); hand speed peaks at 2.7 m/s at some formation
+changes; arms still have right of way by index. `hexagon-35.html`,
+`hexagon-35-full.mp4`. 136 CPU tests, clippy, fmt, `ensemble.cjs` pass.
+
+### Version 36: arms share the floor; everyone dances — 2026-10-05
+
+User on the whole-song video of version 35: "Not synchronized enough, too low
+energy maybe? They are also too far apart, dynamic red zones overlapping is
+what makes it WOW level of technical difficulty."
+
+- Closer: the review hexagon is 0.8 m (was 1.1 m), so each arm reaches its
+  neighbours' bases. The per-arm floor cells of version 35 are deleted.
+  Measured on the song: a hand is inside a neighbour's reach 77 % of arm-time
+  and nearer a neighbour's base than its own 14 %; closest approach of an
+  implement to another arm or implement 10.0 cm at 10 cm clearance; every arm
+  at full speed, the six alike (nothing blocked).
+- Why it does not collide: formations that are the same for every arm, turned
+  by the ring's angle, let each arm move through the space its neighbour just
+  left. Two limits, the same for every arm so the picture stays symmetric
+  (`shared` in `compile_ensemble`): no hand enters a circle at the layout's
+  centre where all hands would meet (radius (clearance/2 + implement + 2 cm) /
+  sin(π/N), 30 cm for six); and while the formation is Mirrored each hand stays
+  on its own side of the line half way to its neighbours. The cross-check is
+  the safety net under both.
+- Arms no longer start at the rig's neutral pose in an ensemble (six neutral
+  hands meet in the middle of a tight ring): each starts at its first target,
+  solved on its own. One arm alone still starts at neutral, output unchanged.
+- More together: OneByOne is deleted. Table now: interlocked, bass-led,
+  silence: Unison; vocal-led: Canon, Mirrored alternating; percussive-open:
+  Canon, Unison alternating; sparse: DropOut; anything else: Pairs. Canon is
+  half a beat per arm (a ripple of three beats round six arms). **Still an
+  agent's table, not reviewed.**
+- On this song: intro Canon, verse 1 Canon, chorus 1 Unison, link Mirrored
+  then Unison, verse 2 Canon, pre-break Mirrored, break Canon, vocal return
+  Canon, chorus 2 Unison to the end section, fade DropOut.
+- Open: hexagon size is still the agent's choice; "complements" undefined;
+  right of way by arm index; canon breaks the symmetry, so its safety rests on
+  the cross-check (it held on this song).
+`hexagon-36.html`, `hexagon-36-full.mp4`. 136 CPU tests, clippy, fmt,
+`ensemble.cjs` pass; one arm alone is identical to version 34.
+
+### Version 37: canon by a fraction of the move; ripple out and back — 2026-10-05
+
+User: a different one-by-one, a canon where arms "just start delayed, not for
+the duration of the whole move, but a fraction of it" (a 3 s move delayed
+0.5–1 s); circular (1-2-3-4-5-6-1-2-3…) or both directions (one starts, then
+the two next to it, then the next two, then the last one, then backwards).
+
+- `Formation::part` now gets the current move (figure) index and its length.
+  Step = move length / max(6, arms): a sixth of the move, 0.5 s for a 3 s move.
+  - Canon: delay = arm index × step; the next move starts again on arm 1.
+  - Ripple (new): delay = (steps round the ring from arm 1, either way) ×
+    step; on every second move the order is reversed, so it starts on the
+    opposite arm and comes back.
+- Table: vocal-led: Canon, Ripple, Mirrored in turn; percussive-open: Ripple,
+  Canon; the rest as in version 36. On this song: intro Ripple, verse 1 Canon,
+  chorus 1 Unison, link Ripple then Canon, verse 2 Mirrored, pre-break Canon,
+  break Ripple, vocal return Ripple, chorus 2 Unison onward, fade DropOut.
+- Two defects the larger delays exposed, both fixed:
+  1. The follower's braking near another arm limited motion in every
+     direction, so two arms that had met could only creep apart. It now limits
+     only motion that shrinks the gap (`arm_room` before and after); zones are
+     as before, so one arm alone is unchanged.
+  2. Neighbours out of step reach for the same place at different times; the
+     cross-check then held them (four arms stood still for 8 s in one canon).
+     The "own side of the line half way to the neighbours" limit, which
+     version 36 applied only to Mirrored, now applies to every formation but
+     Unison, from two beats before to two after, with 5 cm of room beyond the
+     clearance so the solver is not leaning on the hard check.
+- Consequence, told to the user: reaches overlap in space only in Unison. A
+  hand is inside a neighbour's reach 77 % of arm-time as before, but nearer a
+  neighbour's base than its own 6 % (14 % in version 36). Overlap during
+  canon would need the timing planned so paths interleave.
+- Measured, hexagon 0.8 m: no section with still or uneven arms; closest
+  approach 10.0 cm at 10 cm clearance; hand speed p95 0.88 m/s per arm.
+`hexagon-37.html`, `hexagon-37-full.mp4`. 136 CPU tests, clippy, fmt,
+`ensemble.cjs` pass; one arm alone identical to version 34.
+
+### Version 38: the ripple's stall and dash; two more ensemble defects — 2026-10-05
+
+User on the version 37 video: at 3:08 to 3:16 the orange arm on the right
+"stutters/breaks formation", maybe a wrong canon or a jitter bug.
+
+Measured: that is the Ripple of the break (185–204 s). The orange arm is arm 0,
+where the ripple starts; its delay flipped between none and three steps at
+every move because the order reverses. Applied as a jump eased by a bell, that
+made it stand still about a second (hand speed 0.00 at 193–194.5 s) and then
+race (1.1 m/s at 190 s); the opposite arm did the reverse. No arm was within
+30 cm; it was not the cross-check.
+
+- Delays now run evenly from one move's value to the next across the move
+  (`part` in `compile_ensemble`): an arm starts each move on its turn and plays
+  it a little slower or faster. No stall.
+- Ripple's step is half the canon's (a twelfth of the move): reversing the
+  order then changes an end arm's pace by a quarter, not a half.
+- The "own side of the line" limit squeezed the whole sector with a tanh, which
+  bent hand paths over their own base, into the shoulder's limit and out with a
+  kick. It now leaves the inner 70 % of the sector untouched.
+- In the mirrored verse arms were stopped dead at the line (elbows reach past
+  the hand). The margin there is 12 cm beyond clearance and implement; the
+  centre circle keeps its 2 cm.
+Hexagon 0.8 m, whole song: arm 0 has no stall in 186–198 s; accelerations over
+9 m/s² across the six arms 74 → 57 (about five per arm are the single arm's
+own chorus accents); standstills over 0.3 s inside the song 3–5 → 1–4 per arm;
+closest approach 13.4 cm. Left: arm 0 still has one 11 m/s² kick at 187.9 s
+(shoulder at its limit as the hand passes over the base; the single arm has a
+4.9 m/s² version); arms 4 and 5 have three or four short standstills; cause
+not looked for. `hexagon-38.html`, `hexagon-38-full.mp4`. 136 CPU tests,
+clippy, fmt, `ensemble.cjs` pass; one arm alone identical to version 34.
+
+### Version 39: draw order across arms; canon delays on the beat — 2026-10-05
+
+User on the version 38 video: "the orange one is sometimes rendered below the
+one above it, layering issue"; and "doesn't follow music enough, it's like an
+abstraction, but it needs to be more on point to be better I think".
+
+- Preview: each arm used to be painted whole, in arm order, so a far arm could
+  cover a near one. Every arm's pieces (and its pedestal) now go into one list
+  drawn far to near. Planner data for one arm is unchanged from version 34
+  (the exported file differs only in the page's script).
+- Canon step is a whole number of beats (the move's length / 6, rounded, at
+  least 1); Ripple's is half a beat. A late arm now lands on the beat.
+- "On point" is **not answered**. Four readings were put to the user (accents
+  together; arms joining and leaving with how full the music is; one arm
+  leading the solo or the voice; the single-arm figures themselves being too
+  loose) with a request for two or three timestamps and what the six arms
+  should do there, as the 4:07 note did for the voice. Do not build ensemble
+  behaviour for this before the user answers.
+`hexagon-39.html`, `hexagon-39-full.mp4`. 136 CPU tests, clippy, fmt,
+`ensemble.cjs` pass.
+
+### Version 39 accepted — 2026-10-05
+
+The user watched the version 39 whole-song video and said: "It's good now".
+That followed the layering fix and the beat-aligned delays. They did not say
+which reading of "more on point" they had meant, so treat that question as
+closed by this verdict but not as answered: do not add ensemble behaviour for
+it unless they raise it again. The six-arm ensemble on a 0.8 m hexagon is
+accepted for now as it stands in version 39.
+
+### Handover — 2026-10-05
+
+Asked what comes next, the user chose overlap outside unison ("1. is most
+important, we want to be able to make red zones so that it doesn't hit
+equipment or whatever, it's supposed to be generalized right?") and asked for
+a handoff to a fresh session. `docs/DANCE_RESTART_PROMPT.md` is rewritten for
+the ensemble and states that task in two parts: arms inside each other's reach
+in every formation, and red zones as a general tool against equipment. Nothing
+of either is started. The measuring and recording scripts of this session are
+saved outside git in `$D/tracker-scratch/ensemble/`. A hexagon export from the
+current tree is byte-identical to `hexagon-39.html`. Tree clean, branch pushed.
+
+### Version 40: out-of-step arms share space — 2026-10-05
+
+Task 1 of the restart prompt (overlap outside unison). Not yet reviewed by the
+user; `hexagon-40-full.mp4` was sent.
+
+Measured first, on the 0.8 m hexagon. With the "own sector" limit switched off
+entirely, canon and ripple mostly work: hands go past half way to a neighbour
+14.6 % (canon) and 6.7 % (ripple) of arm-time, against 15.8 % in unison. The
+cost was local: arms stood still 9 % of the canon, and the mirrored verse
+jammed (34 % still, then all six stopped from 175 to 185 s). So out-of-step
+arms rarely want the same place; the version 37 limit was on all the time to
+cover a few seconds.
+
+- Rule (`apart` in `compile_ensemble`): before the real solve, each arm is
+  posed alone along its unlimited path at every second knot. Where two arms'
+  checked points come within the clearance (and the formation is not Unison),
+  every hand keeps to its own sector from half a beat before to half a beat
+  after, eased as before. Elsewhere no sector limit. The limit is still the
+  same for all arms at once, so the picture stays symmetric. The centre circle
+  is unchanged. `shared` now takes the limit's weight; the per-formation flag
+  is gone.
+- Margin and window were swept. Wider (10 cm, two beats): less shared space,
+  no fewer stalls. Narrower than the clearance: the cross-check stops arms
+  (1.1 % still in canon). Kept: the clearance itself, half a beat.
+- Limit active, share of each run: ripples 0 %; canons 12 %, 1 %, 1 %, 14 %;
+  mirrored 68 % and 97 %.
+
+| per formation | past half way, v39 | v40 | still, v39 | v40 |
+|---|---|---|---|---|
+| Unison | 15.5 % | 15.7 % | 1.4 % | 1.4 % |
+| Ripple | 0 % | 6.7 % | 0.1 % | 0.1 % |
+| Canon | 0 % | 9.0 % | 1.4 % | 0.1 % |
+| Mirrored | 0 % | 0 % | 0.2 % | 0.1 % |
+
+Whole song: hands nearer a neighbour's base than their own 6 % → 10 % of
+arm-time; kicks over 9 m/s² 59 → 44; standstills over 0.3 s per arm 1–2 → 0
+(arm 5: 1); closest implement surface to another arm 13.4 → 13.0 cm at 10 cm
+clearance; closest hand centres 34 → 29 cm. One arm alone is byte-identical to
+the tree before. Six arms compile in about 16 s (was 12 s): the lone posing is
+the extra.
+
+**Mirrored cannot share space as it is.** Mirror neighbours are images of each
+other in the plane between them, so two arms that cross it meet in it, at the
+same moment. Overlap there needs a different formation (a mirror with a delay,
+or one arm passing over the other); that is an artistic choice, put to the
+user, not built.
+
+**Not what the restart prompt asked for in one respect.** It said overlap
+"needs paths whose timing interleaves, not a clamp". Version 40 does not
+retime anything: it found that the existing canon and ripple timing already
+interleaves most of the time, and keeps the old clamp for the seconds where it
+does not. Canon is still limited 12–14 % of its two long runs. Retiming those
+moments (a different step for that move) is not tried.
+
+Tests: `arms_out_of_step_share_space_without_stopping` (a six-arm ripple:
+hands cross half way, no arm stands, implements stay apart; it fails with the
+limit always on) and `every_arm_of_an_ensemble_stays_out_of_a_red_zone` (two
+arms against a box; this closes the test gap of task 2). 138 CPU tests, clippy,
+fmt, `ensemble.cjs` pass.
+
+Task 2 (red zones against equipment) is otherwise not started: the user has
+not said what the equipment is. Question put to them: which things (projector
+stand, speakers, a wall, people's walkway), so shapes are not invented.
+
+New helpers in `$D/tracker-scratch/ensemble/`: `byform.py FILE` (per formation:
+past half way, speed, still, kicks, closest), `when.py FILE` (clock times where
+two or more out-of-step hands are past half way).
+
+### Version 41: a canon only for short runs — 2026-10-05
+
+User on version 40, after asking how long the canon sections are (61 s in
+verse 1): "too long at times, too unsynchronized if cannon or whatever stays
+too long, ripple is ok, I think its cuz it breaks symmetry?" They also asked
+whether "inverse pairs" exist (arms 1, 3, 5 do X, arms 2, 4, 6 the inverse
+positions). Answer given: Mirrored is that for left and right only (2:14 to
+2:57); no formation inverts high and low or in and out.
+
+- A run that would be a Canon and is longer than sixteen beats is a Ripple
+  (`compile_ensemble`, formation choice). The threshold is the agent's guess.
+  On this song: verse 1 (0:29–1:30) and 4:24–4:41 ripple; two canons remain,
+  2:09–2:14 and 2:57–3:05, one and two moves long. Ripple now runs 0:03–1:30
+  without a break (87 s), not reviewed.
+- Measured: ripple hands past half way to a neighbour 12.0 % of arm-time (the
+  limit of version 40 seldom fires in a ripple); whole song 11.4 %; kicks 44 →
+  40; no standstill over 0.3 s on any arm; closest implement surface 13.4 cm.
+  One arm alone identical.
+`hexagon-41.html`, `hexagon-41-full.mp4` (sent, not yet reviewed). 138 CPU
+tests, clippy, fmt, `ensemble.cjs` pass. Open with the user: whether an
+"inverse" formation in two groups of three is wanted and what inverse means
+(high/low, in/out, or a group one step late); Mirrored without overlap; red
+zone equipment.
+
+### Version 42: unison and mirror for sections; canon and ripple as flourishes — 2026-10-05
+
+Version 41 was never reviewed (its video was not sent). The user, before
+seeing it: "the best looking one is sync. I also like mirror, for me cannon
+was more of a flurish move, same with ripple"; then: "Cannon and ripple work
+well especially with 'linear' movements (where the joints are co-linear with
+the centerpoint), but thats just an idea".
+
+- Sections are Unison or Mirrored only. Table: interlocked, bass-led, silence:
+  Unison; vocal-led: Mirrored, Unison in turn; percussive-open: Unison,
+  Mirrored in turn; sparse: DropOut; else Pairs. Still an agent's table. The
+  sixteen-beat canon rule of version 41 is deleted.
+- Flourish (`accents` in `compile_ensemble`): the move that holds a melodic
+  flourish moment is passed round the ring, as a ripple and a canon in turn.
+  Only the delay changes; arms keep the run's sides. Conditions: the move is
+  six beats or longer and sweeps under 120° round the base.
+- Linear: while a move is passed round, each arm turns to face straight in or
+  straight out (the nearer at the middle of the move) and keeps only the
+  rise, fall, reach and draw-in. This is the agent's reading of the user's
+  "co-linear with the centerpoint". Without the 120° condition the wide
+  moves (circle, arc, eight) lurched: 64 kicks, arms 9.7 cm apart, so they
+  are never passed round.
+- The delay still runs evenly from one move's value to the next (version 38),
+  so arms drift out of step over the move before a flourish and close up
+  during it. Whether that reads as a flourish is for the user.
+- The "would meet" limit of version 40 now applies in every formation; the
+  Unison exemption is dropped (the choruses kept their kicks and closest
+  approach, so the limit seems not to fire there; not checked directly).
+- On this song: Unison 0:00–0:29, Mirrored 0:29–1:30, Unison 1:30–2:09,
+  Mirrored 2:09–2:57, Unison 2:57–3:23, Mirrored 3:23–3:32, Unison 3:32–4:24,
+  Mirrored 4:24–4:41, Unison 4:41–5:23, DropOut, still. Passed round: 0:20
+  (eight, canon), 0:37, 0:46, 0:55 (reach; ripple, canon, ripple), 1:17 (sway,
+  ripple), 2:27 and 3:09 (sway, canon), 4:33 (reach, ripple), 5:10 (rise,
+  canon), 5:23 (sway in the drop-out). None in the two choruses' circles.
+- Measured: kicks over 9 m/s² 47; closest implement surface 13.4 cm; hands
+  past half way to a neighbour 12.2 % of arm-time in Unison, 0 % in Mirrored
+  (now 135 s of the song), 7.0 % overall. Standstills: only 0:49–0:50, 0.3 to
+  0.4 s on five arms, where the linear reach turns round. One arm alone
+  identical.
+- Tests: the out-of-step test of version 40 became
+  `mirrored_arms_keep_apart_without_stopping`; the six-arm unison test now
+  also requires a hand past half way. **No test covers a flourish or the
+  linear turn** (the fixture has no flourish moment). 138 CPU tests, clippy,
+  fmt, `ensemble.cjs` pass.
+`hexagon-42.html`, `hexagon-42-full.mp4` (sent, not yet reviewed). New helpers
+in `$D/tracker-scratch/ensemble/`: `runs.py` (formation runs and their moves),
+`accents.py` (moves passed round), `still.py` (standstills by clock time).
+
+### Version 43 and a verse side-by-side pending — 2026-10-05
+
+User on version 42: "They have a lot of 'free time' now like 1:59-2:03, they
+just sortof hang around doing nothing. They also have moments where they just
+snap back to center, as if theyre 'resetting'. They follow music less now that
+this is all here. We could maybe increase what we did for it to follow the
+stabs?"
+
+Measured:
+- The choruses of version 42 are identical to version 39. At 1:59–2:03 the
+  chorus ends on gather and rise (hands 27–29 cm from their bases, 0.2 m/s),
+  as it did in version 39; then the verse followed as a ripple, now it is in
+  step.
+- The "linear" turn of version 42 (the agent's reading of the user's idea)
+  held arms on the line to the centre for a whole move, nearly still. Deleted.
+  Idle time (six-hand mean under 0.15 m/s for 1.5 s or more) 35 → 32 s only,
+  so it was a small part.
+- Likely main cause, not confirmed by the user: the verse vocabulary. "reach"
+  goes out and tucks back in every eight beats and "sway" is slow; six arms in
+  step or mirrored do that together, which reads as a reset and a wait. In
+  version 39 the canon and ripple delays hid it. Hands slow at the centre
+  circle: 2 s of the song, not the cause.
+- A stronger surge after stabs (1.7 and 2.5 times) changed the chorus hand
+  speed spread little (p90/p10 6.1 → 7.5; the speed cap and the clock's catch-up
+  bound it) and brought stalls (0.9 % → 4 % in Unison) and kicks (44 → 67).
+  Not adopted; knob removed.
+
+Version 43 = version 42 without the linear turn (`hexagon-43.html`; its video
+was recorded but not sent). Kicks 44, closest 13.1 cm, one pause of 0.3–0.7 s
+at 0:49.
+
+**Pending review, key unread:** `blind-verse-side-by-side.mp4` (0:29–1:09, A
+and B on top, C below, clock) with key `blind-verse-key.json`. The verse
+(vocal-led) as mirrored, ripple or unison; same single-arm dance in all three.
+Measured, whole song with every vocal-led run in that formation:
+
+| verse as | idle | hands past half way, verse formation | kicks |
+|---|---|---|---|
+| mirrored | 32 s | 0 % | 44 |
+| ripple | 19 s | 16.1 % | 38 |
+| unison | 21 s | 14.8 % | 43 |
+
+**A review knob is in the tree until the verdict:** environment variable
+`HYST_VERSE=mirrored|ripple|unison` in the formation table of
+`compile_ensemble`. Unset, the table is version 43's. On the verdict: make the
+winner the table's entry, delete the variable, re-export, and compare against
+`hexagon-43.html` only if mirrored wins. Not answered either way by this test:
+what "follow the music" should look like for six arms; the user was asked.
+138 CPU tests, clippy, fmt, `ensemble.cjs` pass. New helpers in
+`$D/tracker-scratch/ensemble/`: `idle.py`, `wall.py`, `turn.py`, `pulse.py`,
+`cmp.py`, `verse.sh`.
+
+### Version 44: verses in unison — 2026-10-05
+
+Verdict on the verse side-by-side: "Genuinely dont know, I think B is the worst
+maybe? Unsure." B was mirrored (key: A ripple, B mirrored, C unison); the user
+asked whether B had the most idle time, so the key was read and the test is
+over. It supports "mirrored is worst for verses" only weakly and does not
+separate ripple from unison. The user accepted the agent's recommendation of
+unison (numbers near equal; the user had said ripple is a flourish).
+
+Changes to the formation table of `compile_ensemble`:
+- vocal-led is Unison; the `HYST_VERSE` variable is deleted.
+- percussive-open alternates starting with Mirrored (was Unison first). The
+  agent's choice, not asked of the user: with unison verses the old order left
+  4.6 s of mirror in the whole song, and the user likes the mirror. One token
+  to revert.
+
+Measured, whole song (`hexagon-44.html`, `hexagon-44-full.mp4`):
+
+| | version 43 | version 44 |
+|---|---|---|
+| Unison / Mirrored | 196 s / 135 s | 286 s / 45 s (0:03–0:29, 3:05–3:23) |
+| idle | 32 s | 20 s |
+| hands past half way, all | 7.4 % | 13.3 % |
+| stalled | 1.7 % | 1.4 % |
+| kicks | 44 | 45 |
+| closest implement gap | 13.1 cm | 13.0 cm |
+
+The mirrored test's fixture is now drums without voice (`fixture(0.1, 0.2)`).
+138 CPU tests, clippy, fmt pass. Not reviewed by the user. Not answered: the
+"snap back to centre" (no clock times given) and whether the remaining 20 s of
+idle needs the verse moves changed. `tmp-verse-*.html` and `tmp-surge-*.html`
+in the output directory are spent and may be deleted.
+
+### Second song: "Five Years" (Bowie) — 2026-10-05
+
+The user accepted version 44 ("Its nice now") and asked for a totally
+different song. Source `~/Downloads/Five_Years_2012_Remaster.wav` (4:44,
+48 kHz). Nothing in the planner was changed for it. Not yet reviewed.
+
+What broke, in order:
+1. `dance_structure.py` crashed when the stem folder had no
+   `separation.json`. Fixed (committed).
+2. **The fixed beat grid does not hold for a live drummer.** The song is in a
+   triple feel (pulse about 1.16 s, three subdivisions of about 0.386 s) and
+   speeds up 6.5 % from start to end. `analyze.ts` reported 114 bpm;
+   `dance_memory.py`'s single period and phase put measured onsets a median
+   134 ms from the grid (chance level; Instant Crush 5 ms). A steady grid and
+   the real beats differ by up to 2.3 s.
+3. On that wrong grid the planner failed outright: "cannot fit tangents
+   segment 4280 channel 0 … accel 71110/8000". **Not investigated**; reproduce
+   with `five-years.notes.sidecar.json`.
+
+Workaround, all outside the repo (`$D/tracker-scratch/newsong/`):
+`beatmap.py` tracks the subdivisions on the drum stem with librosa (basic-pitch
+environment), smooths them and finds the pulse phase (drum strength by
+subdivision mod 3: 4.2 / 1.2 / 2.1, the same phase in every sixth of the song,
+so no slips; strong drum onsets a median 26 ms from a subdivision). `warp.py`
+resamples the mix and all stems so the subdivisions are steady (pitch moves
+with tempo, under half a semitone) and writes `five-years.tempomap.json`.
+`song2.sh` runs the usual pipeline on the warped audio (slug
+`five-years-steady`), with the sidecar's beats replaced by the steady grid.
+The dance beat is 1.5 subdivisions (0.58 s, 103.5 bpm): two beats per pulse, so
+an eight-beat move is one bar of four pulses and the pace matches what the
+planner was tuned on. The agent's choice. Mix onsets are then a median 42 ms
+from the grid and the structure pass calls the grid reliable.
+`record-ensemble.cjs` gained `HYST_TEMPO_MAP=file.json`: it draws the score at
+the mapped time, so the video is on the real beats. **The interactive HTML has
+no tempo map** and drifts up to 2.3 s against its audio; use the video.
+
+Result (`five-years-hexagon.html`, `five-years-hexagon-full.mp4`, 283.7 s):
+
+| formation | seconds | median hand speed | stalled |
+|---|---|---|---|
+| Unison | 193.5 | 0.18 m/s | 5.9 % |
+| DropOut | 57.5 | 0.02 m/s | 49.6 % |
+| Pairs | 22.2 | 0.04 m/s | 47.6 % |
+| Mirrored | 10.5 | 0.18 m/s | 1.0 % |
+
+Kicks 24, closest implement gap 13.9 cm. Runs: still to 0:09; sparse/textural
+(DropOut, Pairs) for most of 0:09–2:13 with bass-led unison between; unison
+2:13–4:19 (vocal-led, then interlocked); mirrored 4:19–4:29; drop-out and
+still to the end. So for the first two minutes most arms rest or barely move:
+the class thresholds were set on Instant Crush and read the quiet opening
+(voice, piano, drums) as "sparse", and sparse → DropOut, textural → Pairs are
+the two rest-heavy rows left in the table. Whether that reads as a build or as
+the idleness the user dislikes is for the user. Hand speed overall is half of
+Instant Crush's (0.15 against 0.29 m/s).
+
+If songs with a live tempo are to be supported properly: the tempo map belongs
+in the sidecar and in score playback (page, `ChoreographyOutput`), and the
+beat tracker in `scripts/`. Not built; waits for the user's verdict.
+
+### Version 45: the planner meets a quiet, dynamic song — 2026-10-05
+
+The user on the first "Five Years" video (version 44 planner):
+- "The arms only start moving at 0:15, then 3 of them flick, then they stop
+  again for a little while"
+- "0:45 is REALLY jerky, too too fast, as if it doesnt even know the
+  tempo/energy/emotion of the song, like its raving"
+- "1:31-1:34 is EXTREMELY jerky, especially the lowest arm at the end, the
+  spin afterwards is also WAAAY to fast"
+- "2:22 to 2:25 is almost no movement"
+- "most of the song says `bass-led` even though it isnt, at least it catches
+  `vocal led` well, but if its `vocal led` for long enough it seems to get a
+  bit 'boring'?"
+
+Measured causes (video clock; `look5.py`, `acts.py`, `classes.py` in
+`tracker-scratch/newsong/`):
+- 0:15, 0:45, 1:31: each a **flourish in its sharp form** (hand 0.7–1.1 m/s,
+  acceleration 15–18 m/s²). The planner chose sharp wherever the lead lane
+  plays separated notes, whatever the loudness. 0:15 was danced by three arms
+  (DropOut); the "spin" at 1:34 was three arms swinging to their rest pose at
+  187°/s as a DropOut run began.
+- 2:22–2:25: hands at 0.04–0.07 m/s; partly the stab surge idling between
+  sparse stabs. Now 0.09–0.23 m/s; still the slowest spot, cause not isolated.
+- Labels: `wholeTrackActivity` is each stem against its own loudest. The voice
+  goes from soft to screaming, so the verses read as voiceless and the steady
+  bass won, though the voice carried 40–55 % of the power and the bass under
+  20 %. The climax (2:36–4:18) was vocal-led (reach, sway for 107 s) because
+  its bass is buried.
+
+Changes (`figures.rs`, `director.rs`):
+1. `intensity(t)`: stem power summed, mean over ±4 beats, against half the
+   song's 90th percentile, capped at 1. Below 0.75 a flourish is soft; arrival
+   strength and the surge's depth are multiplied by it. Instant Crush is at 1
+   nearly throughout (verses 0.55–0.66 of the 90th percentile, choruses 0.8).
+2. `character` takes the voice's share of power and the loudness: sung =
+   activity over 0.3 or share over 0.14; sung and louder than 0.7 of the 90th
+   percentile is "interlocked". **Fragile by construction:** a song with flat
+   dynamics would make every sung passage interlocked; thresholds sit between
+   Instant Crush's verse (0.66) and chorus (0.73).
+3. `Formation::Pairs` and `DropOut` deleted; every class but percussive-open
+   is Unison. `part` still returns a dancing flag, now always 1; the resting
+   pose code behind it is unused and could go.
+4. A vocal-led or interlocked run plays the percussive-open or bass-led phrase
+   once after about 128 beats of its own, and again. At 64 beats it changed
+   Instant Crush's verses, and the different heading into the first chorus
+   brought whole-ensemble kicks (45 → 64), so 128, which leaves Instant Crush's
+   verses and all but its last chorus alone. On "Five Years" this gives one
+   contrast in the climax; the boredom fix there is mostly the class change.
+5. A run under 24 beats (was 8) keeps the formation before it: the ten-second
+   mirrored passage at 4:19 entered from a turning chorus, neighbours met,
+   braked at 20 m/s² and stood for two seconds. **A dodge, not a fix:** entering
+   Mirrored from a wide heading is still unsafe for longer runs.
+
+Measured:
+
+| | Five Years, 44 | Five Years, 45 | Instant Crush, 44 | Instant Crush, 45 |
+|---|---|---|---|---|
+| arms resting (DropOut, Pairs) | 80 s | 0 | 9 s | 0 |
+| kicks | 24 | 14 | 45 | 41 |
+| peak hand acceleration | 22.8 m/s² | 11.7 | 23.0 | 23.0 |
+| fastest base turn | 199°/s | 150 | 190 | 188 |
+| median hand speed | 0.15 m/s | 0.21 | 0.29 | 0.27 |
+| idle | n/a | n/a | 20 s | 19 s |
+| closest implement gap | 13.9 cm | 13.9 | 13.0 | 12.8 |
+
+"Five Years" classes now: sparse 0:09–0:30, bass-led to 0:40, vocal-led
+0:40–1:35, a patchwork of sparse, bass-led, vocal-led and textural 1:35–2:36
+(runs of 3–15 s, each with an arrival; **not fixed**), interlocked 2:36–4:18.
+Instant Crush's classes are the same but for one 3 s vocal-led blip inside the
+last chorus that merged.
+
+Files: `hexagon-45.html`, `hexagon-45-full.mp4`, `five-years-hexagon.html`,
+`five-years-hexagon-full.mp4` (the version 44 video kept as
+`five-years-hexagon-44-full.mp4`). 139 CPU tests (one new, for the class
+rule; the test fixture's stem levels now follow their activity), clippy, fmt.
+Not reviewed. Still open from before: the planner's "cannot fit tangents"
+failure on a wrong beat grid; the tempo map outside the repo.
+
+### Version 46: a third song, classes by share of the sound — 2026-10-05
+
+Version 45 was never shown to the user (its videos were recording when the
+third song arrived); 46 replaces it and its files were deleted.
+
+Third song: `~/Downloads/Justice_-_Presence_Official_Audio.wav` (4:31,
+instrumental, steady 130.0 bpm), slug `presence`, usual pipeline (`song.sh`).
+- **Grid 45 ms late.** `analyze.ts`'s causal beat tracker lags and
+  `dance_memory.py` fits its grid to those beats: strong drum onsets fell an
+  eighth of a beat before the grid through the whole song. `regrid.py` (scratch,
+  librosa) refits period and phase to strong drum onsets (0.46160 s, drum hits a
+  median 2 ms from a beat, 99 % within 30 ms) and replaces the sidecar's beats;
+  `songtail.sh` reruns the later steps. Mix onsets against the grid: median
+  46 → 9 ms. Instant Crush was not rechecked this way (its mix onsets sit 5 ms
+  from its grid). **Belongs in `dance_memory.py`**; not moved there.
+- **Phantom voice.** The voice stem holds under 2 % of the power but peaks
+  against itself, so two passages were vocal-led.
+- **Drum-led intro missed.** Drums carry 40–75 % of the power for 70 s at an
+  activity of 0.15–0.16, under the 0.17 mark: "textural", one slow sway.
+
+Changes to version 45:
+- `character` takes every stem's share of mean power (mean of squares; the
+  mean level squared under-counts drums). Sung = activity over 0.3 with a
+  share over 0.04, or a share over 0.14. Percussive-open = drum activity over
+  0.17 or drum share over 0.4, with no voice by activity or by share.
+- Contrast phrases for all four main classes (vocal-led ↔ percussive-open,
+  interlocked ↔ bass-led), still after about 128 beats.
+
+Classes now (video clock):
+- Instant Crush: as version 44 but 2:54–2:57 is percussive-open (was
+  textural) and the 3 s vocal-led blip in the last chorus merged.
+- Five Years: still to 0:09, percussive-open (drums alone) to 0:19, vocal-led
+  0:19–1:35 and 1:44–2:36 (sparse and bass-led for 9 s between), interlocked
+  2:36–4:18, percussive-open (drums alone) to 4:38. The patchwork of version
+  45 is gone.
+- Presence: percussive-open 0:00–1:10 (Mirrored), textural to 1:32, bass-led
+  1:32–2:16 and 2:31–3:15 with textural breaks, a 6 s "vocal-led" at 3:24 (share
+  0.09 in a drumless break; may be a voice-like synth), percussive-open
+  3:30–3:52, bass-led to 4:23.
+
+Measured (version 46):
+
+| | Instant Crush | Five Years | Presence |
+|---|---|---|---|
+| Unison / Mirrored | 314 s / 26 s | 284 s / 0 | 200 s / 70 s |
+| median hand speed | 0.28 m/s | 0.22 | 0.27 |
+| stalled | 2.7 % | 3.2 % | 1.0 % |
+| kicks (per arm) | 36 | 25 | 66 |
+| jolts (any arm over 9 m/s², `jolts.py`) | not counted | 5 | 13 |
+| closest implement gap | 11.2 cm | 14.1 | 13.2 |
+
+Five Years' largest jolt (22.7 m/s²) is the last frame of the song; the others
+are in the climax. Presence's are flourishes and arrivals. Instant Crush's
+mirror fell from 54 s to 26 s: the 18 s drum passage at 3:05 is the third
+percussive-open run now and alternates to Unison. Closest gap on Instant Crush
+fell from 12.8 to 11.2 cm (clearance 10).
+
+Files: `hexagon-46.html`, `hexagon-46-full.mp4`, `five-years-hexagon(.html,
+-full.mp4)`, `presence-hexagon(.html, -full.mp4)`; the version 44 "Five Years"
+video is `five-years-hexagon-44-full.mp4`. Scratch in
+`tracker-scratch/newsong/`: `song.sh`, `regrid.py`, `songtail.sh`, `phase.py`,
+`three.sh`, `jolts.py`, `acts.py`, `classes.py`, `look5.py`, and the tempo-map
+set (`beatmap.py`, `warp.py`, `song2.sh`, `songvideo.sh`). 139 CPU tests,
+clippy, fmt. Not reviewed.
+
+The user's four moments on "Five Years", version 44 → 46: 0:10–0:17 three
+arms flick and stop → all six at 0.1–0.7 m/s, peak acceleration 1.4; 0:45
+0.70 m/s at 15.5 m/s² → 0.04–0.23 at 1.0; 1:31–1:35 18.2 m/s² and a 187°/s
+turn → 1.6 and 66°/s; 2:22–2:25 0.04–0.07 m/s → 0.14–0.35.
+
+Open: the thresholds remain tuned on three
+songs; beat tracking (tempo map, grid refit) is outside the repo; "cannot fit
+tangents" on a wrong grid is uninvestigated; entering Mirrored from a wide
+heading is unsafe (dodged for short runs only).
+
+### Version 47: the user's review of three songs — 2026-10-06
+
+The user on version 46:
+- "Five years is generally OK, its a difficult song for this and for dancing
+  in general so its OK"
+- Instant Crush: "at 3:52 has a strange jerk also at 4:08-4:09, the 4:36
+  flourish is also sortof jerky"
+- Presence: "a really strange moment at ~0:24-0:26 and again at ~0:41 and
+  ~0:49 and ~1:00 (its also all labeled as percussive open, the only
+  percussive is kick drum on a simple slower pattern)"; "similar strange stuff"
+  at 1:13; after the "quasi drop/start" at 1:32 "really slow and low-energy"
+  until ~1:50, "label is bass-led now (the most prominent instrument there for
+  me is keys ...)"; "a jerk at 2:03/2:04"; "at 2:24 theyre too fast (but in the
+  like 10secs before/after it they actually look like theyre following the
+  flute being played)"; the next bass-led "low energy even though the main
+  instrument (some high keys/pluc/synth thing) is really nice and emotional
+  and has energy and could be followed"; at 2:55–3:00 "the spins fit it
+  nicely"; "3:06 is quite a rough stop/slowdown at once"; "3:17 is too fast,
+  most of the music dropped out so we should be slower right (and we know a
+  buildup and a drop is coming soon due to sidecar)"; "at ~3:29 it says vocal
+  led but no vocals exist"; "the buildup until ~3:52 is 'danced' well but it
+  doesnt pay off (they could RISE HIGH for it or smth, now they just continue
+  like nothing happened)"; after it "again `bass-led` even though an electric
+  guitar is the MAIN item"; "the ending is nice but at 4:26 they jitter into a
+  stop and then turn quickly again".
+
+Measured causes (`jolts.py`, `spans.py`, `look5.py`):
+- Instant Crush 3:52, 4:09, 4:36 and Presence 0:41, 0:49, 1:00, 1:13: sharp
+  flourishes; hand 1.5–2.3 m/s, 14–22 m/s². The 0.8 m/s cap is on the figure
+  clock; a moment's blend rode on top of it, and a surge under it added more.
+  The Instant Crush ones were in version 44 too.
+- Presence 0:24, 2:03, 2:24, 3:06, 3:17, low energy 1:32–1:50 and 2:31–2:55:
+  the stab surge. Its decay (0.35 beat) suits notes about a beat apart; with
+  sparse lead notes the pace sat at 0.3 for seconds, the clock fell behind,
+  then caught up at the cap (1.2 m/s, base at 160–185°/s).
+- 4:26: an arrival at a point where the music falls away, then catch-up.
+- 3:52: an arrival existed, with the same pose as any other.
+
+Changes:
+1. **Moment speed limit.** After the clock is built each moment's `span` is
+   widened so its blend adds at most 0.6 m/s (travel from the prepared pose to
+   the arrival, 1.5 × mean for a smooth blend). The arrival time stays exact;
+   the preparation starts earlier. No surge within two beats of a moment.
+2. **Surge stretched to the note spacing**: decay 0.35 beat × gap/0.9 for gaps
+   of 0.9 to 4 beats (average pace about 1 at any spacing), even pace where
+   the leader's notes are more than four beats apart. Because the clock never
+   runs ahead of the music, a stretched surge is partly clipped, so sparse
+   notes surge less than dense ones; letting the clock lead by half a beat
+   restored it but brought back 1.9 m/s flourishes on Instant Crush and was
+   reverted. The surge test now measures close either side of each hit with a
+   1.1 threshold (was 1.3 over windows a quarter second out, which fell where
+   the fixture's figure changes pace tenfold).
+3. **Arrivals have a direction**: level over the eight beats before against
+   the four after. Lift (rise of 50 % or more is full): pose elevation 0.72 →
+   1.0, hold 1.5 → 2.5 beats, strength at least the lift. Falling away:
+   strength × the ratio (floor 0.3). An entry from near silence is not a lift.
+4. **Calmer without drums**: the clock's rate × 0.65 where drum activity over
+   ±2 beats is nil (full from 0.08). The clock then lags and catches up at
+   15 % over the next section.
+5. **Class names** (same dances): `melody-led` = bass-led rule with the "other"
+   stem over 1.5 × the bass's power (motif BASS); `kick-led` = drums over 40 %
+   of the power but under the activity mark (motif PERC, formation as
+   percussive-open). The voice counts by activity only with 15 % of the "other"
+   stem's power beside it. **Not done:** the dance does not yet follow keys or
+   guitar any differently than before; the leader lane already drives surge
+   and swell in every class. The user's "could be followed" is open.
+6. **Abort fixed**: "cannot fit tangents" came from the tangent pass treating
+   a joint change under 0.05° between knots as a hold. The last knot sits at
+   the song's end, milliseconds after the grid's last, so a moving arm looked
+   held, its velocity was zeroed and no fit existed. Now 0.05° per regular
+   knot interval. It needed arms still moving at the last instant (Presence;
+   Five Years on its first, wrong grid). The error message now prints knot
+   times and velocities.
+
+Measured, version 46 → 47:
+
+| | Instant Crush | Five Years | Presence |
+|---|---|---|---|
+| jolts (any arm over 9 m/s²) | 7 → 5 | 5 → 2 | 13 → 15 |
+| kicks (per arm) | 36 → 26 | 25 → 10 | 66 → 76 |
+| top hand speed | 2.30 → 1.49 m/s | 1.26 → 1.22 | 2.60 → 1.73 |
+| peak hand acceleration | 20.0 → 19.1 m/s² | 22.7 → 10.4 | 21.7 → 21.4 |
+| closest implement gap | 11.2 → 13.0 cm | 14.1 → 17.5 | 13.2 → 12.9 |
+
+The user's moments (hand speed m/s, peak acceleration m/s², top base turn °/s):
+- Instant Crush 3:50–3:54: top 2.02, 20.0 → 1.2–1.5, 11; 4:07–4:11: top 2.30,
+  17.5 → 0.98, 4.4; 4:34–4:38: top 1.32, 14.3 → 1.04, 6.4.
+- Presence 0:23–0:27 turn 185 → 144, acceleration 8.5 → 4.2; 0:40–0:42 14.7 →
+  6.8; 1:00–1:02 21.7 → 7.8; 1:12–1:15 13.7 → 4.4; 1:32–1:50 mean speed 0.19
+  → 0.46, slow share 20 % → 6 %; 2:02–2:06 acceleration 6.2 → 2.9 (still
+  0.93 m/s mean: fast arcs); 2:22–2:26 top 1.73 → 0.65 (acceleration still 11);
+  2:31–2:55 mean 0.30 → 0.39, slow share 16 % → 6 %; 3:04–3:08 slow share 27 %
+  → 0; 3:15–3:20 mean 0.62 → 0.35, top 1.22 → 0.81; 4:24–4:29 top 1.68, 19.9,
+  turn 188 → 0.51, 1.7, 106.
+- Drops: hand height at 1:32 and 3:52 reaches 0.70 m (the top of the reach),
+  2:31 0.67 m. Instant Crush's chorus entries 0.61 → 0.66 m.
+
+Still jolting: Presence 0:48 (a flourish passed round as a ripple in the
+mirrored intro, 1.73 m/s), 1:56, 3:11 (flourishes passed round), and one
+four-arm event near 3:43 on Instant Crush (19 m/s², inter-arm braking). The
+jolt count moves by several with any change of heading: arms in unison brake
+for each other at geometry-dependent moments, and no change here addressed
+that mechanism.
+
+Presence classes now: kick-led 0:00–1:10 (Mirrored), textural to 1:32,
+melody-led and bass-led alternating 1:32–2:16 and 2:31–3:15 (the bass's share
+crosses the 1.5 mark; same dance), textural breaks, a 4 s vocal-led at 3:26
+(share 0.09 beside a lone synth: passes the 15 % test), kick-led 3:30–3:49,
+melody-led and bass-led to 4:23.
+
+Files: `hexagon-47.html`, `hexagon-47-full.mp4`, `five-years-hexagon(.html,
+-full.mp4)`, `presence-hexagon(.html, -full.mp4)`. New scratch: `jolts.py`,
+`spans.py`, `lv.py`. 139 CPU tests, clippy, fmt. Not reviewed.
