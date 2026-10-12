@@ -2115,4 +2115,77 @@ mod tests {
             moved(2.25, 2.45)
         );
     }
+
+    /// 64-bit FNV-1a over the score's JSON.
+    fn digest(score: &EnsembleScore) -> u64 {
+        serde_json::to_string(score)
+            .unwrap()
+            .bytes()
+            .fold(0xcbf29ce484222325, |h, b| {
+                (h ^ u64::from(b)).wrapping_mul(0x100000001b3)
+            })
+    }
+
+    fn ring() -> Vec<ArmPlan> {
+        (0..6)
+            .map(|k| {
+                let degrees = 60.0 * k as f64;
+                let (sin, cos) = degrees.to_radians().sin_cos();
+                ArmPlan {
+                    placement: Placement {
+                        origin_m: [0.8 * cos, 0.8 * sin, 0.0],
+                        yaw_degrees: degrees + 180.0,
+                    },
+                    mirrored: false,
+                }
+            })
+            .collect()
+    }
+
+    /// Whole-score digests, recorded before the workspace refactor. A change
+    /// here means the dance changed; never update a constant to make it pass.
+    #[test]
+    fn golden_digests_of_compile_ensemble() {
+        let rig = Rig::illustrative_five_axis();
+        let config = CompileConfig::default;
+        let steady = super::super::tests::fixture(0.7, 0.7);
+        let mut cut: serde_json::Value = serde_json::from_str(&steady).unwrap();
+        cut["rmsEnvelope"].as_array_mut().unwrap()[80..90].fill(0.0.into());
+        let cut = cut.to_string();
+        let ensemble =
+            |json: &str| compile_ensemble(json, config(), rig.clone(), &[], &ring(), 0.1);
+        let cases = [
+            (
+                "figures",
+                compile_figures(&steady, config(), rig.clone(), &[]),
+                0xd520440a1967779e,
+            ),
+            ("ring", ensemble(&steady), 0xe19af5b5028cfb20),
+            (
+                "mirrored",
+                ensemble(&super::super::tests::fixture(0.1, 0.2)),
+                0x004939ba7322cca6,
+            ),
+            (
+                "cut",
+                compile_figures(&cut, config(), rig.clone(), &[]),
+                0xf90eba349ed91a06,
+            ),
+        ];
+        assert!(cases[3]
+            .1
+            .as_ref()
+            .unwrap()
+            .cues
+            .iter()
+            .any(|c| c.reason.contains("cut moment")));
+        let wrong: Vec<String> = cases
+            .into_iter()
+            .filter_map(|(name, score, want)| {
+                let got = digest(&score.unwrap());
+                (got != want).then(|| format!("{name}: {got:#018x}"))
+            })
+            .collect();
+        assert!(wrong.is_empty(), "digests changed: {wrong:?}");
+    }
 }
