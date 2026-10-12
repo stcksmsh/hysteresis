@@ -1506,3 +1506,12 @@ drop, wrong labels. Nearly all jerks were sharp flourishes or arrivals (hand
 1.5–2.3 m/s) and the stab surge idling then bursting on sparse notes. Fixed in
 the planner; also the "cannot fit tangents" abort (a hold test that mistook the
 song's last, milliseconds-short knot for a hold). Not reviewed.
+
+### B workspace, round 1 — 2026-10-12
+
+Built `docs/B_WORKSPACE.md` v1 in `hyst-compile` (off by default, `Off` is byte-
+identical to version 47) and measured it on the three songs; `ensemble_preview`
+gained `--workspace` and a stderr summary. In the measurements `Rehearsed`
+breaks a guardrail on all three songs and `Schematic` on one, and Presence
+shows no tension at the 1:32 drop. Nothing judged by eye; blind A|B|C test and
+its commands are in `docs/DANCE_HANDOFF.md`. 157 CPU tests green.

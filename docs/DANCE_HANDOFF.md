@@ -2249,3 +2249,219 @@ melody-led and bass-led to 4:23.
 Files: `hexagon-47.html`, `hexagon-47-full.mp4`, `five-years-hexagon(.html,
 -full.mp4)`, `presence-hexagon(.html, -full.mp4)`. New scratch: `jolts.py`,
 `spans.py`, `lv.py`. 139 CPU tests, clippy, fmt. Not reviewed.
+
+
+### B workspace, round 1 — 2026-10-12
+
+Round 1 of `docs/B_WORKSPACE.md` is built and measured. Mode `Off` is still the
+default and reproduces version 47 byte for byte. Nothing here is judged by eye:
+**Not verified on any song by eye.** Version 47 itself still has no verdict.
+
+#### What each commit did
+
+| Commit | What |
+|---|---|
+| `6c1caa8` | Golden digests of `compile_ensemble` before any workspace code (the `Off` ablation baseline). |
+| `f2075d7` | `Foresight`: arrivals, repeats, cuts and phrase ends lifted out of the moments code into `workspace.rs`. Golden unchanged. |
+| `b38916f` | The workspace itself, not wired: beat observations, levels L1/L2/L4 (leaky mean and variance), L3 (phrase rhythm against the best earlier phrase), surprise, the five-field `Field`, basins, `run()`. 9 tests. |
+| `7a06695` | Approach from the lift; timescales from the song's own phrase gap; build start and afterglow length per lift. 4 tests. |
+| `310c758` | Wired into figure size, figure clock, moments, voice height, contrast phrase and accents (Ripple/Canon) and the Unison basins. The four ensemble tests now run in all three modes. 5 tests added, 2 replaced. |
+| `e6949d0` | This step's code: `EnsembleScore.workspace` debug lane (`FieldSample` per beat; absent in `Off`; old score JSON loads), `ensemble_preview --workspace off|rehearsed|schematic`, stderr summary. `compile_ensemble_with_workspace` returns the `Workspace` beside the score so the example can print basins (the score lane has no basin list). 1 test. |
+
+Tests: 156 green before this step (CPU workspace, `hyst-render` excluded), 157
+after. Clippy, fmt, `ensemble.cjs` and the 15 Python tests green before and after.
+The three `Off` exports are byte-identical to `hexagon-47.html`,
+`five-years-hexagon.html` and `presence-hexagon.html`.
+
+#### Constants and where each came from
+
+Spec = `docs/B_WORKSPACE.md` gave the value. The rest are mine and unjudged.
+
+| Constant | Value | Origin |
+|---|---|---|
+| Gain attack / afterglow decay | 0.5 beats / per lift | attack: spec. Decay: spec said a fixed 16; `7a06695` replaced it with the lift's own loud stretch. |
+| Tension release | 1 beat | spec |
+| Precision recovery / approach decay / habituation decay | 8 / 8 / 64 beats | spec |
+| Gain from surprise, payoff, novelty and recognition kicks | 0.6·s, 0.5+0.5·T, 0.3·s, 0.2 | spec |
+| Level weights L1, L2, L3, L4 | 0.5, 0.3, 0.3, 0.2 | spec said "fixed constants" and gave none; `b38916f` chose them |
+| `Z_KNEE`, `Z_SPAN` | 1.5, 4.0 | `b38916f`. Not in spec. A steady loop has a z-score near 1, so raw z cannot be an error; below the knee is no error, knee + span is full error. |
+| `VAR_FLOOR` | 0.0025 (sd 0.05) | `b38916f`. Not in spec. A flat signal would make the first wiggle an infinite z. |
+| `PEAK_DECAY` | 256 beats | `b38916f`. Not in spec. The running peak that stands in for `intensity(t)` (see below). |
+| L3 spread time constant | 2 phrases | `b38916f`. Not in spec. |
+| Leader dimensions in the observation | lane/8, brightness/128 | `b38916f`. Scaling not in spec. |
+| Timescales L1, L2, L4 | phrase/4, phrase, 4·phrase | spec said 4, 16, 64 beats; `7a06695` derives them from the song's median phrase gap |
+| Measured sign (Schematic only) | level now vs mean of last 8 beats: >1.1 up, <0.9 down, none if before <0.15·peak | `b38916f`/`7a06695`. Not in spec. |
+| Figure size | ×(0.85+0.3·g)×(1−0.25·T), then min 1.0 | factors: spec. The cap at 1.0: `310c758`. |
+| Figure clock | ×(1−0.35·T); floor 1.0 while `since_lift` < afterglow, else 0.65 | spec |
+| Moment strength and hold | ×(0.7+0.6·T one beat before it); strength capped at 1.0 | factor: spec. The cap at 1.0: `310c758`, because strength is a 0..1 blend. |
+| Moment preparation | `lead` = max(2·span, T one beat before × beats since build start) | spec idea; formula is `310c758`'s |
+| Voice lift | +0.15·a, where a is the lift's sign smoothed over 4 beats (k = 1−e^−0.25) | factor: spec. The 4-beat smoothing: `310c758`, because a step in the lift carried the hand 0.2 to 0.5 m/s past the speed cap. |
+| Contrast phrase | after 128·(1−0.4·h) beats | spec |
+
+#### What the spec did not settle
+
+- **Gain loudness is causal.** `intensity(t)` looks ahead and behind. Gain uses
+  the beat's level against a running peak that decays over 256 beats.
+- **Timescales from the median phrase gap.** A bar is phrase/4. That is a guess:
+  the sidecar has no downbeats.
+- **Build start** is the quietest bar within 2 phrases before a lift (the
+  earliest on a tie). A build longer than that starts its held breath late.
+- **Afterglow** is the loud stretch after a lift (bars until a bar falls under
+  half the first), clamped to [bar, 4 phrases].
+- **Approach** is the lift's sign (up +1, falling away −1, entry 0). In
+  Schematic it is the measured sign when a surprise crosses 0.5.
+
+#### Measured (release builds, `--ring 6,0.8`)
+
+Guardrails from "Acceptance". Jolts = moments any arm passes 9 m/s². Gap =
+closest implement gap.
+
+| Song · mode | Jolts (limit) | Top hand speed (≤ 1.73) | Gap (≥ 10 cm) | Shown? |
+|---|---|---|---|---|
+| Instant Crush · off (v47) | 5 (≤ 8) | 1.49 | 13.0 | baseline |
+| Instant Crush · rehearsed | **9** (≤ 8) | **2.24** | 10.3 | **not shown** |
+| Instant Crush · schematic | 7 | 1.64 | 12.8 | ok |
+| Five Years · off (v47) | 2 (≤ 5) | 1.22 | 17.5 | baseline |
+| Five Years · rehearsed | **7** (≤ 5) | 1.17 | 12.4 | **not shown** |
+| Five Years · schematic | 2 | 1.59 | 13.0 | ok |
+| Presence · off (v47) | 15 (≤ 18) | 1.73 | 12.9 | baseline |
+| Presence · rehearsed | 16 | **2.06** | 12.2 | **not shown** |
+| Presence · schematic | 17 | **1.78** | 12.8 | **not shown** |
+
+`Rehearsed`, the mode that has to win, breaks a guardrail on all three songs.
+By the rule in "Acceptance" it goes to the tuning round, not to the user.
+`Schematic` breaks one (Presence top speed, 1.78 against 1.73).
+
+Jolts in a mode that are more than 0.5 s from every `Off` jolt (Five Years times
+are video clock). "No moment" means the jolt is inside a plain move.
+
+- Instant Crush, rehearsed: 8 new
+  - 0:15.4 · 6 arms · 10.5 m/s² · move eight (percussive-open) · flourish moment at 12.60s
+  - 1:34.8 · 6 arms · 10.4 m/s² · move rise (interlocked) · no moment
+  - 1:57.0 · 6 arms · 17.4 m/s² · move gather (interlocked) · no moment
+  - 2:03.0 · 6 arms · 12.8 m/s² · move reach (vocal-led) · no moment
+  - 3:45.7 · 5 arms · 21.5 m/s² · move circle (interlocked) · flourish moment at 221.35s
+  - 4:08.8 · 6 arms · 15.5 m/s² · move gather (interlocked) · flourish moment at 249.05s
+  - 4:18.0 · 2 arms · 9.0 m/s² · move gather (interlocked) · no moment
+  - 4:57.6 · 6 arms · 27.1 m/s² · move arc (bass-led) · no moment
+- Instant Crush, schematic: 7 new
+  - 0:15.4 · 6 arms · 10.5 m/s² · move eight (percussive-open) · flourish moment at 12.60s
+  - 1:42.3 · 6 arms · 24.6 m/s² · move circle (interlocked) · no moment
+  - 2:15.6 · 4 arms · 10.2 m/s² · move reach (vocal-led) · arrival moment at 134.25s
+  - 3:42.9 · 2 arms · 13.9 m/s² · move circle (interlocked) · flourish moment at 221.35s
+  - 4:08.8 · 4 arms · 20.2 m/s² · move circle (interlocked) · flourish moment at 249.05s
+  - 4:46.3 · 1 arms · 9.6 m/s² · move rise (interlocked) · no moment
+  - 4:55.3 · 6 arms · 21.7 m/s² · move gather (interlocked) · no moment
+- Five Years, rehearsed: 7 new
+  - 2:30.9 · 6 arms · 9.7 m/s² · move reach (vocal-led) · arrival moment at 149.60s
+  - 2:57.0 · 6 arms · 10.9 m/s² · move open (interlocked) · no moment
+  - 3:33.6 · 6 arms · 10.2 m/s² · move gather (interlocked) · arrival moment at 213.00s
+  - 3:43.5 · 6 arms · 27.1 m/s² · move circle (interlocked) · no moment
+  - 3:50.6 · 6 arms · 10.2 m/s² · move open (interlocked) · no moment
+  - 3:52.0 · 6 arms · 10.6 m/s² · move circle (interlocked) · arrival moment at 236.10s
+  - 3:59.0 · 6 arms · 11.0 m/s² · move arc (interlocked) · no moment
+- Five Years, schematic: 2 new
+  - 2:44.4 · 6 arms · 19.0 m/s² · move circle (interlocked) · flourish moment at 162.20s
+  - 4:17.3 · 3 arms · 9.3 m/s² · move gather (interlocked) · no moment
+- Presence, rehearsed: 12 new
+  - 0:14.2 · 1 arms · 9.9 m/s² · move sway (kick-led) · no moment
+  - 0:40.6 · 6 arms · 18.2 m/s² · move eight (kick-led) · no moment
+  - 0:46.8 · 2 arms · 10.1 m/s² · move eight (kick-led) · no moment
+  - 0:49.0 · 1 arms · 9.6 m/s² · move sway (kick-led) · flourish moment at 48.05s, passed round as Ripple
+  - 1:57.2 · 1 arms · 11.1 m/s² · move rise (melody-led) · flourish moment at 117.05s, passed round as Canon
+  - 2:18.1 · 2 arms · 11.8 m/s² · move sway (textural) · arrival moment at 136.57s, passed round as Canon
+  - 2:55.8 · 4 arms · 12.1 m/s² · move rise (melody-led) · passed round as Ripple
+  - 2:57.1 · 2 arms · 9.9 m/s² · move rise (melody-led) · passed round as Ripple
+  - 3:16.9 · 1 arms · 14.1 m/s² · move sway (textural) · arrival moment at 195.77s, passed round as Canon
+  - 3:21.8 · 1 arms · 15.2 m/s² · move sway (textural) · arrival moment at 195.77s, passed round as Canon
+  - 3:29.5 · 4 arms · 9.5 m/s² · move reach (vocal-led) · passed round as Canon
+  - 4:12.9 · 6 arms · 29.5 m/s² · move arc (melody-led) · no moment
+- Presence, schematic: 10 new
+  - 0:28.2 · 3 arms · 10.9 m/s² · move sway (kick-led) · no moment
+  - 0:54.0 · 6 arms · 10.6 m/s² · move eight (kick-led) · no moment
+  - 1:00.9 · 1 arms · 9.1 m/s² · move reach (kick-led) · flourish moment at 60.95s
+  - 1:20.7 · 1 arms · 10.8 m/s² · move sway (textural) · passed round as Canon
+  - 1:24.3 · 1 arms · 10.9 m/s² · move sway (textural) · passed round as Canon
+  - 1:55.8 · 1 arms · 10.1 m/s² · move rise (melody-led) · flourish moment at 117.05s, passed round as Canon
+  - 1:57.2 · 2 arms · 10.5 m/s² · move rise (melody-led) · flourish moment at 117.05s, passed round as Canon
+  - 2:18.0 · 2 arms · 15.1 m/s² · move sway (textural) · arrival moment at 136.57s, passed round as Canon
+  - 3:16.3 · 2 arms · 20.0 m/s² · move sway (textural) · arrival moment at 195.77s, passed round as Canon
+  - 4:16.5 · 6 arms · 15.6 m/s² · move arc (melody-led) · no moment
+
+Per the "Acceptance" rule, a jolt that also exists in `Off` belongs to the
+braking problem. These do not exist in `Off`. The list shows additions only;
+it does not show `Off` jolts that a mode removed.
+
+#### Presence 1:15–1:50, the build into the 1:32 drop (Rehearsed)
+
+There is **no held breath**. Tension is 0.00 on every beat from 1:15 to 1:50.
+Its three highest peaks in the whole song are 1:09.8 (0.92), 2:53.2 (0.92) and 3:52.2
+(0.94). Gain is already near its 1.5 clamp: the lift at 1:10.2 (gain 1.50) left a
+64-beat afterglow, so gain only decays from 1.38 at 1:15.8 to 1.20 at 1:30.5, and
+the lift at 1:32.4 pushes it from 1.20 to 1.50, a rise of 0.30 where the payoff
+rule asked for 0.5. Basins in the window: novelty 1:28.7 (0.95); lift 0.60 and
+novelty 0.95 together at 1:32.4; Schematic (no foresight) has novelty basins at
+1:36.1, 1:43.5 and 1:50.8 and no lift. Surprise 0.74 at 1:32.4 (the second
+largest in the song; the largest, 0.89, is at 3:24.5), so the drop does break
+the groove. Why the 1:32 build has no tension is not diagnosed. The cause is
+somewhere in the build start or the ramp for that lift; it was not traced.
+
+#### Instant Crush
+
+First Recognition basin: **0:46.2** (similarity 0.95), then 0:50.5 and 0:52.7.
+Recognition basins also fire nine times between 3:25 and 3:50 (every 2.2 s).
+
+#### What is not known
+
+Everything about how it looks. The measurements above are guardrails; they are
+not a verdict. `Off` is unchanged. No video was made.
+
+#### Next steps for the user
+
+1. Rehearsed breaks a guardrail on all three songs, so the rule says tune
+   before showing. Say if you would rather look at it anyway; that is your call
+   and it is outside the fixed acceptance rule.
+2. If you want the blind clips: they are three exports shuffled per clip as
+   A | B | C (left, middle, right), key in a file you leave unread until the
+   verdict. `hexreview.sh` cannot make them (whole song only, hard-coded to
+   Instant Crush's audio, and it reuses a cached `hexrev-all.mp4`), so this
+   script calls the recorder directly (`record-ensemble.cjs`, max 40 s per
+   call, honours `HYST_TEMPO_MAP`). Not run. Save and run with `bash`:
+
+```
+#!/bin/bash
+set -e
+D=/home/stcksmsh/Documents/Codex/2026-09-23-can-you-check-the-programming-github/output/music-arm
+O=$D/b1-blind; mkdir -p $O; : > $O/b1-blind-key.txt
+# name song-tag audio-stem start-seconds length-seconds
+clips=("presence-build pr presence 75 35" "presence-emotional pr presence 151 24" "crush-return ic instant-crush 38.2 32" "years-climb fy five-years 133 27")
+for c in "${clips[@]}"; do
+  read name s audio start secs <<< "$c"
+  perm=$(python3 -c "import random;m=['off','rehearsed','schematic'];random.shuffle(m);print(*m)")
+  echo "$name left-to-right: $perm" >> $O/b1-blind-key.txt
+  i=0
+  for m in $perm; do
+    if [ $s = fy ]; then export HYST_TEMPO_MAP=$D/five-years.tempomap.json; else unset HYST_TEMPO_MAP; fi
+    node $D/record-ensemble.cjs $D/b1-$m-$s.html $D/$audio.m4a $O/$name-$i.mp4 $start $secs > /dev/null
+    i=$((i+1))
+  done
+  ffmpeg -y -v error -i $O/$name-0.mp4 -i $O/$name-1.mp4 -i $O/$name-2.mp4 -ss $start -t $secs -i $D/$audio.m4a \
+    -filter_complex "[0:v]scale=640:-2[a];[1:v]scale=640:-2[b];[2:v]scale=640:-2[c];[a][b][c]hstack=inputs=3[v]" \
+    -map "[v]" -map 3:a -c:v libx264 -crf 28 -pix_fmt yuv420p -c:a aac -shortest $O/$name.mp4
+  rm $O/$name-0.mp4 $O/$name-1.mp4 $O/$name-2.mp4
+done
+echo "clips in $O; do not open b1-blind-key.txt until you have chosen"
+```
+
+3. The four clips (audio clock; the exports are `$D/b1-{off,rehearsed,schematic}-{ic,fy,pr}.html`):
+   "Presence" 1:15–1:50 and 2:31–2:55; "Instant Crush" 8 s before its first
+   Recognition basin to 24 s after (0:38.2–1:10.2); "Five Years" 2:13–2:40.
+4. What to look for: the held breath before 1:32 in Presence (this run shows
+   none, see above), and the arms gathering into one body at the Instant Crush
+   chorus return.
+5. The rule, fixed before any result: `Rehearsed` must beat `Off` in at least 3
+   of the 4 clips. A tie is a loss. `Schematic` cannot win alone. A mode over a
+   guardrail is not shown (all `Rehearsed` exports are over one).
+
+Files in `$D`: `b1-{off,rehearsed,schematic}-{ic,fy,pr}.{html,summary.txt,jolts.txt,look5.txt,gap.txt}`.
+Scratch: `/tmp/b1/` (export, measure and field scripts; not kept).
