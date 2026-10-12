@@ -312,6 +312,25 @@ pub struct EnsembleScore {
     pub placements: Vec<Placement>,
     pub cues: Vec<IntentCue>,
     pub tracks: Vec<AgentTrack>,
+    /// Debug lane: the feeling workspace per beat. None when it is Off.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace: Option<Vec<FieldSample>>,
+}
+
+/// One beat of the workspace field (`docs/B_WORKSPACE.md`). `since_lift` is
+/// None before the first lift.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct FieldSample {
+    pub time: f64,
+    pub gain: f64,
+    pub tension: f64,
+    pub precision: f64,
+    pub approach: f64,
+    pub habituation: f64,
+    pub surprise: f64,
+    pub afterglow_beats: f64,
+    pub since_lift: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -717,6 +736,44 @@ mod tests {
         // A mirror that sticks out past the stated radius is refused.
         rig.implement.radius_m = 0.01;
         assert!(rig.validate().is_err());
+    }
+
+    #[test]
+    fn old_score_json_without_a_workspace_lane_still_loads() {
+        let mut score = EnsembleScore {
+            duration: 1.0,
+            rig: Rig::illustrative_five_axis(),
+            placements: Vec::new(),
+            cues: Vec::new(),
+            tracks: Vec::new(),
+            workspace: None,
+        };
+        let json = serde_json::to_value(&score).unwrap();
+        assert!(
+            json.get("workspace").is_none(),
+            "Off must not write the lane"
+        );
+        assert_eq!(
+            serde_json::from_value::<EnsembleScore>(json).unwrap(),
+            score
+        );
+        score.workspace = Some(vec![FieldSample {
+            time: 0.0,
+            gain: 0.5,
+            tension: 0.0,
+            precision: 1.0,
+            approach: 0.0,
+            habituation: 0.0,
+            surprise: 0.0,
+            afterglow_beats: 16.0,
+            since_lift: None,
+        }]);
+        let json = serde_json::to_value(&score).unwrap();
+        assert!(json["workspace"][0]["sinceLift"].is_null());
+        assert_eq!(
+            serde_json::from_value::<EnsembleScore>(json).unwrap(),
+            score
+        );
     }
 
     #[test]

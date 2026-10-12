@@ -9,11 +9,12 @@ use std::f64::consts::{PI, TAU};
 
 use super::workspace::{
     arrival_lift, observations, phrase_beats, run, BasinKind, EventKind, Foresight, ObsInput,
-    WorkspaceMode,
+    Workspace, WorkspaceMode, NO_LIFT,
 };
 use super::*;
 use crate::ensemble::{
-    fit_tangents, forward_kinematics, AgentTrack, EnsembleScore, JointKnot, Placement, Rig,
+    fit_tangents, forward_kinematics, AgentTrack, EnsembleScore, FieldSample, JointKnot, Placement,
+    Rig,
 };
 
 /// Axis-aligned red zone, metres, world frame. No link may enter it.
@@ -242,6 +243,18 @@ pub fn compile_ensemble(
     arms: &[ArmPlan],
     clearance_m: f64,
 ) -> Result<EnsembleScore, String> {
+    compile_ensemble_with_workspace(json, config, rig, zones, arms, clearance_m).map(|r| r.0)
+}
+
+/// `compile_ensemble`, and the workspace it ran (None in Off) for printing.
+pub fn compile_ensemble_with_workspace(
+    json: &str,
+    config: CompileConfig,
+    rig: Rig,
+    zones: &[Zone],
+    arms: &[ArmPlan],
+    clearance_m: f64,
+) -> Result<(EnsembleScore, Option<Workspace>), String> {
     if arms.is_empty() || !(clearance_m.is_finite() && clearance_m >= 0.0) {
         return Err("ensemble needs an arm and a finite clearance >= 0".into());
     }
@@ -1644,9 +1657,24 @@ pub fn compile_ensemble(
         placements: arms.iter().map(|arm| arm.placement.clone()).collect(),
         cues,
         tracks,
+        workspace: ws.as_ref().map(|w| {
+            (w.field.iter().enumerate())
+                .map(|(n, f)| FieldSample {
+                    time: w.beat_zero + n as f64 * w.beat_period,
+                    gain: f.gain,
+                    tension: f.tension,
+                    precision: f.precision,
+                    approach: f.approach,
+                    habituation: f.habituation,
+                    surprise: f.surprise,
+                    afterglow_beats: f.afterglow_beats,
+                    since_lift: (f.since_lift < NO_LIFT / 2.0).then_some(f.since_lift),
+                })
+                .collect()
+        }),
     };
     score.validate()?;
-    Ok(score)
+    Ok((score, ws))
 }
 
 /// `series` at fractional index `x`, averaged under a bell `sigma` samples
