@@ -305,7 +305,13 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", default=str(common.DATA / "check1"))
     parser.add_argument("--only", nargs="*")
+    parser.add_argument("--baseline", choices=("stems", "mix"), default="stems",
+                        help="mix: the stem features are not available, so the mix-only features are the baseline")
     args = parser.parse_args()
+    if args.baseline == "mix":
+        for name, parts in CANDIDATES.items():
+            CANDIDATES[name] = ["baseline_mix" if p == "baseline_stems" else p for p in parts]
+        del CANDIDATES["baseline_mix"]
     print(f"seeds: folds={common.SEED_FOLDS} bootstrap={common.SEED_BOOTSTRAP} inner={common.SEED_INNER} "
           f"boot={N_BOOT} folds={N_FOLDS}", flush=True)
     durations = clip_durations()

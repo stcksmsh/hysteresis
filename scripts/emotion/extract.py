@@ -84,7 +84,8 @@ def cmd_stems(args):
     model = get_model("htdemucs").eval()
     (CACHE / "frames_stems").mkdir(parents=True, exist_ok=True)
     work = todo(CACHE / "frames_stems", common.all_clips())
-    print(f"stems: {len(work)} clips to do", flush=True)
+    work = work[args.shard::args.shards]
+    print(f"stems: {len(work)} clips to do (shard {args.shard}/{args.shards})", flush=True)
     start = time.time()
     for i, (key, path) in enumerate(work, 1):
         wav = torch.from_numpy(load_audio(path, model.samplerate, mono=False).T.copy())
@@ -288,5 +289,7 @@ if __name__ == "__main__":
     parser.add_argument("command", choices=COMMANDS)
     parser.add_argument("--threads", type=int, default=8)
     parser.add_argument("--workers", type=int, default=8)
+    parser.add_argument("--shard", type=int, default=0)
+    parser.add_argument("--shards", type=int, default=1)
     args = parser.parse_args()
     COMMANDS[args.command](args)

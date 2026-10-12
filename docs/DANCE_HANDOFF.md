@@ -2609,3 +2609,137 @@ moments code reads cleaner with it). There is no round 3.
 
 To remake them: `/tmp/b1/blind2.sh` is the round-1 script with the output
 directory changed to `b1-blind-r2`; the script text is in the round-1 entry.
+
+### Emotion stage 1: encoder — 2026-10-12
+
+Spec: `docs/EMOTION.md`. No planner behaviour changed (version 47 and the `Off`
+golden digests untouched). All code is in `scripts/emotion/`; data, caches and
+models are outside git. Check 1 ran against the **mix-only baseline**, not the
+stems baseline (see "Deviations"). **Not judged by ear or eye; the report page
+is for you to read and mark wrong.**
+
+#### Datasets and licences (`/secondary/hyst-data/emotion/SOURCES.md` has URLs, hashes, text)
+
+| Data | Used | Licence |
+|---|---|---|
+| DEAM, 2013/2014 label release, songs 1..2000 (1,744 clips; the 58 full songs of the 2015 release are left out so one release is used) | timing | manual §3: Non-Commercial Creative Commons (BY-NC), non-profit work |
+| Emotify, 400 one-minute clips, 8,407 rater rows | feelings | no licence stated; "cite the paper" |
+| PMEmo | **not used** | data licence unstated (the repo's MIT covers code), audio only on Google Drive |
+
+Emotify track ids 1..400 are assumed to run classical, rock, electronic, pop
+with file `n` in each genre folder numbered 1..100. The package does not say so.
+Models: MERT-v1-95M (cc-by-nc-4.0), `laion/larger_clap_music` (apache-2.0),
+Essentia Discogs-EffNet and the mtg_jamendo_moodtheme head (CC BY-NC-SA 4.0). The
+DEAM- and emoMusic-trained Essentia heads were not used: they were trained on the
+labels this check scores. All of these are non-commercial: check before exhibition.
+
+#### Candidates
+
+Windows 4 s, step 0.5 s, cached as `.npy` with a manifest per candidate.
+- Baseline: the sidecar's mix signals (energy, five bands, centroid, flatness, flux,
+  onset density, periodicity: mean, std, max over the window; 29 numbers) from audio
+  with the sidecar's constants. A stems version (Demucs: per-stem level, flux, power
+  share, leader; 49 numbers) is built but only 93 + ~300 of 2,144 clips are separated.
+- B expectation signals: **not computed.** They need beat grids, phrase memory and
+  Foresight events; a 45 s clip has none worth the name. Said here, not faked.
+- MERT-v1-95M: run over the whole clip, hidden states pooled per window. All 13 layers
+  kept; "average" = mean of layers, "best" = layer chosen by inner CV on training songs.
+- CLAP: `larger_clap_music`, 4 s windows hop 2 s (a 0.5 s hop would have taken about 8 h).
+- Essentia: Discogs-EffNet embedding (1,280) and the mood/theme head (56).
+- Combined: baseline + each model, and baseline + all.
+
+#### Check 1 (rules as written in `check1.py`, committed before any result)
+
+Seeds: folds 20261012, bootstrap 20261013 (2,000 resamples over songs), inner CV
+20261014. Five folds by song, same folds for every candidate (Emotify balanced by genre).
+Ridge penalty by inner 3-fold on training songs only. Scored on the same rows: 4 s
+windows on a 2 s grid (DEAM labels at 15, 17, … s: 26,155 rows from 1,744 songs;
+Emotify clip means). Intervals are 95 % bootstrap over songs.
+
+| candidate | dims | timing R² | rank corr ρ | NN agreement | geometry | gates timing/ρ/NN | result |
+|---|---|---|---|---|---|---|---|
+| baseline (mix only) | 29 | 0.426 [0.402, 0.449] | 0.509 [0.474, 0.543] | 0.190 [0.152, 0.230] | 1.082 [1.031, 1.151] | – | reference |
+| mert_avg | 768 | 0.603 [0.582, 0.622] | 0.597 [0.569, 0.626] | 0.260 [0.217, 0.302] | 1.041 [1.025, 1.061] | y/y/n | fail |
+| mert_best | 768 | 0.605 [0.584, 0.622] | 0.616 [0.588, 0.644] | 0.273 [0.230, 0.318] | 1.050 [1.032, 1.072] | y/y/n | fail |
+| clap | 512 | 0.229 [0.206, 0.251] | 0.366 [0.329, 0.400] | 0.177 [0.140, 0.215] | 1.065 [1.028, 1.115] | n/n/n | fail |
+| essentia | 1,336 | 0.531 [0.508, 0.550] | 0.614 [0.586, 0.641] | 0.295 [0.253, 0.340] | 1.042 [1.028, 1.060] | y/y/y | **pass** |
+| baseline+mert_avg | 797 | 0.609 [0.589, 0.628] | 0.595 [0.566, 0.625] | 0.255 [0.212, 0.300] | 1.043 [1.026, 1.064] | y/y/n | fail |
+| baseline+clap | 541 | 0.432 [0.407, 0.456] | 0.430 [0.393, 0.464] | 0.193 [0.155, 0.230] | 1.066 [1.030, 1.114] | n/n/n | fail |
+| baseline+essentia | 1,365 | 0.553 [0.530, 0.572] | 0.612 [0.584, 0.639] | 0.295 [0.253, 0.340] | 1.043 [1.028, 1.061] | y/y/y | **pass** |
+| baseline+all | 2,645 | 0.614 [0.593, 0.632] | 0.614 [0.586, 0.641] | 0.310 [0.265, 0.355] | 1.043 [1.027, 1.062] | y/y/y | **pass, pick** |
+
+**Pick: baseline+all** (mix baseline + MERT average + CLAP + Essentia embedding + Essentia
+mood), best mean rank among the three passers (mean ranks 1.50, baseline+essentia 1.92,
+essentia 2.58; the three differ by under 0.002 on geometry and by 0.003 on ρ).
+Pass rule: beats the baseline's point value on timing, rank correlation and nearest-
+neighbour agreement, each with an interval that does not overlap the baseline's;
+geometry is ranked, not a gate. Pick = best mean rank over timing, feelings (mean of
+ρ rank and agreement rank) and geometry among passers.
+
+What the numbers do and do not say:
+- **Within-song timing is not captured.** The diagnostic R² with song means removed
+  is negative for every candidate (baseline -1.31, MERT -0.37…-0.41, Essentia -1.90,
+  baseline+all -0.96). The pooled timing score is mostly between-song mood.
+  The spec's measure is the pooled one and that is what gates. Nothing here shows the
+  encoding follows change inside a song.
+- **Geometry is weak** for everything (1.04–1.08), and the baseline is highest.
+- MERT misses only on nearest-neighbour agreement; its interval touches the baseline's.
+- CLAP (music checkpoint, 4 s windows padded to its 10 s input) is below the baseline.
+- Rank correlation includes the common mode (every clip has high tenderness and
+  low tension); the centred variant is in `results.json` and the table: baseline
+  0.46, baseline+all 0.59.
+- DEAM valence is the weaker label (its manual says so): R² 0.31 vs arousal 0.54 for
+  the baseline, 0.53 vs 0.69 for baseline+all.
+
+#### Deviations from the spec, and why
+
+1. **Baseline is mix-only.** Demucs on 2,144 clips is ~13 s per clip here (8.5 s when
+   the machine was quiet; three parallel shards were slower, not faster): over 6 h.
+   I ran check 1 without it. The stems baseline may be stronger, so these passes are
+   against the weaker baseline. Demucs 4.1.0 is separating in the background; if it
+   completes, rerun `check1.py` (default baseline is stems) and see "If you rerun".
+2. **Evaluation grid 2 s**, not 0.5 s, for every candidate (CLAP cost). Caches for the
+   other candidates are at 0.5 s.
+3. B expectation signals not computed (above).
+4. MERT is pooled from whole-clip hidden states, not run per window: windows see context.
+5. Nearest-neighbour is among the other held-out clips of the same fold (pools of 80);
+   cosine distance on training-standardised vectors. The spec said "closest held-out
+   neighbour"; the pool choice is mine. NN bootstrap resamples clips, not pools.
+6. DEAM: 2013/2014 labels only, chosen to use one release.
+
+#### Output and report
+
+- `scripts/emotion/encode.py IN AUDIO OUT --components …` writes a new sidecar with
+  `emotionEncoding` (`model`, `version`, `dims`, `hopSeconds`, `windowSeconds`,
+  per-step `steps`, per-beat `perBeat`, `components`, `provenance`). Refuses to
+  overwrite the input, refuses audio more than 100 ms off the sidecar duration.
+- Run on the three danced songs, outputs next to the inputs: `instant-crush.emotion.sidecar.json`
+  (680 steps), `five-years-steady.emotion.sidecar.json` (568), `presence.emotion.sidecar.json`
+  (542), 2,645 dims each, 59–73 MB each. Five Years uses its steady-grid analysis WAV, as the sidecar does.
+- Report: `$D/emotion-report.html` (D = music-arm directory): the check-1 table, and for
+  each song every 10 s the predicted GEMS profile and the nearest 3 Emotify and 3 DEAM clips.
+  **I have not read it for sense.** Library clips are 45–60 s means; a 10 s query is noisier.
+
+#### Cost
+
+Run times (this machine, 20 threads): mix features under 15 min; Essentia 1.2 s/clip (~45 min);
+MERT 4.5 s/clip (~2.7 h); CLAP 3.3–4.6 s/clip (~2.2 h incl. a restart); Demucs 13 s/clip;
+check 1 for all nine candidates ~6 min. Disk: data and caches 7.8 GB, env 2.1 GB, HF cache
+1.6 GB, uv cache 2.2 GB (~14 GB of the 30 GB; encoded sidecars 195 MB outside the repo).
+
+#### Tests and checks
+
+`scripts/emotion/test_*.py`: 19 tests. Splits never share a song; ridge recovers a known
+linear signal and scores noise near zero; the inner choice does not see the test fold
+(wrecked test labels change nothing); layer selection finds the informative layer; pass
+rule needs clear intervals; `encode.py` leaves the input byte-identical and adds only
+`emotionEncoding`. Run: `cd scripts/emotion && /secondary/hyst-env/emotion/bin/python -m unittest`.
+The five repository checks passed before the first edit and again after the last.
+
+#### If you rerun with the stems baseline
+
+`/secondary/hyst-env/run_stems_one.sh` (resumable; ~13 s/clip), then
+`python extract.py baseline && python check1.py` (stems is the default baseline), and
+`encode.py` / `report.py` with the new pick's components. A pick containing
+`baseline_stems` needs `--stems-dir` for each song (existing Demucs 4.0.1 outputs).
+Nothing here says the arm will look emotional: stage 4 is the only test of that.

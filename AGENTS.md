@@ -1523,3 +1523,13 @@ skips the last two bars before a drop, one recognition per phrase, two wiring
 constants halved. `Rehearsed` passes the guardrails on all three songs; `Off`
 unchanged. Second blind test is pending; a loss means deleting `workspace.rs`.
 Details in `docs/DANCE_HANDOFF.md`. Not judged by eye.
+
+### Emotion stage 1: encoder — 2026-10-12
+
+Built `scripts/emotion/` (feature extractors, check 1, `encode.py`, `report.py`, 19 tests)
+and ran check 1 on DEAM + Emotify against a mix-only baseline (stems baseline not finished:
+Demucs too slow). Passed: Essentia, baseline+Essentia, baseline+all; pick baseline+all.
+Within-song timing R² is negative for every candidate: the encoding separates songs, it
+does not follow change inside one. Three danced songs encoded to `*.emotion.sidecar.json`
+and an `emotion-report.html` made, outside git; unread by the user. Numbers, deviations
+and rerun steps in `docs/DANCE_HANDOFF.md`. Planner untouched; stages 2-4 not started.

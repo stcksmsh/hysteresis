@@ -60,8 +60,16 @@ questions are open with the user:
 Do not start either piece of work before the user answers; they are large and
 the user chooses the order.
 
-**B workspace (2026-10-12): round 2 built, measured, waiting for the second
-blind test.** `docs/B_WORKSPACE.md` is the design; the last
+**Current work (2026-10-12): the emotion pipeline, `docs/EMOTION.md`.** Stage 1
+(the encoder, check 1) is done; see "Emotion stage 1: encoder" in
+`docs/DANCE_HANDOFF.md` for the table. Three candidates passed against the mix-only
+baseline; the pick is the combined encoding (baseline + MERT + CLAP + Essentia).
+The stems baseline was not finished, within-song timing is not captured, and the
+report page `$D/emotion-report.html` is waiting for the user to read. Stages 2-4
+(body, decoder, odd-one-out tests) are not started. **B is parked** (round 2: not
+enough difference to judge); version 47 is unchanged and `Off` still reproduces it.
+
+B workspace, for the record (round 2 built and measured; parked): `docs/B_WORKSPACE.md` is the design; the last
 `docs/DANCE_HANDOFF.md` entries have the numbers. Round 1 lost the blind test
 (`Rehearsed` beat `Off` in 1 of 4 clips). Round 2 changed constants and two
 definitions; `Rehearsed` now passes the guardrails on all three songs. Version
@@ -229,6 +237,15 @@ Tools in `$D/tracker-scratch/newsong/`:
 - Videos: `songvideo.sh SLUG SECONDS` and `hexreview.sh SOURCE.html OUT.mp4`
   (whole song with a clock; about ten minutes each). The recorder
   `$D/record-ensemble.cjs` reads `HYST_TEMPO_MAP`.
+
+Emotion work (`docs/EMOTION.md`):
+```
+cd scripts/emotion && /secondary/hyst-env/emotion/bin/python -m unittest     # 19 tests
+# env: /secondary/hyst-env/emotion (uv, py3.11; transformers pinned 4.47.1)
+# HF_HOME=/secondary/hyst-env/hf  TORCH_HOME=/secondary/hyst-env/torch-hub  UV_CACHE_DIR=/secondary/hyst-env/uv-cache
+# data: /secondary/hyst-data/emotion/{deam,emotify,SOURCES.md,cache,check1_mixbaseline}
+# extract.py mix|stems|baseline|mert|clap|essentia   (resumable)   check1.py   encode.py   report.py
+```
 
 Environments are under `/secondary/hyst-env` (Demucs; librosa is in the
 `basic-pitch` one); the root disk is nearly full. A shell guard there refuses
