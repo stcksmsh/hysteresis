@@ -7,7 +7,10 @@
 use std::collections::HashMap;
 use std::f64::consts::{PI, TAU};
 
-use super::workspace::{arrival_lift, EventKind, Foresight};
+use super::workspace::{
+    arrival_lift, observations, phrase_beats, run, BasinKind, EventKind, Foresight, ObsInput,
+    WorkspaceMode,
+};
 use super::*;
 use crate::ensemble::{
     fit_tangents, forward_kinematics, AgentTrack, EnsembleScore, JointKnot, Placement, Rig,
@@ -467,10 +470,65 @@ pub fn compile_ensemble(
         }
         sum.map(|v| if total > 0.0 { v / total } else { 0.0 })
     };
+    // The feeling workspace, run once. None in Off: every expression below
+    // that reads it then keeps its original form.
+    let mut starts: Vec<f64> = data
+        .musical_memory
+        .phrases
+        .iter()
+        .map(|p| p.start)
+        .collect();
+    starts.sort_by(f64::total_cmp);
+    let ws = (config.workspace != WorkspaceMode::Off)
+        .then(|| {
+            let phrases: Vec<(f64, &[f64])> = (data.musical_memory.phrases.iter())
+                .map(|p| (p.start, p.rhythm.as_slice()))
+                .collect();
+            let novelty: Vec<(f64, u32, f64)> = (data.musical_structure.novelty_candidates.iter())
+                .map(|n| (n.time, n.scale_beats, n.score_percentile))
+                .collect();
+            let repeats: Vec<f64> = foresight.of(EventKind::Repeat).map(|e| e.time).collect();
+            let lead: Vec<usize> = ranks.iter().map(|r| r[0]).collect();
+            let height: Vec<f64> = if swell.is_empty() {
+                Vec::new()
+            } else {
+                (0..ranks.len()).map(|i| bright(ranks[i][0])[i]).collect()
+            };
+            let obs = observations(&ObsInput {
+                beat_zero: data.musical_memory.beat_zero,
+                beat_period: beat,
+                duration: data.duration,
+                rate,
+                activity: std::array::from_fn(|i| sources[i].whole_track_activity.as_slice()),
+                absolute_rms: std::array::from_fn(|i| sources[i].absolute_rms.as_slice()),
+                drum_density: &sources[1].transient_density,
+                leader: (!height.is_empty()).then_some((lead.as_slice(), height.as_slice())),
+                phrases: &phrases,
+                novelty: &novelty,
+                repeats: &repeats,
+            });
+            run(
+                config.workspace,
+                data.musical_memory.beat_zero,
+                beat,
+                &obs,
+                &foresight,
+            )
+        })
+        .flatten();
     // A figure grows and shrinks with the leader's loudness. The user chose
     // this strength (with the height below) over half of it and over none, on
     // the break's solo and on a strummed verse.
-    let sized = |scale: f64, t: f64| (scale * (1.0 + 0.35 * swell_at(t)[0])).min(1.0);
+    let sized = |scale: f64, t: f64| {
+        let size = scale * (1.0 + 0.35 * swell_at(t)[0]);
+        match &ws {
+            Some(w) => {
+                let f = w.field_at(t);
+                (size * (0.85 + 0.3 * f.gain) * (1.0 - 0.25 * f.tension)).min(1.0)
+            }
+            None => size.min(1.0),
+        }
+    };
 
     // (run start, direction, class) for recall lookups.
     let mut chosen: Vec<(f64, f64, &str)> = Vec::new();
@@ -480,7 +538,36 @@ pub fn compile_ensemble(
     // Scaled shell azimuth where the previous figure ended.
     let mut entry = still(0.0, 1.0)[0];
     let mut way = -1.0;
-    for &(start, end, class) in &runs {
+    // Where a basin happened, as the event's own time (a basin sits on the
+    // beat grid, up to half a beat off it).
+    let basins = ws.as_ref().map_or(&[][..], |w| w.basins.as_slice());
+    let exact = |b: &super::workspace::Basin| -> f64 {
+        let kind = match b.kind {
+            BasinKind::Lift => EventKind::Arrival,
+            BasinKind::Recognition => EventKind::Repeat,
+            BasinKind::Novelty => return b.time,
+        };
+        (foresight.of(kind).map(|e| e.time))
+            .filter(|t| (t - b.time).abs() <= 0.5 * beat + 1e-9)
+            .min_by(|x, y| (x - b.time).abs().total_cmp(&(y - b.time).abs()))
+            .unwrap_or(b.time)
+    };
+    // A lift or a novelty in one run turns the base the other way in the next.
+    let flip_after: Vec<bool> = if basins.is_empty() {
+        Vec::new()
+    } else {
+        runs.iter()
+            .map(|r| {
+                basins
+                    .iter()
+                    .any(|b| b.kind != BasinKind::Recognition && (r.0..r.1).contains(&exact(b)))
+            })
+            .collect()
+    };
+    for (r, &(start, end, class)) in runs.iter().enumerate() {
+        if r > 0 && flip_after.get(r - 1).copied().unwrap_or(false) {
+            way = -way;
+        }
         let activity = classify(start, end).1;
         let (sequence, size, travel) = motif(class);
         let n = *occurrences
@@ -524,7 +611,13 @@ pub fn compile_ensemble(
         let (own, phrases) = if contrast.is_empty() {
             (1, 1)
         } else {
-            let own = (128.0 / length).ceil() as usize;
+            let own = match &ws {
+                Some(w) => {
+                    (128.0 * (1.0 - 0.4 * w.field_at(start).habituation) / length).ceil() as usize
+                }
+                None => (128.0 / length).ceil() as usize,
+            }
+            .max(1);
             (own, own + 1)
         };
         let phrase = [sequence.repeat(own).as_slice(), contrast].concat();
@@ -635,6 +728,10 @@ pub fn compile_ensemble(
         /// True freeze. Only for a cut: dense music, near nothing, dense again.
         /// Every other hold stays alive with small slow movement.
         frozen: bool,
+        /// An arrival that lifts: where its build starts (s).
+        build_start: Option<f64>,
+        /// Beats the preparation starts before the moment; None: twice `span`.
+        lead: Option<f64>,
     }
     let mut moments: Vec<Moment> = Vec::new();
     if config.enable_hits {
@@ -668,6 +765,8 @@ pub fn compile_ensemble(
                     hold_beats: lerp(1.5, 2.5, lift),
                     span: span_for(class_at(time + beat)),
                     frozen: false,
+                    build_start: e.build_start,
+                    lead: None,
                 });
             }
         }
@@ -694,6 +793,8 @@ pub fn compile_ensemble(
                     hold_beats: 0.0,
                     span: if soft { 1.5 } else { 0.75 } * span_for(class_at(time)),
                     frozen: false,
+                    build_start: None,
+                    lead: None,
                 });
             }
         }
@@ -709,9 +810,19 @@ pub fn compile_ensemble(
                 hold_beats: e.strength / beat,
                 span: 0.5,
                 frozen: true,
+                build_start: None,
+                lead: None,
             });
         }
         moments.sort_by(|a, b| a.time.total_cmp(&b.time));
+        // Tension makes a moment bigger and longer; a cut keeps its length.
+        if let Some(w) = &ws {
+            for m in moments.iter_mut().filter(|m| m.label != "cut") {
+                let k = 0.7 + 0.6 * w.field_at(m.time - beat).tension;
+                m.strength = (m.strength * k).min(1.0);
+                m.hold_beats *= k;
+            }
+        }
     }
     for &Moment { time, label, .. } in &moments {
         let i = cues.partition_point(|c| c.end <= time).min(cues.len() - 1);
@@ -758,30 +869,67 @@ pub fn compile_ensemble(
     // as a ripple and a canon in turn. Only its timing changes; the arms keep
     // the sides of the run's formation. Moves under six beats stay together.
     let mut accents: Vec<Option<Formation>> = vec![None; instances.len()];
+    // Only a move that sweeps under 120 degrees round the base. The wide
+    // circles and arcs belong to the choruses, which stay in step (the user:
+    // all together looks best).
+    let passes = |i: usize| {
+        let x = &instances[i];
+        let sweep = (0..=16).map(|k| {
+            let u = k as f64 / 16.0;
+            scaled((x.shape)(u, x.dir), x.scale)[0] + x.turn * u
+        });
+        let (low, high) = sweep.fold((f64::INFINITY, f64::NEG_INFINITY), |(low, high), v| {
+            (low.min(v), high.max(v))
+        });
+        180.0 * (high - low) < 120.0 && x.end - x.start >= 6.0 * beat
+    };
     if arms.len() > 1 {
         let flourishes = moments.iter().filter(|m| m.label == "flourish");
         for (n, m) in flourishes.enumerate() {
             let i = instances
                 .partition_point(|x| x.end <= m.time)
                 .min(instances.len() - 1);
-            // Only a move that sweeps under 120 degrees round the base. The
-            // wide circles and arcs belong to the choruses, which stay in
-            // step (the user: all together looks best).
-            let x = &instances[i];
-            let sweep = (0..=16).map(|k| {
-                let u = k as f64 / 16.0;
-                scaled((x.shape)(u, x.dir), x.scale)[0] + x.turn * u
-            });
-            let (low, high) = sweep.fold((f64::INFINITY, f64::NEG_INFINITY), |(low, high), v| {
-                (low.min(v), high.max(v))
-            });
-            let narrow = 180.0 * (high - low) < 120.0;
-            if narrow && x.end - x.start >= 6.0 * beat && accents[i].is_none() {
+            if passes(i) && accents[i].is_none() {
                 let accent = [Formation::Ripple, Formation::Canon][n % 2];
                 accents[i] = Some(accent);
                 cues[i]
                     .reason
                     .push_str(&format!(" · passed round as {accent:?}"));
+            }
+        }
+        // Novelty: the next move that could take an accent does.
+        let mut given = 0;
+        for b in basins.iter().filter(|b| b.kind == BasinKind::Novelty) {
+            let from = instances.partition_point(|x| x.start < b.time);
+            if let Some(i) = (from..instances.len()).find(|i| passes(*i) && accents[*i].is_none()) {
+                let accent = [Formation::Ripple, Formation::Canon][given % 2];
+                given += 1;
+                accents[i] = Some(accent);
+                cues[i]
+                    .reason
+                    .push_str(&format!(" · passed round as {accent:?} · basin novelty"));
+            }
+        }
+    }
+    // Basins that pull the ensemble into one body: a recognised phrase for its
+    // first bar (a guess: the sidecar has no downbeats), the move that holds a
+    // lift.
+    let mut unison: Vec<bool> = Vec::new();
+    if arms.len() > 1 && !basins.is_empty() {
+        unison = vec![false; instances.len()];
+        let bar = phrase_beats(&starts, beat) / 4.0 * beat;
+        for b in basins {
+            let at = exact(b);
+            let (end, label) = match b.kind {
+                BasinKind::Recognition => (at + bar, "recognition"),
+                BasinKind::Lift => (at, "lift"),
+                BasinKind::Novelty => continue,
+            };
+            for (i, x) in instances.iter().enumerate() {
+                if x.end > at && (x.start < end || x.start <= at) {
+                    unison[i] = true;
+                    cues[i].reason.push_str(&format!(" · basin {label}"));
+                }
             }
         }
     }
@@ -865,7 +1013,20 @@ pub fn compile_ensemble(
                 t - 2.0 * beat,
                 t + 2.0 * beat,
             );
-            let drive = lerp(0.65, 1.0, (drums / 0.08).clamp(0.0, 1.0));
+            let calm = (drums / 0.08).clamp(0.0, 1.0);
+            let drive = match &ws {
+                Some(w) => {
+                    // Right after a lift the afterglow keeps the pace up.
+                    let f = w.field_at(t);
+                    let floor = if f.since_lift < f.afterglow_beats {
+                        1.0
+                    } else {
+                        0.65
+                    };
+                    lerp(floor, 1.0, calm) * (1.0 - 0.35 * f.tension)
+                }
+                None => lerp(0.65, 1.0, calm),
+            };
             drive
                 * f64::min(
                     pulse * if s < t { 1.15 } else { 1.0 },
@@ -883,6 +1044,17 @@ pub fn compile_ensemble(
     let clock: Vec<f64> = (0..clock.len())
         .map(|i| bell(&clock, i as f64, 2.0))
         .collect();
+    // Approach as the body feels it: it settles in over four beats. The hand's
+    // speed cap acts on the figure, not on this lift, and a step in the lift
+    // carried the hand 0.2 to 0.5 m/s past the cap.
+    let felt: Vec<f64> = ws.as_ref().map_or(Vec::new(), |w| {
+        let (k, mut x) = (1.0 - (-0.25f64).exp(), 0.0);
+        let smooth = |f: &super::workspace::Field| {
+            x += (f.approach - x) * k;
+            x
+        };
+        w.field.iter().map(smooth).collect()
+    });
     let waited = |t: f64| -> [f64; 3] {
         let x = (t / step).clamp(0.0, (clock.len() - 1) as f64);
         let i = (x.floor() as usize).min(clock.len() - 2);
@@ -890,10 +1062,20 @@ pub fn compile_ensemble(
         // The hand rises while the voice sings well above its usual pitch.
         let sung = (t - data.musical_memory.beat_zero) / beat - 0.5;
         // 0.65: the user put it between 0.45 and 0.9 in a blind side-by-side.
-        let lift = 0.65 * bell(&voice, sung, 2.0);
-        (p[1], p[2]) = (p[1] + lift, p[2] + lift);
+        let mut lift = 0.65 * bell(&voice, sung, 2.0);
         // The hand rides higher as the leader's line brightens.
-        p[1] += 0.3 * swell_at(t)[1];
+        let mut height = 0.3 * swell_at(t)[1];
+        if !felt.is_empty() {
+            // Approach: the lift of the last arrival, fading.
+            let x =
+                ((t - data.musical_memory.beat_zero) / beat).clamp(0.0, (felt.len() - 1) as f64);
+            let i = (x.floor() as usize).min(felt.len() - 1);
+            let a = lerp(felt[i], felt[(i + 1).min(felt.len() - 1)], x - i as f64);
+            lift += 0.15 * a;
+            height += 0.15 * a;
+        }
+        (p[1], p[2]) = (p[1] + lift, p[2] + lift);
+        p[1] += height;
         p
     };
     // A moment adds no more than 0.6 m/s to the hand's travel along its
@@ -917,13 +1099,23 @@ pub fn compile_ensemble(
         let travel = (0..3).map(|k| (a[k] - b[k]).powi(2)).sum::<f64>().sqrt();
         m.span = m.span.max(1.5 * travel / (0.6 * beat));
     }
+    // A lift is prepared from where tension starts, with the span it has now.
+    if let Some(w) = &ws {
+        for m in moments.iter_mut() {
+            if let Some(start) = m.build_start {
+                let held_breath = w.field_at(m.time - beat).tension * (m.time - start) / beat;
+                m.lead = Some((2.0 * m.span).max(held_breath));
+            }
+        }
+    }
     let hand = |t: f64| -> [f64; 3] {
         let mut p = waited(t);
         for m in &moments {
             let (time, pose, strength, hold, span) =
                 (m.time, m.pose, m.strength, m.hold_beats, m.span);
+            let lead = m.lead.unwrap_or(2.0 * span);
             let tau = (t - time) / beat;
-            if !(-2.0 * span..hold + span).contains(&tau) {
+            if !(-lead..hold + span).contains(&tau) {
                 continue;
             }
             // Arrive smoothly, hold (or pass through), release.
@@ -939,7 +1131,7 @@ pub fn compile_ensemble(
             // Prepare by sinking and pulling in, opposite to the arrival.
             let prepare = strength
                 * if tau < -span {
-                    smooth((tau + 2.0 * span) / span)
+                    smooth((tau + lead) / (lead - span))
                 } else {
                     1.0 - blend
                 }
@@ -1021,6 +1213,11 @@ pub fn compile_ensemble(
                 let run = formations.partition_point(|f| f.0 <= t).saturating_sub(1);
                 let formation = formations[run].1;
                 let length = (instances[index].end - instances[index].start) / beat;
+                let formation = if unison.get(index).copied().unwrap_or(false) {
+                    Formation::Unison
+                } else {
+                    formation
+                };
                 let (side, delay, on) = formation.part(a, count, index, length);
                 let delay = accents[index].map_or(delay, |f| f.part(a, count, index, length).1);
                 (side, delay, on)
@@ -1688,11 +1885,23 @@ fn solve(
 mod tests {
     use super::*;
 
-    #[test]
-    fn hand_travels_and_no_link_enters_a_red_zone() {
+    const MODES: [WorkspaceMode; 3] = [
+        WorkspaceMode::Off,
+        WorkspaceMode::Rehearsed,
+        WorkspaceMode::Schematic,
+    ];
+
+    fn in_mode(workspace: WorkspaceMode) -> CompileConfig {
+        CompileConfig {
+            workspace,
+            ..CompileConfig::default()
+        }
+    }
+
+    fn hand_travels_and_no_link_enters_a_red_zone_in(mode: WorkspaceMode) {
         let json = super::super::tests::fixture(0.7, 0.7);
         let rig = Rig::illustrative_five_axis();
-        let free = compile_figures(&json, CompileConfig::default(), rig.clone(), &[]).unwrap();
+        let free = compile_figures(&json, in_mode(mode), rig.clone(), &[]).unwrap();
         // Zone surrounds where the unobstructed hand is furthest to one side.
         let far = (0..=960)
             .map(|i| {
@@ -1707,7 +1916,7 @@ mod tests {
             min: far.map(|v| v - 0.1),
             max: far.map(|v| v + 0.1),
         };
-        let blocked = compile_figures(&json, CompileConfig::default(), rig, &[zone]).unwrap();
+        let blocked = compile_figures(&json, in_mode(mode), rig, &[zone]).unwrap();
         let (mut entered_free, mut low, mut high) = (false, f64::INFINITY, f64::NEG_INFINITY);
         for i in 0..=960 {
             let t = 8.0 * i as f64 / 960.0;
@@ -1732,6 +1941,13 @@ mod tests {
         assert!(entered_free, "fixture zone must obstruct the free path");
         assert!(high - low > 0.4, "hand lateral travel {:.3} m", high - low);
         assert_eq!(free.cues[0].character, "gather");
+    }
+
+    #[test]
+    fn hand_travels_and_no_link_enters_a_red_zone() {
+        for mode in MODES {
+            hand_travels_and_no_link_enters_a_red_zone_in(mode);
+        }
     }
 
     #[test]
@@ -1874,8 +2090,7 @@ mod tests {
         assert!((world.arm_room([0.7, 0.0, 0.5], 0.0) - 0.06).abs() < 1e-9);
     }
 
-    #[test]
-    fn six_arms_share_the_dance_and_keep_apart() {
+    fn six_arms_share_the_dance_and_keep_apart_in(mode: WorkspaceMode) {
         let json = super::super::tests::fixture(0.7, 0.7);
         let rig = Rig::illustrative_five_axis();
         let ring: Vec<ArmPlan> = (0..6)
@@ -1891,13 +2106,14 @@ mod tests {
                 }
             })
             .collect();
-        let config = CompileConfig::default();
+        let config = in_mode(mode);
         let score = compile_ensemble(&json, config, rig, &[], &ring, 0.1).unwrap();
         assert_eq!(score.tracks.len(), 6);
         assert!(score.cues[0].reason.contains("ensemble Unison"));
         let held = score.rig.implement.radius_m;
         let (mut closest, mut middle, mut moved) = (f64::INFINITY, f64::INFINITY, [0.0f64; 6]);
         let mut across = false;
+        let (mut peak, mut last) = (0.0f64, vec![[0.0; 3]; 6]);
         for i in 0..=480 {
             let frame = score.sample(8.0 * i as f64 / 480.0).unwrap();
             let bodies: Vec<_> = frame
@@ -1907,6 +2123,11 @@ mod tests {
                 .collect();
             for a in 0..6 {
                 let hand = frame.agents[a].world_points.last().unwrap();
+                if i > 0 {
+                    let d = (0..3).map(|k| (hand[k] - last[a][k]).powi(2)).sum::<f64>();
+                    peak = peak.max(d.sqrt() * 60.0);
+                }
+                last[a] = *hand;
                 let origin = ring[a].placement.origin_m;
                 moved[a] = moved[a].max((hand[0] - origin[0]).hypot(hand[1] - origin[1]));
                 let to = |b: &ArmPlan| {
@@ -1924,6 +2145,7 @@ mod tests {
                 }
             }
         }
+        println!("six arms, {mode:?}: peak hand speed {peak:.3} m/s, closest implement gap {closest:.4} m");
         assert!(
             closest > 0.08,
             "arms came within {closest:.3} m, clearance 0.1 m"
@@ -1939,7 +2161,13 @@ mod tests {
     }
 
     #[test]
-    fn mirrored_arms_keep_apart_without_stopping() {
+    fn six_arms_share_the_dance_and_keep_apart() {
+        for mode in MODES {
+            six_arms_share_the_dance_and_keep_apart_in(mode);
+        }
+    }
+
+    fn mirrored_arms_keep_apart_without_stopping_in(mode: WorkspaceMode) {
         // Drums without voice or bass: every second arm dances the mirror image.
         let json = super::super::tests::fixture(0.1, 0.2);
         let ring: Vec<ArmPlan> = (0..6)
@@ -1956,8 +2184,7 @@ mod tests {
             })
             .collect();
         let rig = Rig::illustrative_five_axis();
-        let score =
-            compile_ensemble(&json, CompileConfig::default(), rig, &[], &ring, 0.1).unwrap();
+        let score = compile_ensemble(&json, in_mode(mode), rig, &[], &ring, 0.1).unwrap();
         assert!(score.cues[0].reason.contains("ensemble Mirrored"));
         let held = score.rig.implement.radius_m;
         let hands = |t: f64| -> Vec<[f64; 3]> {
@@ -1992,7 +2219,13 @@ mod tests {
     }
 
     #[test]
-    fn every_arm_of_an_ensemble_stays_out_of_a_red_zone() {
+    fn mirrored_arms_keep_apart_without_stopping() {
+        for mode in MODES {
+            mirrored_arms_keep_apart_without_stopping_in(mode);
+        }
+    }
+
+    fn every_arm_of_an_ensemble_stays_out_of_a_red_zone_in(mode: WorkspaceMode) {
         let json = super::super::tests::fixture(0.7, 0.7);
         let rig = Rig::illustrative_five_axis();
         // Two arms 1.6 m apart, facing each other.
@@ -2006,15 +2239,7 @@ mod tests {
             })
             .to_vec();
         let plan = |zones: &[Zone]| {
-            compile_ensemble(
-                &json,
-                CompileConfig::default(),
-                rig.clone(),
-                zones,
-                &pair,
-                0.1,
-            )
-            .unwrap()
+            compile_ensemble(&json, in_mode(mode), rig.clone(), zones, &pair, 0.1).unwrap()
         };
         let free = plan(&[]);
         // A box of equipment where the second arm's hand is furthest out.
@@ -2051,6 +2276,13 @@ mod tests {
     }
 
     #[test]
+    fn every_arm_of_an_ensemble_stays_out_of_a_red_zone() {
+        for mode in MODES {
+            every_arm_of_an_ensemble_stays_out_of_a_red_zone_in(mode);
+        }
+    }
+
+    #[test]
     fn only_a_cut_freezes_the_arm() {
         let mut value: serde_json::Value =
             serde_json::from_str(&super::super::tests::fixture(0.7, 0.7)).unwrap();
@@ -2081,6 +2313,121 @@ mod tests {
             moved(2.25, 2.45) > 0.02,
             "flow moved {:.3} m",
             moved(2.25, 2.45)
+        );
+    }
+
+    /// A song with a build, a drop at 16 s and a recognised phrase at 16 s.
+    fn drop_song(repeat: bool) -> String {
+        let beats = 56;
+        let json = super::super::tests::synthetic(
+            beats,
+            |n| {
+                if n >= 32 {
+                    [0.8, 0.5, 0.8, 0.5]
+                } else {
+                    [0.1; 4]
+                }
+            },
+            |n| if n >= 32 { 0.9 } else { 0.2 },
+            16,
+            if repeat { &[(2, 0)] } else { &[] },
+        );
+        let mut value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        value["musicalStructure"]["noveltyCandidates"] =
+            serde_json::json!([{"time": 16.0, "scaleBeats": 16, "scorePercentile": 0.97}]);
+        value.to_string()
+    }
+
+    fn pair() -> Vec<ArmPlan> {
+        ring().into_iter().step_by(3).collect()
+    }
+
+    #[test]
+    fn every_mode_compiles_the_same_score_twice() {
+        let json = drop_song(true);
+        let rig = Rig::illustrative_five_axis();
+        let mut scores = Vec::new();
+        for mode in MODES {
+            let go = || compile_ensemble(&json, in_mode(mode), rig.clone(), &[], &pair(), 0.1);
+            let (a, b) = (go().unwrap(), go().unwrap());
+            assert_eq!(
+                serde_json::to_string(&a).unwrap(),
+                serde_json::to_string(&b).unwrap(),
+                "{mode:?} differs between two compiles"
+            );
+            scores.push(serde_json::to_string(&a).unwrap());
+        }
+        assert_ne!(scores[0], scores[1], "Rehearsed must change the dance");
+    }
+
+    #[test]
+    fn a_recognised_repeat_opens_as_one_body() {
+        let rig = Rig::illustrative_five_axis();
+        let go = |mode, repeat| {
+            let json = drop_song(repeat);
+            compile_ensemble(&json, in_mode(mode), rig.clone(), &[], &pair(), 0.1).unwrap()
+        };
+        let first_bar = |score: &EnsembleScore| -> Vec<String> {
+            let bar = score
+                .cues
+                .iter()
+                .filter(|c| c.start >= 16.0 - 1e-9 && c.start < 18.0);
+            bar.map(|c| c.reason.clone()).collect()
+        };
+        let seen = first_bar(&go(WorkspaceMode::Rehearsed, true));
+        assert!(!seen.is_empty());
+        for reason in &seen {
+            assert!(reason.contains("ensemble Unison"), "{reason}");
+            assert!(reason.contains("basin recognition"), "{reason}");
+        }
+        for reason in first_bar(&go(WorkspaceMode::Off, true)) {
+            assert!(!reason.contains("basin"), "{reason}");
+        }
+    }
+
+    #[test]
+    fn the_field_asks_for_more_and_the_caps_still_win() {
+        let json = drop_song(true);
+        let rig = Rig::illustrative_five_axis();
+        let mut peaks = Vec::new();
+        for mode in MODES {
+            let score =
+                compile_ensemble(&json, in_mode(mode), rig.clone(), &[], &pair(), 0.1).unwrap();
+            let held = score.rig.implement.radius_m;
+            let (mut peak, mut closest) = (0.0f64, f64::INFINITY);
+            let mut last: Vec<[f64; 3]> = Vec::new();
+            for i in 0..=1680 {
+                let frame = score.sample(28.0 * i as f64 / 1680.0).unwrap();
+                let hands: Vec<[f64; 3]> = (frame.agents.iter())
+                    .map(|a| *a.world_points.last().unwrap())
+                    .collect();
+                if !last.is_empty() {
+                    for (h, l) in hands.iter().zip(&last) {
+                        let d = (0..3).map(|k| (h[k] - l[k]).powi(2)).sum::<f64>().sqrt();
+                        peak = peak.max(d * 60.0);
+                    }
+                }
+                last = hands;
+                let bodies: Vec<_> = (frame.agents.iter())
+                    .map(|a| body_samples(&a.world_points, held))
+                    .collect();
+                for (p, e) in &bodies[0] {
+                    for (q, f) in &bodies[1] {
+                        let d = (0..3).map(|k| (p[k] - q[k]).powi(2)).sum::<f64>().sqrt();
+                        closest = closest.min(d - e - f);
+                    }
+                }
+            }
+            println!(
+                "drop song, {mode:?}: peak hand speed {peak:.3} m/s, closest gap {closest:.4} m"
+            );
+            assert!(closest > 0.08, "{mode:?}: gap {closest:.3}");
+            peaks.push(peak);
+        }
+        // The field may not push the hand past what the unmodulated dance reached.
+        assert!(
+            peaks[1] <= peaks[0] + 0.1 && peaks[2] <= peaks[0] + 0.1,
+            "{peaks:?}"
         );
     }
 
