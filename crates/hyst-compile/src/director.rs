@@ -543,4 +543,43 @@ mod tests {
             "musicalStructure":{"version":1,"beatGrid":{"fitReliable":false},"noveltyCandidates":[],"repeatedMaterial":[]}
         }).to_string()
     }
+
+    /// Evidence from per-beat vectors, at 0.5 s a beat and 10 frames a second.
+    /// Phrases are `phrase_beats` long with one fixed rhythm; `repeats` lists
+    /// (phrase, repeat_of) with similarity 0.95. Stem absoluteRms is level / 2.
+    pub(super) fn synthetic(
+        beats: usize,
+        activity: impl Fn(usize) -> [f64; 4],
+        level: impl Fn(usize) -> f64,
+        phrase_beats: usize,
+        repeats: &[(usize, usize)],
+    ) -> String {
+        let frame =
+            |f: &dyn Fn(usize) -> f64| -> Vec<f64> { (0..beats * 5).map(|i| f(i / 5)).collect() };
+        let source = |k: usize| {
+            json!({"absoluteRms":frame(&|n| level(n) / 2.0),
+                "wholeTrackActivity":frame(&|n| activity(n)[k]),
+                "spectralFlux":vec![0.0;beats*5],"transientDensity":vec![0.4;beats*5],"candidates":[]})
+        };
+        let rhythm: Vec<f64> = (0..32)
+            .map(|i| if i % 4 == 0 { 1.0 } else { 0.2 })
+            .collect();
+        let count = beats.div_ceil(phrase_beats);
+        let phrases: Vec<_> = (0..count)
+            .map(|i| {
+                let repeat = repeats.iter().find(|r| r.0 == i).map(|r| r.1);
+                json!({"start":(i*phrase_beats) as f64*0.5,
+                    "end":((i+1)*phrase_beats).min(beats) as f64*0.5,
+                    "rhythm":rhythm,"lowRhythm":rhythm,"highRhythm":rhythm,
+                    "repeatOf":repeat,"similarity":if repeat.is_some() {0.95} else {0.0}})
+            })
+            .collect();
+        json!({"duration":beats as f64*0.5,"envelopeRate":10.0,"rmsEnvelope":frame(&level),
+            "musicalMemory":{"version":1,"beatPeriod":0.5,"beatZero":0.0,"phrases":phrases},
+            "stemInterpretation":{"version":1,"duration":beats as f64*0.5,"envelopeRate":10.0,
+                "sources":{"bass":source(0),"drums":source(1),"vocals":source(2),"other":source(3)}},
+            "musicalStructure":{"version":1,"beatGrid":{"fitReliable":false},"noveltyCandidates":[],"repeatedMaterial":[]}
+        })
+        .to_string()
+    }
 }
