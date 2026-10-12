@@ -25,7 +25,7 @@ def _frames(audio, sr):
     n = int(np.ceil(len(audio) / sr * RATE))
     window = np.hanning(FFT).astype(np.float32)
     centre = np.round((np.arange(n) + 0.5) * sr / RATE).astype(int)
-    padded = np.pad(audio, ((FFT // 2, FFT), (0, 0)))
+    padded = np.pad(audio, ((FFT // 2, 2 * FFT), (0, 0)))
     spectra = np.empty((n, FFT // 2 + 1), dtype=np.float32)
     for i, c in enumerate(centre):
         block = padded[c:c + FFT] * window[:, None]
