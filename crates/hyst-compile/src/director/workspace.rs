@@ -20,6 +20,10 @@ pub struct Event {
     pub kind: EventKind,
     pub sign: f64,
     pub strength: f64,
+    /// A `+` arrival built by `Foresight::new`: where its build starts (s).
+    pub build_start: Option<f64>,
+    /// Same: how long the loud stretch after it lasts (beats).
+    pub loud_beats: Option<f64>,
 }
 
 /// Events in construction order: arrivals as given, repeats, cuts, phrase ends.
@@ -55,6 +59,60 @@ pub(super) fn arrival_lift(
         0.0
     };
     (change, lift, sign)
+}
+
+/// Typical phrase length in beats: the median gap between phrase starts, so
+/// the last phrase (it may be cut short) never counts. 16 when fewer than two
+/// gaps remain. The sidecar has no downbeats, so a bar (phrase / 4) is a guess.
+pub(super) fn phrase_beats(starts: &[f64], beat: f64) -> f64 {
+    let mut gaps: Vec<f64> = starts.windows(2).map(|w| (w[1] - w[0]) / beat).collect();
+    if gaps.len() < 2 {
+        return 16.0;
+    }
+    gaps.sort_by(f64::total_cmp);
+    let mid = gaps.len() / 2;
+    if gaps.len() % 2 == 1 {
+        gaps[mid]
+    } else {
+        0.5 * (gaps[mid - 1] + gaps[mid])
+    }
+}
+
+/// Time constants in beats of L1 (bar), L2 (phrase), L4 (section).
+pub(super) fn taus(phrase: f64) -> [f64; 3] {
+    [phrase / 4.0, phrase, 4.0 * phrase]
+}
+
+/// Start of the quietest bar in [time - 2 phrases, time - 1 bar]; the earliest
+/// on a tie. The bars are laid back from the arrival.
+fn build_start(level: &[f64], rate: f64, time: f64, bar: f64) -> f64 {
+    let mut best: Option<(f64, f64)> = None;
+    for k in (1..=8).rev() {
+        let start = time - k as f64 * bar;
+        if start < 0.0 {
+            continue;
+        }
+        let m = mean(level, rate, start, start + bar);
+        if best.is_none_or(|(_, b)| m < b) {
+            best = Some((start, m));
+        }
+    }
+    best.map_or(time, |b| b.0)
+}
+
+/// Beats from a lift until a bar's mean level falls under half the first
+/// bar's; at most four phrases.
+fn loud_beats(level: &[f64], rate: f64, time: f64, bar: f64, beat: f64) -> f64 {
+    let first = mean(level, rate, time, time + bar);
+    let end = level.len() as f64 / rate;
+    let mut len = bar;
+    while time + len < end && len < 16.0 * bar {
+        if mean(level, rate, time + len, time + len + bar) < 0.5 * first {
+            break;
+        }
+        len += bar;
+    }
+    len / beat
 }
 
 /// Cuts: the mix drops to near nothing for half a beat to four beats between
@@ -104,16 +162,22 @@ impl Foresight {
         beat: f64,
     ) -> Self {
         let mut events = Vec::new();
+        let phrases = &data.musical_memory.phrases;
+        let mut starts: Vec<f64> = phrases.iter().map(|p| p.start).collect();
+        starts.sort_by(f64::total_cmp);
+        let bar = phrase_beats(&starts, beat) / 4.0 * beat;
         for &(time, strength) in arrivals {
             let sign = arrival_lift(level, rate, beat, loud, time).2;
+            let up = sign > 0.0;
             events.push(Event {
                 time,
                 kind: EventKind::Arrival,
                 sign,
                 strength,
+                build_start: up.then(|| build_start(level, rate, time, bar)),
+                loud_beats: up.then(|| loud_beats(level, rate, time, bar, beat)),
             });
         }
-        let phrases = &data.musical_memory.phrases;
         let repeated = phrases
             .iter()
             .filter(|p| p.repeat_of.is_some())
@@ -128,12 +192,16 @@ impl Foresight {
             kind: EventKind::Repeat,
             sign: 0.0,
             strength,
+            build_start: None,
+            loud_beats: None,
         }));
         events.extend(cuts(data, beat).into_iter().map(|(from, to)| Event {
             time: from,
             kind: EventKind::Cut,
             sign: 0.0,
             strength: to - from,
+            build_start: None,
+            loud_beats: None,
         }));
         events.extend(
             phrases
@@ -144,6 +212,8 @@ impl Foresight {
                     kind: EventKind::PhraseEnd,
                     sign: 0.0,
                     strength: 1.0,
+                    build_start: None,
+                    loud_beats: None,
                 }),
         );
         Self { events }
@@ -275,7 +345,14 @@ pub struct Field {
     pub habituation: f64,
     /// Schematic surprise, 0..1.
     pub surprise: f64,
+    /// Current afterglow time constant (beats): the gain decay.
+    pub afterglow_beats: f64,
+    /// Beats since the last lift; `NO_LIFT` before the first.
+    pub since_lift: f64,
 }
+
+/// Large and finite, so `field_at` can interpolate it.
+pub const NO_LIFT: f64 = 1e9;
 
 impl Default for Field {
     fn default() -> Self {
@@ -286,6 +363,8 @@ impl Default for Field {
             approach: 0.0,
             habituation: 0.0,
             surprise: 0.0,
+            afterglow_beats: 16.0,
+            since_lift: NO_LIFT,
         }
     }
 }
@@ -306,8 +385,6 @@ pub struct Basin {
 }
 
 const DIMS: usize = 8;
-/// Time constants in beats of L1 (bar), L2 (phrase), L4 (section).
-const TAU: [f64; 3] = [4.0, 16.0, 64.0];
 /// Weights for L1, L2, L3, L4.
 const WEIGHTS: [f64; 4] = [0.5, 0.3, 0.3, 0.2];
 /// An RMS z-score below KNEE is no error; KNEE + SPAN is full error. Not in
@@ -319,9 +396,7 @@ const Z_SPAN: f64 = 4.0;
 const VAR_FLOOR: f64 = 0.0025;
 /// Gain: attack and decay in beats.
 const GAIN_ATTACK: f64 = 0.5;
-const GAIN_DECAY: f64 = 16.0;
 const TENSION_TAU: f64 = 1.0;
-const TENSION_WINDOW: f64 = 32.0;
 const PRECISION_RECOVERY: f64 = 8.0;
 const APPROACH_DECAY: f64 = 8.0;
 const HABITUATION_DECAY: f64 = 64.0;
@@ -423,6 +498,7 @@ fn pearson(a: &[f64], b: &[f64]) -> f64 {
 #[derive(Debug, Clone)]
 pub struct State {
     period: f64,
+    taus: [f64; 3],
     levels: [Leaky; 3],
     spread: [ErrorSpread; 4],
     phrases: Vec<Vec<f64>>,
@@ -435,16 +511,20 @@ pub struct State {
 }
 
 impl State {
-    pub fn new(beat_period: f64) -> Self {
+    pub fn new(beat_period: f64, taus: [f64; 3]) -> Self {
         Self {
             period: beat_period,
-            levels: TAU.map(Leaky::new),
+            taus,
+            levels: taus.map(Leaky::new),
             spread: Default::default(),
             phrases: Vec::new(),
             recent_level: Default::default(),
             peak: 0.0,
             prev_surprise: 0.0,
-            field: Field::default(),
+            field: Field {
+                afterglow_beats: taus[1],
+                ..Field::default()
+            },
             basins: Vec::new(),
         }
     }
@@ -453,6 +533,7 @@ impl State {
         self.basins.clear();
         let half = 0.5 * self.period;
         let mut f = self.field;
+        f.since_lift += 1.0;
 
         // Schematic surprise: only this beat and earlier.
         let x: [Option<f64>; DIMS] = [
@@ -480,14 +561,14 @@ impl State {
             self.phrases.push(rhythm.clone());
         }
         let pi = [
-            self.spread[0].precision_then_learn(e1, TAU[0]),
-            self.spread[1].precision_then_learn(e2, TAU[1]),
+            self.spread[0].precision_then_learn(e1, self.taus[0]),
+            self.spread[1].precision_then_learn(e2, self.taus[1]),
             if obs.phrase.is_some() {
                 self.spread[2].precision_then_learn(e3, 2.0)
             } else {
                 1.0 / (1.0 + self.spread[2].var)
             },
-            self.spread[3].precision_then_learn(e4, TAU[2]),
+            self.spread[3].precision_then_learn(e4, self.taus[2]),
         ];
         let errors = [e1, e2, e3, e4];
         let s = (0..4)
@@ -540,7 +621,7 @@ impl State {
         let tau = if target > f.gain {
             GAIN_ATTACK
         } else {
-            GAIN_DECAY
+            f.afterglow_beats
         };
         f.gain = approach(f.gain, target, tau);
 
@@ -549,15 +630,17 @@ impl State {
             .and_then(|fore| {
                 (fore.of(EventKind::Arrival))
                     .filter(|e| e.sign > 0.0 && e.time >= obs.time + half)
-                    .map(|e| e.time)
-                    .min_by(f64::total_cmp)
+                    .min_by(|a, b| a.time.total_cmp(&b.time))
             })
-            .map_or(0.0, |time| {
-                let d = (time - obs.time) / self.period;
-                if d <= TENSION_WINDOW {
-                    (1.0 - d / TENSION_WINDOW) * (1.0 - s)
-                } else {
+            .map_or(0.0, |e| {
+                // An event made by hand has no build_start: the longest build.
+                let start = e
+                    .build_start
+                    .unwrap_or(e.time - 2.0 * self.taus[1] * self.period);
+                if obs.time < start || e.time <= start {
                     0.0
+                } else {
+                    ((obs.time - start) / (e.time - start)).clamp(0.0, 1.0) * (1.0 - s)
                 }
             });
         f.tension = if lift.is_some() {
@@ -567,6 +650,10 @@ impl State {
         };
         if let Some(e) = lift {
             f.gain += 0.5 + 0.5 * tension_before;
+            f.since_lift = 0.0;
+            f.afterglow_beats = e
+                .loud_beats
+                .map_or(self.taus[1], |b| b.clamp(self.taus[0], self.taus[2]));
             self.basins.push(Basin {
                 time: obs.time,
                 beat: n,
@@ -592,15 +679,17 @@ impl State {
             });
         }
 
-        // An arrival: a known one (Rehearsed, expected sign from Foresight) or,
-        // without foresight, a surprise that just crossed 0.5 (expected 0).
+        // An arrival: a known one (its lift sign from Foresight) or, without
+        // foresight, a surprise that just crossed 0.5 (the causal sign).
         let arrived = match arrival {
             Some(e) => Some(e.sign),
-            None => (foresight.is_none() && s > 0.5 && self.prev_surprise <= 0.5).then_some(0.0),
+            None => {
+                (foresight.is_none() && s > 0.5 && self.prev_surprise <= 0.5).then_some(measured)
+            }
         };
         f.approach = approach(f.approach, 0.0, APPROACH_DECAY);
-        if let Some(expected) = arrived {
-            f.approach = (measured - expected).clamp(-1.0, 1.0);
+        if let Some(sign) = arrived {
+            f.approach = sign;
         }
 
         let novel = match foresight {
@@ -654,6 +743,8 @@ impl Workspace {
             approach: mix(a.approach, b.approach),
             habituation: mix(a.habituation, b.habituation),
             surprise: mix(a.surprise, b.surprise),
+            afterglow_beats: mix(a.afterglow_beats, b.afterglow_beats),
+            since_lift: mix(a.since_lift, b.since_lift),
         }
     }
 }
@@ -671,7 +762,11 @@ pub fn run(
         return None;
     }
     let fore = (mode == WorkspaceMode::Rehearsed).then_some(foresight);
-    let mut state = State::new(beat_period);
+    let starts: Vec<f64> = (obs.iter())
+        .filter(|o| o.phrase.is_some())
+        .map(|o| o.time)
+        .collect();
+    let mut state = State::new(beat_period, taus(phrase_beats(&starts, beat_period)));
     let mut basins = Vec::new();
     let field = obs
         .iter()
@@ -739,6 +834,8 @@ mod workspace_tests {
                 kind: EventKind::Arrival,
                 sign: 1.0,
                 strength: 1.0,
+                build_start: None,
+                loud_beats: None,
             }],
         }
     }
@@ -855,7 +952,7 @@ mod workspace_tests {
         ));
         let full = drop_at(a);
         let empty = Foresight { events: vec![] };
-        let mut state = State::new(BEAT);
+        let mut state = State::new(BEAT, taus(16.0));
         (0..80)
             .map(|n| {
                 let fore = if n >= foresight_from { &full } else { &empty };
@@ -911,6 +1008,116 @@ mod workspace_tests {
             .basins
             .iter()
             .any(|b| b.kind == BasinKind::Recognition && b.beat == 32));
+    }
+
+    #[test]
+    fn a_twelve_beat_song_keeps_its_own_clock() {
+        let t = taus(12.0);
+        println!("12-beat phrase: taus {t:?}");
+        assert_eq!(t, [3.0, 12.0, 48.0]);
+        assert_eq!(phrase_beats(&[0.0, 6.0, 12.0, 18.0], BEAT), 12.0);
+        assert_eq!(phrase_beats(&[0.0, 6.0], BEAT), 16.0);
+        let (_, obs) = obs_of(&synthetic(
+            72,
+            groove,
+            |n| 0.4 + 0.02 * (n % 3) as f64,
+            12,
+            &[],
+        ));
+        let w = run_mode(
+            WorkspaceMode::Schematic,
+            &obs,
+            &Foresight { events: vec![] },
+        );
+        let worst = w.field[24..].iter().map(|f| f.surprise).fold(0.0, f64::max);
+        println!("12-beat loop: max s after two phrases {worst:.4}");
+        assert!(worst < 0.1, "s {worst}");
+    }
+
+    /// A riser: loud (0.6) until `from`, then 0.2 climbing to 0.55 at the
+    /// arrival at beat 80, then 0.9. Returns the tension per beat and the
+    /// build_start the evidence measures, in beats.
+    fn riser(from: usize) -> (Vec<f64>, f64) {
+        let arrival = 80;
+        let level = move |n: usize| match n {
+            n if n < from => 0.6,
+            n if n < arrival => 0.2 + 0.35 * (n - from) as f64 / (arrival - from) as f64,
+            _ => 0.9,
+        };
+        let json = synthetic(96, |_| [0.4; 4], level, 16, &[]);
+        let (data, obs) = obs_of(&json);
+        let f = Foresight::new(
+            &data,
+            &[(arrival as f64 * BEAT, 1.0)],
+            &data.rms_envelope,
+            0.9,
+            10.0,
+            BEAT,
+        );
+        let start = f.events[0].build_start.expect("a + arrival has a build") / BEAT;
+        let w = run_mode(WorkspaceMode::Rehearsed, &obs, &f);
+        (w.field.iter().map(|f| f.tension).collect(), start)
+    }
+
+    #[test]
+    fn the_breath_is_held_from_where_the_build_starts() {
+        for (from, label) in [(68, "12-beat"), (40, "40-beat")] {
+            let (t, start) = riser(from);
+            let first = t.iter().position(|v| *v > 0.02).unwrap() as f64;
+            println!("{label} build: build_start beat {start}, T > 0.02 at {first}");
+            assert!((first - start).abs() <= 4.0, "{label}: {first} vs {start}");
+            for n in (first as usize + 2)..80 {
+                assert!(t[n] > t[n - 1], "{label}: T fell at {n}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_longer_peak_glows_longer() {
+        // Base 0.4; at beat 40 a lift to 0.8 that lasts `loud` beats. Beats
+        // after the loud stretch until the gain is back within 0.1 of its end.
+        let tail = |loud: usize| {
+            let level = move |n: usize| {
+                if (40..40 + loud).contains(&n) {
+                    0.8
+                } else {
+                    0.35
+                }
+            };
+            let json = synthetic(240, |_| [0.4; 4], level, 16, &[]);
+            let (data, obs) = obs_of(&json);
+            let f = Foresight::new(
+                &data,
+                &[(40.0 * BEAT, 1.0)],
+                &data.rms_envelope,
+                0.8,
+                10.0,
+                BEAT,
+            );
+            let w = run_mode(WorkspaceMode::Rehearsed, &obs, &f);
+            let end = w.field[239].gain;
+            let after = &w.field[40 + loud..];
+            let held = after.iter().take_while(|f| f.gain > end + 0.1).count();
+            println!(
+                "loud {loud}: afterglow tau {:.1}, {held} beats above steady",
+                w.field[41].afterglow_beats
+            );
+            held
+        };
+        assert!(tail(64) > tail(8));
+    }
+
+    #[test]
+    fn approach_follows_the_lift() {
+        let (_, obs) = obs_of(&synthetic(60, |_| [0.4; 4], |_| 0.4, 16, &[]));
+        for (sign, up) in [(1.0, true), (-1.0, false)] {
+            let mut f = drop_at(30);
+            f.events[0].sign = sign;
+            let w = run_mode(WorkspaceMode::Rehearsed, &obs, &f);
+            let a = w.field[31].approach;
+            println!("approach after sign {sign}: {a:.3}");
+            assert!(if up { a > 0.5 } else { a < -0.5 });
+        }
     }
 
     #[test]
