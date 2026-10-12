@@ -537,7 +537,7 @@ pub fn compile_ensemble_with_workspace(
         match &ws {
             Some(w) => {
                 let f = w.field_at(t);
-                (size * (0.85 + 0.3 * f.gain) * (1.0 - 0.25 * f.tension)).min(1.0)
+                (size * (0.9 + 0.2 * f.gain) * (1.0 - 0.25 * f.tension)).min(1.0)
             }
             None => size.min(1.0),
         }
@@ -1036,7 +1036,7 @@ pub fn compile_ensemble_with_workspace(
                     } else {
                         0.65
                     };
-                    lerp(floor, 1.0, calm) * (1.0 - 0.35 * f.tension)
+                    lerp(floor, 1.0, calm) * (1.0 - 0.17 * f.tension)
                 }
                 None => lerp(0.65, 1.0, calm),
             };

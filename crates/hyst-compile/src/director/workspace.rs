@@ -83,11 +83,13 @@ pub(super) fn taus(phrase: f64) -> [f64; 3] {
     [phrase / 4.0, phrase, 4.0 * phrase]
 }
 
-/// Start of the quietest bar in [time - 2 phrases, time - 1 bar]; the earliest
-/// on a tie. The bars are laid back from the arrival.
+/// Start of the quietest bar in [time - 2 phrases, time - 2 bars]; the earliest
+/// on a tie. The bars are laid back from the arrival. The last two bars are
+/// skipped: the gap just before a drop is quiet, but it is not where the climb
+/// starts.
 fn build_start(level: &[f64], rate: f64, time: f64, bar: f64) -> f64 {
     let mut best: Option<(f64, f64)> = None;
-    for k in (1..=8).rev() {
+    for k in (3..=8).rev() {
         let start = time - k as f64 * bar;
         if start < 0.0 {
             continue;
@@ -396,6 +398,9 @@ const Z_SPAN: f64 = 4.0;
 const VAR_FLOOR: f64 = 0.0025;
 /// Gain: attack and decay in beats.
 const GAIN_ATTACK: f64 = 0.5;
+/// Gain a steady passage sits at (its level against the running peak times
+/// this). Lifts, surprises and recognitions push it toward 1 and beyond.
+const GAIN_STEADY: f64 = 0.5;
 const TENSION_TAU: f64 = 1.0;
 const PRECISION_RECOVERY: f64 = 8.0;
 const APPROACH_DECAY: f64 = 8.0;
@@ -504,6 +509,8 @@ pub struct State {
     phrases: Vec<Vec<f64>>,
     recent_level: std::collections::VecDeque<f64>,
     peak: f64,
+    /// Time of the last recognition basin: at most one per phrase.
+    last_recognition: f64,
     prev_surprise: f64,
     field: Field,
     /// Basins emitted by the latest `step`.
@@ -520,6 +527,7 @@ impl State {
             phrases: Vec::new(),
             recent_level: Default::default(),
             peak: 0.0,
+            last_recognition: f64::NEG_INFINITY,
             prev_surprise: 0.0,
             field: Field {
                 afterglow_beats: taus[1],
@@ -613,11 +621,18 @@ impl State {
                 .map(|e| e.strength)
                 .max_by(f64::total_cmp);
         }
+        // One recognition per phrase: a minimum gap of a phrase's length.
+        if recognition.is_some() && obs.time - self.last_recognition < self.taus[1] * self.period {
+            recognition = None;
+        }
+        if recognition.is_some() {
+            self.last_recognition = obs.time;
+        }
         let lift = arrival.filter(|e| e.sign > 0.0);
 
         // Field.
         let intensity = (obs.level / self.peak.max(1e-9)).min(1.0);
-        let target = intensity + 0.6 * s;
+        let target = GAIN_STEADY * intensity + 0.6 * s;
         let tau = if target > f.gain {
             GAIN_ATTACK
         } else {
@@ -976,8 +991,8 @@ mod workspace_tests {
     fn afterglow_decays_over_sixteen_beats() {
         let (_, obs) = obs_of(&synthetic(120, |_| [0.4; 4], |_| 0.4, 16, &[]));
         let w = run_mode(WorkspaceMode::Rehearsed, &obs, &drop_at(40));
-        // Steady intensity is 1; the gain settles there, jumps, then relaxes.
-        let excess = |n: usize| w.field[n].gain - 1.0;
+        // Steady intensity is 1; the gain settles at GAIN_STEADY, jumps, then relaxes.
+        let excess = |n: usize| w.field[n].gain - GAIN_STEADY;
         let tau = 16.0 / (excess(42) / excess(58)).ln();
         println!(
             "afterglow: excess {:.4} -> {:.4}, tau {tau:.3}",
@@ -1070,6 +1085,60 @@ mod workspace_tests {
                 assert!(t[n] > t[n - 1], "{label}: T fell at {n}");
             }
         }
+    }
+
+    #[test]
+    fn a_one_bar_gap_before_the_drop_does_not_move_the_build_start() {
+        // Loud until beat 52, a riser 0.2 -> 0.55 to beat 76, a quiet bar
+        // (0.05) at 76..80, the drop at 80. The riser starts at beat 52.
+        let level = |n: usize| match n {
+            n if n < 52 => 0.6,
+            n if n < 76 => 0.2 + 0.35 * (n - 52) as f64 / 24.0,
+            n if n < 80 => 0.05,
+            _ => 0.9,
+        };
+        let json = synthetic(96, |_| [0.4; 4], level, 16, &[]);
+        let (data, obs) = obs_of(&json);
+        let f = Foresight::new(
+            &data,
+            &[(80.0 * BEAT, 1.0)],
+            &data.rms_envelope,
+            0.9,
+            10.0,
+            BEAT,
+        );
+        let start = f.events[0].build_start.unwrap() / BEAT;
+        let w = run_mode(WorkspaceMode::Rehearsed, &obs, &f);
+        let first = w.field.iter().position(|f| f.tension > 0.02).unwrap();
+        println!("gap case: build_start beat {start}, T > 0.02 at {first}");
+        assert_eq!(start, 52.0);
+        assert!((first as f64 - 52.0).abs() <= 4.0, "T starts at {first}");
+    }
+
+    #[test]
+    fn recognition_fires_at_most_once_per_phrase() {
+        // Repeats every 4 beats in a 16-beat phrase song: one basin per phrase.
+        let json = synthetic(96, groove, |_| 0.4, 16, &[]);
+        let (_, obs) = obs_of(&json);
+        let repeat = |beat: usize| Event {
+            time: beat as f64 * BEAT,
+            kind: EventKind::Repeat,
+            sign: 0.0,
+            strength: 0.9,
+            build_start: None,
+            loud_beats: None,
+        };
+        let f = Foresight {
+            events: (0..96).step_by(4).map(repeat).collect(),
+        };
+        let w = run_mode(WorkspaceMode::Rehearsed, &obs, &f);
+        let beats: Vec<usize> = (w.basins.iter())
+            .filter(|b| b.kind == BasinKind::Recognition)
+            .map(|b| b.beat)
+            .collect();
+        println!("recognitions at {beats:?}");
+        assert!(beats.len() >= 5);
+        assert!(beats.windows(2).all(|p| p[1] - p[0] >= 16), "{beats:?}");
     }
 
     #[test]
