@@ -2465,3 +2465,147 @@ echo "clips in $O; do not open b1-blind-key.txt until you have chosen"
 
 Files in `$D`: `b1-{off,rehearsed,schematic}-{ic,fy,pr}.{html,summary.txt,jolts.txt,look5.txt,gap.txt}`.
 Scratch: `/tmp/b1/` (export, measure and field scripts; not kept).
+
+### B workspace, round 2 — 2026-10-12
+
+The user's round-1 verdicts stand: `Rehearsed` won only Presence 2:31–2:55 (1 of
+4), so the rule sent it to round 2. The user allowed constants plus two
+definition fixes and nothing else. Commit `b20e7f6`. `Off` is still byte-
+identical to version 47 (the three exports compared with `cmp`), golden digests
+unchanged, 159 CPU tests, clippy, fmt, `ensemble.cjs` and the Python tests green.
+**Not verified on any song by eye.**
+
+#### What the user measured on round 1 (Presence, Rehearsed), confirmed
+
+Gain above 1.0 on 93 % of beats (median 1.28), so figure size was ×1.15–1.3
+nearly all the time and clamped at 1.0. Tension built before the 1:10 lift but
+started at 1:31.9 for the 1:32 drop. Instant Crush fired Recognition every 2.2 s
+at 3:25–3:50.
+
+#### Changes
+
+Two definition fixes (`workspace.rs`):
+
+1. **`build_start` skips the last two bars before the arrival** when it looks
+   for the quietest bar (bars 3 to 8 back instead of 1 to 8). Test: a riser from
+   beat 52 to 76, a quiet bar at 76–80, the drop at 80: build start 52, tension
+   starts within 4 beats of it.
+2. **At most one Recognition basin per phrase**: a minimum gap of the phrase
+   length (`taus[1]` beats) between recognitions. It gates the whole basin (the
+   precision reset, habituation, gain kick and the Unison). Test: repeats every
+   4 beats in a 16-beat-phrase song give gaps of at least 16 beats.
+
+Constants:
+
+| Constant | Round 1 | Round 2 | Why |
+|---|---|---|---|
+| `GAIN_STEADY` (new): gain target = this × level/peak | 1 (implicit) | 0.5 | a steady passage sits near 0.5; the spec's surprise term, lifts and recognitions push above |
+| Figure size gain factor, `figures.rs` | 0.85 + 0.3·g | 0.9 + 0.2·g | still ×1.0 at g = 0.5; a smaller swing |
+| Figure clock tension factor | 1 − 0.35·T | 1 − 0.17·T | |
+| Everything else | | unchanged | size ×(1−0.25·T), moment ×(0.7+0.6·T), voice +0.15·a, all `workspace.rs` time constants |
+
+**How the last two were chosen: a search, not a derivation.** With only the gain
+centre and the two fixes (rehearsed: Instant Crush 11 jolts, Five Years 9; both
+over), I swept 48 combinations of the five wiring factors (size gain 0 / 0.1 /
+0.2, size tension 0.12 / 0.25, clock tension 0.17 / 0.35, moment 0.3 / 0.6, voice
+0.075 / 0.15) against the three songs' guardrails. Two passed all nine checks;
+I took the one that moves the fewest constants. The other: size gain 0.1 and
+clock 0.35, which sits at exactly 18 jolts on Presence. Jolt counts move by
+several with any change (the known braking mechanism), so the margin is thin:
+Five Years sits at its limit of 5. These constants are tuned against these three
+songs and the guardrail numbers, not against how it looks.
+
+#### Gain distribution (Rehearsed, per beat)
+
+| Song | Median | p10 | p90 | Share above 1 |
+|---|---|---|---|---|
+| Instant Crush before → after | 1.23 → 0.98 | 0.99 → 0.61 | 1.47 → 1.38 | 88 % → 48 % |
+| Five Years before → after | 1.33 → 1.22 | 0.93 → 0.56 | 1.47 → 1.45 | 86 % → 76 % |
+| Presence before → after | 1.28 → 1.02 | 1.03 → 0.73 | 1.47 → 1.36 | 93 % → 54 % |
+
+Steady passages now sit near 0.6 (p10). The medians stay near or above 1 because
+a lift's afterglow keeps gain above 1 for 40 or more beats (decay 16 to 64 beats
+from 1.5) and these songs lift often; Five Years stays loud for minutes. Not
+reduced further: the afterglow clamp is a definition, not a constant.
+
+#### Guardrails, Rehearsed now passes on all three songs
+
+| Song · mode | Jolts (limit) | Top hand speed (≤ 1.73) | Gap (≥ 10 cm) |
+|---|---|---|---|
+| Instant Crush · off (v47) | 5 (≤ 8) | 1.49 | 13.0 |
+| Instant Crush · rehearsed | 7 | 1.56 | 13.7 |
+| Instant Crush · schematic | 4 | 1.56 | 15.1 |
+| Five Years · off (v47) | 2 (≤ 5) | 1.22 | 17.5 |
+| Five Years · rehearsed | 5 | 1.26 | 15.5 |
+| Five Years · schematic | 2 | 1.28 | 16.9 |
+| Presence · off (v47) | 15 (≤ 18) | 1.73 | 12.9 |
+| Presence · rehearsed | 17 | 1.57 | 12.8 |
+| Presence · schematic | 15 | 1.55 | 11.5 |
+
+New jolts (more than 0.5 s from every `Off` jolt; Five Years in video clock):
+
+- Instant Crush, rehearsed: 6 new
+  - 1:57.2 · 1 arms · 12.4 m/s² · move gather (interlocked) · no moment
+  - 4:08.8 · 4 arms · 20.7 m/s² · move circle (interlocked) · flourish moment at 249.05s
+  - 4:47.4 · 6 arms · 10.6 m/s² · move open (interlocked) · no moment
+  - 4:56.7 · 5 arms · 18.2 m/s² · move gather (interlocked) · no moment
+  - 5:09.1 · 1 arms · 9.3 m/s² · move gather (bass-led) · no moment
+  - 5:10.7 · 1 arms · 10.7 m/s² · move rise (bass-led) · flourish moment at 312.75s, passed round as Canon
+- Instant Crush, schematic: 4 new
+  - 1:42.3 · 3 arms · 15.1 m/s² · move circle (interlocked) · no moment
+  - 2:15.6 · 4 arms · 11.5 m/s² · move reach (vocal-led) · arrival moment at 134.25s
+  - 3:34.5 · 6 arms · 15.2 m/s² · move gather (interlocked) · arrival moment at 212.65s
+  - 3:59.6 · 5 arms · 12.0 m/s² · move gather (interlocked) · flourish moment at 240.30s
+- Five Years, rehearsed: 5 new
+  - 2:54.7 · 6 arms · 9.7 m/s² · move rise (interlocked) · no moment
+  - 3:31.9 · 2 arms · 9.2 m/s² · move gather (interlocked) · arrival moment at 213.00s
+  - 3:50.6 · 6 arms · 11.1 m/s² · move open (interlocked) · no moment
+  - 4:02.5 · 6 arms · 9.4 m/s² · move arc (interlocked) · no moment
+  - 4:43.7 · 3 arms · 12.9 m/s² · move still (silence) · passed round as Ripple
+- Five Years, schematic: 2 new
+  - 3:10.9 · 6 arms · 9.7 m/s² · move circle (interlocked) · arrival moment at 189.80s
+  - 3:38.0 · 2 arms · 9.1 m/s² · move circle (interlocked) · no moment
+- Presence, rehearsed: 9 new
+  - 0:40.7 · 6 arms · 12.8 m/s² · move sway (kick-led) · flourish moment at 40.65s
+  - 1:11.5 · 6 arms · 12.1 m/s² · move sway (textural) · arrival moment at 70.35s, flourish moment at 77.35s, passed round as Ripple
+  - 1:57.6 · 2 arms · 10.7 m/s² · move rise (melody-led) · flourish moment at 117.05s, passed round as Canon
+  - 3:13.0 · 1 arms · 11.3 m/s² · move arc (melody-led) · no moment
+  - 3:16.4 · 3 arms · 19.0 m/s² · move sway (textural) · arrival moment at 195.77s, passed round as Canon
+  - 3:19.8 · 2 arms · 11.7 m/s² · move sway (textural) · arrival moment at 195.77s, passed round as Canon
+  - 3:29.9 · 3 arms · 10.7 m/s² · move reach (vocal-led) · passed round as Canon
+  - 3:40.9 · 4 arms · 11.6 m/s² · move eight (kick-led) · flourish moment at 220.45s, passed round as Canon
+  - 4:13.6 · 4 arms · 10.2 m/s² · move arc (melody-led) · no moment
+- Presence, schematic: 9 new
+  - 1:20.2 · 1 arms · 10.5 m/s² · move sway (textural) · passed round as Canon
+  - 1:24.3 · 1 arms · 13.5 m/s² · move sway (textural) · passed round as Canon
+  - 1:57.2 · 3 arms · 10.5 m/s² · move rise (melody-led) · flourish moment at 117.05s, passed round as Canon
+  - 2:19.4 · 3 arms · 11.5 m/s² · move sway (textural) · arrival moment at 136.57s, passed round as Canon
+  - 2:59.8 · 6 arms · 10.7 m/s² · move arc (melody-led) · no moment
+  - 3:14.3 · 1 arms · 11.6 m/s² · move arc (melody-led) · no moment
+  - 3:16.1 · 2 arms · 17.9 m/s² · move sway (textural) · arrival moment at 195.77s, passed round as Canon
+  - 3:19.5 · 1 arms · 12.2 m/s² · move sway (textural) · arrival moment at 195.77s, passed round as Canon
+  - 3:21.6 · 1 arms · 9.3 m/s² · move sway (textural) · arrival moment at 195.77s, passed round as Canon
+
+#### Presence 1:15–1:50 and Instant Crush, Rehearsed
+
+- Tension now starts at 1:23.6, not 1:31.9: 0.12 at 1:24.5, 0.42 at 1:27.3, 0.72
+  at 1:30.1, 0.87 at 1:31.5, then 0 at the 1:32.4 lift. Gain falls from 1.19 to
+  0.97 over the build, then jumps to 1.48 at the drop and decays to 1.01 by 1:50.8.
+  Surprise at the drop is 0.74 as before.
+- Presence has 6 Recognition basins (12 before); Instant Crush has 4 (12 before).
+  Instant Crush's first is still 0:46.2; at 3:25–3:50 they are 3:25.5, 3:36.4
+  and 3:47.3, one per phrase.
+
+#### The blind test, round 2
+
+Same four clips as round 1, fresh shuffle, key in
+`$D/b1-blind-r2/b1-blind-key.txt`, which I did not open. Clips:
+`presence-build.mp4`, `presence-emotional.mp4`, `crush-return.mp4`,
+`years-climb.mp4` in `$D/b1-blind-r2/`, left to right A, B, C. The round-1 clips
+and key stay in `$D/b1-blind/`. Same rule: `Rehearsed` must beat `Off` in at
+least 3 of 4, a tie is a loss, `Schematic` cannot win alone. A loss here is
+"Remove": delete `workspace.rs` and its wiring (`Foresight` stays only if the
+moments code reads cleaner with it). There is no round 3.
+
+To remake them: `/tmp/b1/blind2.sh` is the round-1 script with the output
+directory changed to `b1-blind-r2`; the script text is in the round-1 entry.

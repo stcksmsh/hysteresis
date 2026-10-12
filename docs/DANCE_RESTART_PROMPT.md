@@ -60,13 +60,14 @@ questions are open with the user:
 Do not start either piece of work before the user answers; they are large and
 the user chooses the order.
 
-**B workspace, round 1 (2026-10-12): built and measured, waiting for the blind
-test.** `docs/B_WORKSPACE.md` is the design; the last `docs/DANCE_HANDOFF.md`
-entry has the numbers. Version 47 still has no verdict, and `Off` (the default)
-still reproduces it byte for byte. In the measurements `Rehearsed` breaks a
-guardrail on all three songs, so by the fixed rule it goes to the tuning round
-and is not shown; `Schematic` breaks one (Presence top speed). Nothing has been
-judged by eye.
+**B workspace (2026-10-12): round 2 built, measured, waiting for the second
+blind test.** `docs/B_WORKSPACE.md` is the design; the last
+`docs/DANCE_HANDOFF.md` entries have the numbers. Round 1 lost the blind test
+(`Rehearsed` beat `Off` in 1 of 4 clips). Round 2 changed constants and two
+definitions; `Rehearsed` now passes the guardrails on all three songs. Version
+47 still has no verdict and `Off` (the default) still reproduces it byte for
+byte. Nothing has been judged by eye. A second loss means Remove (delete
+`workspace.rs` and its wiring); there is no round 3.
 
 ## What version 47 does that version 44 did not
 
@@ -181,18 +182,17 @@ before theorising (`jolts.py`, `spans.py`, `look5.py`).
 - `AGENTS.md` is very long; only its top section and its last few entries are
   current.
 
-- **B workspace, open items.** No held breath is visible in `Rehearsed` at the
-  Presence 1:32 drop (tension 0 from 1:15 to 1:50; the cause is not traced).
-  Gain sits near its 1.5 clamp after a lift, so the payoff rise is clipped.
-  `Rehearsed` adds jolts (9 / 7 / 16 against 5 / 2 / 15) and top hand speed
-  over 1.73 m/s on Instant Crush and Presence. The bar is phrase/4, a guess.
-  Round 2 may move constants only (see `docs/B_WORKSPACE.md`).
+- **B workspace, open items.** Gain still sits above 1 on about half of the
+  beats (afterglow lasts 40+ beats). Round 2's wiring constants were chosen by
+  a 48-point search against the three songs' guardrails; Five Years sits at its
+  jolt limit (5). The bar is phrase/4, a guess. The blind result decides
+  Freeze or Remove.
 
 ## Commands
 
 Anywhere:
 ```
-cargo test --workspace --exclude hyst-render      # 157 pass; six-arm tests take ~15 s each
+cargo test --workspace --exclude hyst-render      # 159 pass; six-arm tests take ~15 s each
 cargo clippy -p hyst-compile -p hyst-output -p hyst-previz -p hyst-cli --all-targets -- -D warnings
 cargo fmt --all --check
 node crates/hyst-previz/tests/ensemble.cjs

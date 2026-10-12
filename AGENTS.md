@@ -1515,3 +1515,11 @@ gained `--workspace` and a stderr summary. In the measurements `Rehearsed`
 breaks a guardrail on all three songs and `Schematic` on one, and Presence
 shows no tension at the 1:32 drop. Nothing judged by eye; blind A|B|C test and
 its commands are in `docs/DANCE_HANDOFF.md`. 157 CPU tests green.
+
+### B workspace, round 2 — 2026-10-12
+
+Round 1 lost the blind test (1 of 4). Round 2: gain centred at 0.5, build start
+skips the last two bars before a drop, one recognition per phrase, two wiring
+constants halved. `Rehearsed` passes the guardrails on all three songs; `Off`
+unchanged. Second blind test is pending; a loss means deleting `workspace.rs`.
+Details in `docs/DANCE_HANDOFF.md`. Not judged by eye.
