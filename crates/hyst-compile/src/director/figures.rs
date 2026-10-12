@@ -7,6 +7,7 @@
 use std::collections::HashMap;
 use std::f64::consts::{PI, TAU};
 
+use super::workspace::{arrival_lift, EventKind, Foresight};
 use super::*;
 use crate::ensemble::{
     fit_tangents, forward_kinematics, AgentTrack, EnsembleScore, JointKnot, Placement, Rig,
@@ -281,6 +282,7 @@ pub fn compile_ensemble(
             arrivals.push((time, strength));
         }
     }
+    let foresight = Foresight::new(&data, &arrivals, &level, loud, rate, beat);
     // Spans: those transitions, then phrase edges at least four beats from any edge.
     let mut edges: Vec<f64> = vec![0.0, data.duration];
     edges.extend(arrivals.iter().map(|a| a.0));
@@ -648,23 +650,15 @@ pub fn compile_ensemble(
                 2.0
             }
         };
-        for &(time, strength) in &arrivals {
+        for e in foresight.of(EventKind::Arrival) {
+            let (time, strength) = (e.time, e.strength);
             if time > 4.0 * beat && class_at(time + beat) != "silence" {
                 // Which way the music goes at the arrival. Where it lifts (a
                 // drop after a build) the arms rise high and hold longer: the
                 // user saw a build "danced well" that did not pay off. Where
                 // it falls away the arrival is small, not a big gesture into a
                 // quiet break.
-                // Eight beats back: the last bar of a build is often a loud fill.
-                let before = mean(&level, rate, time - 8.0 * beat, time - 0.5 * beat);
-                let after = mean(&level, rate, time + 0.5 * beat, time + 4.0 * beat);
-                let change = after / before.max(1e-9);
-                // Music starting from near nothing is an entry, not a lift.
-                let lift = if before < 0.15 * loud {
-                    0.0
-                } else {
-                    ((change - 1.0) / 0.5).clamp(0.0, 1.0)
-                };
+                let (change, lift, _) = arrival_lift(&level, rate, beat, loud, time);
                 moments.push(Moment {
                     time,
                     pose: [lerp(0.72, 1.0, lift), 1.0],
@@ -703,45 +697,19 @@ pub fn compile_ensemble(
                 });
             }
         }
-        // Cuts: the mix drops to near nothing for half a beat to four beats
-        // between two dense stretches. The arm freezes where it is.
-        let level = &data.rms_envelope;
-        if !level.is_empty() {
-            let frame = data.envelope_rate;
-            let mut sorted = level.clone();
-            sorted.sort_by(f64::total_cmp);
-            let dense = 0.6 * sorted[sorted.len() * 3 / 4];
-            let mut i = 0;
-            while i < level.len() {
-                let around = mean(
-                    level,
-                    frame,
-                    i as f64 / frame - 4.0 * beat,
-                    i as f64 / frame,
-                );
-                if level[i] >= 0.2 * around || around < dense {
-                    i += 1;
-                    continue;
-                }
-                let start = i;
-                while i < level.len() && level[i] < 0.2 * around {
-                    i += 1;
-                }
-                let (from, to) = (start as f64 / frame, i as f64 / frame);
-                let after = mean(level, frame, to, to + 2.0 * beat);
-                if (0.5 * beat..=4.0 * beat).contains(&(to - from)) && after >= dense {
-                    moments.retain(|m| (m.time - from).abs() >= 6.0 * beat);
-                    moments.push(Moment {
-                        time: from,
-                        pose: [0.0, 0.0],
-                        strength: 0.0,
-                        label: "cut",
-                        hold_beats: (to - from) / beat,
-                        span: 0.5,
-                        frozen: true,
-                    });
-                }
-            }
+        // Cuts: the arm freezes where it is.
+        for e in foresight.of(EventKind::Cut) {
+            let from = e.time;
+            moments.retain(|m| (m.time - from).abs() >= 6.0 * beat);
+            moments.push(Moment {
+                time: from,
+                pose: [0.0, 0.0],
+                strength: 0.0,
+                label: "cut",
+                hold_beats: e.strength / beat,
+                span: 0.5,
+                frozen: true,
+            });
         }
         moments.sort_by(|a, b| a.time.total_cmp(&b.time));
     }

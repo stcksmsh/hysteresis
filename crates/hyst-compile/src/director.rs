@@ -5,6 +5,7 @@ use crate::CompileConfig;
 use serde::{Deserialize, Serialize};
 
 pub mod figures;
+pub mod workspace;
 
 const SOURCES: [&str; 4] = ["bass", "drums", "vocals", "other"];
 
