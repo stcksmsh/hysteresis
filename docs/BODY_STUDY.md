@@ -152,3 +152,48 @@ and must pass. Hand checks stay at 60 fps.
 
 Stretching, sampling (2,000 passing, seed 20261013), descriptors, triplets and
 check 2b are unchanged.
+
+## Addendum 2, 2026-10-13 (evening): clip length, minimum movement, region centres
+
+Written after the rerun (commit `ee2d437`) and the user's first look at three
+single clips, **before check 2b ran on anything**. Still round 1. Everything not
+named here stands.
+
+### Why
+
+The user: "8 s and little to no movement"; the sudden, strong, free clip looked
+"on some drugs, jittery or breaking". Measured per 8 s on the hand point: the
+three first-look clips covered 0.95–1.89 m of path, a 21–49 cm box and 10–59° of
+base turn; v47's Instant Crush (arm 0) covers a median 2.42 m, 78 cm and 178°.
+v47 itself fits the cheap-servo limits nearly everywhere (base speed over its
+limit 2.6 % of the time, shoulder 0.8 %, shoulder acceleration 1.7 %, the other
+joints never), so the limits do not force small motion; the generator does.
+Separately, the region rule stopped the rerun with 2 of 8 regions short of 9
+members (6 and 7).
+
+### Clip length: 16 s (user)
+
+Clips are 16 s. Stretching maps clip time t to motion time 8 + (t − 8)/s. Triplets
+are three 16 s clips side by side.
+
+### Minimum movement (check 2a, new rule; user: the p10 of the dance)
+
+Every clip, measured on the final 16 s at 60 fps, must reach the 10th percentile
+of v47's whole 16 s windows on arm 0 over the three songs (`hexagon-47.html`,
+`five-years-hexagon.html`, `presence-hexagon.html`, 54 windows):
+
+| Measure | Floor |
+|---|---|
+| Hand path length | ≥ 3.67 m |
+| Largest side of the box the hand covers | ≥ 0.74 m |
+| Base turn range (max − min of base yaw) | ≥ 161° |
+
+A clip below any floor fails check 2a like any other limit (the stretch ladder
+applies; a vector failing at s = 1.95 is rejected and counted by reason).
+
+### Region centres
+
+If a centre's region stays under 9 members after the fill, that centre is
+replaced by the next candidate in farthest-point order (the candidate farthest
+from all centres kept), and its region is filled the same way. Every replacement
+is reported with its reason.
