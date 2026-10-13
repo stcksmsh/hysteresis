@@ -2792,3 +2792,30 @@ Measured cause, from the user's own look at the exports (Presence, Rehearsed):
 B is not part of the emotion pipeline. Its expectation signals were not
 computed for check 1 (no beat grids or phrase memory on 45 s clips). Revisit
 only if a later stage needs expectation as an input.
+
+### Body study, step 1: generator and 2a sweep (stop 1) — 2026-10-13
+
+Rules: `docs/BODY_STUDY.md`, unchanged. Code: `crates/hyst-compile/src/body.rs`
+(generator, check 2a, 37 descriptors), `crates/hyst-previz/examples/body_study.rs`
+(`sweep`, `fill`, `html`), `scripts/body_study/regions.py`. Planner, `ensemble_preview.rs`
+and `figures.rs` untouched: `three.sh` exports compared with `cmp` against
+`hexagon-47.html`, `five-years-hexagon.html`, `presence-hexagon.html`, identical before and
+after. Data in `/secondary/hyst-data/bodystudy/` (outside git). **Not verified by eye.**
+
+Generator: phrase of moves in joint space; the ranges and why are in the doc comments.
+Constants the builder chose: knots every 0.05 s, moves 1.0–1.8 s apart, depth 0.3–1.0,
+arrival skew 0.75–1.4, bursts 1–3, follow-through 0–15 % at 0.8–1.4 Hz, wander yaw ±15°
+and roll ±30° (capped to 0.35 of the speed limit per move), breath 8°/12°, period
+3.3–12 s. Each move's size is capped by the acceleration and speed budget of its duration.
+
+Sweep (seed 20261013): first draft (no cap) passed 2000 of 48,939 (4 %), nearly all
+sustained, light, bound, direct. Cap added, then wander cap: 2000 of 3,457 (58 %).
+Remaining rejections: floor 1357, joint range 5, kinematic 95. Low height and deep curl
+fail the floor (pass rate 7 % at height decile 0, 97 % at decile 9). Stretch used,
+1.1^0..1.1^7: 162, 41, 98, 337, 581, 459, 256, 66; median 1.46.
+
+Regions (37 descriptors, z-score, farthest-point): r = 4.52, centre distance min 12.56,
+mean 17.50. Seven of 8 centres are single outlier clips (z up to 8.6 on shoulder, elbow or
+wrist speed and acceleration, heavy right tails). After `fill`: region 4 has 24 members,
+regions 0, 2, 6 reach 9 (clones of one body vector, new seeds), regions 1, 3, 5, 7 stay at
+2, 2, 1, 1. By the study's rule, the study stops here. Triplets not built.
