@@ -396,3 +396,114 @@ sequential triangle test of sensory science. The user accepted this proposal.
 
 The single clips are the 1280 x 720 crops of the stacks (frame-identical to their
 third of the stack, no ids in names or metadata).
+
+## Addendum 8, 2026-10-14: round 2 — the body decides, no movement floors, 8 s clips, 32 triplets
+
+Written after check 2b of round 1 was scored (commit `c9dd673`: 13 of 24, fail).
+This is **round 2**, the one round `NEXT_BODY_THEN_MIND.md` allows ("If it fails").
+If it fails too, the study stops and the rig, implement or scale is the user's
+decision. Everything not named here stands. Fresh sweep, fresh regions, fresh
+triplets; nothing from round 1's clips is reused.
+
+### Why (measured by the overseer on round 1's answers and clips)
+
+- 13 of 24 correct: P(≥ 13 | guessing) = 0.028; proportion discriminated 0.31
+  (95 % 0.03–0.58); d′ about 1.6.
+- Memory: odd in the middle (B) found 3 of 8; A picked 12 times, right 5; first
+  12 triplets 5 correct, last 12: 8.
+- The seed decided about half of what the descriptors show (within-region variance
+  0.52 of the sweep's; clones of one body 1.93 apart, two random clips 2.41).
+- The movement floors (addenda 2 and 3) squeezed size and energy: mean joint
+  speed over the 72 test clips 24–45 °/s; odd against pair a median 9 % apart.
+  Accuracy against that difference: r = −0.28 (size), −0.45 (peak speed, p 0.03);
+  5 of 11 wrong picks were the peak-speed outlier, mostly a seed effect.
+- The user: forcing every body to dance level removes or dampens most of what
+  separates emotional motion (Sievers et al. 2013: rate, jitter, direction, step
+  size, spikiness); a sad and an angry body cannot differ in a tight band.
+
+### Generator
+
+1. **The body vector decides**: which joint leads, the move pattern and targets,
+   each joint's pace and rhythm, **size and energy**, and the effort qualities.
+   **The seed only adds small variation** (for example small offsets in timing and
+   targets, and the start phase). The number of body dimensions may change; it is
+   reported. Body vectors are drawn uniformly from [0, 1]^n with seed 20261016.
+2. **Size and energy have no target range.** They run from small and slow up to
+   the hardware limits, as the parameters give. The builder documents each
+   constant and its reason, as before.
+
+### Check 2a (changes)
+
+- **Removed:** the movement floors of addendum 2 (hand path, box, base turn) and
+  the per-joint motion floors of addendum 3.
+- **New, stillness cap:** a clip fails if all five joints are under 2 °/s at the
+  same time for more than 2 s at once, or for more than 25 % of the clip in total
+  (60 fps, on the shown 8 s).
+- Unchanged: the per-joint hardware limits and the rendered-curve check of
+  addendum 1, hand speed and jolt, the floor clearance, the frame rule of
+  addendum 3 (study camera), the stretch ladder (s up to 1.95, else rejected).
+- **Clips are 8 s.** Stretching maps clip time t to motion time 4 + (t − 4)/s.
+  Descriptors (the same 37) are measured on the shown 8 s.
+
+### Reports, never gates
+
+On the sweep (2,000 passing): the distribution of mean joint speed over bodies
+(histogram, p10, p90, their ratio); per-joint shares of motion; still time;
+rejections by rule and by parameter decile.
+
+### Ranks
+
+Rank of a value against the 2,000 sweep values of its descriptor: (number below +
+half the number equal) / 2,000, for sweep and made clips alike (fixes round 1's
+arbitrary tie order in the lag descriptors).
+
+### Regions
+
+- Addendum 4's method: 8 centres by farthest-point sampling over the candidate
+  centres (d9 at or under the median); a region is one body vector; **12 clips per
+  region** (the centre sweep clip + 11 fresh seeds, each passing check 2a; up to
+  200 seeds); seed spread w_i and position m_i over the 12.
+- **Gate:** |m_i − m_j| ≥ 1.5 × max(w_i, w_j) for every pair, with addendum 4's
+  replacement order. If the candidates run out, the study stops and reports,
+  before anything is rendered for the test.
+
+### Triplets
+
+- **32 scored triplets.** Triplet i (0..31): pair region p = i mod 8, odd region
+  (p + k) mod 8, k = 1, 3, 5, 7 for i in 0–7, 8–15, 16–23, 24–31. Every region is
+  the pair 4 times and the odd one 4 times; every clip is used once (96).
+- Order shuffled with seed 20261017. **Odd positions balanced**: A, B, C as odd
+  11, 11 and 10 times, assigned to triplets at random with the same seed.
+- **4 practice triplets first, unscored**, from 8 body vectors not in any region:
+  the next 8 candidates in farthest-point order after the final centres, each
+  pair body and odd body with fresh seeds passing check 2a; no gate.
+
+### Viewing (addendum 7 with these changes)
+
+- First pass: A, B, C one after another, alone, 8 s each, 1 s black between.
+  Pause allowed; no seek.
+- **Before the counted answer: at most 2 replays per triplet, each clip at most
+  once**, each alone, from the start, no seek; offered only after the first pass.
+- Counted answer, final. After it (scored triplets): addendum 7's replays with
+  seek, second answer and text, all data only.
+- **Practice triplets** show after the counted answer: right or wrong; if wrong,
+  the odd clip and one pair clip side by side, played together, replayable.
+  Scored triplets give no feedback.
+- Recorded additionally: replays before the counted answer, per clip.
+
+### Check 2b
+
+- **Pass: at least 20 of 32 correct** (chance 1/3; P(≥ 20 | guessing) ≈ 0.0007,
+  the same strictness as 16 of 24).
+- Reported: per region (found as odd, pair of a correct triplet); per odd position
+  (confusion table); first against second half; hits on the 16 triplets whose two
+  regions differ most in mean joint speed against the other 16; which descriptors
+  separate found from missed.
+
+### ★ Stops
+
+1. After the sweep: the reports above and three first-look 8 s clips (not test
+   clips): one from the calmest decile of mean joint speed, one from the most
+   energetic decile, one from the middle. The user judges the range by eye.
+2. After the regions gate, triplets and page: the user takes the test.
+3. After scoring.
