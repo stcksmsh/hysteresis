@@ -1527,8 +1527,8 @@ Details in `docs/DANCE_HANDOFF.md`. Not judged by eye.
 ### Emotion stage 1: encoder — 2026-10-12
 
 Built `scripts/emotion/` (feature extractors, check 1, `encode.py`, `report.py`, 19 tests)
-and ran check 1 on DEAM + Emotify against a mix-only baseline (stems baseline not finished:
-Demucs too slow). Passed: Essentia, baseline+Essentia, baseline+all; pick baseline+all.
+and ran check 1 on DEAM + Emotify against the stems baseline (Demucs on all 2,144 clips;
+an earlier mix-only run is kept in the handoff). Only baseline+all passed, and is the pick.
 Within-song timing R² is negative for every candidate: the encoding separates songs, it
 does not follow change inside one. Three danced songs encoded to `*.emotion.sidecar.json`
 and an `emotion-report.html` made, outside git; unread by the user. Numbers, deviations

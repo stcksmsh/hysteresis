@@ -2614,9 +2614,10 @@ directory changed to `b1-blind-r2`; the script text is in the round-1 entry.
 
 Spec: `docs/EMOTION.md`. No planner behaviour changed (version 47 and the `Off`
 golden digests untouched). All code is in `scripts/emotion/`; data, caches and
-models are outside git. Check 1 ran against the **mix-only baseline**, not the
-stems baseline (see "Deviations"). **Not judged by ear or eye; the report page
-is for you to read and mark wrong.**
+models are outside git. **The final check 1 uses the stems baseline** (Demucs on all
+2,144 clips); an earlier run against mix-only features came first and is kept below
+for comparison. **Not judged by ear or eye; the report page is for you to read and
+mark wrong.**
 
 #### Datasets and licences (`/secondary/hyst-data/emotion/SOURCES.md` has URLs, hashes, text)
 
@@ -2638,8 +2639,9 @@ labels this check scores. All of these are non-commercial: check before exhibiti
 Windows 4 s, step 0.5 s, cached as `.npy` with a manifest per candidate.
 - Baseline: the sidecar's mix signals (energy, five bands, centroid, flatness, flux,
   onset density, periodicity: mean, std, max over the window; 29 numbers) from audio
-  with the sidecar's constants. A stems version (Demucs: per-stem level, flux, power
-  share, leader; 49 numbers) is built but only 93 + ~300 of 2,144 clips are separated.
+  with the sidecar's constants, plus the stems (Demucs htdemucs 4.1.0, per-stem level,
+  flux, power share, leader: 20 more, 49 in all). The stems baseline is **the** baseline;
+  the 29-number mix-only version is the earlier reference.
 - B expectation signals: **not computed.** They need beat grids, phrase memory and
   Foresight events; a 45 s clip has none worth the name. Said here, not faked.
 - MERT-v1-95M: run over the whole clip, hidden states pooled per window. All 13 layers
@@ -2648,7 +2650,30 @@ Windows 4 s, step 0.5 s, cached as `.npy` with a manifest per candidate.
 - Essentia: Discogs-EffNet embedding (1,280) and the mood/theme head (56).
 - Combined: baseline + each model, and baseline + all.
 
-#### Check 1 (rules as written in `check1.py`, committed before any result)
+#### Final check 1: stems baseline (rules as written in `check1.py`, committed before any result)
+
+Same folds, seeds, rows and rules as the earlier run below. Output: `/secondary/hyst-data/emotion/check1_stems/`.
+
+| candidate | dims | timing R² | rank corr ρ | NN agreement | geometry | gates timing/ρ/NN | result |
+|---|---|---|---|---|---|---|---|
+| baseline (stems + mix) | 49 | 0.449 [0.423, 0.473] | 0.524 [0.490, 0.558] | 0.215 [0.175, 0.255] | 1.082 [1.035, 1.143] | – | reference |
+| mert_avg | 768 | 0.603 [0.582, 0.622] | 0.597 [0.569, 0.626] | 0.260 [0.217, 0.302] | 1.041 [1.025, 1.061] | y/y/n | fail |
+| mert_best | 768 | 0.605 [0.584, 0.622] | 0.616 [0.588, 0.644] | 0.273 [0.230, 0.318] | 1.050 [1.032, 1.072] | y/y/n | fail |
+| clap | 512 | 0.229 [0.206, 0.251] | 0.366 [0.329, 0.400] | 0.177 [0.140, 0.215] | 1.065 [1.028, 1.115] | n/n/n | fail |
+| essentia | 1,336 | 0.531 [0.508, 0.550] | 0.614 [0.586, 0.641] | 0.295 [0.253, 0.340] | 1.042 [1.028, 1.060] | y/y/n | fail |
+| baseline+mert_avg | 817 | 0.610 [0.590, 0.629] | 0.596 [0.568, 0.626] | 0.260 [0.217, 0.303] | 1.044 [1.026, 1.065] | y/y/n | fail |
+| baseline+clap | 561 | 0.454 [0.429, 0.477] | 0.467 [0.430, 0.503] | 0.215 [0.175, 0.255] | 1.067 [1.031, 1.114] | n/n/n | fail |
+| baseline+essentia | 1,385 | 0.559 [0.537, 0.578] | 0.616 [0.588, 0.643] | 0.295 [0.253, 0.340] | 1.043 [1.029, 1.062] | y/y/n | fail |
+| baseline+all | 2,665 | 0.617 [0.596, 0.635] | 0.616 [0.588, 0.643] | 0.318 [0.273, 0.362] | 1.043 [1.027, 1.063] | y/y/y | **pass, pick** |
+
+**Pick: baseline+all** (stems + mix baseline, MERT average, CLAP, Essentia embedding,
+Essentia mood). It is the only passer. Against the stems baseline, Essentia and
+baseline+Essentia no longer pass: their NN-agreement intervals now overlap the
+baseline's (0.253 vs 0.255). Valence R² 0.54 / arousal 0.70 for the pick (baseline 0.33 / 0.57).
+Within-song R² is still negative for every candidate (baseline -1.37, pick -0.96).
+Everything said under "What the numbers do and do not say" below still holds.
+
+#### Earlier run: mix-only baseline (rules as written in `check1.py`, committed before any result)
 
 Seeds: folds 20261012, bootstrap 20261013 (2,000 resamples over songs), inner CV
 20261014. Five folds by song, same folds for every candidate (Emotify balanced by genre).
@@ -2693,11 +2718,11 @@ What the numbers do and do not say:
 
 #### Deviations from the spec, and why
 
-1. **Baseline is mix-only.** Demucs on 2,144 clips is ~13 s per clip here (8.5 s when
-   the machine was quiet; three parallel shards were slower, not faster): over 6 h.
-   I ran check 1 without it. The stems baseline may be stronger, so these passes are
-   against the weaker baseline. Demucs 4.1.0 is separating in the background; if it
-   completes, rerun `check1.py` (default baseline is stems) and see "If you rerun".
+1. **Stems baseline took a long run.** Demucs on 2,144 clips was ~13-20 s per clip here
+   (8.5 s in a quiet machine; three parallel shards were slower, not faster), roughly
+   11 h with interruptions. I first ran check 1 against the mix-only baseline (the table
+   below), then reran when stems finished (the table above, which is final). Demucs is
+   4.1.0, the songs' own stems were made with 4.0.1 (same htdemucs weights).
 2. **Evaluation grid 2 s**, not 0.5 s, for every candidate (CLAP cost). Caches for the
    other candidates are at 0.5 s.
 3. B expectation signals not computed (above).
@@ -2713,9 +2738,10 @@ What the numbers do and do not say:
   `emotionEncoding` (`model`, `version`, `dims`, `hopSeconds`, `windowSeconds`,
   per-step `steps`, per-beat `perBeat`, `components`, `provenance`). Refuses to
   overwrite the input, refuses audio more than 100 ms off the sidecar duration.
-- Run on the three danced songs, outputs next to the inputs: `instant-crush.emotion.sidecar.json`
-  (680 steps), `five-years-steady.emotion.sidecar.json` (568), `presence.emotion.sidecar.json`
-  (542), 2,645 dims each, 59–73 MB each. Five Years uses its steady-grid analysis WAV, as the sidecar does.
+- Run on the three danced songs, outputs next to the inputs, with the final pick's components:
+  `instant-crush.emotion.sidecar.json` (680 steps), `five-years-steady.emotion.sidecar.json` (568),
+  `presence.emotion.sidecar.json` (542), 2,665 dims each, 62–77 MB each. The songs' stems are
+  the existing Demucs outputs. Five Years uses its steady-grid analysis WAV, as the sidecar does.
 - Report: `$D/emotion-report.html` (D = music-arm directory): the check-1 table, and for
   each song every 10 s the predicted GEMS profile and the nearest 3 Emotify and 3 DEAM clips.
   **I have not read it for sense.** Library clips are 45–60 s means; a 10 s query is noisier.
@@ -2724,7 +2750,7 @@ What the numbers do and do not say:
 
 Run times (this machine, 20 threads): mix features under 15 min; Essentia 1.2 s/clip (~45 min);
 MERT 4.5 s/clip (~2.7 h); CLAP 3.3–4.6 s/clip (~2.2 h incl. a restart); Demucs 13 s/clip;
-check 1 for all nine candidates ~6 min. Disk: data and caches 7.8 GB, env 2.1 GB, HF cache
+check 1 for all nine candidates ~6 min (~4 min in the final run). Disk: data and caches 7.8 GB, env 2.1 GB, HF cache
 1.6 GB, uv cache 2.2 GB (~14 GB of the 30 GB; encoded sidecars 195 MB outside the repo).
 
 #### Tests and checks
@@ -2736,10 +2762,10 @@ rule needs clear intervals; `encode.py` leaves the input byte-identical and adds
 `emotionEncoding`. Run: `cd scripts/emotion && /secondary/hyst-env/emotion/bin/python -m unittest`.
 The five repository checks passed before the first edit and again after the last.
 
-#### If you rerun with the stems baseline
+#### To rerun
 
-`/secondary/hyst-env/run_stems_one.sh` (resumable; ~13 s/clip), then
-`python extract.py baseline && python check1.py` (stems is the default baseline), and
-`encode.py` / `report.py` with the new pick's components. A pick containing
-`baseline_stems` needs `--stems-dir` for each song (existing Demucs 4.0.1 outputs).
+Caches are complete, so: `python extract.py baseline && python check1.py` (stems baseline is the
+default; `--baseline mix` for the mix-only one), then `encode.py` / `report.py` with the pick's
+components (`/secondary/hyst-env/encode_songs.sh`, `make_report.sh`). A pick containing
+`baseline_stems` needs `--stems-dir` for each song.
 Nothing here says the arm will look emotional: stage 4 is the only test of that.

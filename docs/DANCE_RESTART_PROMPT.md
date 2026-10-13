@@ -62,10 +62,9 @@ the user chooses the order.
 
 **Current work (2026-10-12): the emotion pipeline, `docs/EMOTION.md`.** Stage 1
 (the encoder, check 1) is done; see "Emotion stage 1: encoder" in
-`docs/DANCE_HANDOFF.md` for the table. Three candidates passed against the mix-only
-baseline; the pick is the combined encoding (baseline + MERT + CLAP + Essentia).
-The stems baseline was not finished, within-song timing is not captured, and the
-report page `$D/emotion-report.html` is waiting for the user to read. Stages 2-4
+`docs/DANCE_HANDOFF.md` for the table. Against the stems baseline one candidate passed, and it
+is the pick: the combined encoding (stems baseline + MERT + CLAP + Essentia). Within-song
+timing is not captured by any candidate, and the report page `$D/emotion-report.html` is waiting for the user to read. Stages 2-4
 (body, decoder, odd-one-out tests) are not started. **B is parked** (round 2: not
 enough difference to judge); version 47 is unchanged and `Off` still reproduces it.
 
