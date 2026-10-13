@@ -2819,3 +2819,93 @@ mean 17.50. Seven of 8 centres are single outlier clips (z up to 8.6 on shoulder
 wrist speed and acceleration, heavy right tails). After `fill`: region 4 has 24 members,
 regions 0, 2, 6 reach 9 (clones of one body vector, new seeds), regions 1, 3, 5, 7 stay at
 2, 2, 1, 1. By the study's rule, the study stops here. Triplets not built.
+
+### Body study, step 1 rerun under the addendum (stop 1 again) — 2026-10-13
+
+Rules: `docs/BODY_STUDY.md` with its 2026-10-13 addendum (unchanged). Data in
+`/secondary/hyst-data/bodystudy/r2/` (`sweep.json`, `regions.json`, `fill.json`,
+`first/{a,b,c}.{html,mp4}`), outside git. `scripts/body_study/report.py` prints the sweep
+numbers below. **Not verified by eye.** The study stops at the region rule (below): no
+triplets, no `answer.html`.
+
+Code (`hyst-compile` and `hyst-previz` only):
+- `body.rs`: `LIMITS` (one table: yaw 120/600, shoulder 90/300, elbow 150/1000, wrist bend
+  200/2000, roll 250/3000 deg/s, deg/s2). `violations()` samples the score's own quintic
+  curve at 1 kHz (speed by first difference, acceleration by second difference), runs
+  `validate` on the rig's own envelope (240 deg/s, 8000 deg/s2, unchanged), then hand speed,
+  jolt and floor at 60 fps; every broken rule is named. `check_2a` returns the first.
+  `feasible_traced` also returns the rules broken at stretch 1.
+- **Score format, additive**: `JointKnot.acceleration_degrees_per_second2` (serde default,
+  omitted when empty, so every older score and export is unchanged). Reason: with zero
+  acceleration at every knot the quintic renders 1.3-1.5x the acceleration of the curve it
+  samples, at any knot spacing (tested 0.05, 0.02, 0.01 s: 1.32, -, 1.48). The generator now
+  writes the true acceleration; `channel_bounds` (the `validate` proof) uses it too. Motion
+  before the change: the move itself peaked at 299.97 of 300 deg/s2 on a probe, the rendered
+  curve at 1.3-1.5x.
+- Move-size cap per joint from that joint's own limits, no factor on them. Exact numeric peaks
+  of the skewed burst profile (`profile_peaks`) and of the follow-through ring with its 0.15 s
+  ramp (`ring_peaks`) replace the old 5.77, 1.875, 1.5 and 0.45/0.8 constants. Taken off the
+  limit before the move gets it: breath on shoulder and elbow (exact peak), wander on yaw and
+  roll. The ring starts after the move ends, so it is a separate bound, not a sum.
+  Remaining factors: **0.5 on wander** (it shares yaw/roll with the move and the two can
+  peak together; the move gets the other half). Wander shape bounds 2 pi w/dur and
+  6 pi^2 w/dur^2 are upper bounds from the shape's components. Nothing else.
+- Knots every 0.05 s as before. Tests: 7 body tests (rendered-curve check names joint and
+  limit; wrist range > shoulder range for a sudden strong clip); workspace CPU tests (165,
+  `hyst-render` excluded) pass; clippy -D warnings clean on compile/previz/output/cli.
+
+Sweep (seed 20261013): **3,516 attempts, 2,000 passed.** Rejected 1,516: at the top of the
+ladder (1.95) the first rule broken is floor 1,510, joint range 6, nothing else. Rules broken
+at stretch 1 over all rejected clips (a clip can break several): floor 1,514, shoulder accel
+841, elbow accel 465, hand jolt 149, wrist bend accel 127, hand speed 75, roll `validate`
+72, base yaw accel 59, roll speed 11, yaw speed 2, roll accel 17, joint range 7. Rejection by
+decile is in `report.py` output: height decile 0 rejects 322/338, decile 9 rejects 3/342;
+curl_extension decile 0 250/345, decile 9 57/370; every other parameter 120-190 per ~350 in
+every decile (no other parameter matters). Stretch histogram (1.1^0..7): 501, 1308, 78, 27,
+15, 20, 30, 21. Clips clean at stretch 1: 501 of 2,000. Rules broken at stretch 1 among the
+2,000 that pass: shoulder accel 1,256, elbow accel 762, hand jolt 240, wrist bend accel 174,
+floor 138, base yaw accel 84, roll `validate` 65, roll accel 30, hand speed 29, roll speed 8,
+shoulder/elbow/yaw speed 1-2. These are mostly about 10 % over (probe: rendered 1.14 at worst
+on the shoulder, caused by consecutive moves overlapping through joint delays and the
+previous move's ring); the ladder's first step (1.1) takes them. Roll `validate` failures:
+the roll's limit (250 deg/s) is above the rig's envelope (240).
+
+Low (<0.2) against high (>0.8) medians; p90 joint speed deg/s (yaw / shoulder / elbow / wrist
+bend / roll) and total joint motion deg (same order; sum), motion of the rendered 8 s:
+- time: n 358 / 436. p90 low 44.0 / 17.0 / 26.7 / 13.5 / 93.4; high 15.9 / 8.8 / 22.7 / 18.2 /
+  68.5. Total low 143 / 62 / 93 / 42 / 319 (683); high 39 / 29 / 63 / 42 / 171 (351).
+- weight: n 411 / 403. p90 low 27.4 / 11.8 / 19.6 / 10.4 / 73.2; high 28.1 / 14.7 / 31.7 /
+  22.8 / 93.3. Total low 85 / 40 / 66 / 27 / 206 (425); high 80 / 47 / 92 / 56 / 271 (579).
+- flow: n 389 / 375. p90 low 30.4 / 14.7 / 28.3 / 16.8 / 85.0; high 26.9 / 12.7 / 26.4 / 16.2 /
+  82.5. Total low 85 / 45 / 82 / 40 / 234 (514); high 86 / 44 / 81 / 47 / 246 (522).
+- space: n 390 / 412. p90 low 31.3 / 13.9 / 27.3 / 16.2 / 52.9; high 30.3 / 14.6 / 26.5 /
+  16.6 / 109.3. Total low 88 / 45 / 82 / 45 / 136 (414); high 93 / 46 / 80 / 42 / 340 (621).
+Sudden clips (time > 0.8) still move less than sustained ones at yaw, shoulder, roll (total
+351 against 683). It is the acceleration budget: a burst of 0.1 s at 600 deg/s2 is about 1
+degree on yaw. The wrist moves the same total and faster in sudden clips. "Weight" now
+differs at the elbow, wrist and roll (p90 22.8 against 10.4 on the wrist). Flow differs by
+under 10 % in either measure (follow-through is small: 0.15 of the move at most).
+
+Regions (rank-normalised descriptors, 1,000 candidate centres with d9 at or under the median
+1.091; centres clips 785, 1627, 497, 815, 1383, 897, 1972, 1506): **r = 0.691**.
+Centre-to-centre distance min 2.228, mean 2.991 (a quarter: 0.748). Mean within-region
+pairwise distance 0.679 / 0 / 0.678 / 0.676 / 0 / 0 / 0 / 0 (regions with one member have 0).
+Members before fill: 2, 1, 2, 3, 1, 1, 1, 1. After fill (clones of members' body vectors,
+fresh seeds, kept inside the ball, 200 tries): **9, 9, 9, 6, 9, 7, 9, 9**. Regions 3 and 5
+stay short (200 tries each). **The rule stops the study here.** The 9th-nearest neighbour of
+a median clip is 1.09 away, farther than r, so the 2,000 clips alone never fill a ball: the
+filled members are clones of one or two body vectors with other content seeds. Whether that
+counts as a region is a decision for you; I did not change r, the fill or the rule.
+Stretch (median / max) of region members before fill: 1.0/1.0, 1.1/1.1, 1.1/1.1, 1.61/1.77,
+1.0/1.0, 1.1/1.1, 1.1/1.1, 1.0/1.0.
+
+Single clips for a first look (not test clips, silent, 8 s) in `r2/first/`: a (body 1238:
+time 0.00, weight 0.13, flow 0.08, stretch 1.0), b (1071: time 0.90, weight 0.87, flow 0.94,
+stretch 1.1), c (1792: space 0.98, extension 0.88, time 0.04, stretch 1.1). `SendUserFile`
+could not deliver (not a project thread); paths above. Body vectors and seeds are in
+`sweep.json`.
+
+Unchanged: `three.sh` exports compared with `cmp` against `hexagon-47.html`,
+`five-years-hexagon.html`, `presence-hexagon.html`: all three identical. The three tmp files
+it made were deleted; older `tmp-45-*`, `tmp-46-*` files from earlier sessions were not mine
+and are left. Frozen `src/` and `tools/`, no hardware.

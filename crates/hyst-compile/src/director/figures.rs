@@ -1609,6 +1609,7 @@ pub fn compile_ensemble_with_workspace(
             arm.knots.push(JointKnot {
                 time,
                 velocity_degrees_per_second: vec![0.0; q.len()],
+                acceleration_degrees_per_second2: Vec::new(),
                 joints_degrees: q,
             });
         }

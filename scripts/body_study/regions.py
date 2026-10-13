@@ -1,19 +1,25 @@
-"""regions.py SWEEP.json OUT.json: regions of the body study (docs/BODY_STUDY.md).
-Standardise the 37 descriptors over all clips, pick 8 centres by farthest-point
-sampling (first: farthest from the mean), choose r, assign members."""
+"""regions.py SWEEP.json OUT.json: regions of the body study (docs/BODY_STUDY.md,
+addendum 2026-10-13). Rank-normalise the 37 descriptors, keep the denser half of the
+clips (distance to the 9th nearest other clip at or under the median) as candidate
+centres, pick 8 by farthest-point sampling over candidates (first: farthest from the
+mean), choose r, assign members."""
 import json, sys
 import numpy as np
 
 sweep = json.load(open(sys.argv[1]))
 clips = sweep["clips"]
 D = np.array([c["desc"] for c in clips])
-mu, sd = D.mean(0), D.std(0)
-sd[sd < 1e-12] = 1.0
-Z = (D - mu) / sd
-centres = [int(np.argmax(np.linalg.norm(Z, axis=1)))]
+N = len(D)
+srt = np.sort(D, axis=0)  # kept in OUT: new clips are ranked against these
+Z = np.stack([(np.searchsorted(srt[:, k], D[:, k], "left") + 1 - 0.5) / N for k in range(D.shape[1])], 1)
+pair = np.linalg.norm(Z[:, None] - Z[None], axis=2)
+d9 = np.sort(pair, axis=1)[:, 9]  # column 0 is the clip itself
+cand = np.flatnonzero(d9 <= np.median(d9))
+dm = np.linalg.norm(Z - Z.mean(0), axis=1)
+centres = [int(cand[np.argmax(dm[cand])])]
 for _ in range(7):
-    d = np.min([np.linalg.norm(Z - Z[c], axis=1) for c in centres], axis=0)
-    centres.append(int(np.argmax(d)))
+    d = np.min([np.linalg.norm(Z[cand] - Z[c], axis=1) for c in centres], axis=0)
+    centres.append(int(cand[np.argmax(d)]))
 C = Z[centres]
 cc = np.linalg.norm(C[:, None] - C[None], axis=2)
 off = cc[np.triu_indices(8, 1)]
@@ -37,7 +43,7 @@ for r in np.linspace(0, off.min(), 201)[1:]:
         best = r
 mem = members(best)
 out = {
-    "mean": mu.tolist(), "std": sd.tolist(), "centres": centres, "r": best,
+    "sorted": srt.T.tolist(), "centres": centres, "r": best,
     "meanCentreDistance": float(off.mean()), "minCentreDistance": float(off.min()),
     "quarterOfMeanCentreDistance": float(quarter),
     "regions": [{
@@ -49,10 +55,12 @@ out = {
     } for k, m in enumerate(mem)],
 }
 json.dump(out, open(sys.argv[2], "w"))
-print(f"r={best:.3f} (min centre dist {off.min():.2f}, mean {off.mean():.2f}, quarter {quarter:.2f})")
+print(f"within-region mean distances", [round(r_["meanWithinDistance"], 3) for r_ in out["regions"]])
+print(f"r={best:.3f} (centre-to-centre min {off.min():.3f}, mean {off.mean():.3f}, quarter of mean {quarter:.3f})")
 for k, m in enumerate(mem):
     reg = out["regions"][k]
     print(k, len(m), f"within {reg['meanWithinDistance']:.2f}", "stretch med/max",
           None if not len(m) else f"{reg['stretchMedian']:.2f}/{reg['stretchMax']:.2f}")
 print("stretch of all 2000: median", np.median([c["s"] for c in clips]))
-print("descriptor spread: z-dist to mean, 5/50/95 pct", np.percentile(np.linalg.norm(Z, axis=1), [5, 50, 95]).round(2))
+print("descriptor spread: rank-space distance to mean, 5/50/95 pct", np.percentile(dm, [5, 50, 95]).round(3))
+print("d9 median", round(float(np.median(d9)), 3), "candidates", len(cand), "centres", centres)

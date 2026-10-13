@@ -4,7 +4,8 @@
 
 use crate::director::IntentCue;
 use crate::ensemble::{
-    forward_kinematics, AgentTrack, EnsembleScore, Implement, JointKnot, Placement, Rig,
+    forward_kinematics, sample_track, AgentTrack, EnsembleScore, Implement, JointKnot, Placement,
+    Rig,
 };
 
 pub const PARAMS: [&str; 12] = [
@@ -30,9 +31,19 @@ pub const FPS: f64 = 60.0;
 /// Stretch ladder: 1.1^0 .. 1.1^7 (= 1.95).
 pub const STRETCH_STEPS: u32 = 7;
 
-// Check 2a limits (user, 2026-10-13).
-pub const SPEED_DPS: f64 = 150.0;
-pub const ACCEL_DPS2: f64 = 500.0;
+/// Joint names, in channel order.
+pub const JOINTS: [&str; 5] = ["base_yaw", "shoulder", "elbow", "wrist_bend", "wrist_roll"];
+/// Check 2a per-joint limits for cheap servos (`docs/BODY_STUDY.md` addendum
+/// 2026-10-13): speed degrees/s, acceleration degrees/s2. The one place they live.
+pub const LIMITS: [(f64, f64); 5] = [
+    (120.0, 600.0),
+    (90.0, 300.0),
+    (150.0, 1000.0),
+    (200.0, 2000.0),
+    (250.0, 3000.0),
+];
+/// Sampling rate of the rendered-curve joint check.
+const CHECK_HZ: f64 = 1000.0;
 pub const HAND_MPS: f64 = 1.2;
 pub const JOLT_MPS2: f64 = 9.0;
 pub const FLOOR_M: f64 = 0.05;
@@ -41,12 +52,10 @@ pub const DISC_M: f64 = 0.06;
 const REACH_M: f64 = 0.69;
 
 pub fn study_rig() -> Rig {
+    // The rig keeps its own envelope (240 deg/s, 8000 deg/s2): `validate` must still
+    // pass on it. The study limits are checked on the rendered curve instead.
     let mut rig = Rig::illustrative_five_axis();
     rig.implement = Implement::disc();
-    for c in &mut rig.channels {
-        c.max_speed_degrees_per_second = SPEED_DPS;
-        c.max_acceleration_degrees_per_second2 = ACCEL_DPS2;
-    }
     rig
 }
 
@@ -99,6 +108,49 @@ fn posture(extension: f64, height: f64, arch: f64) -> [f64; 3] {
     [-e1, q2, q3]
 }
 
+/// Peak |speed| and |acceleration| of the skewed burst profile minjerk(x^g) on
+/// x in 0..1, per unit amplitude and unit duration.
+fn profile_peaks(g: f64) -> (f64, f64) {
+    let f = |x: f64| minjerk(x.powf(g));
+    let (n, h) = (4000, 1.0 / 4000.0);
+    let (mut v, mut a) = (0.0f64, 0.0f64);
+    for i in 1..n {
+        let x = i as f64 * h;
+        v = v.max(((f(x + h) - f(x - h)) / (2.0 * h)).abs());
+        a = a.max(((f(x + h) - 2.0 * f(x) + f(x - h)) / (h * h)).abs());
+    }
+    (v, a)
+}
+
+/// Peak speed and acceleration, per unit of amplitude, of the follow-through ring
+/// (0.15 s ramp, decay `tau`, `hz`): measured on the curve, because the ramp adds to
+/// the sine's own derivatives.
+fn ring_peaks(hz: f64, tau: f64) -> (f64, f64) {
+    let f = |a: f64| {
+        minjerk(a / 0.15) * (-a.max(0.0) / tau).exp() * (std::f64::consts::TAU * hz * a).sin()
+    };
+    let h = 1e-3;
+    let (mut v, mut acc) = (0.0f64, 0.0f64);
+    for i in 1..4000 {
+        let a = i as f64 * h;
+        v = v.max(((f(a + h) - f(a - h)) / (2.0 * h)).abs());
+        acc = acc.max(((f(a + h) - 2.0 * f(a) + f(a - h)) / (h * h)).abs());
+    }
+    (v, acc)
+}
+
+/// Wander amplitude on yaw (j 0) or roll (j 4) for a move of `dur` seconds. The shape
+/// sin(2 pi t)sin^2(pi t) has peak speed under 2 pi w/dur and acceleration under
+/// 6 pi^2 w/dur^2. Wander gets half of the joint's limits (factor 0.5: it shares the
+/// joint with the move and the two can peak together; the move gets the other half).
+fn wander_amp(param: f64, j: usize, dur: f64) -> f64 {
+    let (v, a) = LIMITS[j];
+    let pi = std::f64::consts::PI;
+    param
+        .min(0.5 * v * dur / (2.0 * pi))
+        .min(0.5 * a * dur * dur / (6.0 * pi * pi))
+}
+
 struct Move {
     start: f64,
     /// Whole transition, seconds (before per-joint delay).
@@ -141,6 +193,14 @@ impl Motion {
             *dj = 0.3 * delay * rank / 4.0 + if j == lead { 0.0 } else { 0.12 };
         }
         let peaks = 1 + (2.0 * time).round() as usize;
+        let (pv, pa) = profile_peaks(skew);
+        let ring_hz = lerp(0.8, 1.4, flow);
+        let ring_decay = lerp(0.15, 0.6, flow);
+        let (ring_v, ring_a) = ring_peaks(ring_hz, ring_decay);
+        // Indirect: yaw wanders up to ±15 degrees and roll ±30 on the way to each target.
+        let wander = [15.0 * space, 30.0 * space];
+        // Breath: shoulder up to 8 degrees, elbow 12, period 3.3..12 s.
+        let breath_deg = [8.0 * bdepth, 12.0 * bdepth];
         let mut moves = Vec::new();
         let (mut t, mut cur) = (0.2, p0);
         while t < 7.4 {
@@ -155,19 +215,36 @@ impl Motion {
             let yaw = rng.sign() * (25.0 + 65.0 * rng.next()) * depth;
             let roll = rng.sign() * (30.0 + 120.0 * rng.next()) * lerp(0.3, 1.0, space) * depth;
             let target = [yaw, q[0], q[1], q[2], roll];
-            // Authoring budget: a burst of amplitude A over time d peaks near
-            // 5.77 A g^2 / d^2 deg/s2 (g = arrival skew, either way), the quintic
-            // with zero knot acceleration adds up to 1.5x, so the burst's amplitude
-            // is capped at 0.45 of the acceleration limit and 0.8 of the speed limit.
-            // A sudden move therefore stays small; that is the arm's range, not a bug.
-            let bursts = peaks as f64;
-            let d_burst = if peaks > 1 { dur / bursts * 0.7 } else { dur };
-            let g2 = skew.max(1.0 / skew).powi(2);
-            let cap = bursts
-                * (0.45 * ACCEL_DPS2 * d_burst * d_burst / (5.77 * g2))
-                    .min(0.8 * SPEED_DPS * d_burst / 1.875);
+            // Authoring budget, per joint, from that joint's own limits. A burst of
+            // amplitude A/n over d_burst peaks at pv A/(n d) and pa A/(n d^2) (pv, pa:
+            // numeric peaks of the skewed profile). Taken off the limit first: breath
+            // (shoulder, elbow) and wander (yaw, roll) on the same joint, which add
+            // to the move. The follow-through ring starts after the move ends, so it
+            // is a separate constraint, not a sum. No margin on the limits: where a
+            // clip still exceeds them (moves overlapping through joint delays) the
+            // stretch ladder slows it.
+            let n = peaks as f64;
+            let d_burst = if peaks > 1 { dur / n * 0.7 } else { dur };
             let mut delta = [0.0; 5];
             for j in 0..5 {
+                let (mut lv, mut la) = LIMITS[j];
+                if j == 1 || j == 2 {
+                    let amp = breath_deg[j - 1];
+                    let w = std::f64::consts::TAU * lerp(0.08, 0.3, brate);
+                    lv = (lv - amp * w).max(0.0);
+                    la = (la - amp * w * w).max(0.0);
+                }
+                if j == 0 || j == 4 {
+                    let w = wander_amp(wander[j / 4], j, dur);
+                    let k = std::f64::consts::TAU / dur;
+                    lv -= w * k;
+                    la -= w * 6.0 * std::f64::consts::PI.powi(2) / (dur * dur);
+                }
+                let mut cap = (lv * d_burst * n / pv).min(la * d_burst * d_burst * n / pa);
+                let ov = 0.15 * flow;
+                if ov > 0.0 {
+                    cap = cap.min(lv / (ov * ring_v)).min(la / (ov * ring_a));
+                }
                 let want = (target[j] - cur[j]) * if j == lead { 1.35 } else { 1.0 };
                 delta[j] = want.clamp(-cap, cap);
                 cur[j] += delta[j];
@@ -187,12 +264,10 @@ impl Motion {
             delay: d,
             skew,
             overshoot: 0.15 * flow,
-            ring_hz: lerp(0.8, 1.4, flow),
-            ring_decay: lerp(0.15, 0.6, flow),
-            // Indirect: yaw wanders ±15 degrees and roll ±30 on the way to each target.
-            wander: [15.0 * space, 30.0 * space],
-            // Breath: shoulder up to 8 degrees, elbow 12, period 3.3..12 s.
-            breath: [8.0 * bdepth, 12.0 * bdepth],
+            ring_hz,
+            ring_decay,
+            wander,
+            breath: breath_deg,
             breath_hz: lerp(0.08, 0.3, brate),
             breath_phase: rng.next() * std::f64::consts::TAU,
         }
@@ -235,9 +310,7 @@ impl Motion {
                 }
                 // Indirect space: yaw and roll bow off the straight path while moving.
                 if (j == 0 || j == 4) && (0.0..1.0).contains(&tau) {
-                    // One cycle over the move peaks at 2 pi w / dur; keep it under 0.35 of the speed limit.
-                    let w =
-                        self.wander[j / 4].min(0.35 * SPEED_DPS * m.dur / std::f64::consts::TAU);
+                    let w = wander_amp(self.wander[j / 4], j, m.dur);
                     q[j] += m.wander_sign[j / 4]
                         * w
                         * (std::f64::consts::TAU * tau).sin()
@@ -264,7 +337,12 @@ pub fn clip(b: &Body, seed: u64, s: f64) -> EnsembleScore {
             let m = motion_time(t);
             let h = 1e-4;
             let (a, c) = (motion.at(m - h), motion.at(m + h));
+            let g = 2e-3;
+            let (lo, mid, hi) = (motion.at(m - g), motion.at(m), motion.at(m + g));
             JointKnot {
+                acceleration_degrees_per_second2: (0..5)
+                    .map(|j| (hi[j] - 2.0 * mid[j] + lo[j]) / (g * g) / (s * s))
+                    .collect(),
                 time: t,
                 joints_degrees: motion.at(m).to_vec(),
                 velocity_degrees_per_second: (0..5)
@@ -318,11 +396,33 @@ pub struct Check2a {
     pub min_floor_margin_m: f64,
 }
 
-/// Check 2a on the score as rendered: the score's own proof of joint range, speed
-/// and acceleration (the rig carries the study limits), then hand speed, jolt and
-/// floor at 60 fps. Err names the first rule broken.
-pub fn check_2a(score: &EnsembleScore) -> Result<Check2a, String> {
-    score.validate()?;
+/// Every check 2a rule the score breaks, each named (empty = feasible). Joint speed
+/// and acceleration are measured on the rendered curve at 1 kHz (acceleration by
+/// second difference); `validate` (the rig's own envelope) must also pass; hand
+/// speed, jolt and floor at 60 fps.
+pub fn violations(score: &EnsembleScore) -> (Vec<String>, Check2a) {
+    let mut out = Vec::new();
+    if let Err(e) = score.validate() {
+        out.push(format!("validate: {e}"));
+    }
+    let dt = 1.0 / CHECK_HZ;
+    let n = (score.duration * CHECK_HZ).round() as usize;
+    let q: Vec<Vec<f64>> = (0..=n)
+        .map(|i| sample_track(&score.tracks[0].knots, i as f64 * dt).expect("sample"))
+        .collect();
+    for (j, &(v_lim, a_lim)) in LIMITS.iter().enumerate() {
+        let v = q.windows(2).map(|w| (w[1][j] - w[0][j]).abs() / dt);
+        let a = q
+            .windows(3)
+            .map(|w| (w[2][j] - 2.0 * w[1][j] + w[0][j]).abs() / (dt * dt));
+        let (v, a) = (v.fold(0.0, f64::max), a.fold(0.0, f64::max));
+        if v > v_lim {
+            out.push(format!("{} speed", JOINTS[j]));
+        }
+        if a > a_lim {
+            out.push(format!("{} accel", JOINTS[j]));
+        }
+    }
     let fr = frames(score);
     let hand: Vec<[f64; 3]> = fr.iter().map(|f| f.1[5]).collect();
     let speed: Vec<f64> = hand
@@ -348,31 +448,52 @@ pub fn check_2a(score: &EnsembleScore) -> Result<Check2a, String> {
             ends.min(f.1[5][2] - FLOOR_M - DISC_M)
         })
         .fold(f64::MAX, f64::min);
-    let report = Check2a {
-        max_hand_mps: max_hand,
-        max_jolt_mps2: max_jolt,
-        min_floor_margin_m: floor,
-    };
     if max_hand > HAND_MPS {
-        return Err(format!("hand speed {max_hand:.2} m/s"));
+        out.push("hand speed".into());
     }
     if max_jolt > JOLT_MPS2 {
-        return Err(format!("hand jolt {max_jolt:.2} m/s2"));
+        out.push("hand jolt".into());
     }
     if floor < 0.0 {
-        return Err(format!("floor margin {floor:.3} m"));
+        out.push("floor".into());
     }
-    Ok(report)
+    (
+        out,
+        Check2a {
+            max_hand_mps: max_hand,
+            max_jolt_mps2: max_jolt,
+            min_floor_margin_m: floor,
+        },
+    )
 }
 
-/// The first clip on the stretch ladder that passes check 2a, with its stretch.
-/// None: rejected (stretching beyond 1.95 would show less than half the phrase).
-pub fn feasible(b: &Body, seed: u64) -> Option<(f64, EnsembleScore)> {
-    (0..=STRETCH_STEPS).find_map(|i| {
+/// Check 2a: Err names the first rule broken.
+pub fn check_2a(score: &EnsembleScore) -> Result<Check2a, String> {
+    let (v, report) = violations(score);
+    v.into_iter().next().map_or(Ok(report), Err)
+}
+
+/// The first clip on the stretch ladder that passes check 2a, with its stretch, and
+/// the rules broken at stretch 1. None: rejected (stretching beyond 1.95 would show
+/// less than half the phrase).
+pub fn feasible_traced(b: &Body, seed: u64) -> (Option<(f64, EnsembleScore)>, Vec<String>) {
+    let mut first = Vec::new();
+    for i in 0..=STRETCH_STEPS {
         let s = 1.1f64.powi(i as i32);
         let score = clip(b, seed, s);
-        check_2a(&score).ok().map(|_| (s, score))
-    })
+        let (v, _) = violations(&score);
+        if i == 0 {
+            first = v.clone();
+        }
+        if v.is_empty() {
+            return (Some((s, score)), first);
+        }
+    }
+    (None, first)
+}
+
+pub fn feasible(b: &Body, seed: u64) -> Option<(f64, EnsembleScore)> {
+    feasible_traced(b, seed).0
 }
 
 pub const DESCRIPTOR_COUNT: usize = 37;
@@ -533,6 +654,33 @@ mod tests {
         let gentle = [0.8, 0.7, 0.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.5, 0.0, 0.3, 0.5];
         assert!(feasible(&gentle, 1).is_some());
         assert!(hand_at(&[0.0, 60.0, 80.0, 0.0, 0.0])[2] < FLOOR_M + DISC_M);
+    }
+
+    #[test]
+    fn rendered_curve_check_names_the_joint_and_limit() {
+        let b = [0.8, 0.7, 0.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.5, 0.0, 0.3, 0.5];
+        let (_, mut c) = feasible(&b, 1).unwrap();
+        assert!(violations(&c).0.is_empty());
+        // 40 degrees of yaw in 0.05 s: 800 deg/s, over the 120 deg/s base limit.
+        c.tracks[0].knots[80].joints_degrees[0] += 40.0;
+        let v = violations(&c).0;
+        assert!(v.contains(&"base_yaw speed".to_string()), "{v:?}");
+        assert!(!v.iter().any(|x| x.starts_with("wrist_roll")), "{v:?}");
+    }
+
+    #[test]
+    fn move_size_follows_each_joints_own_budget() {
+        // Sudden, strong, free: every joint still stays inside its own limits at s = 1
+        // for most seeds; the wrist (2000 deg/s2) must move more than the shoulder (300).
+        let b = [0.5, 0.5, 0.5, 1.0, 1.0, 0.0, 0.0, 0.2, 0.5, 0.3, 0.0, 0.5];
+        let c = clip(&b, 11, 1.0);
+        let range: Vec<f64> = (0..5)
+            .map(|j| {
+                let v = c.tracks[0].knots.iter().map(|k| k.joints_degrees[j]);
+                v.clone().fold(f64::MIN, f64::max) - v.fold(f64::MAX, f64::min)
+            })
+            .collect();
+        assert!(range[3] > range[1], "{range:?}");
     }
 
     #[test]

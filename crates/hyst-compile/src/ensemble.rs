@@ -296,6 +296,10 @@ pub struct JointKnot {
     pub joints_degrees: Vec<f64>,
     /// Shared tangent on both adjacent quintic segments, degrees/second.
     pub velocity_degrees_per_second: Vec<f64>,
+    /// Shared acceleration on both adjacent segments, degrees/second². Empty = rest
+    /// (every older score), so the join is C2 at the stated value instead of zero.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub acceleration_degrees_per_second2: Vec<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -406,6 +410,12 @@ impl EnsembleScore {
                 if !knot.time.is_finite()
                     || knot.joints_degrees.len() != self.rig.channels.len()
                     || knot.velocity_degrees_per_second.len() != self.rig.channels.len()
+                    || !(knot.acceleration_degrees_per_second2.is_empty()
+                        || (knot.acceleration_degrees_per_second2.len() == self.rig.channels.len()
+                            && knot
+                                .acceleration_degrees_per_second2
+                                .iter()
+                                .all(|v| v.is_finite())))
                     || !knot
                         .velocity_degrees_per_second
                         .iter()
@@ -485,7 +495,7 @@ impl EnsembleScore {
     }
 }
 
-fn sample_track(knots: &[JointKnot], t: f64) -> Result<Vec<f64>, String> {
+pub(crate) fn sample_track(knots: &[JointKnot], t: f64) -> Result<Vec<f64>, String> {
     let first = knots.first().ok_or("empty agent track")?;
     if t <= first.time {
         return Ok(first.joints_degrees.clone());
@@ -520,7 +530,12 @@ fn pack_knot(k: &JointKnot, base: usize) -> Knot {
                 .copied()
                 .unwrap_or(0.0)
         }),
-        acceleration: [0.0; 3],
+        acceleration: std::array::from_fn(|j| {
+            k.acceleration_degrees_per_second2
+                .get(base + j)
+                .copied()
+                .unwrap_or(0.0)
+        }),
     }
 }
 
@@ -538,11 +553,22 @@ fn channel_bounds(a: &JointKnot, b: &JointKnot, j: usize) -> Result<crate::Segme
         phase: String::new(),
         joints: [k.joints_degrees[j], 0.0, 0.0],
         velocity: [k.velocity_degrees_per_second[j], 0.0, 0.0],
-        acceleration: [0.0; 3],
+        acceleration: [
+            k.acceleration_degrees_per_second2
+                .get(j)
+                .copied()
+                .unwrap_or(0.0),
+            0.0,
+            0.0,
+        ],
     };
     let start = single(a);
     let end = single(b);
-    if start.velocity == [0.0; 3] && end.velocity == [0.0; 3] {
+    if start.velocity == [0.0; 3]
+        && end.velocity == [0.0; 3]
+        && start.acceleration == [0.0; 3]
+        && end.acceleration == [0.0; 3]
+    {
         return segment_bounds(&start, &end).map_err(|e| e.to_string());
     }
     let dt = end.time - start.time;
@@ -553,11 +579,12 @@ fn channel_bounds(a: &JointKnot, b: &JointKnot, j: usize) -> Result<crate::Segme
     let p5 = end.joints[0];
     let v0 = start.velocity[0];
     let v1 = end.velocity[0];
+    let (a0, a1) = (start.acceleration[0], end.acceleration[0]);
     let p = [
         p0,
         p0 + v0 * dt / 5.0,
-        p0 + 2.0 * v0 * dt / 5.0,
-        p5 - 2.0 * v1 * dt / 5.0,
+        p0 + 2.0 * v0 * dt / 5.0 + a0 * dt * dt / 20.0,
+        p5 - 2.0 * v1 * dt / 5.0 + a1 * dt * dt / 20.0,
         p5 - v1 * dt / 5.0,
         p5,
     ];

@@ -19,6 +19,7 @@ fn sweep(out: PathBuf, want: usize) -> io::Result<()> {
     let mut lost = [[0u64; 10]; 12];
     let mut hist = [0u64; 8];
     let mut reasons = std::collections::BTreeMap::<String, u64>::new();
+    let mut reasons1 = std::collections::BTreeMap::<String, u64>::new();
     while clips.len() < want {
         let batch: Vec<u64> = (next..next + 64 * threads as u64).collect();
         next += batch.len() as u64;
@@ -30,14 +31,25 @@ fn sweep(out: PathBuf, want: usize) -> io::Result<()> {
                         ch.iter()
                             .map(|&i| {
                                 let (b, seed) = body::draw(i);
-                                let r = body::feasible(&b, seed)
-                                    .map(|(s, score)| (s, body::descriptors(&score)));
+                                let (f, fail1) = body::feasible_traced(&b, seed);
+                                let r = f.map(|(s, score)| {
+                                    // total joint motion per joint, degrees, at 60 fps
+                                    let fr = body::frames(&score);
+                                    let motion: Vec<f64> = (0..5)
+                                        .map(|j| {
+                                            fr.windows(2)
+                                                .map(|w| (w[1].0[j] - w[0].0[j]).abs())
+                                                .sum()
+                                        })
+                                        .collect();
+                                    (s, body::descriptors(&score), motion)
+                                });
                                 // why a rejected vector fails at the top of the ladder
                                 let why = r.is_none().then(|| {
                                     let top = body::clip(&b, seed, 1.1f64.powi(7));
-                                    body::check_2a(&top).err().unwrap_or_default()
+                                    body::violations(&top).0
                                 });
-                                (i, b, seed, r, why)
+                                (i, b, seed, r, why, fail1)
                             })
                             .collect::<Vec<_>>()
                     })
@@ -47,7 +59,7 @@ fn sweep(out: PathBuf, want: usize) -> io::Result<()> {
                 .flat_map(|h| h.join().unwrap())
                 .collect()
         });
-        for (i, b, seed, r, why) in done {
+        for (i, b, seed, r, why, fail1) in done {
             if clips.len() >= want {
                 break;
             }
@@ -60,14 +72,19 @@ fn sweep(out: PathBuf, want: usize) -> io::Result<()> {
                 }
             }
             match r {
-                Some((s, desc)) => {
+                Some((s, desc, motion)) => {
                     hist[(s.ln() / 1.1f64.ln()).round() as usize] += 1;
-                    clips.push(serde_json::json!({"b":b,"seed":seed,"s":s,"desc":desc}));
+                    clips.push(serde_json::json!({"b":b,"seed":seed,"s":s,"desc":desc,"motion":motion,"fail1":fail1}));
                 }
                 None => {
-                    let key = why.unwrap_or_default();
-                    let key = key.split_whitespace().take(2).collect::<Vec<_>>().join(" ");
-                    *reasons.entry(key).or_default() += 1;
+                    // first rule broken at the top of the ladder; and every rule at stretch 1
+                    let top = why.unwrap_or_default();
+                    *reasons
+                        .entry(top.first().cloned().unwrap_or_default())
+                        .or_default() += 1;
+                    for k in &fail1 {
+                        *reasons1.entry(k.clone()).or_default() += 1;
+                    }
                 }
             }
         }
@@ -75,7 +92,7 @@ fn sweep(out: PathBuf, want: usize) -> io::Result<()> {
     let data = serde_json::json!({
         "sampleSeed": 20261013u64, "params": body::PARAMS, "attempts": attempts,
         "passed": clips.len(), "stretchHistogram": hist, "attemptedByDecile": seen,
-        "rejectedByDecile": lost, "rejectReasonAtTopOfLadder": reasons, "clips": clips
+        "rejectedByDecile": lost, "rejectReasonAtTopOfLadder": reasons, "rejectRulesAtStretch1": reasons1, "clips": clips
     });
     fs::write(&out, serde_json::to_vec(&data)?)?;
     println!(
@@ -98,13 +115,17 @@ fn fill(sweep: PathBuf, regions: PathBuf, out: PathBuf) -> io::Result<()> {
             .map(|x| x.as_f64().unwrap())
             .collect()
     };
-    let (mu, sd) = (vec(&rg["mean"]), vec(&rg["std"]));
+    // rank-normalise a descriptor vector against the 2,000 sorted columns
+    let sorted: Vec<Vec<f64>> = rg["sorted"].as_array().unwrap().iter().map(&vec).collect();
     let r = rg["r"].as_f64().unwrap();
     let clips = sw["clips"].as_array().unwrap();
     let z = |d: &[f64]| -> Vec<f64> {
         d.iter()
             .enumerate()
-            .map(|(i, v)| (v - mu[i]) / sd[i])
+            .map(|(i, v)| {
+                let below = sorted[i].partition_point(|x| x < v);
+                (below as f64 + 0.5) / sorted[i].len() as f64
+            })
             .collect()
     };
     let centres: Vec<Vec<f64>> = rg["centres"]
