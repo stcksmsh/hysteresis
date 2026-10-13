@@ -299,3 +299,35 @@ not about which seed a clip drew.
 The factor 1.5 was proposed by the overseer and accepted by the user. A probe on
 the made clips of `1b22eee` (approximate ranks, 7 regions) gave ratios 1.23 to
 2.8, with 2 of 21 pairs under 1.5.
+
+## Addendum 5, 2026-10-13 (night): test the last region set as built
+
+Written after the run of commit `90cbec8`, **before check 2b ran on anything**.
+Still round 1. Everything not named here stands; check 2b and its pass mark
+(16 of 24) are unchanged.
+
+### Why
+
+The separation rule of addendum 4 failed with every candidate used: over 1,000
+regions built, the worst pair's ratio never exceeded 0.86. Addendum 4's estimate of
+the seed spread (0.85–1.0) was biased low: those clones had been kept only inside
+r = 0.90 of their centre. The real seed spread is a median 1.93; two random sweep
+clips are a median 2.41 apart; the variance inside a region is about 0.52 of the
+sweep's. In descriptor space the seed explains about half of what the clips show.
+The descriptors are not the judge (see Descriptors). The user chose to let their
+eye decide whether body differences show through the seed.
+
+### Regions (replace the separation factor)
+
+- The 8 regions are **exactly the final set in `r5/regions.json`** of `90cbec8`:
+  centres 1706, 1966, 529, 786, 1582, 365, 1919, 183 (in that slot order), each
+  with its 9 clips (body vector, seed, stretch) as stored. Nothing is rebuilt or
+  replaced.
+- The factor becomes **0.6**. This value was set after the result, only to name
+  the set tested; its smallest ratio is 0.618. It scores nothing: check 2b does.
+- Ranks are as addendum 4 defines them for every clip. Three lag descriptors
+  (33–35) take about 60 distinct values; the r4 centre selection broke their ties
+  arbitrarily. This is recorded, not redone.
+- Expected from the descriptors, stated before the test: a weak separation. A
+  failing check 2b points at the generator (how much the seed decides against the
+  body vector), not at the test.
