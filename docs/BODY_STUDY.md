@@ -358,3 +358,41 @@ them". Asked how to show a triplet, the user chose both views below.
   answered triplet.
 - The answers file also records per triplet: time spent, plays of the stack, and
   opens of each single clip. These are data only, never a gate or a score.
+
+## Addendum 7, 2026-10-13 (night): one clip at a time; the first answer counts
+
+Written after addendum 6 and **before any answer was given**. Still round 1. It
+replaces addendum 6's viewing in full (addendum 6 was never built). Unchanged: the
+72 clips, the 24 triplets, the shuffle, `r5/key.json`, the pass mark of 16 of 24
+(chance 1/3 per triplet, p ≈ 0.0009).
+
+### Why
+
+The user rejected the stack: three arms moving at once cannot be followed.
+Unlimited viewing before answering lets a viewer compare details that come from
+the seed (where the arm is at a given second) rather than the character of the
+motion, which an installation viewer sees once, in passing. This follows the
+sequential triangle test of sensory science. The user accepted this proposal.
+
+### Viewing (replaces addendum 6)
+
+1. **First pass.** A, B and C play one after another, each alone at 1280 x 720,
+   16 s each, with 1 s of black between them. The current letter is shown beside
+   the video, never on it. Pause is allowed; seek, rewind and replay are not.
+   No two clips ever play at the same time.
+2. **Counted answer.** After C ends, the viewer answers A, B or C. This answer is
+   the one check 2b scores. It is final.
+3. **After the counted answer.** Any single clip may be replayed, as often as
+   wanted, one at a time, with play, pause and seek. An optional second answer and
+   the optional free text ("what did the odd one look like?") are recorded as data
+   only, never scored.
+4. One triplet at a time, in the shuffled order; no going back to an answered
+   triplet.
+5. Progress is saved after every triplet and the test can resume, so it may be
+   taken in sittings (suggested: two of 12).
+6. Recorded per triplet: counted answer, second answer, free text, time to the
+   counted answer, total time, pauses during the first pass, replays per clip.
+   Data only.
+
+The single clips are the 1280 x 720 crops of the stacks (frame-identical to their
+third of the stack, no ids in names or metadata).
