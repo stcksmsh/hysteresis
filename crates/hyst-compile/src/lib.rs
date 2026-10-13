@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 pub mod body;
+pub mod body_regions;
 pub mod director;
 pub mod ensemble;
 

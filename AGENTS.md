@@ -1542,3 +1542,11 @@ per-joint floor and in-frame rules (a study-only camera in `body_study html`). 2
 2,068 clips pass. The final region check fails (within-region 0.85-1.02 against a quarter
 of 0.633), so the study stopped at ★ 1. Not verified by eye. Numbers in
 `docs/DANCE_HANDOFF.md`.
+
+### Body study, addendum 4 run — 2026-10-13
+
+`body_study regions` builds addendum 4's regions (`hyst_compile::body_regions`, 7 tests) on
+the r4 sweep. Seed spread w is 1.33-2.72 (median 1.93), not the 0.85-1.0 the addendum
+assumed. After 992 replacements the candidates ran out; the final set's smallest ratio is
+0.618 and 25 of 28 pairs are under 1.5. The study stops before ★ 2. Not verified by eye.
+Numbers in `docs/DANCE_HANDOFF.md`.

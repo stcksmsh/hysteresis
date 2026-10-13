@@ -3218,3 +3218,100 @@ Body vectors and seeds are in `sweep.json`.
 Unchanged: `three.sh` exports compared with `cmp` against `hexagon-47.html`,
 `five-years-hexagon.html` and `presence-hexagon.html`: all three are identical. Its three
 tmp files were deleted. Frozen `src/` and `tools/` were not touched. No hardware was driven.
+
+### Body study, step 1 under addendum 4: regions as one body vector (stopped at the separation rule) — 2026-10-13
+
+Rules: `docs/BODY_STUDY.md` with all four addenda (unchanged). Data in
+`/secondary/hyst-data/bodystudy/r5/` (`regions.json`, `regions.log`, `report.txt`), outside
+git. Reused, not regenerated: `r4/sweep.json` and `r4/regions.json` (sorted columns,
+candidates). Generator (`body.rs`) and check 2a untouched. **Not verified by eye.** The
+separation rule fails with the candidates exhausted, so the study stops before ★ 2: no
+triplets, no clips rendered, no answer page in the repo.
+
+Built:
+- `crates/hyst-compile/src/body_regions.rs` (new): rank against the sweep's sorted columns
+  ((values below + 0.5) / 2,000), seed spread w (mean pairwise distance of a region's 9
+  rank vectors), position m (their mean), all pairs and their ratio |m_i - m_j| / max(w_i,
+  w_j), the worst pair, farthest-point order, and `select`, the addendum-4 loop: build the 8
+  initial centres; a region short of 9 clips is replaced; while a pair has a ratio under
+  1.5, the later-chosen centre of the pair with the smallest ratio is replaced by the
+  candidate farthest from the 7 kept centres (never a centre used before); stop when the
+  rule holds or no candidate is left. On a stop the last full set of 8 is kept for the
+  report. 7 tests on small synthetic sets: the rule takes the larger spread, ranks, spread
+  and position, farthest-point order, replacement of the later-chosen centre of the worst
+  pair until the rule holds, a short region replaced, exhaustion stops.
+- `body_study regions SWEEP REGIONS OUT` (`crates/hyst-previz/examples/body_study.rs`):
+  recomputes the 8 initial centres and fails unless they equal `r4/regions.json`'s (they
+  do: 1706, 1966, 357, 1016, 1582, 365, 1434, 1017). A region = the centre sweep clip + the
+  first 8 seeds that pass check 2a (`body::feasible`, the stretch ladder, floors, frame).
+  A failing seed is counted by the first rule it breaks at stretch 1.95.
+- `scripts/body_study/report4.py REGIONS.json REGIONS.log`: the step-6 report.
+
+Constants and origin:
+- factor 1.5, 9 clips per region, 200 seeds per region, seed 20261015: addendum 4.
+- Seed order (mine): a splitmix64 stream started at 20261015 + (centre + 1) x
+  0x2545F4914F6CDD1D, 53-bit seeds as `body::draw` gives. It depends only on the centre, so
+  a region is the same whenever it is built. Seeds run in batches of the thread count; the
+  first 8 passing in seed order are kept, and "tried" counts up to the 8th pass.
+- Mean for the first centre: the mean of the 2,000 sweep rank vectors.
+
+Run (twice; the second run only added w to the log; the event lists are identical):
+- **992 replacements, candidates exhausted (all 1,000 used). Rule broken.**
+- Replacements by reason: 992 separation rule, 0 short regions (every region reached 9
+  clips). By slot: 0, 0, 26, 189, 0, 0, 666, 111.
+- Worst-pair ratio at each replacement: max 0.860, median 0.581, p90 0.704. None reached
+  1.0.
+- Seed spread w over all 1,000 regions built: min 1.327, p10 1.674, median 1.925, p90
+  2.199, max 2.721. Addendum 4 quoted 0.85-1.0 for clones of one body vector. Those were
+  the r4 fill's clips, kept only if they fell inside r = 0.90 of the centre, so that number
+  was biased low.
+- For scale: two random sweep clips are a median 2.416 apart (p10 1.856, p90 3.066; 20,000
+  random pairs). Per descriptor, the variance inside a final region is a median 0.52 of the
+  sweep's variance (min 0.13, max 1.08). The seed accounts for about half of what the
+  descriptors show.
+- Seeds over all builds: 8,252 tried, 252 skipped: joint range (`validate`) 101, hand path
+  75, base yaw motion 66, floor 3, base turn 3, hand box 2, shoulder motion 1, wrist bend
+  motion 1.
+
+Final set (the last full set of 8 before exhaustion), centres 1706, 1966, 529, 786, 1582,
+365, 1919, 183:
+- w: 2.225, 1.667, 1.553, 1.679, 1.386, 1.984, 1.944, 1.519.
+- Seeds tried (skipped): 8; 8; 8; 10 (hand path 2); 13 (base yaw motion 2, joint range 3);
+  8; 8; 8.
+- Pairs, i j |m_i - m_j| ratio, smallest ratio first: 0 6 1.376 0.618; 6 7 1.512 0.778;
+  5 6 1.607 0.810; 2 5 1.733 0.874; 2 3 1.510 0.899; 5 7 1.786 0.900; 0 7 2.011 0.904;
+  0 2 2.029 0.912; 0 5 2.045 0.919; 0 3 2.152 0.967; 1 3 1.656 0.986; 4 5 2.044 1.030;
+  1 5 2.062 1.039; 2 6 2.029 1.044; 0 4 2.376 1.068; 3 5 2.183 1.100; 2 4 1.764 1.136;
+  1 2 1.908 1.144; 3 6 2.339 1.203; 4 6 2.433 1.252; 0 1 2.856 1.284; 2 7 2.094 1.349;
+  1 4 2.302 1.381; 1 6 2.797 1.439; 4 7 2.270 1.494; 1 7 2.503 1.502; 3 4 2.550 1.518;
+  3 7 2.567 1.529.
+- **Smallest ratio 0.618. 25 of 28 pairs under 1.5.** |m_i - m_j| ranges 1.376-2.856;
+  1.5 x the largest w needs 3.337.
+- Stretches of the 72 clips (centre first per region):
+  - 0: 1.331, then 1.000 x 8;
+  - 1: 1.000 x 7, 1.100, 1.000;
+  - 2: 1.000 x 9;
+  - 3: 1.000 x 9;
+  - 4: 1.000 x 9;
+  - 5: 1.000 x 4, 1.100, 1.000 x 4;
+  - 6: 1.100, 1.000 x 4, 1.100, 1.100, 1.000 x 2;
+  - 7: 1.000 x 9.
+  Histogram 1.1^0..7: 66, 5, 0, 1, 0, 0, 0, 0.
+
+What the numbers say: a region's position is a mean of 9 clips, so positions sit nearer
+the middle of rank space than single clips do. The rule asks for about 1.5 x 1.9 = 2.9
+between positions. No pair of positions in any set reached that, and no worst pair got
+over 0.86. Changing the factor, the descriptors or the region definition is your decision;
+I did not.
+
+Drafts written for ★ 2 but not run, not tested and not committed (rule broken):
+`r5/drafts/{triplets.py,render.sh,answer.html,score.py}` (triplet assignment, shuffle with
+`random.Random(20261014)`, 72 clip recordings and A | B | C stacks at 3840 x 720, the
+answer page, the 2b scorer).
+
+Checks: `cargo test -p hyst-compile -p hyst-output -p hyst-previz -p hyst-cli` passes
+(hyst-compile 53, with the 7 new); clippy -D warnings on the same crates with
+--all-targets is clean; fmt is clean. `three.sh` exports compared with `cmp` against
+`hexagon-47.html`, `five-years-hexagon.html` and `presence-hexagon.html`: all three are
+identical; the tmp files were deleted. Frozen `src/` and `tools/` untouched. No hardware
+driven.
