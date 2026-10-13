@@ -331,3 +331,30 @@ eye decide whether body differences show through the seed.
 - Expected from the descriptors, stated before the test: a weak separation. A
   failing check 2b points at the generator (how much the seed decides against the
   body vector), not at the test.
+
+## Addendum 6, 2026-10-13 (night): how a triplet is viewed
+
+Written after commit `9337b00` and the user's first try of its answer page,
+**before any answer was given** (the user stopped before answering; no check 2b
+result exists). Still round 1. It replaces "plays once" (NEXT_BODY_THEN_MIND.md
+step 1.5) and how a triplet is shown. Unchanged: the 72 clips, the 24 triplets,
+the shuffle, `r5/key.json`, the pass mark of 16 of 24 (chance 1/3 per triplet,
+p ≈ 0.0009).
+
+### Why
+
+The user: "This sort of comparison doesnt work without seek/pause etc, there are 3
+videos running simultaneously, I cant keep up with all 3 and compare all of
+them". Asked how to show a triplet, the user chose both views below.
+
+### Viewing (replaces "plays once")
+
+- The A | B | C stack plays with one shared bar: play, pause, seek, replay.
+- Each of A, B and C has a [+] that opens that clip alone at 1280 x 720 with its
+  own play, pause, seek and replay. The single clip is cut from the stack (same
+  pixels, no ids).
+- Viewing time, replays and single-clip views are unlimited and in any order.
+- One triplet at a time, as before. An answer is final: no going back to an
+  answered triplet.
+- The answers file also records per triplet: time spent, plays of the stack, and
+  opens of each single clip. These are data only, never a gate or a score.
