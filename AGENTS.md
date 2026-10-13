@@ -1572,3 +1572,11 @@ a range server (`serve.cjs`), headless tests and the scorer (counted answer only
 13 of 24 correct, check 2b fails (pass ≥ 16; p = 0.028 for 13 or more under guessing).
 Every answer came right after the first pass; no replays or second answers. Round 2 waits
 for the user and the overseer. Numbers in `docs/DANCE_HANDOFF.md`.
+
+### Body study round 2, generator and sweep (★ 1) — 2026-10-14
+
+Addendum 8. `body.rs` rewritten: 15 body dimensions (adds size, energy, rhythm); the body
+sets pattern, pace, size and rhythm, the seed only start phase and small jitter; movement
+floors removed, stillness cap added; 8 s clips. Sweep 2,000 of 2,002 pass; mean joint speed
+p10 8.5, p90 45.6 deg/s (ratio 5.35). Three first-look clips in `r6/first/`. Not verified by
+eye. Waiting for the user and the overseer before regions.

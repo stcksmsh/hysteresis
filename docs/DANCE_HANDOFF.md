@@ -3487,3 +3487,114 @@ point at. Addendum 5 says a failing 2b points at the generator (how much the see
 against the body vector). Round 2 is not started. That decision, and its addendum, belong to
 the user and the overseer. Answers file also left where the user put it:
 `/secondary/Programming/Github/Hysteresis/answers.json` (untracked, main checkout).
+
+### Body study, round 2 under addendum 8: generator and sweep (★ 1) — 2026-10-14
+
+Rules: `docs/BODY_STUDY.md` with all eight addenda (unchanged). Data in
+`/secondary/hyst-data/bodystudy/r6/` (`sweep.json`, `sweep.log`, `report.txt`, `first.tsv`,
+`first/{calm,middle,energetic}.{html,mp4,txt}`, `first/silence.m4a`), outside git. **Not
+verified by eye.** The study waits at ★ 1: the user judges the range from the three clips.
+Nothing of round 1's clips is reused.
+
+Generator (`crates/hyst-compile/src/body.rs`, `Motion::new` rewritten; every range and its
+reason in its doc comment):
+- **15 body dimensions** (was 12): round 1's twelve plus `size`, `energy` and `rhythm`.
+- **The body decides.** Pattern: every joint alternates between two poles, one move each
+  way (base yaw ±span/2 about straight ahead, roll back and forth, shoulder and elbow about
+  centres set by height and curl_extension, wrist about the arch's centre). Pace: energy sets
+  the leader's move length. Rhythm sets how many moves elbow (1 + round(rhythm)), wrist bend
+  and roll (1 + round(2 rhythm)) make per base and shoulder move. Initiation, succession,
+  time, weight, flow, space and breath act as in round 1.
+- **The seed only varies:** the start phase (anywhere in one leader cycle of two moves),
+  ±8 % on each gap, ±10 % of the joint's travel on each target, breath's phase. Round 1's
+  random target draws, random side flips, random paces and the 15-degree minimum move are
+  gone.
+- **Floor:** a target that breaks the floor rule is lifted in steps (shoulder 8, elbow and
+  wrist 10 degrees) up to 6 times, then the joint stays for that move (round 1: 30 random
+  redraws).
+- Limits, the base's hand-speed cap, overlap, holds, overshoot and the final slow-down
+  factor are round 1's.
+
+Constants and origin:
+- `PACE_FAST` 0.7 s per leader move (energy 1): under round 1's shortest wrist move, so the
+  fast end meets the joint limits and hand rules, not a cap of its own. Geometric between.
+- `PACE_SLOW` 5.0 s (energy 0) and `SIZE_MIN` 0.06 (size 0, scale 1 at size 1, geometric):
+  the slowest and smallest point of a probe ladder (size scale / pace 0.12 / 3.2, 0.06 / 4.0,
+  0.06 / 5.0, 0.04 / 6.0, 0.03 / 8.0) at which at least 90 % of the calmest bodies (size and
+  energy ≤ 0.05, 60 draws) pass the stillness cap: 56 of 60 here, 53 at 0.04 / 6.0, 47 at
+  0.03 / 8.0. 200-clip sweeps on the same ladder gave mean joint speed p90/p10 2.28, 4.01,
+  4.53, 5.97, 7.66.
+- `AMP`, full-size travel per move: base 330 and roll 110 degrees (round 1's upper ranges),
+  shoulder 85 and elbow 125 (their whole ranges, 10..95 and -30..95), wrist bend 140 (twice
+  round 1's 70 per side). Wander (base 15, roll 30 degrees x space) is scaled by size too.
+- `TIME_JITTER` 0.08, `TARGET_JITTER` 0.1: mine, small next to pace (7.1x) and size (16.7x).
+- `BEGIN` -12 s (minus the start phase): two slowest moves plus overlap, so the clip opens
+  inside the pattern. `END` 12 s.
+- Stillness cap (addendum 8): `STILL_DEG_S` 2, `STILL_RUN_S` 2, `STILL_SHARE` 0.25. A frame
+  step is still when all five joints move under 2 deg/s.
+- Clip 8 s, stretch about 4 s (addendum 8). Sample seed 20261016.
+- Removed: the movement floors (`MIN_PATH_M`, `MIN_BOX_M`, `MIN_TURN_DEG`) and per-joint
+  floors (`MIN_JOINT_DEG`). `body_study fill` (addendum 3's region fill) was deleted.
+
+Tests (13 body tests): same inputs give the same clip; stretching keeps the centre pose and
+slows the clip; one body over 6 seeds stays within 1.35x in mean joint speed (three bodies);
+size and energy at 0 and 1 give mean joint speed calm < big-slow / 3, < small-fast / 2,
+< both-high / 4; hardware limits and `validate` hold on feasible clips from calm to sudden,
+big and fast; the rendered-curve check names the joint; a 2.5 s freeze fails "still run",
+alternating 1 s still / 1 s moving fails the share; rhythm 1 gives the wrist at least twice
+rhythm 0's moves; overshoot only on distal joints and only with free flow; the study
+camera; descriptors finite.
+
+Sweep (seed 20261016): **2,002 attempts, 2,000 passed**, 2 rejected (floor at stretch 1.95;
+one also out of frame at stretch 1). No parameter decile has more than 2 rejections; the
+full table is in `report.txt`. Stretch histogram 1.1^0..7: 1913, 79, 8, 0, 0, 0, 0, 0.
+
+Reports (addendum 8, never gates). Mean joint speed = mean over the five joints of each
+joint's mean speed on the shown 8 s, deg/s:
+- **min 2.8, p10 8.5, median 28.3, p90 45.6, max 63.7; p90/p10 5.35.** Round 1's 72 test
+  clips: 24-45.
+- Histogram: 2.8-7.9:178 7.9-13.0:217 13.0-18.0:204 18.0-23.1:212 23.1-28.2:182
+  28.2-33.2:223 33.2-38.3:249 38.3-43.4:255 43.4-48.5:160 48.5-53.5:90 53.5-58.6:27
+  58.6-63.7:3.
+- Per joint, mean speed p10 / median / p90: yaw 10.9 / 29.8 / 47.7, shoulder 3.9 / 11.1 /
+  26.2, elbow 8.1 / 24.2 / 43.7, wrist bend 8.4 / 37.3 / 64.8, roll 7.5 / 31.4 / 58.0.
+- Spearman rho of each parameter with mean joint speed: size +0.78, energy +0.46, rhythm
+  +0.21, flow +0.13, every other |rho| ≤ 0.06. Median by size decile 8.0 to 41.9; by
+  energy decile 15.3 to 37.5. Energy flattens above its 7th decile: big, fast bodies meet
+  the hand-speed rule and are slowed as a whole.
+- Share of total joint motion, median (p10, p90): yaw 0.216 (0.162, 0.342), shoulder 0.091
+  (0.058, 0.145), elbow 0.186 (0.124, 0.251), wrist bend 0.270 (0.166, 0.327), roll 0.223
+  (0.155, 0.284).
+- Still time (all joints under 2 deg/s): 145 of 2,000 clips have any still frame; longest
+  run max 1.05 s; share median 0, p90 0, max 0.242.
+- Hand path p10 / median / p90 1.09 / 2.97 / 4.50 m; box 0.26 / 0.66 / 1.06 m; base turn
+  28 / 90 / 228 degrees.
+- Seed against body (probe, not a rule): 100 sweep bodies, 6 seeds each. Coefficient of
+  variation of mean joint speed within one body: median 0.046, p90 0.083; max/min over the
+  6 seeds median 1.14, p90 1.30, max 2.01. Ranks and regions are not built yet.
+
+First-look clips (8 s, silent, study camera, `record-ensemble.cjs`, 1280 x 720, not test
+clips): the sweep clip nearest the 5th, 50th and 95th percentile of mean joint speed.
+Per joint in the order yaw / shoulder / elbow / wrist bend / roll, mean speed deg/s.
+- calm, sweep clip 1982 (size 0.14, energy 0.15, stretch 1.0): mean joint speed 6.2;
+  per joint 7.7 / 4.2 / 6.9 / 6.6 / 5.8. Hand path 0.99 m, box 0.25 m, base turn 29
+  degrees, top hand speed 0.18 m/s. All joints still: 0 s. Frame margin 218 px.
+- middle, clip 561 (size 0.59, energy 0.11, stretch 1.0): 28.3; per joint 24.9 / 8.8 /
+  24.7 / 42.5 / 40.7. Hand path 2.82 m, box 0.76 m, base turn 95 degrees, top hand speed
+  0.67 m/s. Still 0 s. Frame margin 86 px.
+- energetic, clip 1466 (size 0.76, energy 0.76, stretch 1.0): 49.3; per joint 45.1 / 38.5
+  / 28.1 / 72.9 / 61.6. Hand path 3.48 m, box 0.77 m, base turn 168 degrees, top hand
+  speed 0.70 m/s. Still 0 s. Frame margin 46 px.
+Body vectors and seeds: `r6/first.tsv`; per-clip printout in `first/*.txt`.
+
+Report script: `scripts/body_study/report6.py SWEEP.json`.
+
+Not done (after the go-ahead): ranks with half-ties, regions of 12 with the gate, practice
+and scored triplets, the page with capped replays and practice feedback, scorer, HOWTO,
+page tests.
+
+Checks: `cargo test -p hyst-compile -p hyst-output -p hyst-previz -p hyst-cli` passes
+(hyst-compile 54); clippy -D warnings on the same crates with --all-targets is clean; fmt is
+clean. `three.sh` exports compared with `cmp` against `hexagon-47.html`,
+`five-years-hexagon.html` and `presence-hexagon.html`: all three identical; tmp files
+deleted. Frozen `src/` and `tools/` untouched. No hardware driven.

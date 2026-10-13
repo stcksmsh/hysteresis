@@ -1,4 +1,4 @@
-//! Body study generator (`docs/BODY_STUDY.md`): one arm, silent, 16 s, moving in
+//! Body study generator (`docs/BODY_STUDY.md`): one arm, silent, 8 s, moving in
 //! joint space from a body vector. No music, no mind. Rules for check 2a live
 //! here so they are in code before any result they score.
 
@@ -8,7 +8,8 @@ use crate::ensemble::{
     Rig,
 };
 
-pub const PARAMS: [&str; 12] = [
+/// Round 2 (addendum 8) adds size, energy and rhythm: 15 dimensions.
+pub const PARAMS: [&str; 15] = [
     "curl_extension",
     "height",
     "arch",
@@ -21,11 +22,14 @@ pub const PARAMS: [&str; 12] = [
     "initiation",
     "breath_depth",
     "breath_rate",
+    "size",
+    "energy",
+    "rhythm",
 ];
 /// Every value 0..1. Order as in `PARAMS`.
-pub type Body = [f64; 12];
+pub type Body = [f64; 15];
 
-pub const CLIP_SECONDS: f64 = 16.0;
+pub const CLIP_SECONDS: f64 = 8.0;
 const KNOT_DT: f64 = 0.05;
 pub const FPS: f64 = 60.0;
 /// Stretch ladder: 1.1^0 .. 1.1^7 (= 1.95).
@@ -48,14 +52,12 @@ pub const HAND_MPS: f64 = 1.2;
 pub const JOLT_MPS2: f64 = 9.0;
 pub const FLOOR_M: f64 = 0.05;
 pub const DISC_M: f64 = 0.06;
-/// Minimum movement over the clip (addendum 2): the 10th percentile of version 47's
-/// 16 s windows on arm 0 over the three songs.
-pub const MIN_PATH_M: f64 = 3.67;
-pub const MIN_BOX_M: f64 = 0.74;
-pub const MIN_TURN_DEG: f64 = 161.0;
-/// Per-joint motion floors (addendum 3): total |change| per 16 s, degrees, at the
-/// 10th percentile of version 47's 16 s windows on arm 0, in `JOINTS` order.
-pub const MIN_JOINT_DEG: [f64; 5] = [386.0, 148.0, 299.0, 454.0, 370.0];
+/// Stillness cap (addendum 8): a frame is still when every joint moves under
+/// `STILL_DEG_S`; a clip fails with a still run over `STILL_RUN_S` or still frames
+/// over `STILL_SHARE` of the clip (60 fps).
+pub const STILL_DEG_S: f64 = 2.0;
+pub const STILL_RUN_S: f64 = 2.0;
+pub const STILL_SHARE: f64 = 0.25;
 /// The study camera (addendum 3, in frame): the preview's solo camera (yaw -0.6,
 /// pitch 0.35, focal 1800 px, 1280 x 720 canvas, centre at x 640, y 315) moved back
 /// from 2.1 m to 3.05 m and aimed at z 0.35 m instead of 0.3 m, the smallest
@@ -133,6 +135,22 @@ pub fn longest_still(fr: &[([f64; 5], Vec<[f64; 3]>)]) -> [f64; 5] {
     })
 }
 
+/// Frames where every joint moves under `STILL_DEG_S` (60 fps): the longest such
+/// run, seconds, and their share of all frame steps.
+pub fn stillness(fr: &[([f64; 5], Vec<[f64; 3]>)]) -> (f64, f64) {
+    let (mut run, mut best, mut total) = (0usize, 0usize, 0usize);
+    for w in fr.windows(2) {
+        if (0..5).all(|j| (w[1].0[j] - w[0].0[j]).abs() * FPS < STILL_DEG_S) {
+            run += 1;
+            total += 1;
+            best = best.max(run);
+        } else {
+            run = 0;
+        }
+    }
+    (best as f64 / FPS, total as f64 / (fr.len() - 1) as f64)
+}
+
 /// Straight reach from the shoulder to the hand point: 0.28 + 0.22 + 0.08 + 0.11.
 const REACH_M: f64 = 0.69;
 
@@ -153,19 +171,12 @@ impl Rng {
         z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
         ((z ^ (z >> 31)) >> 11) as f64 / (1u64 << 53) as f64
     }
-    fn sign(&mut self) -> f64 {
-        if self.next() < 0.5 {
-            -1.0
-        } else {
-            1.0
-        }
-    }
 }
 
-/// Attempt `index` of the sampling stream (fixed seed 20261013): a uniform body
+/// Attempt `index` of the sampling stream (fixed seed 20261016): a uniform body
 /// vector and its content seed.
 pub fn draw(index: u64) -> (Body, u64) {
-    let mut rng = Rng(20_261_013u64.wrapping_add(index.wrapping_mul(0x2545_F491_4F6C_DD1D)));
+    let mut rng = Rng(20_261_016u64.wrapping_add(index.wrapping_mul(0x2545_F491_4F6C_DD1D)));
     let b = std::array::from_fn(|_| rng.next());
     (b, (rng.next() * (1u64 << 53) as f64) as u64)
 }
@@ -220,14 +231,32 @@ fn floor_margin(rig: &Rig, q: &[f64; 5]) -> f64 {
 }
 
 const HEAVY: [bool; 5] = [true, true, false, false, false];
-/// Each joint's own pace: the range its move lengths are drawn from, seconds.
-/// Base and shoulder carry the arm and take long moves; the elbow, wrist bend and
-/// roll carry little and take short, frequent ones.
-const PACE: [(f64, f64); 5] = [(1.8, 3.0), (1.5, 2.6), (0.8, 1.3), (0.6, 1.1), (0.7, 1.3)];
-/// Moves are generated from this time (so the clip opens mid-motion) to `END`.
-const BEGIN: f64 = -3.0;
-const END: f64 = 24.0;
-
+/// Seconds per leader move at energy 0 and 1 (geometric between). 0.7 s is under
+/// round 1's shortest wrist move, so the fast end meets the joint limits and the
+/// hand rules rather than a cap of its own. The slow end 5.0 s and `SIZE_MIN` 0.06
+/// are the slowest and smallest of a probe ladder (size scale / pace: 0.12 / 3.2,
+/// 0.06 / 4.0, 0.06 / 5.0, 0.04 / 6.0, 0.03 / 8.0) at which at least 90 % of the
+/// calmest bodies (size and energy ≤ 0.05, 60 draws) pass the stillness cap:
+/// 56 of 60 here, 53 at 0.04 / 6.0, 47 at 0.03 / 8.0.
+const PACE_SLOW: f64 = 5.0;
+const PACE_FAST: f64 = 0.7;
+/// Size scale at size 0 (at 1 it is 1, geometric between); see `PACE_SLOW`.
+const SIZE_MIN: f64 = 0.06;
+/// Full-size travel per move, degrees: base span between its two sides, shoulder
+/// elevation, elbow bend, wrist bend about its centre, roll turn. The base 330 and
+/// roll 110 are the old upper ranges; shoulder 85 and elbow 125 are their whole
+/// allowed ranges (10..95 and -30..95); the wrist 140 is twice the old 70 per side.
+const AMP: [f64; 5] = [330.0, 85.0, 125.0, 140.0, 110.0];
+/// Seed variation: each gap ±8 %, each target ±10 % of its joint's travel, and the
+/// start phase anywhere in one leader cycle (two moves). Small next to the body's
+/// own ranges (pace 7.1x, size 16.7x).
+const TIME_JITTER: f64 = 0.08;
+const TARGET_JITTER: f64 = 0.1;
+/// Moves are generated from `BEGIN` minus the start phase (so every joint is in its
+/// pattern, not in its first move from the start pose, when the clip opens: two
+/// slowest moves, 5 s each, plus their overlap) to `END` (past the 8 s clip).
+const BEGIN: f64 = -12.0;
+const END: f64 = 12.0;
 /// One move of one joint.
 struct Move {
     start: f64,
@@ -288,62 +317,63 @@ impl Motion {
         [self.breath[0] * s, self.breath[1] * s]
     }
 
-    /// Ranges and why (`docs/BODY_STUDY.md` addendum 3: every joint dances).
-    /// - Pace: each joint has its own move lengths (`PACE`): base 1.8..3.0 s,
-    ///   shoulder 1.5..2.6, elbow 0.8..1.3, wrist bend 0.6..1.1, roll 0.7..1.3.
-    ///   No duration is shared across joints. A move that its joint's limits make
-    ///   longer than its gap takes the following gaps too, so it reaches its target.
+    /// Ranges and why (`docs/BODY_STUDY.md` addendum 8: the body decides, the seed
+    /// only varies). Every choice below is a function of the body vector; the seed
+    /// draws only the start phase, ±`TIME_JITTER` on each gap, ±`TARGET_JITTER` on
+    /// each target, and breath's phase.
+    /// - Energy: the leader's move length, `PACE_SLOW` 5.0 s (energy 0) to
+    ///   `PACE_FAST` 0.7 s (energy 1), geometric. At the fast end the joint limits
+    ///   and the hand rules set the pace (each move lasts at least what its joint's
+    ///   limits need; then the whole motion is slowed by one factor, below).
+    /// - Size: every joint's travel per move is `AMP` (base 330, shoulder 85, elbow
+    ///   125, wrist bend 140, roll 110 degrees) times a scale from `SIZE_MIN` 0.06
+    ///   (size 0) to 1 (size 1), geometric. Base and roll scale their wander too.
+    /// - Rhythm: base and shoulder move once per pace; the elbow 1 + round(rhythm)
+    ///   times, wrist bend and roll 1 + round(2 rhythm) times. Rhythm 0 moves every
+    ///   joint together; rhythm 1 has the wrist and roll three moves to the base's
+    ///   one.
+    /// - Pattern: every joint alternates between two poles, one move each way. Base
+    ///   yaw swings between ±span/2 about straight ahead; the roll turns back and
+    ///   forth. The shoulder's poles sit about a centre set by height inside 10 +
+    ///   breath .. 95 degrees of elevation, the elbow's about a centre set by
+    ///   curl_extension inside -30 (bent up) .. its floor cap, the wrist's about the
+    ///   arch's centre ((2 arch - 1) x (0.45 elbow + 10)), as in round 1.
     /// - Initiation and succession: the leading joint (base, shoulder, elbow or
-    ///   wrist bend) runs its own stream of moves. Every other joint starts a move
-    ///   at one of the leader's move starts plus its delay (0.12 s, plus 0..0.3 s
-    ///   along the chain, base to tip below 0.5): it picks the leader's starts
-    ///   nearest its own pace and, if it is faster, splits the gap into its own
-    ///   shorter moves (lengths 0.75..1.25 of an equal split).
+    ///   wrist bend) sets the move starts. Each other joint starts at the leader's
+    ///   starts plus its delay (0.12 s, plus 0..0.3 s along the chain, base to tip
+    ///   below succession_direction 0.5), dividing each leader gap into equal parts
+    ///   if it is faster or taking every n-th start if slower.
     /// - No dead stops: each move lasts its gap times 1 + overlap (0.3 sustained ..
-    ///   0.12 sudden), so the next move of the same joint starts before it ends and
-    ///   the two add up. Only base and shoulder hold, and only when sudden: their
-    ///   moves last the gap times 1.3 .. 0.8, the lighter joints keep moving
-    ///   through it, and breath never stops.
-    /// - Time: the accelerating ramp is 50 % (sustained, a bell with the
-    ///   decelerating one) to 12 % (sudden, a sharp start) of every move.
+    ///   0.12 sudden), so moves of one joint overlap. Only base and shoulder hold,
+    ///   and only when sudden: their moves last the gap times 1.3 .. 0.8.
+    /// - Time: the accelerating ramp is 50 % (sustained, a bell) to 12 % (sudden,
+    ///   a sharp start) of every move.
     /// - Weight: how much of the rest decelerates. Base and shoulder 100 % (light,
-    ///   floats in) to 35 % (strong, cruise then a firm arrival); elbow, wrist and
-    ///   roll 100 % to 75 %, so they keep settling when the heavy joints arrive.
+    ///   floats in) to 35 % (strong, firm arrival); elbow, wrist and roll 100 % to
+    ///   75 %.
     /// - Flow: elbow, wrist bend and roll pass their target by 25 % x flow of their
-    ///   move and settle back once over 0.4 x sqrt(flow) of its duration. Base and
-    ///   shoulder never overshoot.
-    /// - Travel and shape: base yaw alternates sides of a span of 240..330 degrees
-    ///   (each target in the outer 25 % of its side, so two targets are at least 180
-    ///   degrees apart). Shoulder elevation alternates between the lowest and
-    ///   highest 35 % of 10 + breath .. 95 degrees, elbow bend between the most
-    ///   curled and most straight 35 % of -30 (bent up) .. 95 degrees, wrist
-    ///   bend alternates sides by 20..70 degrees about the arch's centre
-    ///   ((2 arch - 1) x (0.45 elbow + 10)). Elbow and wrist never bend down so far that their
-    ///   link's end comes under the floor plus the disc radius (+5 mm) over the move.
-    ///   height and curl_extension set 0.25 of the shoulder and elbow draws, so they
-    ///   bias where the targets fall, never whether they move. Sizes were set so the
-    ///   joints' shares of motion come near version 47's.
-    /// - Space: the roll turns 30..110 x 0.6..1 degrees per move; yaw bows up to 15
-    ///   degrees and roll 30 on the way.
+    ///   move and settle back once over 0.4 x sqrt(flow) of its duration.
+    /// - Space: base yaw bows up to 15 and roll 30 degrees (times the size scale)
+    ///   on the way, alternating sides.
     /// - Breath: shoulder up to 8 degrees, elbow 12, period 3.3..12 s.
-    /// - Floor: shoulder, elbow and wrist targets are drawn again (up to 30 times)
-    ///   if, anywhere along the move with breath at either extreme, a point placed
-    ///   by the joints drawn so far is under the floor, or the last of them under
-    ///   the floor plus the disc radius (the wrist: the whole floor rule). A draw
-    ///   under 15 degrees from where the joint is counts as failed. After 30 the
-    ///   joint lifts 25 degrees (shoulder 15) if that passes, else stays for that
-    ///   move.
+    /// - Floor: a shoulder, elbow or wrist target that puts a point placed by the
+    ///   joints drawn so far under the floor (the last of them under the floor plus
+    ///   the disc radius; the wrist: the whole floor rule) anywhere along the move,
+    ///   breath at either extreme, is lifted in steps (shoulder 8, elbow and wrist
+    ///   10 degrees) up to 6 times; if that fails the joint stays for that move.
+    ///   Elbow and wrist bends are capped so their link's end stays 5 mm over the
+    ///   floor plus the disc radius.
     /// - Limits: each move lasts at least what its joint's own `LIMITS` need (roll
     ///   speed capped at the rig's 240 deg/s envelope; breath's peak taken off
     ///   shoulder and elbow). Elbow, wrist bend and roll moves are sized against 0.6
-    ///   of their speed limit, because overlapping moves (a settle and the next
-    ///   move) add up. The base is drawn last of the four and its speed is capped
-    ///   so that the hand's largest horizontal radius over the move turns at most
-    ///   0.75 of the hand speed rule. Then the whole motion (not breath) is slowed by one
-    ///   factor, if needed, so that the summed moves keep every joint under 0.98 of
-    ///   its limits and the hand under 0.95 of its speed and jolt rules over the clip.
+    ///   of their speed limit, because overlapping moves add up. The base's speed is
+    ///   capped so the hand's largest horizontal radius over the move turns at most
+    ///   0.75 of the hand speed rule. Then the whole motion (not breath) is slowed
+    ///   by one factor, if needed, to keep every joint under 0.98 of its limits and
+    ///   the hand under 0.95 of its speed and jolt rules over the clip.
     fn new(b: &Body, seed: u64) -> Self {
-        let [ext, height, arch, time, weight, flow, space, dir, delay, init, bdepth, brate] = *b;
+        let [ext, height, arch, time, weight, flow, space, dir, delay, init, bdepth, brate, size, energy, rhythm] =
+            *b;
         let mut rng = Rng(seed ^ 0xA5A5_5A5A_1234_5678);
         let rig = study_rig();
         let lead = ((init * 4.0) as usize).min(3);
@@ -373,6 +403,15 @@ impl Motion {
         }
         let overlap = lerp(0.3, 0.12, time);
         let settle = 0.4 * flow.sqrt();
+        let pace = PACE_SLOW * (PACE_FAST / PACE_SLOW).powf(energy);
+        let scale = SIZE_MIN.powf(1.0 - size);
+        let per: [f64; 5] = [
+            1.0,
+            1.0,
+            1.0 + rhythm.round(),
+            1.0 + (2.0 * rhythm).round(),
+            1.0 + (2.0 * rhythm).round(),
+        ];
         let mut motion = Self {
             // Start pose, held before the first moves: mid height, elbow half bent.
             p0: [0.0, -lerp(10.0 + breath[0], 95.0, 0.5), 50.0, 0.0, 0.0],
@@ -385,41 +424,37 @@ impl Motion {
         };
 
         // Move starts per joint: the leader's own, then each follower's.
+        let jitter = |rng: &mut Rng, x: f64, k: f64| x * (1.0 + k * (2.0 * rng.next() - 1.0));
         let mut starts: [Vec<f64>; 5] = Default::default();
-        let (lo, hi) = PACE[lead];
-        let mut t = BEGIN;
+        let lead_gap = pace / per[lead];
+        let mut t = BEGIN - 2.0 * lead_gap * rng.next();
         while t < END {
             starts[lead].push(t);
-            t += lerp(lo, hi, rng.next());
+            t += jitter(&mut rng, lead_gap, TIME_JITTER);
         }
         starts[lead].push(t);
         for j in (0..5).filter(|&j| j != lead) {
             let forced: Vec<f64> = starts[lead].iter().map(|s| s + d[j]).collect();
-            let (lo, hi) = PACE[j];
-            let mut cur = forced[0];
-            let mut out = vec![cur];
-            while cur < END {
-                let want = cur + lerp(lo, hi, rng.next());
-                let Some(next) = forced
-                    .iter()
-                    .copied()
-                    .filter(|&f| f > cur + 0.5 * lo)
-                    .min_by(|a, b| (a - want).abs().total_cmp(&(b - want).abs()))
-                else {
-                    break;
-                };
-                let n = ((next - cur) / (0.5 * (lo + hi))).round().max(1.0) as usize;
-                let w: Vec<f64> = (0..n).map(|_| lerp(0.75, 1.25, rng.next())).collect();
-                let sum: f64 = w.iter().sum();
-                let mut acc = cur;
-                for wi in &w[..n - 1] {
-                    acc += (next - cur) * wi / sum;
-                    out.push(acc);
+            let ratio = per[j] / per[lead];
+            starts[j] = if ratio >= 1.0 {
+                let k = ratio.round() as usize;
+                let mut out = Vec::new();
+                for w in forced.windows(2) {
+                    out.push(w[0]);
+                    for i in 1..k {
+                        let x = jitter(&mut rng, i as f64, TIME_JITTER / i as f64) / k as f64;
+                        out.push(lerp(w[0], w[1], x));
+                    }
                 }
-                out.push(next);
-                cur = next;
-            }
-            starts[j] = out;
+                out.push(*forced.last().unwrap());
+                out
+            } else {
+                forced
+                    .iter()
+                    .step_by((1.0 / ratio).round() as usize)
+                    .copied()
+                    .collect()
+            };
         }
 
         // Targets, joint by joint so each floor check sees the joints drawn so far.
@@ -448,12 +483,11 @@ impl Motion {
                 })
             })
         };
-        let span = lerp(240.0, 330.0, rng.next());
+        let amp: [f64; 5] = std::array::from_fn(|j| AMP[j] * scale);
         let e1_lo = 10.0 + breath[0];
         let peaks: [(f64, f64); 5] = std::array::from_fn(|j| profile_peaks(ramps[j].0, ramps[j].1));
         // Base after the bends: its speed cap needs the hand's radius.
         for j in [1, 2, 3, 0, 4] {
-            let flip = rng.sign();
             let st = std::mem::take(&mut starts[j]);
             let mult = if HEAVY[j] {
                 lerp(1.0 + overlap, 0.8, time)
@@ -464,7 +498,7 @@ impl Motion {
             while i + 1 < st.len() {
                 let t0 = st[i];
                 let mut next;
-                let alt = if k % 2 == 0 { flip } else { -flip };
+                let alt = if k % 2 == 0 { 1.0 } else { -1.0 };
                 k += 1;
                 let cur = motion.joint(j, t0 + 50.0);
                 let gap_dur = (st[i + 1] - t0) * mult;
@@ -499,45 +533,44 @@ impl Motion {
                     3 => high(&motion, 3).clamp(-110.0, 110.0),
                     _ => f64::MAX,
                 };
-                let draw = |rng: &mut Rng, m: &Motion| -> f64 {
-                    let band = 0.35 * rng.next() + if alt > 0.0 { 0.65 } else { 0.0 };
-                    match j {
-                        0 => alt * (span / 2.0 - 0.25 * span / 2.0 * rng.next()),
-                        1 => -lerp(e1_lo, 95.0, 0.75 * band + 0.25 * height),
-                        2 => lerp(cap, -30.0, 0.75 * band + 0.25 * ext),
-                        3 => {
-                            let q2 = m.joint(2, t0 + gap_dur);
-                            let c = (2.0 * arch - 1.0) * (0.45 * q2 + 10.0);
-                            (c + alt * lerp(20.0, 70.0, rng.next())).clamp(-110.0, cap)
-                        }
-                        _ => {
-                            cur + rng.sign() * lerp(30.0, 110.0, rng.next()) * lerp(0.6, 1.0, space)
-                        }
+                let jit = TARGET_JITTER * amp[j] * (2.0 * rng.next() - 1.0);
+                let half = amp[j] / 2.0;
+                let planned = match j {
+                    0 => alt * half + jit,
+                    1 => {
+                        let (lo, hi) = (e1_lo, 95.0);
+                        let h = half.min((hi - lo) / 2.0);
+                        -(lerp(lo + h, hi - h, height) + alt * h + jit).clamp(lo, hi)
                     }
+                    2 => {
+                        let (lo, hi) = (-30.0, cap);
+                        let h = half.min((hi - lo) / 2.0);
+                        (lerp(hi - h, lo + h, ext) + alt * h + jit).clamp(lo, hi)
+                    }
+                    3 => {
+                        let q2 = motion.joint(2, t0 + gap_dur);
+                        let c = (2.0 * arch - 1.0) * (0.45 * q2 + 10.0);
+                        (c + alt * half + jit).clamp(-110.0, cap)
+                    }
+                    _ => cur + alt * (2.0 * half) + jit,
                 };
                 let wander = match j {
-                    0 => rng.sign() * 15.0 * space,
-                    4 => rng.sign() * 30.0 * space,
+                    0 => alt * 15.0 * space * scale,
+                    4 => alt * 30.0 * space * scale,
                     _ => 0.0,
                 };
                 let mut tries = 0;
                 loop {
-                    // 30 draws, then a 25 degree lift (shoulder 15), then no move.
-                    let target = match tries {
-                        0..30 => draw(&mut rng, &motion),
-                        30 => match j {
-                            1 => (cur - 15.0).max(-95.0),
-                            2 => (cur - 25.0).max(-30.0),
-                            3 => (cur - 25.0).max(-110.0),
-                            _ => cur,
-                        },
+                    // The planned target, then lifted in 6 steps, then no move.
+                    let target = match (j, tries) {
+                        (_, 0) => planned,
+                        (1, 1..=6) => (planned - 8.0 * tries as f64).max(-95.0),
+                        (2, 1..=6) => (planned - 10.0 * tries as f64).max(-30.0),
+                        (3, 1..=6) => (planned - 10.0 * tries as f64).max(-110.0),
                         _ => cur,
                     };
                     tries += 1;
                     let delta = target - cur;
-                    if (1..4).contains(&j) && tries <= 30 && delta.abs() < 15.0 {
-                        continue;
-                    }
                     let over = match j {
                         2 => {
                             (target + 0.25 * flow * delta)
@@ -597,7 +630,7 @@ impl Motion {
                         over,
                         wander,
                     });
-                    if j == 0 || j == 4 || tries > 31 {
+                    if j == 0 || j == 4 || tries > 7 {
                         break;
                     }
                     if clear(&motion, j, t0, t0 + dur * (1.0 + settle)) {
@@ -671,11 +704,11 @@ impl Motion {
     }
 }
 
-/// The 16 s clip for body `b`, content `seed` and stretch `s`: clip time t shows
-/// motion time 8 + (t - 8)/s, so s > 1 shows the middle 16/s seconds, slower.
+/// The 8 s clip for body `b`, content `seed` and stretch `s`: clip time t shows
+/// motion time 4 + (t - 4)/s, so s > 1 shows the middle 8/s seconds, slower.
 pub fn clip(b: &Body, seed: u64, s: f64) -> EnsembleScore {
     let motion = Motion::new(b, seed);
-    let motion_time = |t: f64| 8.0 + (t - 8.0) / s;
+    let motion_time = |t: f64| 4.0 + (t - 4.0) / s;
     let n = (CLIP_SECONDS / KNOT_DT).round() as usize;
     let knots = (0..=n)
         .map(|i| {
@@ -744,6 +777,8 @@ pub struct Check2a {
     pub movement: [f64; 3],
     /// Total motion per joint, degrees.
     pub joint_motion: [f64; 5],
+    /// Longest still run (s) and still share of the clip (`stillness`).
+    pub still: (f64, f64),
     /// Smallest distance to the frame edge, pixels.
     pub frame_margin_px: f64,
 }
@@ -774,8 +809,7 @@ pub fn movement(fr: &[([f64; 5], Vec<[f64; 3]>)]) -> [f64; 3] {
 /// Every check 2a rule the score breaks, each named (empty = feasible). Joint speed
 /// and acceleration are measured on the rendered curve at 1 kHz (acceleration by
 /// second difference); `validate` (the rig's own envelope) must also pass; hand
-/// speed, jolt, floor, the minimum movement, the per-joint motion floors and the
-/// frame at 60 fps.
+/// speed, jolt, floor, the stillness cap and the frame at 60 fps.
 pub fn violations(score: &EnsembleScore) -> (Vec<String>, Check2a) {
     let mut out = Vec::new();
     if let Err(e) = score.validate() {
@@ -834,20 +868,13 @@ pub fn violations(score: &EnsembleScore) -> (Vec<String>, Check2a) {
         out.push("floor".into());
     }
     let mv = movement(&fr);
-    for (k, (v, min)) in mv
-        .iter()
-        .zip([MIN_PATH_M, MIN_BOX_M, MIN_TURN_DEG])
-        .enumerate()
-    {
-        if *v < min {
-            out.push(["hand path", "hand box", "base turn"][k].into());
-        }
-    }
     let jm = joint_motion(&fr);
-    for j in 0..5 {
-        if jm[j] < MIN_JOINT_DEG[j] {
-            out.push(format!("{} motion", JOINTS[j]));
-        }
+    let still = stillness(&fr);
+    if still.0 > STILL_RUN_S {
+        out.push("still run".into());
+    }
+    if still.1 > STILL_SHARE {
+        out.push("still share".into());
     }
     let margin = fr
         .iter()
@@ -864,6 +891,7 @@ pub fn violations(score: &EnsembleScore) -> (Vec<String>, Check2a) {
             min_floor_margin_m: floor,
             movement: mv,
             joint_motion: jm,
+            still,
             frame_margin_px: margin,
         },
     )
@@ -937,7 +965,7 @@ fn best_lag(a: &[f64], b: &[f64]) -> f64 {
     best as f64 / FPS
 }
 
-/// 37 motion descriptors of the final 8 s at 60 fps (`docs/BODY_STUDY.md`):
+/// 37 motion descriptors of the shown 8 s at 60 fps (`docs/BODY_STUDY.md`):
 /// per channel speed, acceleration and jerk (mean, p90) = 30; posture height,
 /// extension, curl = 3; lag base>shoulder, shoulder>elbow, elbow>wrist = 3;
 /// hand-speed periodicity = 1.
@@ -1025,49 +1053,122 @@ pub fn hand_at(joints: &[f64; 5]) -> [f64; 3] {
 mod tests {
     use super::*;
 
+    const MID: Body = [0.5; 15];
+
+    fn with(pairs: &[(usize, f64)]) -> Body {
+        let mut b = MID;
+        for &(k, v) in pairs {
+            b[k] = v;
+        }
+        b
+    }
+
+    /// Mean over the five joints of each joint's mean speed, deg/s, on the clip.
+    fn mean_speed(c: &EnsembleScore) -> f64 {
+        let d = descriptors(c);
+        (0..5).map(|j| d[6 * j]).sum::<f64>() / 5.0
+    }
+
     #[test]
-    fn same_inputs_same_clip_and_validates() {
-        let b = [0.5; 12];
-        let (a, c) = (clip(&b, 7, 1.0), clip(&b, 7, 1.0));
+    fn same_inputs_same_clip() {
+        let (a, c) = (clip(&MID, 7, 1.0), clip(&MID, 7, 1.0));
         assert_eq!(a, c);
-        assert_ne!(a, clip(&b, 8, 1.0));
-        assert_eq!(a.tracks[0].knots.len(), 321);
+        assert_ne!(a, clip(&MID, 8, 1.0));
+        assert_eq!(a.tracks[0].knots.len(), 161);
     }
 
     #[test]
     fn stretching_slows_motion_and_keeps_the_phrase_centre() {
-        let b = [0.5, 0.6, 0.5, 0.5, 0.5, 0.5, 0.5, 0.2, 0.5, 0.3, 0.5, 0.5];
-        let (one, two) = (clip(&b, 3, 1.0), clip(&b, 3, 2.0));
-        // Centre of the clip is the same pose.
-        let mid = |s: &EnsembleScore| s.tracks[0].knots[160].joints_degrees.clone();
+        let (one, two) = (clip(&MID, 3, 1.0), clip(&MID, 3, 2.0));
+        let mid = |s: &EnsembleScore| s.tracks[0].knots[80].joints_degrees.clone();
         assert_eq!(mid(&one), mid(&two));
-        let peak = |s: &EnsembleScore| {
-            s.tracks[0]
-                .knots
-                .iter()
-                .flat_map(|k| k.velocity_degrees_per_second.iter().map(|v| v.abs()))
-                .fold(0.0, f64::max)
-        };
-        assert!(peak(&two) < peak(&one) * 0.75);
+        assert!(mean_speed(&two) < mean_speed(&one) * 0.75);
     }
 
     #[test]
-    fn a_gentle_body_passes_2a_and_a_floor_dive_does_not() {
-        let gentle = [0.8, 0.7, 0.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.5, 0.0, 0.3, 0.5];
-        assert!(feasible(&gentle, 1).is_some());
-        assert!(hand_at(&[0.0, 60.0, 80.0, 0.0, 0.0])[2] < FLOOR_M + DISC_M);
+    fn same_body_different_seeds_stays_close() {
+        for b in [
+            MID,
+            with(&[(12, 0.2), (13, 0.2)]),
+            with(&[(12, 0.8), (13, 0.8)]),
+        ] {
+            let v: Vec<f64> = (1..=6).map(|s| mean_speed(&clip(&b, s, 1.0))).collect();
+            let (lo, hi) = (
+                v.iter().copied().fold(f64::MAX, f64::min),
+                v.iter().copied().fold(0.0, f64::max),
+            );
+            assert!(hi / lo < 1.35, "{v:?}");
+        }
+    }
+
+    #[test]
+    fn size_and_energy_set_mean_joint_speed() {
+        let speed = |size, energy| mean_speed(&clip(&with(&[(12, size), (13, energy)]), 4, 1.0));
+        let (calm, big_slow, small_fast, wild) = (
+            speed(0.0, 0.0),
+            speed(1.0, 0.0),
+            speed(0.0, 1.0),
+            speed(1.0, 1.0),
+        );
+        assert!(big_slow > 3.0 * calm, "{calm} {big_slow}");
+        assert!(small_fast > 2.0 * calm, "{calm} {small_fast}");
+        assert!(wild > 4.0 * calm, "{calm} {wild}");
+    }
+
+    #[test]
+    fn hardware_limits_hold_on_feasible_clips() {
+        for b in [
+            MID,
+            with(&[(12, 1.0), (13, 1.0), (3, 1.0)]),
+            with(&[(12, 0.0), (13, 0.0)]),
+        ] {
+            let (_, c) = feasible(&b, 2).expect("feasible");
+            assert!(violations(&c).0.is_empty());
+            c.validate().unwrap();
+        }
     }
 
     #[test]
     fn rendered_curve_check_names_the_joint_and_limit() {
-        let b = [0.8, 0.7, 0.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.5, 0.0, 0.3, 0.5];
-        let (_, mut c) = feasible(&b, 1).unwrap();
-        assert!(violations(&c).0.is_empty());
+        let (_, mut c) = feasible(&MID, 1).unwrap();
         // 40 degrees of yaw in 0.05 s: 800 deg/s, over the 120 deg/s base limit.
         c.tracks[0].knots[80].joints_degrees[0] += 40.0;
         let v = violations(&c).0;
         assert!(v.contains(&"base_yaw speed".to_string()), "{v:?}");
         assert!(!v.iter().any(|x| x.starts_with("wrist_roll")), "{v:?}");
+    }
+
+    #[test]
+    fn stillness_cap_is_enforced() {
+        let (_, mut c) = feasible(&MID, 1).unwrap();
+        assert!(violations(&c).1.still.0 <= STILL_RUN_S);
+        // Freeze every joint from 2 s to 4.5 s: a 2.5 s still run.
+        let knots = &mut c.tracks[0].knots;
+        let hold = knots[40].joints_degrees.clone();
+        for k in &mut knots[40..=90] {
+            k.joints_degrees = hold.clone();
+            k.velocity_degrees_per_second = vec![0.0; 5];
+            k.acceleration_degrees_per_second2 = vec![0.0; 5];
+        }
+        let (v, r) = violations(&c);
+        assert!(v.contains(&"still run".to_string()), "{v:?} {:?}", r.still);
+        // Short still runs adding up past a quarter of the clip.
+        let fr: Vec<([f64; 5], Vec<[f64; 3]>)> = (0..=480)
+            .map(|i| {
+                let moving = (i / 60) % 2 == 0;
+                (
+                    [if moving { i as f64 } else { 0.0 }, 0.0, 0.0, 0.0, 0.0],
+                    vec![],
+                )
+            })
+            .collect();
+        let (run, share) = stillness(&fr);
+        assert!(run <= 1.0 && share > STILL_SHARE, "{run} {share}");
+    }
+
+    #[test]
+    fn a_floor_dive_is_under_the_floor() {
+        assert!(hand_at(&[0.0, 60.0, 80.0, 0.0, 0.0])[2] < FLOOR_M + DISC_M);
     }
 
     #[test]
@@ -1082,27 +1183,10 @@ mod tests {
     }
 
     #[test]
-    fn a_typical_clip_travels_past_the_floors_in_frame() {
-        let b = [0.5; 12];
-        let (_, c) = feasible(&b, 3).unwrap();
-        let fr = frames(&c);
-        let mv = movement(&fr);
-        assert!(
-            mv[0] >= MIN_PATH_M && mv[1] >= MIN_BOX_M && mv[2] >= MIN_TURN_DEG,
-            "{mv:?}"
-        );
-        let jm = joint_motion(&fr);
-        assert!((0..5).all(|j| jm[j] >= MIN_JOINT_DEG[j]), "{jm:?}");
-        let (_, r) = violations(&c);
-        assert!(r.frame_margin_px >= FRAME_MARGIN_PX);
-    }
-
-    #[test]
     fn study_camera_matches_the_template_and_catches_a_point_outside() {
         let (x, y, _) = project([0.0, 0.0, CAMERA_TARGET_Z]);
         assert!((x - 640.0).abs() < 1e-9 && (y - 315.0).abs() < 1e-9);
-        let b = [0.5; 12];
-        let (_, mut c) = feasible(&b, 3).unwrap();
+        let (_, mut c) = feasible(&MID, 3).unwrap();
         // A hand 1.5 m up is out of every frame.
         for k in &mut c.tracks[0].knots {
             k.joints_degrees[1] = -90.0;
@@ -1116,74 +1200,34 @@ mod tests {
     }
 
     #[test]
-    fn joints_keep_their_own_pace_and_light_joints_move_more_often() {
-        let m = Motion::new(&[0.5; 12], 4);
-        let median = |j: usize| {
-            let mut d: Vec<f64> = m.moves[j].iter().map(|x| x.dur).collect();
-            d.sort_by(|a, b| a.total_cmp(b));
-            d[d.len() / 2]
+    fn rhythm_sets_how_often_distal_joints_move() {
+        let count = |rhythm| {
+            let m = Motion::new(&with(&[(14, rhythm), (9, 0.0)]), 4);
+            (m.moves[0].len(), m.moves[3].len())
         };
-        assert!(
-            median(2) < median(0) && median(3) < median(1),
-            "elbow/wrist slower"
-        );
-        assert!(m.moves[3].len() > m.moves[0].len() + 3);
-        // Not one shared duration: the base and the wrist start at different times.
-        let s0: Vec<f64> = m.moves[0].iter().map(|x| x.start).collect();
-        assert!(m.moves[3].iter().filter(|x| !s0.contains(&x.start)).count() > 3);
-    }
-
-    #[test]
-    fn something_always_moves_sudden_or_sustained() {
-        for time in [0.0, 1.0] {
-            let mut b = [0.5; 12];
-            (b[3], b[4]) = (time, 1.0);
-            let (_, c) = feasible(&b, 5).unwrap();
-            let fr = frames(&c);
-            let all_still = fr
-                .windows(2)
-                .filter(|w| (0..5).all(|j| (w[1].0[j] - w[0].0[j]).abs() * FPS < 2.0));
-            assert_eq!(all_still.count(), 0, "time {time}");
-            let still = longest_still(&fr);
-            assert!(
-                still[2..].iter().all(|&s| s < 0.5),
-                "time {time}: {still:?}"
-            );
-        }
+        let (_, w0) = count(0.0);
+        let (_, w1) = count(1.0);
+        assert!(w1 >= 2 * w0, "{w0} {w1}");
     }
 
     #[test]
     fn free_overshoots_distal_joints_only_and_bound_never() {
-        let mut b = [0.5; 12];
-        b[5] = 1.0;
+        let b = with(&[(5, 1.0)]);
         let m = Motion::new(&b, 6);
         assert!((0..2).all(|j| m.moves[j].iter().all(|x| x.over == 0.0)));
         assert!((2..5).all(|j| m.moves[j].iter().any(|x| x.over != 0.0)));
-        // One overshoot: it settles once, monotonically, to the target.
         let x = &m.moves[4][3];
         let v: Vec<f64> = (0..=50)
             .map(|i| m.offset(4, x, 1.0 + m.settle * i as f64 / 50.0))
             .collect();
         assert!(v.windows(2).all(|w| (w[1] - w[0]) * x.over <= 1e-12));
-        b[5] = 0.0;
-        let m = Motion::new(&b, 6);
+        let m = Motion::new(&with(&[(5, 0.0)]), 6);
         assert!((0..5).all(|j| m.moves[j].iter().all(|x| x.over == 0.0)));
     }
 
     #[test]
-    fn sudden_starts_sharp_and_strong_heavy_joints_arrive_firm() {
-        let mut b = [0.5; 12];
-        (b[3], b[4]) = (1.0, 1.0);
-        let m = Motion::new(&b, 7);
-        let (ra, rd0) = m.ramps[0];
-        let (_, rd3) = m.ramps[3];
-        assert!(ra < 0.15 && rd0 < 0.35 && rd3 > 0.6, "{:?}", m.ramps);
-    }
-
-    #[test]
     fn descriptor_count_and_finite() {
-        let b = [0.4; 12];
-        let d = descriptors(&clip(&b, 5, 1.5));
+        let d = descriptors(&clip(&[0.4; 15], 5, 1.5));
         assert_eq!(d.len(), DESCRIPTOR_COUNT);
         assert!(d.iter().all(|v| v.is_finite()));
     }
