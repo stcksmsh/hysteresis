@@ -43,7 +43,7 @@ for r in np.linspace(0, off.min(), 201)[1:]:
         best = r
 mem = members(best)
 out = {
-    "sorted": srt.T.tolist(), "centres": centres, "r": best,
+    "sorted": srt.T.tolist(), "centres": centres, "candidates": cand.tolist(), "r": best,
     "meanCentreDistance": float(off.mean()), "minCentreDistance": float(off.min()),
     "quarterOfMeanCentreDistance": float(quarter),
     "regions": [{

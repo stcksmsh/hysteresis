@@ -42,7 +42,8 @@ fn sweep(out: PathBuf, want: usize) -> io::Result<()> {
                                                 .sum()
                                         })
                                         .collect();
-                                    (s, body::descriptors(&score), motion)
+                                    let mv = body::movement(&fr);
+                                    (s, body::descriptors(&score), motion, mv)
                                 });
                                 // why a rejected vector fails at the top of the ladder
                                 let why = r.is_none().then(|| {
@@ -72,9 +73,9 @@ fn sweep(out: PathBuf, want: usize) -> io::Result<()> {
                 }
             }
             match r {
-                Some((s, desc, motion)) => {
+                Some((s, desc, motion, mv)) => {
                     hist[(s.ln() / 1.1f64.ln()).round() as usize] += 1;
-                    clips.push(serde_json::json!({"b":b,"seed":seed,"s":s,"desc":desc,"motion":motion,"fail1":fail1}));
+                    clips.push(serde_json::json!({"b":b,"seed":seed,"s":s,"desc":desc,"motion":motion,"movement":mv,"fail1":fail1}));
                 }
                 None => {
                     // first rule broken at the top of the ladder; and every rule at stretch 1
@@ -105,6 +106,8 @@ fn sweep(out: PathBuf, want: usize) -> io::Result<()> {
 
 /// Regions short of 9 members get clips made from their members' body vectors with
 /// fresh seeds, kept if they fall inside the region's ball (up to 200 tries each).
+/// A region still short has its centre replaced by the candidate farthest from all
+/// kept centres (addendum 2), r held, membership recomputed, and is filled again.
 fn fill(sweep: PathBuf, regions: PathBuf, out: PathBuf) -> io::Result<()> {
     let sw: serde_json::Value = serde_json::from_slice(&fs::read(sweep)?)?;
     let rg: serde_json::Value = serde_json::from_slice(&fs::read(regions)?)?;
@@ -115,10 +118,16 @@ fn fill(sweep: PathBuf, regions: PathBuf, out: PathBuf) -> io::Result<()> {
             .map(|x| x.as_f64().unwrap())
             .collect()
     };
+    let ids = |v: &serde_json::Value| -> Vec<usize> {
+        v.as_array()
+            .unwrap()
+            .iter()
+            .map(|x| x.as_u64().unwrap() as usize)
+            .collect()
+    };
     // rank-normalise a descriptor vector against the 2,000 sorted columns
     let sorted: Vec<Vec<f64>> = rg["sorted"].as_array().unwrap().iter().map(&vec).collect();
     let r = rg["r"].as_f64().unwrap();
-    let clips = sw["clips"].as_array().unwrap();
     let z = |d: &[f64]| -> Vec<f64> {
         d.iter()
             .enumerate()
@@ -128,12 +137,6 @@ fn fill(sweep: PathBuf, regions: PathBuf, out: PathBuf) -> io::Result<()> {
             })
             .collect()
     };
-    let centres: Vec<Vec<f64>> = rg["centres"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|c| z(&vec(&clips[c.as_u64().unwrap() as usize]["desc"])))
-        .collect();
     let dist = |a: &[f64], b: &[f64]| {
         a.iter()
             .zip(b)
@@ -141,39 +144,128 @@ fn fill(sweep: PathBuf, regions: PathBuf, out: PathBuf) -> io::Result<()> {
             .sum::<f64>()
             .sqrt()
     };
-    let mut added = Vec::new();
-    for (k, reg) in rg["regions"].as_array().unwrap().iter().enumerate() {
-        let members: Vec<usize> = reg["members"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|m| m.as_u64().unwrap() as usize)
-            .collect();
-        let mut have = members.len();
-        let mut tries = 0;
-        while have < 9 && tries < 200 && !members.is_empty() {
-            let m = &clips[members[tries % members.len()]];
-            let b: body::Body = vec(&m["b"]).try_into().unwrap();
-            let seed = 1_000_000 + (k * 1000 + tries) as u64;
-            tries += 1;
-            if let Some((s, score)) = body::feasible(&b, seed) {
-                let d = z(&body::descriptors(&score));
-                let near = (0..8)
-                    .min_by(|&a, &c| dist(&d, &centres[a]).total_cmp(&dist(&d, &centres[c])))
-                    .unwrap();
-                if near == k && dist(&d, &centres[k]) <= r {
-                    added.push(serde_json::json!({"region":k,"b":b,"seed":seed,"s":s,"desc":body::descriptors(&score)}));
-                    have += 1;
-                }
+    // pool: (rank vector, body, sweep index or None for a made clip)
+    let mut pool: Vec<(Vec<f64>, body::Body, Option<usize>)> = sw["clips"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .enumerate()
+        .map(|(i, c)| {
+            (
+                z(&vec(&c["desc"])),
+                vec(&c["b"]).try_into().unwrap(),
+                Some(i),
+            )
+        })
+        .collect();
+    let candidates = ids(&rg["candidates"]);
+    let mut centres = ids(&rg["centres"]);
+    let mut dropped: Vec<usize> = Vec::new();
+    let mut filled = [false; 8];
+    let (mut added, mut replacements) = (Vec::new(), Vec::new());
+    let mut pass = 0u64;
+    let members = |pool: &[(Vec<f64>, body::Body, Option<usize>)], centres: &[usize]| {
+        let c: Vec<&Vec<f64>> = centres.iter().map(|&i| &pool[i].0).collect();
+        let mut m = vec![Vec::new(); 8];
+        for (i, p) in pool.iter().enumerate() {
+            let k = (0..8)
+                .min_by(|&a, &b| dist(&p.0, c[a]).total_cmp(&dist(&p.0, c[b])))
+                .unwrap();
+            if dist(&p.0, c[k]) <= r {
+                m[k].push(i);
             }
         }
+        m
+    };
+    loop {
+        let m = members(&pool, &centres);
+        let Some(k) = (0..8).find(|&k| m[k].len() < 9) else {
+            break;
+        };
+        if !filled[k] {
+            filled[k] = true;
+            pass += 1;
+            let (mut have, mut tries) = (m[k].len(), 0);
+            let centre = pool[centres[k]].0.clone();
+            let others: Vec<Vec<f64>> = centres.iter().map(|&i| pool[i].0.clone()).collect();
+            while have < 9 && tries < 200 {
+                let b = pool[m[k][tries % m[k].len()]].1;
+                let seed = 1_000_000 + pass * 1000 + tries as u64;
+                tries += 1;
+                if let Some((s, score)) = body::feasible(&b, seed) {
+                    let desc = body::descriptors(&score);
+                    let d = z(&desc);
+                    let near = (0..8)
+                        .min_by(|&a, &c| dist(&d, &others[a]).total_cmp(&dist(&d, &others[c])))
+                        .unwrap();
+                    if near == k && dist(&d, &centre) <= r {
+                        added.push(serde_json::json!({"region":k,"centre":centres[k],"b":b,"seed":seed,"s":s,"desc":desc}));
+                        pool.push((d, b, None));
+                        have += 1;
+                    }
+                }
+            }
+            println!(
+                "region {k} (centre {}): {} members + {} made in {tries} tries",
+                centres[k],
+                m[k].len(),
+                have - m[k].len()
+            );
+            continue;
+        }
+        // Still short after its fill: replace the centre.
+        dropped.push(centres[k]);
+        let kept: Vec<usize> = (0..8).filter(|&i| i != k).map(|i| centres[i]).collect();
+        let next = candidates
+            .iter()
+            .copied()
+            .filter(|c| !centres.contains(c) && !dropped.contains(c))
+            .max_by(|&a, &b| {
+                let f = |c: usize| {
+                    kept.iter()
+                        .map(|&o| dist(&pool[c].0, &pool[o].0))
+                        .fold(f64::MAX, f64::min)
+                };
+                f(a).total_cmp(&f(b))
+            });
+        let Some(next) = next else {
+            println!("region {k}: no candidate left; the study stops here");
+            break;
+        };
+        let reason = format!("{} members after fill, under 9", m[k].len());
         println!(
-            "region {k}: {} members + {} made in {tries} tries",
-            members.len(),
-            have - members.len()
+            "region {k}: centre {} replaced by {next} ({reason})",
+            centres[k]
+        );
+        replacements
+            .push(serde_json::json!({"region":k,"old":centres[k],"new":next,"reason":reason}));
+        centres[k] = next;
+        filled[k] = false;
+    }
+    let m = members(&pool, &centres);
+    let sweep_members: Vec<Vec<usize>> = m
+        .iter()
+        .map(|v| v.iter().filter_map(|&i| pool[i].2).collect())
+        .collect();
+    for (k, v) in m.iter().enumerate() {
+        println!(
+            "region {k} (centre {}): {} members after fill",
+            centres[k],
+            v.len()
         );
     }
-    fs::write(out, serde_json::to_vec(&added)?)
+    let made_members: Vec<usize> = m
+        .iter()
+        .map(|v| v.iter().filter(|&&i| pool[i].2.is_none()).count())
+        .collect();
+    fs::write(
+        out,
+        serde_json::to_vec(&serde_json::json!({
+            "r": r, "centres": centres, "replacements": replacements, "added": added,
+            "sweepMembers": sweep_members, "madeMembers": made_members,
+            "membersAfter": m.iter().map(Vec::len).collect::<Vec<_>>(),
+        }))?,
+    )
 }
 
 fn html(
@@ -190,7 +282,27 @@ fn html(
         .collect::<Result<_, _>>()?;
     let b: body::Body = b.try_into().map_err(|_| err("b needs 12 values"))?;
     let score: EnsembleScore = body::clip(&b, seed, s);
-    body::check_2a(&score).map_err(|e| err(format!("clip fails 2a: {e}")))?;
+    let rep = body::check_2a(&score).map_err(|e| err(format!("clip fails 2a: {e}")))?;
+    // Direction reversals: the hand's velocity points against its velocity at the
+    // previous frame where it moved faster than 0.05 m/s (slower frames skipped, so
+    // a reversal through a stop counts; a gradual turn does not).
+    let fr = body::frames(&score);
+    let (mut reversals, mut last) = (0, None::<[f64; 3]>);
+    for w in fr.windows(2) {
+        let v: [f64; 3] = std::array::from_fn(|k| (w[1].1[5][k] - w[0].1[5][k]) * body::FPS);
+        if v.iter().map(|x| x * x).sum::<f64>().sqrt() <= 0.05 {
+            continue;
+        }
+        if last.is_some_and(|l| (0..3).map(|k| l[k] * v[k]).sum::<f64>() < 0.0) {
+            reversals += 1;
+        }
+        last = Some(v);
+    }
+    let [path, side, turn] = rep.movement;
+    println!(
+        "hand path {path:.2} m, box {side:.2} m, base turn {turn:.0} deg, top hand speed {:.2} m/s, reversals {reversals}",
+        rep.max_hand_mps
+    );
     let fps = body::FPS;
     let frames: Vec<_> = (0..=(score.duration * fps).round() as usize)
         .map(|i| {

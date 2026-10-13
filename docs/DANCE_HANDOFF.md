@@ -2909,3 +2909,120 @@ Unchanged: `three.sh` exports compared with `cmp` against `hexagon-47.html`,
 `five-years-hexagon.html`, `presence-hexagon.html`: all three identical. The three tmp files
 it made were deleted; older `tmp-45-*`, `tmp-46-*` files from earlier sessions were not mine
 and are left. Frozen `src/` and `tools/`, no hardware.
+
+### Body study, step 1 under addendum 2: new generator, sweep, regions (stop 1) — 2026-10-13
+
+Rules: `docs/BODY_STUDY.md` with both addenda (unchanged). Data in
+`/secondary/hyst-data/bodystudy/r3/` (`sweep.json`, `report.txt`, `regions.json`,
+`fill.json`, `first/{a,b,c}.{html,mp4}`, `first/silence.m4a`), outside git. **Not verified
+by eye.** Stopped at ★ 1: no triplets, no `answer.html`.
+
+Why: the user saw three 8 s first-look clips as hardly moving, and the sudden/strong/free one
+as jittery. The old generator sized every move from body weight ("depth") and the
+acceleration budget of a short slot, and its sudden and free settings made several bursts
+and a ring on every joint.
+
+Generator changes (`crates/hyst-compile/src/body.rs`, `Motion` rewritten; ranges in its doc
+comment):
+1. Travel. Each move goes to a new posture. Base yaw alternates sides of a span drawn per
+   clip from 220 to 320 degrees, with each target in the outer 35 % of its side. The shoulder
+   alternates between the lowest and highest 35 % of its draw. Shape parameters set 0.25 of
+   the posture draw, so they bias where the targets fall, never whether they spread. Weight no
+   longer sets move size. Reason: the brief's item 1 and the floors below.
+2. Time. Velocity ramps cover 100 % of the move (sustained, a bell) to 45 % (sudden, quick
+   cruise). Duration is the shortest legal one times 1.7 (sustained, no hold) to 1.0
+   (sudden), then a hold of time x 0.6..1.4 s. Breath runs through the hold. The multi-burst
+   profile is deleted. Reason: item 2.
+3. Weight sets the deceleration ramp's share of the ramps: 65 % (light, floats in) to 30 %
+   (strong, firm stop).
+4. Flow. Elbow and wrist bend overshoot by 25 % x flow of their move, then settle once over
+   0.4 x sqrt(flow) of the move's duration. Other joints get no overshoot. The ring and its
+   frequency/decay are deleted. Reason: item 3.
+5. Limits. Each move's duration comes from one sampled pass of the move at unit duration.
+   Joint speed scales as 1/T and acceleration and jolt as 1/T^2, so this gives the exact
+   shortest T for each joint's own `LIMITS`, hand speed 1.2 m/s and jolt 9 m/s^2. The roll's
+   speed is capped at the rig's 240 deg/s envelope so `validate` can pass. Breath's exact peak
+   is taken off the shoulder and elbow limits. The 0.5 wander factor and the per-joint
+   move-size caps are deleted. The one common duration is set by whichever joint or hand rule
+   binds, usually yaw at 120 deg/s or hand speed. Joint delays and breath are left out of
+   this pass, and the stretch ladder covers them. Reason: item 4. **Open question for you:**
+   the elbow and wrist share that duration, so they move far under their own limits. If
+   "uses its own limits" means each joint at its own pace, say so.
+6. A target whose path or pose breaks the floor (breath at either extreme) is drawn again,
+   up to 30 times.
+
+Check 2a (addendum 2): 16 s clips, stretch about 8 s. Floors use `movement()`: hand path
+3.67 m, box side 0.74 m, base turn 161 deg. Tests (8 body tests): 321 knots, centre at knot
+160, sudden has a hold of at least 0.6 s and overshoot only on elbow/wrist, sustained/bound
+has no hold or overshoot, the profile is monotone from 0 to 1, and a mid body passes the
+floors. Workspace CPU tests (hyst-render excluded) pass. Clippy -D warnings is clean on
+compile/previz/output/cli, and fmt is clean.
+
+Sweep (seed 20261013): **2,082 attempts, 2,000 passed.** First rule broken among the 82
+rejected at stretch 1.95: floor 69, hand path 13. Rules broken at stretch 1 by the rejected
+clips: floor 75, hand path 7, hand speed 6. Rejections by decile, of about 200 per decile:
+height 31, 26, 12, 5, 0, 1, 4, 1, 1, 1; curl_extension 19, 17, 8, 12, 9, 3, 8, 3, 2, 1;
+breath_depth 2, 4, 3, 2, 3, 4, 9, 14, 14, 27; every other parameter 1-15 per decile. Stretch
+histogram (1.1^0..7): 1904, 73, 4, 7, 5, 3, 1, 3. Rules broken at stretch 1 among the 2,000
+that passed: hand speed 69, floor 27; 1,904 were clean at stretch 1.
+
+Low (<0.2) against high (>0.8) medians. p90 joint speed is deg/s and total joint motion is
+degrees, both in the order yaw / shoulder / elbow / wrist bend / roll. Movement is hand path
+m / box m / base turn deg:
+- time (n 380 / 411): p90 low 69.5 / 13.6 / 12.3 / 6.2 / 23.7, high 103.0 / 20.1 / 17.9 /
+  10.6 / 40.4. Total low 468 / 98 / 93 / 34 / 144 (sum 842), high 751 / 148 / 126 / 56 /
+  212 (1301). Movement low 4.84 / 1.12 / 230, high 7.56 / 1.14 / 239.
+- weight (373 / 416): p90 low 85.9 / 17.0 / 15.5 / 8.1 / 29.6, high 80.3 / 16.2 / 14.4 / 7.7
+  / 29.7. Total low 630 / 127 / 115 / 45 / 165 (1111), high 575 / 120 / 106 / 43 / 167
+  (1028). Movement low 6.43 / 1.13 / 235, high 5.94 / 1.13 / 236.
+- flow (419 / 380): p90 low 83.6 / 16.7 / 14.1 / 7.9 / 32.1, high 84.3 / 16.9 / 16.0 / 8.3 /
+  28.2. Total low 664 / 130 / 106 / 44 / 191 (1158), high 573 / 121 / 118 / 46 / 160 (1034).
+  Movement low 6.67 / 1.14 / 235, high 5.97 / 1.13 / 234.
+- space (423 / 389): p90 low 85.8 / 16.9 / 15.3 / 8.5 / 15.7, high 80.0 / 15.4 / 14.8 / 7.1 /
+  46.8. Total low 637 / 128 / 111 / 50 / 91 (1020), high 563 / 115 / 111 / 41 / 260 (1117).
+  Movement low 6.49 / 1.14 / 236, high 5.86 / 1.13 / 234.
+Weight and flow move these medians by under 10 %, so their effect is in profile shape, which
+these measures do not separate. Yaw carries most of the motion, and the wrist bend totals
+34-56 degrees over 16 s.
+
+Histograms over all 2,000 clips, as range:count:
+- Hand path, m: 3.69-4.37:83 4.37-5.04:312 5.04-5.72:349 5.72-6.40:400 6.40-7.08:350
+  7.08-7.75:278 7.75-8.43:164 8.43-9.11:47 9.11-9.78:14 9.78-10.46:3.
+- Box, m: 0.81-0.85:1 0.85-0.90:4 0.90-0.95:14 0.95-0.99:64 0.99-1.04:138 1.04-1.09:271
+  1.09-1.13:507 1.13-1.18:547 1.18-1.23:394 1.23-1.27:60.
+- Base turn, deg: 164-179:25 179-194:111 194-209:270 209-224:360 224-239:326 239-253:339
+  253-268:281 268-283:186 283-298:72 298-313:30.
+
+Regions (rank space; candidate centres are the 1,000 clips with d9 at or under the median,
+0.999): **r = 0.794**. Centre-to-centre distance min 2.205, mean 3.099 (a quarter: 0.775).
+Initial centres 1739, 926, 194, 1663, 935, 386, 1267, 1048. Within-region mean distances
+0.703, 0.689, 0.768, 0, 0.729, 0.677, 0, 0. Members before fill: 12, 4, 2, 1, 4, 2, 1, 1.
+Replacement (`body_study fill`, which now holds r, recomputes every region's membership after
+each replacement, and never reuses a dropped centre; `regions.py` now writes `candidates`).
+Each step is old > new, with the members after the failed fill:
+- region 3: 1663>1491 (5), 1491>320 (3), 320>136 (2), 136>1715 (4), 1715>1694 (4),
+  1694>675 (7), 675>1464 (4), 1464>1336 (3), 1336>1740 (5), 1740>118 (1), 118>97 (5);
+- region 5: 386>829 (8), 829>277 (5), 277>192 (6), 192>797 (8), 797>1210 (7), 1210>193 (7),
+  193>1695 (3), 1695>1815 (5), 1815>219 (3), 219>936 (6), 936>1977 (6), 1977>1478 (7),
+  1478>1055 (2), 1055>772 (8);
+- region 6: 1267>334 (4).
+26 replacements. Final centres 1739, 926, 194, 97, 935, 772, 334, 1048. Members after fill:
+12, 9, 9, 9, 9, 9, 9, 9. Of these, 12, 4, 2, 4, 4, 4, 2, 1 are sweep clips and 0, 5, 7, 5,
+5, 5, 7, 8 are made (clones of members' body vectors with new seeds). Within-region
+distances after replacement were not recomputed.
+
+Single first-look clips (16 s, silent, stretch 1.0, not test clips) in `r3/first/`.
+Reversals count frames where the hand's velocity points against its velocity at the
+previous frame faster than 0.05 m/s:
+- a: sweep clip 491, time 0.03, weight 0.09, flow 0.06. Hand path 4.98 m, box 1.07 m, base
+  turn 210 deg, top hand speed 0.69 m/s, 1 reversal.
+- b: clip 665, time 0.99, weight 0.96, flow 0.94. 7.14 m, 1.11 m, 212 deg, 1.19 m/s, 3
+  reversals. At 10 s the disc rises out of the top of the frame (camera unchanged).
+- c: clip 994, space 0.98, curl_extension 0.99. 5.92 m, 1.24 m, 257 deg, 0.87 m/s, 3
+  reversals.
+Body vectors and seeds are in `sweep.json`.
+
+Unchanged: `three.sh` exports compared with `cmp` against `hexagon-47.html`,
+`five-years-hexagon.html` and `presence-hexagon.html`: all three are identical. Its three tmp
+files were deleted; older `tmp-*` files from earlier sessions are left. Frozen `src/` and
+`tools/` were not touched. No hardware was driven.
