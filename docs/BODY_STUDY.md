@@ -90,3 +90,65 @@ They are not the judge. They build the regions and show what differs.
    spread, two or three single clips (not part of the test).
 2. Triplets and page ready: the user takes the test.
 3. After scoring.
+
+## Addendum, 2026-10-13 (afternoon): limits for cheap hardware, check method, regions
+
+Written after the first sweep and its stop at the region rule, **before check 2b
+ran on anything**. It replaces the check 2a limits and the region rule above; the
+rest stands. It is still round 1.
+
+### Why
+
+The first sweep (commit `db0c2b1`) measured that one 500 °/s² limit for every joint
+flattens the body: clips high in "time" (sudden) moved less than sustained ones
+(90th-percentile joint speed 19 against 42 °/s; total joint motion 12 against 38),
+and "weight" changed nothing (23 against 24 °/s). Each move's size was capped by
+the acceleration budget, so a fast move had to be tiny. That limit came from the
+shoulder; the distal joints carry far less load. Separately, farthest-point
+sampling picked single outlier clips as 7 of the 8 centres, and 4 regions had 1–2
+members, so the study stopped.
+
+### Hardware the limits assume (user: cheap equipment, light 3D-printed body)
+
+Feetech STS3215-class bus servos (about 2.9 N·m stall, about 270 °/s unloaded);
+the shoulder through a 2:1 reduction (or an STS3250-class servo); a micro servo
+for the roll; base on a thrust bearing with a slip ring. Printed links 25–40 g,
+the 30 g disc, the illustrative lengths. Each limit keeps its joint at or under
+about 25 % of stall with the arm level. Servo figures are from memory; the masses
+are invented. Bench-measure and update before hardware use.
+
+### Check 2a limits (replace the table above)
+
+| Joint | Speed | Acceleration | Torque at the limit, estimated |
+|---|---|---|---|
+| Base yaw | 120 °/s | 600 °/s² | 0.6 N·m, 20 % of stall |
+| Shoulder | 90 °/s | 300 °/s² | 1.1 gravity + 0.3 = 1.4 N·m, 24 % with the reduction |
+| Elbow | 150 °/s | 1,000 °/s² | 0.42 gravity + 0.21 = 0.6 N·m, 22 % |
+| Wrist bend | 200 °/s | 2,000 °/s² | about 0.1 N·m |
+| Wrist roll | 250 °/s | 3,000 °/s² | negligible |
+
+Hand speed ≤ 1.2 m/s, hand jolt ≤ 9 m/s² (the `jolts.py` measure; printed links
+flex, so an abrupt stop rings: the mark now has a physical reason too), floor 5 cm
+(hand point 5 cm + disc radius), joint ranges unchanged.
+
+### Check method
+
+Joint speed and acceleration are measured on the **rendered curve** (the score's
+quintic segments, sampled at 1 kHz; acceleration by second difference of the
+sampled positions), not by the conservative hull proof, which overstates them by
+up to about 1.5×. `EnsembleScore::validate` with the rig's own envelope still runs
+and must pass. Hand checks stay at 60 fps.
+
+### Regions (replace the region rule above)
+
+1. Each of the 37 descriptors is **rank-normalised** over the 2,000 clips:
+   value → (rank − 0.5) / 2,000. Distances are Euclidean in that space.
+2. For every clip, d9 = distance to its 9th nearest other clip. **Candidate
+   centres** are the clips with d9 at or under the median d9 (the denser half).
+3. 8 centres by farthest-point sampling over the candidates only: the first is the
+   candidate farthest from the mean, each next the candidate farthest from all
+   chosen.
+4. Membership, r, the 9-member requirement and the fill rule are as above.
+
+Stretching, sampling (2,000 passing, seed 20261013), descriptors, triplets and
+check 2b are unchanged.
