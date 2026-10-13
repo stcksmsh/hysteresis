@@ -3457,3 +3457,33 @@ clippy -D warnings with --all-targets is clean on the same crates; fmt is clean.
 exports compared with `cmp` against `hexagon-47.html`, `five-years-hexagon.html` and
 `presence-hexagon.html`: all three are identical; the tmp files were deleted. Nothing was
 watched or answered. Frozen `src/` and `tools/` untouched. No hardware driven.
+
+### Body study, check 2b scored (★ 3) — 2026-10-13
+
+The user's answers: `answers.json` (24 of 24, finished, no pending triplet), copied to
+`/secondary/hyst-data/bodystudy/r5/answers.json`; the score output is in `r5/score.txt`.
+Scored with `scripts/body_study/score.py` against `r5/key.json`: counted answers only, as
+addendum 7 says.
+
+- **13 of 24 correct. Check 2b fails** (pass at ≥ 16; chance 8).
+- Under guessing, 13 or more has p = 0.028 (binomial, 1/3 per triplet); 16 or more 0.00086.
+  Wilson 95 % interval for the hit rate: 0.35-0.72 (chance 0.33).
+- Per region, found as the odd one (of 3) / as the pair of a correct triplet (of 3):
+  0 (centre 1706) 2/2, 1 (1966) 1/0, 2 (529) 2/1, 3 (786) 2/2, 4 (1582) 1/2,
+  5 (365) 2/3, 6 (1919) 1/2, 7 (183) 2/1.
+- Per k (odd region = pair + k mod 8): k 1: 3/8, k 3: 5/8, k 5: 5/8.
+- Descriptors with the largest found-minus-missed difference, rank units:
+  - odd region's position: wrist roll jerk p90 -0.101, roll jerk mean -0.092, roll accel
+    p90 -0.081, lag elbow>wrist +0.078, wrist bend speed p90 -0.074, extension +0.067;
+  - |m_odd - m_pair|: shoulder accel p90 -0.140, shoulder speed mean -0.133, roll jerk
+    mean +0.125, shoulder accel mean -0.109, roll jerk p90 +0.105, shoulder jerk p90 -0.100.
+  With 13 hits and 11 misses, each difference rests on a few triplets.
+- Data, not scored: no second answers, no replays, no free text. Time to the counted
+  answer: median 51.1 s (min 50.6, max 55.7). The first pass alone takes 50 s, so every
+  answer came right after C. One pause in the first pass at most.
+
+Per `NEXT_BODY_THEN_MIND.md` step 1, "If it fails": round 2, once, widens what the misses
+point at. Addendum 5 says a failing 2b points at the generator (how much the seed decides
+against the body vector). Round 2 is not started. That decision, and its addendum, belong to
+the user and the overseer. Answers file also left where the user put it:
+`/secondary/Programming/Github/Hysteresis/answers.json` (untracked, main checkout).

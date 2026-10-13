@@ -1566,3 +1566,9 @@ and the answer after C counts. Replays with seek come only after it, and progres
 after every step. 72 lossless single-clip crops are frame-identical to the stacks. The page,
 a range server (`serve.cjs`), headless tests and the scorer (counted answer only) are in
 `scripts/body_study/`. The user starts with `r5/HOWTO.txt`. Not verified by eye.
+
+### Body study, check 2b scored — 2026-10-13
+
+13 of 24 correct, check 2b fails (pass ≥ 16; p = 0.028 for 13 or more under guessing).
+Every answer came right after the first pass; no replays or second answers. Round 2 waits
+for the user and the overseer. Numbers in `docs/DANCE_HANDOFF.md`.
