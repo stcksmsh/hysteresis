@@ -197,3 +197,55 @@ If a centre's region stays under 9 members after the fill, that centre is
 replaced by the next candidate in farthest-point order (the candidate farthest
 from all centres kept), and its region is filled the same way. Every replacement
 is reported with its reason.
+
+## Addendum 3, 2026-10-13 (night): every joint dances, the rule is rechecked, the arm stays in frame
+
+Written after the run of commit `a86aae9` and the user's look at its three 16 s
+clips, **before check 2b ran on anything**. Still round 1. Everything not named
+here stands.
+
+### Why
+
+The user, on the three clips: a "fluid, but almost all is base moving, the elbow
+joint not at all and almost no disc spin"; b "spin, stop, reposition, spin, stop,
+reposition … only base and shoulder joint working really, mechanical looking,
+like an assembly line machine"; c "somewhere in between … a bit of elbow
+movement, some disc rotation, but still the same issues". Measured, total joint
+motion per 16 s (degrees): v47 arm 0 over the three songs, median (p10) base 669
+(386), shoulder 220 (148), elbow 442 (299), wrist bend 599 (454), roll 603 (370);
+the sweep's low/high medians base 468–751, shoulder 98–148, elbow 93–126, wrist
+bend 34–56, roll 91–260. Also: after the 26 centre replacements, 6 of 8 regions
+had a mean within-region distance over a quarter of the mean centre-to-centre
+distance (0.756–0.861 against 0.752); the rule was not rechecked. Clip b's disc
+left the top of the frame at about 10 s.
+
+### Per-joint motion floors (check 2a, new rule)
+
+Every clip, on the final 16 s at 60 fps, total motion (sum of |Δ angle| per frame)
+of each joint at least the v47 p10 above (54 whole 16 s windows, arm 0, the
+three exports; knots interpolated linearly at 60 fps):
+
+| Joint | Floor, degrees per 16 s |
+|---|---|
+| Base yaw | 386 |
+| Shoulder | 148 |
+| Elbow | 299 |
+| Wrist bend | 454 |
+| Wrist roll | 370 |
+
+A clip below any floor fails check 2a like any other limit.
+
+### In frame (check 2a, new rule)
+
+Every world point of the arm and the disc's whole radius stay inside the
+recorded frame at every 60 fps frame, with a 20 px margin, using the camera the
+test clips are recorded with. The camera may be changed for the study (report
+how); the shared preview template `crates/hyst-previz/src/ensemble.html` may not,
+because v47's exports embed it byte for byte.
+
+### Region rule after replacement
+
+The quarter rule (mean within-region pairwise distance under a quarter of the
+mean centre-to-centre distance, in every region) and the membership radius r are
+checked on the **final** centres and members, after every replacement and fill.
+If the final set breaks the rule, the study stops and reports.
