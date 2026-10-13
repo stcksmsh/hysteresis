@@ -3026,3 +3026,195 @@ Unchanged: `three.sh` exports compared with `cmp` against `hexagon-47.html`,
 `five-years-hexagon.html` and `presence-hexagon.html`: all three are identical. Its three tmp
 files were deleted; older `tmp-*` files from earlier sessions are left. Frozen `src/` and
 `tools/` were not touched. No hardware was driven.
+
+### Body study, step 1 under addendum 3: per-joint generator, sweep, regions (stopped at the region rule) — 2026-10-13
+
+Rules: `docs/BODY_STUDY.md` with all three addenda (unchanged). Data in
+`/secondary/hyst-data/bodystudy/r4/` (`sweep.json`, `sweep.log`, `report.txt`, `regions.json`,
+`regions.txt`, `fill.json`, `fill.txt`, `first/{a,b,c}.{html,mp4}`, `first/silence.m4a`),
+outside git. **Not verified by eye.** The final region check fails (below), so the study
+stops at ★ 1: no triplets, no `answer.html`.
+
+Why: the user on the three r3 clips: a "almost all is base moving, the elbow joint not at
+all and almost no disc spin"; b "spin, stop, reposition ... mechanical looking, like an
+assembly line machine"; c "somewhere in between". Cause in the generator: one move duration
+for all joints, set by the slowest (usually the base); all joints starting and stopping
+together; "sudden" as move then dead stop.
+
+Generator changes (`crates/hyst-compile/src/body.rs`, `Motion` rewritten; ranges and reasons
+in its doc comment):
+1. Own pace per joint. Each joint has its own list of moves, with lengths drawn from its own
+   range: base 1.8-3.0 s, shoulder 1.5-2.6, elbow 0.8-1.3, wrist bend 0.6-1.1, roll 0.7-1.3.
+   Initiation picks the leading joint (base, shoulder, elbow or wrist bend), which runs its own
+   moves. Every other joint starts a move at one of the leader's move starts plus its
+   succession delay (0.12 s, plus 0-0.3 s along the chain, its direction set by succession
+   direction). It picks the leader starts nearest its own pace and splits a long gap into its
+   own shorter moves (each 0.75-1.25 of an equal split). If a joint's own limits need longer
+   than the gap, the move takes the following gaps too, so it still reaches its target.
+   Reason: item 1, no shared duration.
+2. No dead stops. Each move lasts its gap times 1 + overlap (0.3 sustained to 0.12 sudden), so
+   the next move of the same joint starts before the previous ends and the two add up. Only
+   base and shoulder hold, and only when sudden (their moves last the gap times 1.3 down to
+   0.8). Elbow, wrist and roll never hold. Breath runs throughout. Time sets the accelerating
+   ramp, 50 % (a bell) down to 12 % (a sharp start) of every move. Weight sets how much of the
+   rest decelerates. On base and shoulder that is 100 % down to 35 % (cruise, then a firm
+   arrival). On elbow, wrist and roll it is 100 % down to 75 %, so they keep settling when the
+   heavy joints arrive. Reason: item 2.
+3. Flow. Elbow, wrist bend and roll pass their target by 25 % x flow of the move and settle
+   back once, monotonically, over 0.4 x sqrt(flow) of its duration. Base and shoulder never
+   overshoot. Reason: item 3.
+4. Every joint travels. Base yaw alternates sides of a 240-330 degree span, with targets in
+   the outer 25 % of each side, so two targets are at least 180 degrees apart; the r3 span
+   allowed 143, under the 161 turn floor. The shoulder alternates between its lowest and
+   highest 35 % of 10 + breath .. 95 degrees of elevation. The elbow alternates between the
+   most curled and most straight 35 % of -30 (bent up, new) .. 95 degrees. The wrist bend
+   alternates sides by 20-70 degrees about the arch's centre. The roll turns 30-110 x 0.6-1
+   degrees per move (space). Shape parameters set 0.25 of each draw. Sizes were chosen on a
+   200-clip probe so that the joints' shares come near version 47's. Reason: item 4, every
+   joint clears its floor.
+5. Floor during generation. Joints are drawn shoulder, elbow, wrist, then base, then roll.
+   While a joint is drawn, the points placed by the joints drawn so far must stay above the
+   floor, and the last of them above the floor plus the disc radius, with breath at either
+   extreme; the wrist checks the whole floor rule. Elbow and wrist bends are also capped so
+   their link end stays 5 mm over floor plus disc. A draw is rejected if it fails these
+   checks or lands under 15 degrees from the current angle. After 30 rejected draws the joint
+   lifts 25 degrees (shoulder 15); if that fails too, it stays put for that move.
+6. Limits. Each move lasts at least what its joint's own `LIMITS` need. The roll's speed is
+   capped at the rig's 240 deg/s envelope, and breath's peak is taken off the shoulder and
+   elbow limits. Elbow, wrist and roll moves are sized against 0.6 of their speed limit,
+   because overlapping moves add up (first probe: wrist at 1.1-1.55x its limit). The base's
+   speed is capped so the hand's largest horizontal radius over the move gives at most 0.75
+   of the hand speed rule (first probe: hand at 1.1-1.6x). Then the whole motion, but not
+   breath, is slowed by one factor, if needed, to keep every joint under 0.98 of its limits
+   and the hand under 0.95 of its speed and jolt rules over the clip. The 0.98 covers the
+   gap between this pass's 240 Hz sampling and the 1 kHz check.
+7. Clips open mid-motion: moves start at -3 s.
+
+Check 2a, addendum 3 (`violations`):
+- Per-joint motion floors: `MIN_JOINT_DEG` = 386 / 148 / 299 / 454 / 370 degrees per 16 s,
+  measured with `joint_motion` at 60 fps.
+- In frame: `frame_margin` projects every world point exactly as `ensemble.html`'s `project`
+  does, plus the disc's radius around the hand point; it must stay ≥ 20 px inside the
+  1280 x 720 frame.
+- Study camera: the template's solo camera with the same yaw (-0.6), pitch (0.35) and focal
+  length, moved from 2.1 m to 3.05 m and aimed at z 0.35 instead of 0.3. That is the smallest
+  distance, in 0.05 m steps, at which every point within the arm's reach plus the disc stays
+  20 px inside the frame (sampled sphere).
+- `body_study html` writes these two numbers into its own copy of the template and fails if
+  the template's camera strings change. `ensemble.html` is unchanged.
+- `body_study fill` now rechecks the quarter rule and r on the final centres and members.
+
+Tests (12 body tests):
+- the camera matches the template's centre, and a point out of frame is caught;
+- a typical clip clears every floor and stays in frame;
+- elbow and wrist move more often and on shorter moves than base and shoulder, starting at
+  other times;
+- sudden and sustained clips: no 60 fps frame where every joint is under 2 deg/s, and elbow,
+  wrist and roll never still for 0.5 s or more;
+- free overshoots elbow, wrist and roll only, settling once and monotonically; bound never
+  overshoots;
+- sudden plus strong gives a sharp start, a firm heavy arrival and a long light settle.
+
+Other checks: workspace CPU tests (171, `hyst-render` excluded) pass; clippy -D warnings is
+clean on compile/previz/output/cli; fmt is clean.
+
+Sweep (seed 20261013): **2,068 attempts, 2,000 passed.** Rejected 68.
+- First rule broken at stretch 1.95: joint range (`validate`, joint not named) 26, base yaw
+  motion 20, hand path 19, floor 2, shoulder motion 1.
+- Rules broken at stretch 1 by the rejected clips: joint range 34, base yaw motion 23, hand
+  speed 8, shoulder motion 4, floor 2.
+- Rejections by decile (about 200 attempts per decile):
+  - time 3, 5, 5, 4, 2, 4, 6, 12, 13, 14;
+  - weight 12, 19, 6, 9, 8, 2, 6, 3, 1, 2;
+  - flow 4, 3, 3, 3, 7, 6, 12, 7, 9, 14;
+  - arch 14, 12, 9, 1, 3, 2, 5, 10, 4, 8;
+  - curl_extension 10, 11, 2, 9, 7, 6, 5, 6, 5, 7;
+  - every other parameter 2-11 per decile.
+  Full table in `report.txt`.
+- Stretch histogram (1.1^0..7): 1773, 195, 26, 2, 2, 2, 0, 0.
+- Rules broken at stretch 1 among the 2,000 that passed: hand speed 213, joint range 15;
+  1,773 were clean at stretch 1.
+
+Per joint over the 2,000 clips, total motion histogram (degrees, range:count) and share of
+the summed motion (median, p10, p90):
+- base yaw: 387-443:80 443-499:264 499-555:445 555-611:447 611-666:307 666-722:211
+  722-778:145 778-834:60 834-890:36 890-946:5. Share 0.196 (0.170, 0.231).
+- shoulder: 151-182:51 182-213:151 213-244:312 244-275:452 275-307:478 307-338:341
+  338-369:153 369-400:49 400-431:10 431-462:3. Share 0.094 (0.074, 0.114).
+- elbow: 309-361:7 361-413:24 413-465:78 465-517:209 517-569:405 569-621:529 621-673:397
+  673-725:235 725-777:83 777-829:33. Share 0.201 (0.172, 0.230).
+- wrist bend: 464-544:9 544-623:37 623-703:107 703-782:304 782-862:504 862-941:530
+  941-1021:336 1021-1100:130 1100-1179:38 1179-1259:5. Share 0.292 (0.257, 0.322).
+- roll: 390-453:19 453-516:92 516-580:307 580-643:602 643-707:573 707-770:269 770-834:99
+  834-897:30 897-961:7 961-1024:2. Share 0.216 (0.191, 0.244).
+
+For comparison, from the brief: v47's shares are base 26 %, wrist bend 24, roll 24, elbow 17;
+the r3 sweep's were base about 60 %.
+
+Low (< 0.2) against high (> 0.8) medians. Joint values are given as yaw / shoulder / elbow /
+wrist bend / roll. Movement is hand path m / box m / base turn deg.
+- time (n 388 / 403): p90 speed low 65.9 / 30.4 / 68.6 / 98.8 / 82.4, high 69.6 / 30.5 /
+  70.3 / 101.3 / 84.2. Total low 653 / 282 / 618 / 892 / 655 (sum 3115), high 527 / 233 /
+  583 / 852 / 643 (2844). Movement low 7.96 / 1.14 / 252, high 7.27 / 1.13 / 255.
+- weight (355 / 425): p90 low 67.6 / 34.3 / 68.1 / 97.7 / 83.3, high 66.5 / 30.3 / 70.1 /
+  99.4 / 82.9. Total low 532 / 273 / 578 / 827 / 632 (2849), high 645 / 278 / 618 / 902 /
+  647 (3110). Movement low 7.32 / 1.13 / 256, high 8.00 / 1.14 / 253.
+- flow (428 / 370): p90 low 67.6 / 32.8 / 63.0 / 92.7 / 80.7, high 67.4 / 31.5 / 74.9 /
+  104.7 / 86.3. Total low 588 / 280 / 559 / 834 / 625 (2900), high 569 / 267 / 640 / 892 /
+  659 (3054). Movement low 7.67 / 1.15 / 252, high 7.78 / 1.11 / 256.
+- space (423 / 386): p90 low 71.8 / 31.7 / 68.6 / 98.1 / 85.8, high 62.9 / 32.2 / 68.7 /
+  99.3 / 86.6. Total low 623 / 274 / 594 / 850 / 704 (3080), high 544 / 279 / 603 / 878 /
+  642 (2940). Movement low 7.88 / 1.14 / 253, high 7.37 / 1.13 / 255.
+These medians move by under 20 % across any of the four parameters. The parameters now
+change profile shape, holds, overshoot and wander; p90 speed and total motion do not
+separate these.
+
+Histograms over the 2,000 clips:
+- Hand path, m: 4.49-5.11:4 5.11-5.72:19 5.72-6.34:88 6.34-6.95:309 6.95-7.57:494
+  7.57-8.18:523 8.18-8.80:353 8.80-9.41:169 9.41-10.03:34 10.03-10.64:7.
+- Box, m: 0.83-0.88:3 0.88-0.93:19 0.93-0.98:68 0.98-1.03:168 1.03-1.08:308 1.08-1.13:430
+  1.13-1.18:480 1.18-1.23:349 1.23-1.28:148 1.28-1.33:27.
+- Base turn, deg: 186-200:11 200-214:76 214-228:260 228-242:355 242-256:358 256-270:370
+  270-284:292 284-298:187 298-312:81 312-326:10.
+
+Regions (rank space; candidate centres are the 1,000 clips with d9 at or under the median,
+1.374):
+- **r = 0.903.** Initial centre-to-centre distance min 2.287, mean 2.977 (a quarter: 0.744).
+- Initial centres 1706, 1966, 357, 1016, 1582, 365, 1434, 1017. Members before fill: 1 in
+  every region (only the centre; its within-region distance is 0).
+- Fill and replacement: **814 replacements**, each with the reason "under 9 members after
+  fill". Per region: 7, 29, 2, 108, 145, 260, 212, 51. Every replacement (old > new, members
+  after the failed fill) is in `r4/fill.txt` and `fill.json`.
+- Final centres 1919, 644, 1264, 1074, 1102, 1457, 1277, 1025. Members after fill: 11, 9, 9,
+  9, 9, 9, 9, 9. Of these, 9, 1, 1, 1, 2, 1, 1, 1 are sweep clips; the rest are made from
+  members' body vectors with fresh seeds.
+- **Final check (addendum 3): broken.** Final centre-to-centre min 1.484, mean 2.531, a
+  quarter 0.633. Mean within-region distances 0.996, 0.935, 0.848, 1.006, 1.012, 0.901,
+  0.944, 1.018: all eight are over the quarter. r = 0.903 is under the final minimum centre
+  distance 1.484. **The study stops here.**
+- What the numbers say: the new clips spread more evenly in descriptor space (d9 median 1.374
+  against r3's 0.999). No clip but the centre falls inside r of any initial centre. Clones of
+  one body vector with fresh seeds sit about 0.85-1.0 apart. So a ball holding 9 clips cannot
+  have a within-distance under a quarter of the centre spacing. Changing r, the fill or the
+  rule is your decision; I did not.
+
+Single first-look clips (16 s, silent, stretch 1.0, not test clips) in `r4/first/`, recorded
+with `record-ensemble.cjs` from the study-camera pages. Units: hand path m, box m, base turn
+deg, top hand speed m/s. Per joint, in the order yaw / shoulder / elbow / wrist bend / roll:
+total motion in degrees, then the longest time under 2 deg/s in seconds.
+- a, sustained/light/bound: sweep clip 494 (time 0.03, weight 0.09, flow 0.06). Movement 6.60
+  / 1.05 / 213 / 0.90. Motion 637 / 197 / 583 / 981 / 650. Still 0.13 / 1.17 / 0.07 / 0.03 /
+  0.03. Frame margin 53 px.
+- b, sudden/strong/free: clip 670 (time 0.99, weight 0.96, flow 0.94). Movement 8.25 / 1.10 /
+  304 / 1.14. Motion 613 / 227 / 695 / 770 / 597. Still 1.93 / 1.15 / 0.08 / 0.05 / 0.05.
+  Frame margin 39 px.
+- c, indirect/extended: clip 53 (space 0.97, curl_extension 0.98). Movement 6.04 / 1.06 /
+  252 / 1.13. Motion 561 / 208 / 652 / 943 / 609. Still 0.80 / 0.13 / 0.05 / 0.05 / 0.13.
+  Frame margin 35 px.
+The longest still time over any joint is base 1.93 s (b, its sudden hold) and shoulder 1.17
+s (a, where breath alone moves it between moves).
+Body vectors and seeds are in `sweep.json`.
+
+Unchanged: `three.sh` exports compared with `cmp` against `hexagon-47.html`,
+`five-years-hexagon.html` and `presence-hexagon.html`: all three are identical. Its three
+tmp files were deleted. Frozen `src/` and `tools/` were not touched. No hardware was driven.

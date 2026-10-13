@@ -1,4 +1,4 @@
-"""report.py SWEEP.json: sweep numbers for docs/BODY_STUDY.md step 1."""
+"""report.py SWEEP.json: sweep numbers for docs/BODY_STUDY.md step 1 (with its addenda)."""
 import json, sys, collections
 import numpy as np
 d = json.load(open(sys.argv[1]))
@@ -28,3 +28,9 @@ for name in ["time", "weight", "flow", "space"]:
 for i, n in enumerate(VN):
     h, e = np.histogram(V[:, i], bins=10)
     print(f"histogram {n}:", " ".join(f"{e[k]:.2f}-{e[k+1]:.2f}:{h[k]}" for k in range(10)))
+# per joint (addendum 3): total motion histogram and share of the summed motion
+S = M / M.sum(1, keepdims=True)
+for j, n in enumerate(J):
+    h, e = np.histogram(M[:, j], bins=10)
+    print(f"total motion {n} deg:", " ".join(f"{e[k]:.0f}-{e[k+1]:.0f}:{h[k]}" for k in range(10)))
+    print(f"  share of summed motion median {np.median(S[:, j]):.3f} p10 {np.percentile(S[:, j], 10):.3f} p90 {np.percentile(S[:, j], 90):.3f}")

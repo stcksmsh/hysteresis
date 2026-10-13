@@ -1,5 +1,6 @@
 //! Body study tools (docs/BODY_STUDY.md).
 //!   body_study sweep OUT.json [N]            sample feasible body vectors (default 2000)
+//!   body_study fill SWEEP.json REGIONS.json OUT.json   fill/replace regions, recheck the rule
 //!   body_study html OUT.html AUDIO_URL b0,..,b11 SEED S [--score OUT.json]   one clip
 use std::{env, fs, io, path::PathBuf};
 
@@ -35,13 +36,7 @@ fn sweep(out: PathBuf, want: usize) -> io::Result<()> {
                                 let r = f.map(|(s, score)| {
                                     // total joint motion per joint, degrees, at 60 fps
                                     let fr = body::frames(&score);
-                                    let motion: Vec<f64> = (0..5)
-                                        .map(|j| {
-                                            fr.windows(2)
-                                                .map(|w| (w[1].0[j] - w[0].0[j]).abs())
-                                                .sum()
-                                        })
-                                        .collect();
+                                    let motion = body::joint_motion(&fr).to_vec();
                                     let mv = body::movement(&fr);
                                     (s, body::descriptors(&score), motion, mv)
                                 });
@@ -258,12 +253,54 @@ fn fill(sweep: PathBuf, regions: PathBuf, out: PathBuf) -> io::Result<()> {
         .iter()
         .map(|v| v.iter().filter(|&&i| pool[i].2.is_none()).count())
         .collect();
+    // Addendum 3: the quarter rule and r, rechecked on the final centres and members.
+    let cc: Vec<f64> = (0..8)
+        .flat_map(|a| (a + 1..8).map(move |b| (a, b)))
+        .map(|(a, b)| dist(&pool[centres[a]].0, &pool[centres[b]].0))
+        .collect();
+    let cc_mean = cc.iter().sum::<f64>() / cc.len() as f64;
+    let cc_min = cc.iter().copied().fold(f64::MAX, f64::min);
+    let quarter = cc_mean / 4.0;
+    let within: Vec<f64> = m
+        .iter()
+        .map(|v| {
+            let d: Vec<f64> = (0..v.len())
+                .flat_map(|a| (a + 1..v.len()).map(move |b| (a, b)))
+                .map(|(a, b)| dist(&pool[v[a]].0, &pool[v[b]].0))
+                .collect();
+            if d.is_empty() {
+                0.0
+            } else {
+                d.iter().sum::<f64>() / d.len() as f64
+            }
+        })
+        .collect();
+    let rule = within.iter().all(|&w| w < quarter) && r <= cc_min;
+    println!(
+        "final: centre-to-centre min {cc_min:.3} mean {cc_mean:.3}, quarter {quarter:.3}, r {r:.3}"
+    );
+    for (k, w) in within.iter().enumerate() {
+        println!(
+            "  region {k}: within {w:.3} {} quarter",
+            if *w < quarter { "<" } else { ">=" }
+        );
+    }
+    println!(
+        "final region rule: {}",
+        if rule {
+            "holds"
+        } else {
+            "BROKEN: the study stops"
+        }
+    );
     fs::write(
         out,
         serde_json::to_vec(&serde_json::json!({
             "r": r, "centres": centres, "replacements": replacements, "added": added,
             "sweepMembers": sweep_members, "madeMembers": made_members,
             "membersAfter": m.iter().map(Vec::len).collect::<Vec<_>>(),
+            "final": {"minCentreDistance": cc_min, "meanCentreDistance": cc_mean,
+                      "quarter": quarter, "meanWithinDistance": within, "ruleHolds": rule},
         }))?,
     )
 }
@@ -303,6 +340,16 @@ fn html(
         "hand path {path:.2} m, box {side:.2} m, base turn {turn:.0} deg, top hand speed {:.2} m/s, reversals {reversals}",
         rep.max_hand_mps
     );
+    let still = body::longest_still(&fr);
+    for (j, name) in body::JOINTS.iter().enumerate() {
+        println!(
+            "  {name:10} total motion {:5.0} deg (floor {:.0}), longest still {:.2} s",
+            rep.joint_motion[j],
+            body::MIN_JOINT_DEG[j],
+            still[j]
+        );
+    }
+    println!("  frame margin {:.0} px", rep.frame_margin_px);
     let fps = body::FPS;
     let frames: Vec<_> = (0..=(score.duration * fps).round() as usize)
         .map(|i| {
@@ -327,7 +374,26 @@ fn html(
             .replace('>', "\\u003e")
             .replace('&', "\\u0026")
     };
-    let html = include_str!("../src/ensemble.html")
+    // The study camera (`body::CAMERA_*`, addendum 3): only this copy changes.
+    let template = include_str!("../src/ensemble.html");
+    let camera = [
+        (
+            "const target=solo?[0,0,0.3]:",
+            format!("const target=solo?[0,0,{}]:", body::CAMERA_TARGET_Z),
+        ),
+        (
+            "const distance=solo?2.1:",
+            format!("const distance=solo?{}:", body::CAMERA_DISTANCE),
+        ),
+    ];
+    let mut template = template.to_string();
+    for (from, to) in camera {
+        if !template.contains(from) {
+            return Err(err(format!("template camera changed: {from}")));
+        }
+        template = template.replacen(from, &to, 1);
+    }
+    let html = template
         .replace("__DURATION__", &score.duration.to_string())
         .replace("__TRACK_URL_JSON__", &esc(serde_json::to_string(url)?))
         .replace("__ENSEMBLE_DATA__", &esc(serde_json::to_string(&data)?));

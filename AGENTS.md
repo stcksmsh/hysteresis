@@ -1533,3 +1533,12 @@ Within-song timing R² is negative for every candidate: the encoding separates s
 does not follow change inside one. Three danced songs encoded to `*.emotion.sidecar.json`
 and an `emotion-report.html` made, outside git; unread by the user. Numbers, deviations
 and rerun steps in `docs/DANCE_HANDOFF.md`. Planner untouched; stages 2-4 not started.
+
+### Body study, addendum 3 run — 2026-10-13
+
+Generator rewritten in `body.rs`: each joint has its own pace and leader-synchronised
+moves, overlapping so none stops dead; overshoot on elbow, wrist and roll only; new
+per-joint floor and in-frame rules (a study-only camera in `body_study html`). 2,000 of
+2,068 clips pass. The final region check fails (within-region 0.85-1.02 against a quarter
+of 0.633), so the study stopped at ★ 1. Not verified by eye. Numbers in
+`docs/DANCE_HANDOFF.md`.
