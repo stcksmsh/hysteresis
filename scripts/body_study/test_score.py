@@ -15,8 +15,11 @@ key = {"triplets": tr, "m": [[rng.random() for _ in range(37)] for _ in range(8)
 
 def run(right):
     """`right` of 24 answered correctly (the first ones), the rest wrong."""
-    ans = [{"shown": n + 1, "choice": t["odd"] if n < right else "ABC"[(n + 1) % 3],
-            "text": "odd one jerky" if n == 0 else "", "time": "2026-10-13T00:00:00Z"}
+    # second answer: always the true odd one (must never count)
+    ans = [{"shown": n + 1, "counted": t["odd"] if n < right else "ABC"[(n + 1) % 3],
+            "second": t["odd"], "text": "odd one jerky" if n == 0 else "",
+            "timeToCountedS": 52.0 + n, "totalS": 80.0 + n, "pausesFirstPass": n % 2,
+            "replays": {"A": n % 3, "B": 0, "C": 1}}
            for n, t in enumerate(tr)]
     with tempfile.TemporaryDirectory() as d:
         (Path(d) / "a.json").write_text(json.dumps({"answers": ans}))
@@ -30,6 +33,9 @@ assert "16 of 24 correct -> PASS" in out, out
 # triplets t01..t16 correct: regions 0..7 odd-found counts from n % 8 pattern
 assert "t01 (found, odd region 1): odd one jerky" in out, out
 assert "found minus missed" in out, out
+assert "second answers given 24 of 24: correct 24, changed from the counted answer 8" in out, out
+assert "timeToCountedS: median 63.5" in out, out
 assert "15 of 24 correct -> FAIL" in run(15)
+assert "0 of 24 correct -> FAIL" in run(0)
 assert "all found or all missed" in run(24)
 print("score.py checks pass")

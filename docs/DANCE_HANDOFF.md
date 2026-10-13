@@ -3381,3 +3381,79 @@ Checks: `cargo test -p hyst-compile -p hyst-output -p hyst-previz -p hyst-cli` p
 compared with `cmp` against `hexagon-47.html`, `five-years-hexagon.html` and
 `presence-hexagon.html`: all three are identical; the tmp files were deleted. Frozen `src/`
 and `tools/` untouched. No hardware driven.
+
+### Body study, step 1 under addendum 7: one clip at a time, the counted answer (★ 2) — 2026-10-13
+
+Rules: `docs/BODY_STUDY.md` with all seven addenda (unchanged). Addendum 6 was never built.
+The 72 clips, the 24 triplets, the shuffle and `r5/key.json` of `9337b00` are unchanged.
+Data in `/secondary/hyst-data/bodystudy/r5/`, outside git. **Not verified by eye.** The study
+waits at ★ 2: the user takes the test as `r5/HOWTO.txt` says.
+
+Why: the user, on the A | B | C stack: "This sort of comparison doesnt work without
+seek/pause etc, there are 3 videos running simultaneously, I cant keep up with all 3 and
+compare all of them". The overseer then wrote addenda 6 and 7; 7 replaces 6.
+
+Built:
+- `scripts/body_study/crops.sh R5DIR`: cuts A, B and C out of each stack `test/tNN.mp4`
+  into `test/tNN-{a,b,c}.mp4`. Settings: `crop=1280:720:{0,1280,2560}:0`, libx264 `-qp 0`
+  (lossless; the profile is High 4:4:4 Predictive), yuv420p, faststart, no audio,
+  `-map_metadata -1`. Then every crop's decoded frames (`framemd5`) are compared with its
+  third of the stack: **72 crops, 0 mismatches.** Each is 1280 x 720, 480 frames, 16.0 s,
+  with encoder tags only. Sizes 8,205,478-10,896,646 bytes, 657 MB in all. Headless Chrome
+  plays them (one test crop: 50 frames, 0 dropped in 1.5 s). The stacks are no longer shown
+  and stay on disk.
+- `scripts/body_study/answer.html` (rewritten to addendum 7):
+  - First pass: Start, then A, B, C alone at 1280 x 720 (scaled to fit), with 1 s of black
+    between. The letter is beside the video, left. A Pause/Resume button; no controls, no
+    pointer events, no context menu. A seek is undone (snaps back to the last played time).
+    One video element only, so two clips never play at once.
+  - After C: the counted answer A / B / C, final, saved at once.
+  - Then replays of any clip one at a time, with native controls (seek), an optional second
+    answer (toggle) and the free text. Next triplet; no way back.
+  - State is in `localStorage` (`hyst-bodystudy-answers-v1`), saved at Start, at every
+    pause, at the counted answer, on every replay, second answer and text change, and at
+    Next. A reload during the first pass restarts that triplet from A and keeps its counts.
+    A reload after the counted answer returns to the replays with the answer locked.
+  - "Download answers so far" (any time) and "Download answers" (end) save `answers.json`.
+    "Load a saved file" resumes from it; a file with fewer answers than the browser has is
+    refused.
+  - Per triplet it records: shown, counted, second, text, timeToCountedS (Start to counted
+    answer, across reloads), totalS (Start to Next), pausesFirstPass, replays {A, B, C}
+    (each open and each play after a clip ended), firstPassStarts, started, countedAt,
+    finishedAt.
+  - Videos come from `test/` next to the page or `?dir=`. The page has no reference to
+    `key.json`.
+- `scripts/body_study/serve.cjs [DIR] [PORT]`: a loopback server with byte ranges (Python's
+  `http.server` has none, and replay seeking needs them). Defaults: its own folder, port
+  8777. It serves only `answer.html` and `test/tNN-{a,b,c}.mp4`. `key.json`, `clips.tsv`,
+  the stacks and `../` paths answer 404 (checked with curl on r5). A copy of it and of the
+  page are in `r5/`.
+- `scripts/body_study/test_answer.sh` (+ `test_answer.cjs`): headless Chrome at 1366 x 768
+  on gray 3 s lossless dummy clips. It runs once from `file://` and once over `serve.cjs`,
+  31 checks each, all passing:
+  - no horizontal scroll; the controls fit in 768 px (the video is 956 px wide);
+  - A, black, B, black, C in order; no controls in the first pass; seeks back and forward
+    refused; pause holds the clip;
+  - replays locked until the counted answer; the counted answer is saved and cannot change,
+    also after a reload; no way back to the first pass;
+  - replays have controls and seek;
+  - the records' fields, replay counts and times;
+  - a reload mid first pass restarts it (2 starts recorded);
+  - download mid test; cleared storage, then resume from the file;
+  - 24 / 24 ends the test with a final download;
+  - no request for the key; only the page and the single clips are requested (Chrome's
+    built-in `data:` icons and favicon excepted); `serve.cjs` refuses `key.json` and
+    serves byte ranges.
+- `scripts/body_study/score.py`: scores only `counted`. Second answers (given, correct,
+  changed), times, pauses and replays are printed as data only. `test_score.py`
+  (synthetic key and answers, where the second answer is always right): 16 gives PASS, 15
+  and 0 give FAIL, 24 all found, and the data lines are checked. Not run on real answers.
+- `r5/HOWTO.txt`: the server command `node /secondary/hyst-data/bodystudy/r5/serve.cjs`,
+  the URL `http://127.0.0.1:8777/answer.html`, Chrome required, how to resume, where
+  `answers.json` goes.
+
+Checks: `cargo test -p hyst-compile -p hyst-output -p hyst-previz -p hyst-cli` passes;
+clippy -D warnings with --all-targets is clean on the same crates; fmt is clean. `three.sh`
+exports compared with `cmp` against `hexagon-47.html`, `five-years-hexagon.html` and
+`presence-hexagon.html`: all three are identical; the tmp files were deleted. Nothing was
+watched or answered. Frozen `src/` and `tools/` untouched. No hardware driven.

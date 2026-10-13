@@ -1558,3 +1558,11 @@ Addendum 5: the 8 regions of `90cbec8` as built, factor 0.6. `scripts/body_study
 (all on their ladder stretch, frame margin ≥ 27 px); 24 A | B | C stacks in
 `/secondary/hyst-data/bodystudy/r5/test/`; the user opens the page as `r5/HOWTO.txt` says.
 Not verified by eye. Waiting for the user's answers.
+
+### Body study, test ready under addendum 7 (★ 2) — 2026-10-13
+
+Addendum 7 replaces the stack (addendum 6 unbuilt). A, B, C play alone one after another,
+and the answer after C counts. Replays with seek come only after it, and progress is saved
+after every step. 72 lossless single-clip crops are frame-identical to the stacks. The page,
+a range server (`serve.cjs`), headless tests and the scorer (counted answer only) are in
+`scripts/body_study/`. The user starts with `r5/HOWTO.txt`. Not verified by eye.
