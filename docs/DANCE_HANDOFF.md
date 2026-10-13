@@ -3315,3 +3315,69 @@ Checks: `cargo test -p hyst-compile -p hyst-output -p hyst-previz -p hyst-cli` p
 `hexagon-47.html`, `five-years-hexagon.html` and `presence-hexagon.html`: all three are
 identical; the tmp files were deleted. Frozen `src/` and `tools/` untouched. No hardware
 driven.
+
+### Body study, step 1 under addendum 5: triplets, clips and the answer page (★ 2) — 2026-10-13
+
+Rules: `docs/BODY_STUDY.md` with all five addenda (unchanged). Regions: the final set of
+`r5/regions.json` of `90cbec8` as stored (centres 1706, 1966, 529, 786, 1582, 365, 1919, 183;
+9 clips each; smallest ratio 0.618 against addendum 5's factor 0.6). Nothing rebuilt. Data
+in `/secondary/hyst-data/bodystudy/r5/`, outside git. **Not verified by eye.** The study
+waits at ★ 2: the user takes the test.
+
+Built:
+- `scripts/body_study/triplets.py REGIONS.json R5DIR`: checks the centres and the 0.6
+  factor, then builds the 24 triplets. Triplet i: pair from p = i mod 8, odd from
+  (p + k) mod 8, k = 1, 3, 5 for i in 0-7, 8-15, 16-23. Each region gives its 9 clips in
+  stored order (centre first): clips 0-5 to its 3 pairs in triplet order, clips 6-8 to its
+  3 odd appearances (my choice; the documents do not order clips within a region). Order
+  and odd position shuffled with Python's `random.Random(20261014)` (shuffle, then
+  `randrange(3)` per triplet). Writes `key.json` (per shown triplet: odd position, pair
+  and odd region, k, and region, centre, sweep index, body vector, seed, stretch of A, B,
+  C; plus m, w, centres), `clips.tsv` and `triplets.tsv`. Checked: 72 distinct clips, each
+  region odd 3 times and pair 3 times, every triplet's regions match its key.
+- `body_study ladder b SEED S` (new subcommand): fails unless S is the first passing
+  stretch on the ladder.
+- `scripts/body_study/render.sh R5DIR`: per clip, `body_study ladder`, then `body_study
+  html` (study camera, check 2a with the frame rule), then `record-ensemble.cjs` (start 0,
+  16 s, `r5/silence.m4a`, which is r4's 16 s of silence). Any failure is listed and nothing
+  is stacked. Stacks: ffmpeg `hstack` of the three 1280 x 720 clips at full size, 3840 x
+  720, libx264 crf 20, yuv420p, faststart, no audio track, `-map_metadata -1`, named
+  `test/t01.mp4`..`t24.mp4` by shown order.
+- `scripts/body_study/answer.html`: one triplet at a time, progress "n / 24". Play plays
+  once: there are no controls, no pointer events on the video, no context menu or
+  picture-in-picture, and any later play or seek is undone. A / B / C and the optional
+  text box ("What did the odd one look like?") unlock when the video ends. At the end,
+  "Save answers" downloads `answers.json`: `{finished, answers: [{shown, choice, text,
+  time}]}`. Videos come from `test/` next to the page, or from `?dir=`. The page has no
+  reference to `key.json`. A copy of the page is in `r5/answer.html`.
+- `scripts/body_study/test_answer.sh` (+ `test_answer.cjs`): the page in headless Chrome
+  at 1366 x 768 on 24 gray dummy videos. Checked: page width 1366 = viewport (no
+  horizontal scroll), video 250 px tall, buttons locked until the end, no replay, progress
+  text, 24 answers saved with shown/choice/text/time, no request outside `test/`. Passes
+  from `file://` and from `python3 -m http.server`.
+- `scripts/body_study/score.py ANSWERS KEY`: correct of 24, pass at >= 16, per region found
+  as the odd one (of 3) and as the pair of a correct triplet, per k, and the 8 descriptors
+  with the largest found-minus-missed difference (the odd region's position m, and |m_odd
+  - m_pair|), then the free text. `test_score.py` runs it on a synthetic key and answers:
+  16 correct gives PASS, 15 FAIL, 24 "all found". Not run on real answers.
+- `r5/HOWTO.txt`: the server command, the URL, and where `answers.json` goes.
+
+Clips (automated checks only):
+- All 72 match their stored stretch on the ladder and pass check 2a. The smallest frame
+  margin is 27 px (rule 20). Stretches: 66 at 1.0, 5 at 1.1, 1 at 1.331. No clip problems.
+- Each clip: 1280 x 720, 480 frames. Each stack: 3840 x 720, 480 frames, 16.000 s, video
+  only.
+- Stack tags: encoder strings only. The only id-like byte string in the files is "key"
+  from x264's `keyint` option, the same in every file.
+- Sizes: `test/` 77,341,453 bytes (2,980,505-3,515,610 per stack); `clips/` 112 MB,
+  intermediates the page never loads.
+- First stacking attempt: ffmpeg read the loop's stdin and skipped lines. It was fixed
+  with `-nostdin` and the stacks were remade. The clips were not re-recorded.
+- Disclosure: one run of `triplets.py` printed the 24 odd positions to my terminal before I
+  removed that print. I have not watched any test clip.
+
+Checks: `cargo test -p hyst-compile -p hyst-output -p hyst-previz -p hyst-cli` passes; clippy
+-D warnings with --all-targets is clean on the same crates; fmt is clean. `three.sh` exports
+compared with `cmp` against `hexagon-47.html`, `five-years-hexagon.html` and
+`presence-hexagon.html`: all three are identical; the tmp files were deleted. Frozen `src/`
+and `tools/` untouched. No hardware driven.

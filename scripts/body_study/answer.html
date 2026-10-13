@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Body study</title>
+<!-- Answer page for check 2b (docs/BODY_STUDY.md). Loads t01..t24.mp4 from the
+     folder in ?dir= (default test/, next to this page). Never reads the key. -->
+<style>
+  :root { color-scheme: dark; --bg: #0c1114; --fg: #c7d6db; --mute: #6f8188; --line: #2a3a40; --on: #e8b45a; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px system-ui, sans-serif; }
+  main { padding: 16px; box-sizing: border-box; width: 100%; }
+  html, body { overflow-x: hidden; }
+  video { width: 100%; height: auto; display: block; background: #000; pointer-events: none; }
+  .abc { display: grid; grid-template-columns: repeat(3, 1fr); text-align: center; font-size: 28px; margin: 6px 0 14px; }
+  .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 10px 0; }
+  button { font: inherit; padding: 10px 22px; background: #1a252a; color: var(--fg); border: 1px solid var(--line); border-radius: 6px; cursor: pointer; }
+  button:disabled { opacity: .35; cursor: default; }
+  button.pick { font-size: 24px; min-width: 90px; }
+  button.on { border-color: var(--on); color: var(--on); }
+  textarea { width: 100%; min-height: 70px; font: inherit; background: #111a1e; color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 8px; box-sizing: border-box; }
+  .mute { color: var(--mute); }
+</style>
+</head>
+<body>
+<main>
+  <p id="head">Which one moves differently from the other two? Each triplet plays once.</p>
+  <video id="v" muted playsinline preload="auto" disablepictureinpicture controlslist="nodownload nofullscreen noremoteplayback"></video>
+  <div class="abc"><span>A</span><span>B</span><span>C</span></div>
+  <div class="row">
+    <button id="play">Play</button>
+    <button class="pick" data-k="A" disabled>A</button>
+    <button class="pick" data-k="B" disabled>B</button>
+    <button class="pick" data-k="C" disabled>C</button>
+    <span id="status" class="mute"></span>
+  </div>
+  <textarea id="note" placeholder="What did the odd one look like? (optional)" disabled></textarea>
+  <div class="row"><button id="next" disabled>Next</button></div>
+</main>
+<script>
+const N = 24;
+const dir = new URLSearchParams(location.search).get('dir') || 'test/';
+const v = document.getElementById('v'), play = document.getElementById('play'), next = document.getElementById('next');
+const note = document.getElementById('note'), status = document.getElementById('status'), head = document.getElementById('head');
+const picks = [...document.querySelectorAll('.pick')];
+const answers = [];
+let i = 0, choice = null, played = false;
+const name = k => `t${String(k + 1).padStart(2, '0')}`;
+function load() {
+  choice = null; played = false; note.value = ''; note.disabled = true; next.disabled = true;
+  picks.forEach(b => { b.disabled = true; b.classList.remove('on'); });
+  play.disabled = false; status.textContent = '';
+  head.textContent = `${i + 1} / ${N}. Which one moves differently from the other two? It plays once.`;
+  v.src = dir + name(i) + '.mp4'; v.load();
+}
+v.addEventListener('error', () => { status.textContent = `Could not load ${v.src}`; });
+v.addEventListener('contextmenu', e => e.preventDefault());
+// Plays once: any later play (or seek) is undone.
+v.addEventListener('play', () => { if (played) v.pause(); });
+v.addEventListener('seeking', () => { if (played && v.currentTime < v.duration) v.currentTime = v.duration; });
+play.addEventListener('click', () => {
+  if (played) return;
+  play.disabled = true; status.textContent = 'Playing';
+  v.play().catch(e => { status.textContent = `Playback failed: ${e.message}`; play.disabled = false; });
+});
+v.addEventListener('ended', () => {
+  played = true;
+  status.textContent = 'Pick A, B or C';
+  picks.forEach(b => { b.disabled = false; }); note.disabled = false;
+});
+picks.forEach(b => b.addEventListener('click', () => {
+  choice = b.dataset.k;
+  picks.forEach(o => o.classList.toggle('on', o === b));
+  next.disabled = false;
+}));
+next.addEventListener('click', () => {
+  answers.push({ shown: i + 1, choice, text: note.value.trim(), time: new Date().toISOString() });
+  i += 1;
+  if (i < N) { load(); return; }
+  v.removeAttribute('src'); v.load();
+  document.querySelector('main').innerHTML = '<p>All 24 answered.</p><div class="row"><button id="save">Save answers</button></div><p class="mute">Saves answers.json to your downloads.</p>';
+  document.getElementById('save').addEventListener('click', () => {
+    const blob = new Blob([JSON.stringify({ finished: new Date().toISOString(), answers }, null, 1)], { type: 'application/json' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'answers.json'; a.click();
+  });
+});
+load();
+</script>
+</body>
+</html>

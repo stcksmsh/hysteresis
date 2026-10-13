@@ -1550,3 +1550,11 @@ the r4 sweep. Seed spread w is 1.33-2.72 (median 1.93), not the 0.85-1.0 the add
 assumed. After 992 replacements the candidates ran out; the final set's smallest ratio is
 0.618 and 25 of 28 pairs are under 1.5. The study stops before ★ 2. Not verified by eye.
 Numbers in `docs/DANCE_HANDOFF.md`.
+
+### Body study, test ready (★ 2) — 2026-10-13
+
+Addendum 5: the 8 regions of `90cbec8` as built, factor 0.6. `scripts/body_study/` has
+`triplets.py`, `render.sh`, `answer.html`, `score.py` and their tests. 72 clips rendered
+(all on their ladder stretch, frame margin ≥ 27 px); 24 A | B | C stacks in
+`/secondary/hyst-data/bodystudy/r5/test/`; the user opens the page as `r5/HOWTO.txt` says.
+Not verified by eye. Waiting for the user's answers.

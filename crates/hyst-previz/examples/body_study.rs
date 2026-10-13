@@ -2,6 +2,7 @@
 //!   body_study sweep OUT.json [N]            sample feasible body vectors (default 2000)
 //!   body_study fill SWEEP.json REGIONS.json OUT.json   fill/replace regions, recheck the rule
 //!   body_study regions SWEEP.json REGIONS.json OUT.json   regions under addendum 4
+//!   body_study ladder b0,..,b11 SEED S       fail unless S is the clip's stretch-ladder value
 //!   body_study html OUT.html AUDIO_URL b0,..,b11 SEED S [--score OUT.json]   one clip
 use std::{env, fs, io, path::PathBuf};
 
@@ -576,6 +577,23 @@ fn html(
     Ok(())
 }
 
+/// Fails unless `s` is the first stretch on the ladder at which the clip passes 2a.
+fn ladder(b: &str, seed: u64, s: f64) -> io::Result<()> {
+    let b: Vec<f64> = b
+        .split(',')
+        .map(|v| v.parse().map_err(|_| err("bad b")))
+        .collect::<Result<_, _>>()?;
+    let b: body::Body = b.try_into().map_err(|_| err("b needs 12 values"))?;
+    match body::feasible(&b, seed) {
+        Some((l, _)) if l == s => {
+            println!("stretch {s} matches the ladder");
+            Ok(())
+        }
+        Some((l, _)) => Err(err(format!("ladder gives stretch {l}, stored {s}"))),
+        None => Err(err("rejected on the ladder")),
+    }
+}
+
 fn main() -> io::Result<()> {
     let a: Vec<String> = env::args().skip(1).collect();
     match a.iter().map(String::as_str).collect::<Vec<_>>().as_slice() {
@@ -583,6 +601,11 @@ fn main() -> io::Result<()> {
         ["sweep", out, n] => sweep(out.into(), n.parse().map_err(|_| err("bad N"))?),
         ["fill", sweep, regions, out] => fill(sweep.into(), regions.into(), out.into()),
         ["regions", sweep, rg, out] => regions(sweep.into(), rg.into(), out.into()),
+        ["ladder", b, seed, s] => ladder(
+            b,
+            seed.parse().map_err(|_| err("bad seed"))?,
+            s.parse().map_err(|_| err("bad s"))?,
+        ),
         ["html", out, url, b, seed, s, rest @ ..] => html(
             out.into(), url, b,
             seed.parse().map_err(|_| err("bad seed"))?,
