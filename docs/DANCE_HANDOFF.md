@@ -2769,3 +2769,26 @@ default; `--baseline mix` for the mix-only one), then `encode.py` / `report.py` 
 components (`/secondary/hyst-env/encode_songs.sh`, `make_report.sh`). A pick containing
 `baseline_stems` needs `--stems-dir` for each song.
 Nothing here says the arm will look emotional: stage 4 is the only test of that.
+
+### B workspace parked — verdict of 2026-10-12 (written 2026-10-13)
+
+Round 2's blind test did not separate the modes: the user could not tell
+`Off`, `Rehearsed` and `Schematic` apart ("all 3 are mostly good"). Under the
+round-2 rule a tie is a loss, but the user chose to **park** B rather than
+delete it: `workspace.rs` and its wiring stay in the tree, `Off` stays the
+default and still reproduces version 47 byte for byte.
+
+Measured cause, from the user's own look at the exports (Presence, Rehearsed):
+
+- **The hand shell caps elevation at 79°.** Presence's median hand elevation
+  is 49°, and the hand sits pinned at the lid 8–10 % of the time. Every "rise"
+  B asks for (lift, gain, voice) saturates against that lid, so the fields
+  move little that can be seen. Stage 2 of `docs/EMOTION.md` (open shell)
+  removes the lid.
+- **The held breath reads as low energy.** Tension shrinks figures and slows
+  the figure clock before a drop; on screen that is a smaller, slower dance,
+  not suspense.
+
+B is not part of the emotion pipeline. Its expectation signals were not
+computed for check 1 (no beat grids or phrase memory on 45 s clips). Revisit
+only if a later stage needs expectation as an input.
