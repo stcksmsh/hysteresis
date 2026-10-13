@@ -249,3 +249,53 @@ The quarter rule (mean within-region pairwise distance under a quarter of the
 mean centre-to-centre distance, in every region) and the membership radius r are
 checked on the **final** centres and members, after every replacement and fill.
 If the final set breaks the rule, the study stops and reports.
+
+## Addendum 4, 2026-10-13 (night): a region is one body vector, separated by its seed spread
+
+Written after the run of commit `1b22eee` and the user's approval of its three
+first-look clips, **before check 2b ran on anything**. Still round 1. It replaces
+the region membership, r, the fill, the quarter rule and its recheck. Everything
+not named here stands: rank-normalised descriptors, candidate centres, sampling,
+check 2a with all its floors and the frame rule, triplets and check 2b.
+
+### Why
+
+The final region check of `1b22eee` failed: mean within-region distance
+0.85–1.02 in all 8 regions, against a quarter of the mean centre-to-centre
+distance, 0.633 (recomputed by the overseer: 0.86–1.04 against 0.632). The rule
+cannot pass in this space: clips made from one body vector with fresh seeds sit
+0.85–1.0 apart, so seed noise alone is over the limit; the median distance to a
+clip's 9th nearest neighbour is 1.37, over r = 0.90, so no sweep clip but the
+centre fell inside any region, and 814 centre replacements followed. The user
+chose to anchor the rule to the seed noise: the test is about body parameters,
+not about which seed a clip drew.
+
+### Regions (replace membership, r, the fill and the quarter rule)
+
+1. **Centres** as before: farthest-point sampling over the candidate centres (d9
+   at or under the median, rank space over the 2,000 sweep clips).
+2. **A region is one body vector**: its centre sweep clip plus 8 clips made from
+   the same body vector with fresh content seeds (seed order fixed by seed
+   20261015). Each made clip must pass check 2a exactly as a sweep clip does
+   (stretch ladder, floors, frame); a seed that fails is skipped and counted.
+   Up to 200 seeds per region. A region short of 9 clips after 200 seeds has its
+   centre replaced (step 5).
+3. Made clips are ranked against the 2,000 sweep clips: per descriptor,
+   (number of sweep values below + 0.5) / 2,000.
+4. For each region i: **seed spread** w_i = mean pairwise distance of its 9
+   clips; **position** m_i = mean of its 9 rank vectors.
+   **Separation rule:** for every pair of regions,
+   |m_i − m_j| ≥ 1.5 × max(w_i, w_j).
+5. **Replacement.** While a pair breaks the rule, take the pair with the smallest
+   ratio |m_i − m_j| / max(w_i, w_j), replace the later-chosen of its two centres
+   by the next candidate in farthest-point order (the candidate farthest from all
+   centres kept), and build its region by step 2. Every replacement is reported
+   with its pair, ratio and reason. If the candidates run out, the study stops and
+   reports.
+6. **Reported** for the final set: every w_i, every pairwise |m_i − m_j| and
+   ratio, the smallest ratio, seeds tried and skipped per region (by reason), and
+   the stretch of each of the 72 clips.
+
+The factor 1.5 was proposed by the overseer and accepted by the user. A probe on
+the made clips of `1b22eee` (approximate ranks, 7 regions) gave ratios 1.23 to
+2.8, with 2 of 21 pairs under 1.5.
