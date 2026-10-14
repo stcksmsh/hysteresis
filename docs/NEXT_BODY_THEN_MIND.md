@@ -145,6 +145,13 @@ Record the **whole-song dial** (`EMOTION.md` stage 4.3) on the three danced song
 until step 2's results are in. It is the only within-song truth that is the
 user's own feeling.
 
+**Dial format (user, 2026-10-14, before any recording):** a 2D pad, valence
+(unpleasant to pleasant, horizontal) and arousal (calm to excited, vertical),
+both −1..+1, recorded at 10 Hz against the audio clock, one pass per song,
+pause allowed, no seek. The pad shows the current position with live numbers
+and a colour that follows the position, so the user always sees what is chosen.
+Gate 5 uses the arousal axis; valence is reported, not gated.
+
 ### What to build (`scripts/emotion/`)
 
 - **Ear**: stage 1's pick (`baseline+all`, 2,665 per 0.5 s), PCA to 64 fitted on
