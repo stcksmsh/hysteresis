@@ -1589,3 +1589,11 @@ Regions under addendum 8: the separation rule holds with 0 replacements (smalles
 Page with practice feedback and capped pre-answer replays, scorer (pass at 20 of 32) and
 their tests in `scripts/body_study/`. The user starts with `r6/HOWTO.txt`. Not verified by
 eye.
+
+### Body study passes; whole-song dial page — 2026-10-14
+
+Check 2b of round 2: 30 of 32 correct, PASS (pass at 20; P under guessing about 1e-12);
+step 1 passes. `scripts/emotion/dial.html` (+ `dial_serve.cjs`, 62 headless checks on
+synthetic audio) records the user's valence/arousal at 10 Hz on the audio clock for the
+three songs, served from `/secondary/hyst-data/emotion/dial/` (`HOWTO.txt`). The builder
+never opens `dial.json`. Step 2 not started.

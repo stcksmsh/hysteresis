@@ -68,6 +68,11 @@ timing is not captured by any candidate, and the report page `$D/emotion-report.
 (body, decoder, odd-one-out tests) are not started. **B is parked** (round 2: not
 enough difference to judge); version 47 is unchanged and `Off` still reproduces it.
 
+**2026-10-14:** step 1 of `docs/NEXT_BODY_THEN_MIND.md` passes (body study round 2, check
+2b: 30 of 32). The whole-song dial page for step 2 is ready
+(`/secondary/hyst-data/emotion/dial/HOWTO.txt`); the user records, the builder never opens
+`dial.json`. Step 2 (MERP, the mind spike) is not started.
+
 B workspace, for the record (round 2 built and measured; parked): `docs/B_WORKSPACE.md` is the design; the last
 `docs/DANCE_HANDOFF.md` entries have the numbers. Round 1 lost the blind test
 (`Rehearsed` beat `Off` in 1 of 4 clips). Round 2 changed constants and two

@@ -3727,3 +3727,128 @@ Checks: `cargo test -p hyst-compile -p hyst-output -p hyst-previz -p hyst-cli` p
 clean. `three.sh` exports compared with `cmp` against `hexagon-47.html`,
 `five-years-hexagon.html` and `presence-hexagon.html`: all three identical; tmp files
 deleted. Frozen `src/` and `tools/` untouched. No hardware driven.
+
+### Body study round 2: check 2b scored (pass) — 2026-10-14
+
+The user's answers: `/secondary/hyst-data/bodystudy/r6/answers.json`. Scored with
+`scripts/body_study/score.py r6/answers.json r6/key.json` (counted answers of the 32 scored
+triplets only, as addendum 8 says); the output is saved in `r6/score.txt`.
+
+- **30 of 32 correct. Check 2b passes** (pass at ≥ 20; chance 10.7).
+- Under guessing, 30 or more has P = 1.1e-12 (binomial, 1/3 per triplet; the scorer prints
+  0.0000). Wilson 95 % interval for the hit rate: 0.80-0.98 (chance 0.33).
+- Per region, found as the odd one (of 4) / pair region of a correct triplet (of 4):
+  0 (centre 1849, 2.9 deg/s) 4/4, 4/4; 1 (1479, 42.3) 4/4, 4/4; 2 (50, 35.5) 3/4, 3/4;
+  3 (1789, 17.5) 4/4, 4/4; 4 (1583, 12.8) 4/4, 4/4; 5 (965, 8.7) 4/4, 4/4; 6 (1047, 49.3)
+  4/4, 4/4; 7 (1064, 16.5) 3/4, 3/4.
+- Per k (odd region = pair region + k mod 8): k 1: 8/8, k 3: 7/8, k 5: 7/8, k 7: 8/8.
+- Odd position (rows) against counted answer (columns A, B, C): odd A 10 / 0 / 1; odd B
+  0 / 10 / 1; odd C 0 / 0 / 10. Both misses answered C.
+- Halves of the shown order: 1-16: 16/16; 17-32: 14/16.
+- Speed split: the 16 triplets with the largest gap in region mean joint speed (18.0-40.7
+  deg/s) 14/16; the other 16 (gap 3.7-14.6 deg/s) 16/16.
+- Separating descriptors (found minus missed, rank units; two misses, so each rests on
+  two triplets):
+  - odd region's position m: periodicity -0.415, base yaw speed p90 -0.359, shoulder speed
+    p90 -0.289, base yaw speed mean -0.285, elbow jerk p90 +0.261, elbow jerk mean +0.256,
+    wrist roll jerk mean +0.243, shoulder speed mean -0.241;
+  - |m_odd - m_pair|: periodicity +0.540, base yaw accel mean +0.293, base yaw accel p90
+    +0.292, curl +0.268, elbow accel mean +0.259, elbow speed p90 +0.238, elbow jerk mean
+    +0.233, base yaw jerk mean +0.228.
+- Data, not scored: practice 3 of 4 right. Second answers on 2 of 32 (1 correct, both
+  changed from the counted answer). Time to the counted answer: median 30.0 s (26.6-46.3);
+  total per triplet median 41.5 s (27.6-71.0). Pauses in the first pass: median 0, max 1.
+  Replays before the counted answer per triplet: none on 16, one on 9, two on 7; found 14 of
+  16 with any replay, 16 of 16 without. Replays after the counted answer: 1 in all.
+
+The user's notes, verbatim:
+
+- t01 (found, odd region 0): A and B were both small, slow and near the top, thats why I chose C
+- t09 (found, odd region 5): A and B were obviously the same, repetitive/locked groove sortof, and C was high/extended/slow
+- t11 (found, odd region 6): A and C are basically figure eights
+- t16 (found, odd region 7): A and C are obviously the same, sortof locked groove, lateral move, hold, vertical move, hold, inverse lateral move hold, ...
+- t17 (found, odd region 0): C is massively slower than A/B
+- t18 (found, odd region 3): Again, A and B are the "locked groove, hold between lateral/vertical move" ones
+- t19 (missed, odd region 7): First one where I'm unsure
+- t21 (found, odd region 2): B and C are more figure eights/easy/fluid, A has some quick up-to-down moves, inverting its trajectory sortof?
+- t22 (found, odd region 6): Both A and B have sort of "holds" sortof? Idk
+- t23 (found, odd region 4): B is the "locked groove/holds" one (Im not just remembering the different classes here, but that description is why its obviously different from the other 2 who are similar)
+- t24 (found, odd region 7): C is a lot bigger and free-er and A/B is very similar
+- t25 (found, odd region 5): Main difference is position/how the arm holds, B is straight up, A and C are in similar heights
+- t27 (found, odd region 4): A is `locked groove/holds` thing
+- t28 (found, odd region 2): A and C are again `almost straight up and slow` sortof
+- t29 (found, odd region 6): A and B are the "almost straight up slow thing"
+- t31 (found, odd region 1): A and C are both sortof "slow/sad hanging/drooping"
+- t32 (found, odd region 6): A is more "wild and unstructured" than the other two
+
+Step 1 passes. Per `NEXT_BODY_THEN_MIND.md`, the user decides step 3 later (after step 2).
+Nothing in the generator or the planner changed.
+
+### Whole-song dial page (step 2, "Before it starts") — 2026-10-14
+
+The page on which the user records their own feeling for the three danced songs, audio only
+(`NEXT_BODY_THEN_MIND.md` step 2 dial format; `EMOTION.md` stage 4.3). The recordings are
+held-out truth for step 2's gate 5: **the builder never opens `dial.json`.** Tested on
+synthetic audio only. Not used by the user yet. Not verified by eye.
+
+Built (`scripts/emotion/`):
+- `dial.html`: one page, no libraries. Songs in fixed order `song1.m4a` (Instant Crush),
+  `song2.m4a` (Five Years), `song3.m4a` (Presence); the title shows "Song k of 3: title
+  (artist)". A 520 px square canvas pad: valence horizontal, arousal vertical, both -1..+1,
+  centre 0,0. Edge labels "valence −1 unpleasant", "valence +1 pleasant", "arousal +1",
+  "arousal −1"; corner words excited (top right), tense, sad, calm. White marker, a trail of
+  the last 3 s fading linearly, numbers "valence +0.42 / arousal -0.17" in 34 px monospace
+  beside the pad. Pad tint `hsl(angle, 65 % × min(1, r), 38 %)`, angle = atan2(arousal,
+  valence) in degrees, r the distance from the centre; grey at the centre. A 6 px progress
+  bar under the pad, not clickable.
+- Input: the marker follows `pointermove` over the pad (no button), stays where it was when
+  the pointer leaves; arrow keys move it 0.05 (clamped, rounded to 0.01). Every song and the
+  practice start at the centre.
+- Flow: optional 30 s practice before song 1 (pad only, no audio, "End practice" allowed,
+  never recorded, not offered again). Each song: Start, Pause / Resume, plays once, no
+  controls on the audio element; any seek further than 0.25 s from the last played time is
+  undone and logged as `seekRefused`. At the end: saved, "Next song". After song 3 the page
+  says where to put `dial.json`.
+- Recording: a 20 ms timer (and `timeupdate`) samples up to the audio clock: sample k has
+  t = k / 10 s of `audio.currentTime` and the position then, so a song of d seconds gives
+  floor(10 d) + 1 samples whatever the pauses. Nothing is sampled while paused. Events
+  `start`, `pause`, `resume`, `seekRefused`, `end` with audio time and wall time.
+  `localStorage` key `hyst-emotion-dial-v1`, written every second while playing, at every
+  pause, resume and song end. A reload (or a loaded file) with a song in progress drops that
+  song's samples and logs `{at, reachedT, samplesDropped}` in its `restarts`; finished songs
+  stay. "Download dial.json" any time; "Load a saved file" resumes from a download.
+- File format: `{format: "hyst-emotion-dial", version: 1, rate: 10, axes, practiceDone,
+  songs: [{file, title, artist, status, duration, startedAt, endedAt, samples: [[t, valence,
+  arousal], ...], events, restarts}]}`.
+- `dial_serve.cjs [DIR] [PORT]`: the body-study server with a new whitelist, `dial.html` and
+  `song1.m4a`-`song3.m4a` only; 127.0.0.1, byte ranges, port 8778, DIR defaults to its own
+  folder. `dial.json` answers 404.
+- `test_dial.sh` + `test_dial.cjs`: three synthetic 4 s sine songs, headless Chrome at
+  1366 x 768 over the server. 62 checks, all pass, 3 runs of 3: whitelist (dial.json,
+  other files, traversal, POST refused; ranges serve the right bytes; loopback only), 520 px
+  pad, no horizontal scroll, titles, centre start, grey centre tint, hue per direction and
+  saturation with distance, trail, practice not recorded, 41 samples for 4.000 s at t = k/10,
+  samples carry pointer and key positions at the right audio times, pause stops recording
+  and logs at the audio time, seek back and forward undone, pointer leaving keeps the
+  marker, saved mid-song, reload mid-song restarts it and keeps song 1, download equals the
+  stored state, load resumes after clearing storage, final download, only the page and the
+  three songs requested.
+
+Constants and origin: 10 Hz, -1..+1, 520 px, 3 s trail, 0.05 step, 30 s practice, port
+8778, every second save: the brief. Mine (not set by the documents): hue = angle directly
+(pleasant red, excited yellow-green, unpleasant cyan, calm violet), saturation 65 % and
+lightness 38 % at full distance, 0.25 s seek tolerance, start at the centre for every song,
+edge labels as above.
+
+Installed in `/secondary/hyst-data/emotion/dial/` (outside git): `song1.m4a`-`song3.m4a`
+(copies of `$D/instant-crush.m4a`, `five-years.m4a`, `presence.m4a`; durations 339.824,
+283.753, 270.733 s), `dial.html`, `dial_serve.cjs`, `HOWTO.txt`. Smoke check over the real
+folder (headless, nothing recorded): title "Song 1 of 3: Instant Crush (Daft Punk)", the
+three durations above load, `HOWTO.txt` 404.
+
+Checks: `cargo test -p hyst-compile -p hyst-output -p hyst-previz -p hyst-cli` passes
+(hyst-compile 55); clippy -D warnings on the same crates with --all-targets is clean; fmt is
+clean. `three.sh` exports compared with `cmp` against `hexagon-47.html`,
+`five-years-hexagon.html` and `presence-hexagon.html`: all three identical; tmp files
+deleted. Frozen `src/` and `tools/` untouched. No hardware driven. Step 2 (MERP, the mind)
+not started.

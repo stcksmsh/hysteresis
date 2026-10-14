@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Whole-song dial</title>
+<link rel="icon" href="data:,">
+<!--
+  Whole-song dial (NEXT_BODY_THEN_MIND.md step 2, "Before it starts"; EMOTION.md stage 4.3).
+  Audio only. A 2D pad: valence horizontal (-1 unpleasant .. +1 pleasant), arousal vertical
+  (-1 calm .. +1 excited). Sampled at 10 Hz on the audio clock (t = k / 10 s of
+  audio.currentTime) while the song plays; nothing while paused. One pass per song, no seek.
+  Saved in localStorage (every second and at each song end); download as dial.json.
+  Served by dial_serve.cjs next to song1.m4a, song2.m4a, song3.m4a.
+-->
+<style>
+  :root { --bg: #16171a; --fg: #e8e8e8; --dim: #9a9ca3; --line: #3a3c42; --accent: #6aa8ff; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.4 system-ui, sans-serif; }
+  main { max-width: 980px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  #status { color: var(--dim); min-height: 1.4em; margin: 0 0 12px; }
+  .row { display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start; }
+  .padwrap { position: relative; width: min(520px, calc(100vw - 32px)); }
+  #pad { display: block; width: 100%; aspect-ratio: 1; border: 1px solid var(--line); border-radius: 6px; cursor: crosshair; touch-action: none; outline: none; }
+  #pad:focus-visible { border-color: var(--accent); }
+  .lab { position: absolute; color: var(--fg); font-size: 13px; pointer-events: none; text-shadow: 0 0 3px #000, 0 0 6px #000; }
+  .corner { font-size: 15px; font-weight: 600; }
+  #prog { height: 6px; background: var(--line); border-radius: 3px; margin-top: 10px; overflow: hidden; }
+  #progbar { height: 100%; width: 0; background: var(--accent); }
+  #nums { font: 600 34px/1.35 ui-monospace, monospace; white-space: pre; }
+  #side p { color: var(--dim); max-width: 360px; }
+  button { font: inherit; padding: 8px 16px; margin: 4px 8px 4px 0; border-radius: 6px; border: 1px solid var(--line); background: #2a2c31; color: var(--fg); cursor: pointer; }
+  button:disabled { opacity: .4; cursor: default; }
+  button.main { background: #2c4a78; border-color: #3d65a3; }
+  .files { margin-top: 16px; color: var(--dim); font-size: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <h1 id="title">Whole-song dial</h1>
+  <p id="status"></p>
+  <div class="row">
+    <div class="padwrap">
+      <canvas id="pad" tabindex="0" width="520" height="520"></canvas>
+      <span class="lab" style="left:50%;top:6px;transform:translateX(-50%)">arousal +1</span>
+      <span class="lab" style="left:50%;bottom:22px;transform:translateX(-50%)">arousal −1</span>
+      <span class="lab" style="left:6px;top:50%;transform:translateY(-50%)">valence −1<br>unpleasant</span>
+      <span class="lab" style="right:6px;top:50%;transform:translateY(-50%);text-align:right">valence +1<br>pleasant</span>
+      <span class="lab corner" style="right:10px;top:28px">excited</span>
+      <span class="lab corner" style="left:10px;top:28px">tense</span>
+      <span class="lab corner" style="left:10px;bottom:44px">sad</span>
+      <span class="lab corner" style="right:10px;bottom:44px">calm</span>
+      <div id="prog"><div id="progbar"></div></div>
+    </div>
+    <div id="side">
+      <div id="nums">valence +0.00
+arousal +0.00</div>
+      <div id="buttons">
+        <button id="practice" class="main">Practice 30 s (no audio)</button>
+        <button id="endpractice" hidden>End practice</button>
+        <button id="start" class="main">Start</button>
+        <button id="pause" hidden>Pause</button>
+        <button id="next" class="main" hidden>Next song</button>
+      </div>
+      <p id="help">Move the pointer over the pad: the marker follows it, no button needed. When the pointer
+        leaves the pad, the marker stays. Arrow keys move it by 0.05. Each song plays once, start to end;
+        Pause is allowed, seeking is not.</p>
+      <div class="files">
+        <button id="download">Download dial.json</button>
+        <button id="loadbtn">Load a saved file</button>
+        <input id="load" type="file" accept=".json,application/json" hidden>
+      </div>
+    </div>
+  </div>
+  <audio id="audio" preload="auto"></audio>
+</main>
+<script>
+'use strict';
+const SONGS = [
+  { file: 'song1.m4a', title: 'Instant Crush', artist: 'Daft Punk' },
+  { file: 'song2.m4a', title: 'Five Years', artist: 'David Bowie' },
+  { file: 'song3.m4a', title: 'Presence', artist: 'Justice' },
+];
+const STORE = 'hyst-emotion-dial-v1', RATE = 10, STEP = 0.05, PRACTICE_S = 30, TRAIL_MS = 3000;
+const $ = id => document.getElementById(id);
+const audio = $('audio'), pad = $('pad'), ctx = pad.getContext('2d');
+
+// ---- state -------------------------------------------------------------------------------
+function fresh() {
+  return { format: 'hyst-emotion-dial', version: 1, rate: RATE,
+    axes: { valence: '-1 unpleasant .. +1 pleasant (horizontal)', arousal: '-1 calm .. +1 excited (vertical)' },
+    practiceDone: false,
+    songs: SONGS.map(s => ({ file: s.file, title: s.title, artist: s.artist, status: 'todo', duration: null,
+      startedAt: null, endedAt: null, samples: [], events: [], restarts: [] })) };
+}
+function valid(s) {
+  return s && s.format === 'hyst-emotion-dial' && Array.isArray(s.songs) && s.songs.length === SONGS.length &&
+    s.songs.every((x, i) => x.file === SONGS[i].file && Array.isArray(x.samples) && Array.isArray(x.events) && Array.isArray(x.restarts));
+}
+// A song left mid-way (reload, or a file saved mid-song) starts again from the beginning.
+function settle(s) {
+  for (const x of s.songs) if (x.status === 'playing') {
+    const last = x.samples.length ? x.samples[x.samples.length - 1][0] : 0;
+    x.restarts.push({ at: new Date().toISOString(), reachedT: last, samplesDropped: x.samples.length });
+    x.status = 'todo'; x.samples = []; x.events = []; x.startedAt = null;
+  }
+  return s;
+}
+let state;
+try { const s = JSON.parse(localStorage.getItem(STORE) || 'null'); state = valid(s) ? settle(s) : fresh(); } catch { state = fresh(); }
+function save() { try { localStorage.setItem(STORE, JSON.stringify(state)); } catch { } }
+save();
+const cur = () => state.songs.findIndex(x => x.status !== 'done');
+
+// ---- position, trail, drawing ---------------------------------------------------------------
+let pos = { v: 0, a: 0 }, trail = [], mode = 'idle';   // idle | practice | song
+const clamp = x => Math.max(-1, Math.min(1, x)), r2 = x => Math.round(x * 100) / 100;
+function setPos(v, a) { pos = { v: clamp(v), a: clamp(a) }; trail.push({ ...pos, ms: performance.now() }); }
+function tint(v, a) {   // hue from the angle round the centre, saturation from the distance
+  const hue = ((Math.atan2(a, v) * 180 / Math.PI) + 360) % 360, sat = Math.min(1, Math.hypot(v, a));
+  return `hsl(${hue.toFixed(1)}, ${(sat * 65).toFixed(1)}%, 38%)`;
+}
+const fmt = x => (x < 0 ? '-' : '+') + Math.abs(r2(x)).toFixed(2);
+function draw() {
+  const W = pad.width, H = pad.height, X = v => (v + 1) / 2 * W, Y = a => (1 - a) / 2 * H, now = performance.now();
+  ctx.fillStyle = tint(pos.v, pos.a); ctx.fillRect(0, 0, W, H);
+  pad.dataset.tint = ctx.fillStyle;
+  ctx.strokeStyle = 'rgba(255,255,255,.25)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(W / 2, 0); ctx.lineTo(W / 2, H); ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2); ctx.stroke();
+  trail = trail.filter(p => now - p.ms < TRAIL_MS);
+  ctx.lineWidth = 3; ctx.lineCap = 'round';
+  for (let i = 1; i < trail.length; i++) {
+    ctx.strokeStyle = `rgba(255,255,255,${(0.7 * (1 - (now - trail[i].ms) / TRAIL_MS)).toFixed(3)})`;
+    ctx.beginPath(); ctx.moveTo(X(trail[i - 1].v), Y(trail[i - 1].a)); ctx.lineTo(X(trail[i].v), Y(trail[i].a)); ctx.stroke();
+  }
+  ctx.fillStyle = '#fff'; ctx.strokeStyle = '#000'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(X(pos.v), Y(pos.a), 11, 0, 2 * Math.PI); ctx.fill(); ctx.stroke();
+  $('nums').textContent = `valence ${fmt(pos.v)}\narousal ${fmt(pos.a)}`;
+  const d = audio.duration;
+  $('progbar').style.width = mode === 'song' && d > 0 ? `${(100 * audio.currentTime / d).toFixed(2)}%` : '0%';
+  requestAnimationFrame(draw);
+}
+
+pad.addEventListener('pointermove', e => {
+  const r = pad.getBoundingClientRect();
+  setPos((e.clientX - r.left) / r.width * 2 - 1, 1 - (e.clientY - r.top) / r.height * 2);
+});
+document.addEventListener('keydown', e => {
+  const d = { ArrowLeft: [-STEP, 0], ArrowRight: [STEP, 0], ArrowUp: [0, STEP], ArrowDown: [0, -STEP] }[e.key];
+  if (!d) return;
+  e.preventDefault(); setPos(r2(pos.v + d[0]), r2(pos.a + d[1]));
+});
+
+// ---- recording on the audio clock ------------------------------------------------------------
+let song = null, lastGood = 0, lastSave = 0, nextPending = false;   // nextPending: a song ended, wait for Next song
+function sampleUpTo(t) {   // one sample per 1/RATE s of audio time reached
+  while (song.samples.length / RATE <= t + 1e-9) song.samples.push([song.samples.length / RATE, r2(pos.v), r2(pos.a)]);
+}
+function event(type, extra) { song.events.push({ type, t: Math.round(audio.currentTime * 1000) / 1000, at: new Date().toISOString(), ...extra }); }
+function tick() {
+  if (mode !== 'song' || !song || audio.paused || audio.seeking) return;
+  lastGood = audio.currentTime; sampleUpTo(lastGood);
+  if (performance.now() - lastSave >= 1000) { lastSave = performance.now(); save(); }
+}
+setInterval(tick, 20);
+audio.addEventListener('timeupdate', tick);
+audio.addEventListener('seeking', () => {   // no seek: any jump is undone
+  if (mode === 'song' && Math.abs(audio.currentTime - lastGood) > 0.25) { event('seekRefused', { to: audio.currentTime }); audio.currentTime = lastGood; }
+});
+audio.addEventListener('pause', () => { if (mode === 'song' && !audio.ended) { event('pause'); save(); show(); } });
+audio.addEventListener('play', () => { if (mode === 'song' && song.events.length) { event('resume'); save(); show(); } });
+audio.addEventListener('ended', () => {
+  if (mode !== 'song') return;
+  sampleUpTo(audio.duration);
+  event('end'); song.status = 'done'; song.endedAt = new Date().toISOString();
+  mode = 'idle'; nextPending = cur() >= 0; save(); show();
+});
+
+// ---- flow ---------------------------------------------------------------------------------
+let practiceTimer = null, practiceEnd = 0;
+function show() {
+  const i = cur(), all = i < 0, s = all ? null : SONGS[i];
+  $('title').textContent = all ? 'Whole-song dial: all three songs done' : `Song ${i + 1} of 3: ${s.title} (${s.artist})`;
+  const restarted = !all && state.songs[i].restarts.length && mode === 'idle';
+  $('status').textContent =
+    mode === 'practice' ? `Practice, not recorded: ${Math.max(0, Math.ceil((practiceEnd - performance.now()) / 1000))} s left.` :
+    mode === 'song' ? (audio.paused ? 'Paused. Recording is paused with the audio.' : 'Recording. Move the marker to how the music feels to you now.') :
+    all ? 'Saved. Download dial.json and put it in /secondary/hyst-data/emotion/dial/dial.json, then tell the overseer.' :
+    restarted ? 'The page was reloaded during this song, so it starts again from the beginning.' :
+    i > 0 && state.songs[i - 1].status === 'done' && !state.songs[i].startedAt ? `Song ${i} saved. Next: ${s.title}.` :
+    'Press Start when ready. The song plays once, start to end.';
+  const firstUnplayed = i === 0 && !state.practiceDone;
+  $('practice').hidden = !(firstUnplayed && mode === 'idle');
+  $('endpractice').hidden = mode !== 'practice';
+  $('start').hidden = all || mode !== 'idle' || nextPending;
+  $('start').disabled = false;
+  $('pause').hidden = mode !== 'song';
+  $('pause').textContent = audio.paused ? 'Resume' : 'Pause';
+  $('next').hidden = !(nextPending && mode === 'idle');
+}
+$('next').onclick = () => { nextPending = false; setPos(0, 0); show(); };
+$('practice').onclick = () => {
+  mode = 'practice'; setPos(0, 0); practiceEnd = performance.now() + PRACTICE_S * 1000; pad.focus();
+  practiceTimer = setInterval(() => { if (performance.now() >= practiceEnd) endPractice(); else show(); }, 250); show();
+};
+function endPractice() { clearInterval(practiceTimer); mode = 'idle'; state.practiceDone = true; setPos(0, 0); save(); show(); }
+$('endpractice').onclick = endPractice;
+$('start').onclick = async () => {
+  const i = cur(); if (i < 0) return;
+  song = state.songs[i]; $('start').disabled = true;
+  audio.src = SONGS[i].file; audio.currentTime = 0;
+  setPos(0, 0); lastGood = 0; song.samples = []; song.events = [];
+  try { await audio.play(); } catch (e) { $('status').textContent = 'Could not play: ' + e.message; $('start').disabled = false; return; }
+  mode = 'song'; song.status = 'playing'; song.startedAt = new Date().toISOString(); song.duration = audio.duration;
+  event('start'); lastSave = performance.now(); save(); show(); pad.focus();
+};
+$('pause').onclick = () => { if (audio.paused) audio.play(); else audio.pause(); };
+$('download').onclick = () => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(state, null, 1)], { type: 'application/json' }));
+  a.download = 'dial.json'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+};
+$('loadbtn').onclick = () => $('load').click();
+$('load').onchange = async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  try {
+    const s = JSON.parse(await f.text());
+    if (!valid(s)) throw Error('not a dial file');
+    if (mode === 'song') { mode = 'idle'; audio.pause(); }
+    state = settle(s); nextPending = false; save(); setPos(0, 0); show();
+    $('status').textContent = `Loaded ${f.name}. ${$('status').textContent}`;
+  } catch (err) { $('status').textContent = 'Could not load that file: ' + err.message; }
+};
+window.addEventListener('beforeunload', () => { if (mode === 'song') save(); });
+show(); requestAnimationFrame(draw);
+</script>
+</body>
+</html>
