@@ -1,15 +1,67 @@
-//! cargo run -p hyst-previz --example ensemble_preview -- output.html track-url sidecar.json [--score score.json] [--rig rig.json] [--groove-only] [--no-reuse] [--zone x0,y0,z0,x1,y1,z1]
+//! cargo run -p hyst-previz --example ensemble_preview -- output.html track-url sidecar.json [--score score.json] [--rig rig.json] [--groove-only] [--no-reuse] [--zone x0,y0,z0,x1,y1,z1] [--workspace off|rehearsed|schematic]
 use std::{env, fs, io, path::PathBuf};
 
+use hyst_compile::director::workspace::{BasinKind, Workspace, WorkspaceMode};
+
+fn clock(t: f64) -> String {
+    format!("{}:{:04.1}", t as u32 / 60, t % 60.0)
+}
+
+/// Basins, the three highest tension peaks (local maxima at least 8 beats
+/// apart) and the two largest surprises, to stderr. Times: seconds into the audio.
+fn print_workspace(w: &Workspace) {
+    for b in &w.basins {
+        let kind = match b.kind {
+            BasinKind::Recognition => "recognition",
+            BasinKind::Lift => "lift",
+            BasinKind::Novelty => "novelty",
+        };
+        eprintln!("basin {} {kind} {:.2}", clock(b.time), b.strength);
+    }
+    let at = |n: usize| w.beat_zero + n as f64 * w.beat_period;
+    let f = &w.field;
+    let mut peaks: Vec<(usize, f64)> = (0..f.len())
+        .filter(|&n| {
+            let (v, before, after) = (
+                f[n].tension,
+                n.checked_sub(1).map(|i| f[i].tension),
+                f.get(n + 1).map(|x| x.tension),
+            );
+            v > 0.0 && before.is_none_or(|b| v > b) && after.is_none_or(|a| v >= a)
+        })
+        .map(|n| (n, f[n].tension))
+        .collect();
+    peaks.sort_by(|a, b| b.1.total_cmp(&a.1));
+    let mut kept: Vec<(usize, f64)> = Vec::new();
+    for p in peaks {
+        if kept.len() < 3 && kept.iter().all(|k| k.0.abs_diff(p.0) >= 8) {
+            kept.push(p);
+        }
+    }
+    for (n, v) in kept {
+        eprintln!("tension {} {v:.2}", clock(at(n)));
+    }
+    let mut surprises: Vec<(usize, f64)> =
+        f.iter().enumerate().map(|(n, x)| (n, x.surprise)).collect();
+    surprises.sort_by(|a, b| b.1.total_cmp(&a.1));
+    for (n, v) in surprises.into_iter().take(2) {
+        eprintln!("surprise {} {v:.2}", clock(at(n)));
+    }
+}
+
 fn usage() -> &'static str {
-    "Usage: ensemble_preview OUTPUT.html AUDIO_URL SIDECAR.json [--score OUT.json] [--rig RIG.json] [--groove-only] [--no-reuse] [--zone BOX]\n\
+    "Usage: ensemble_preview OUTPUT.html AUDIO_URL SIDECAR.json [--score OUT.json] [--rig RIG.json] [--groove-only] [--no-reuse] [--zone BOX] [--workspace MODE]\n\
      AUDIO_URL resolves relative to OUTPUT.html; serve both files with a range-capable local server.\n\
      --score PATH     write resolved 3D score for audit\n\
      --rig PATH       use JSON rig geometry and local axes (default illustrative five-axis)\n\
      --groove-only    disable hit accents\n\
      --no-reuse       disable recalled musical material\n\
      --drag GAIN      wrist trails the hand's rise and fall, degrees per m/s (default 240)\n\
+     --implement KIND hand object: ball (default, lumpy mirror ball) or disc; a --rig file may carry any other\n\
      --zone BOX       red zone corners in metres, x0,y0,z0,x1,y1,z1 (repeatable)\n\
+     --ring N,R       N arms evenly on a circle of radius R metres, their forward toward its centre (6,1.1 is a hexagon)\n\
+     --clearance M    arms keep their checked points this far apart, metres (default 0.1)\n\
+     --workspace MODE feeling workspace: off (default), rehearsed or schematic; prints basins, tension peaks and surprises to stderr\n\
      --figures        accepted and ignored; the figure planner is the only mode\n\
      Audio starts only after Play. Score and arm trajectories resolve offline for deterministic seek."
 }
@@ -20,6 +72,8 @@ fn main() -> io::Result<()> {
     let mut score_output = None;
     let mut rig_path = None;
     let mut zones = Vec::new();
+    let mut implement = None;
+    let (mut ring, mut clearance) = ((1usize, 0.0f64), 0.1f64);
     let mut config = hyst_compile::CompileConfig::default();
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -34,6 +88,42 @@ fn main() -> io::Result<()> {
                     .next()
                     .and_then(|v| v.parse().ok())
                     .ok_or_else(|| io::Error::other("--drag requires degrees per m/s"))?
+            }
+            "--implement" => {
+                implement = Some(match args.next().as_deref() {
+                    Some("disc") => hyst_compile::ensemble::Implement::disc(),
+                    Some("ball") => hyst_compile::ensemble::Implement::mirror_ball(),
+                    _ => return Err(io::Error::other("--implement requires disc or ball")),
+                })
+            }
+            "--ring" => {
+                let raw = args.next().unwrap_or_default();
+                let parsed = raw
+                    .split_once(',')
+                    .and_then(|(n, r)| Some((n.parse().ok()?, r.parse().ok()?)));
+                ring = parsed
+                    .filter(|(n, r): &(usize, f64)| {
+                        (1..=16).contains(n) && r.is_finite() && *r >= 0.0
+                    })
+                    .ok_or_else(|| io::Error::other("--ring requires N,RADIUS with 1..=16 arms"))?
+            }
+            "--clearance" => {
+                clearance = args
+                    .next()
+                    .and_then(|v| v.parse().ok())
+                    .ok_or_else(|| io::Error::other("--clearance requires metres"))?
+            }
+            "--workspace" => {
+                config.workspace = match args.next().as_deref() {
+                    Some("off") => WorkspaceMode::Off,
+                    Some("rehearsed") => WorkspaceMode::Rehearsed,
+                    Some("schematic") => WorkspaceMode::Schematic,
+                    _ => {
+                        return Err(io::Error::other(
+                            "--workspace requires off, rehearsed or schematic",
+                        ))
+                    }
+                }
             }
             "--figures" => {}
             "--zone" => {
@@ -80,12 +170,34 @@ fn main() -> io::Result<()> {
     let output = PathBuf::from(&positional[0]);
     let track_url = &positional[1];
     let sidecar = fs::read_to_string(&positional[2])?;
-    let rig = match rig_path {
+    let mut rig: hyst_compile::ensemble::Rig = match rig_path {
         Some(path) => serde_json::from_str(&fs::read_to_string(path)?)?,
         None => hyst_compile::ensemble::Rig::illustrative_five_axis(),
     };
-    let score = hyst_compile::director::figures::compile_figures(&sidecar, config, rig, &zones)
-        .map_err(io::Error::other)?;
+    if let Some(implement) = implement {
+        rig.implement = implement;
+    }
+    let arms: Vec<_> = (0..ring.0)
+        .map(|k| {
+            let degrees = 360.0 * k as f64 / ring.0 as f64;
+            let (sin, cos) = degrees.to_radians().sin_cos();
+            hyst_compile::director::figures::ArmPlan {
+                placement: hyst_compile::ensemble::Placement {
+                    origin_m: [ring.1 * cos, ring.1 * sin, 0.0],
+                    // Forward is toward the centre; a lone arm keeps yaw 0.
+                    yaw_degrees: if ring.0 > 1 { degrees + 180.0 } else { 0.0 },
+                },
+                mirrored: false,
+            }
+        })
+        .collect();
+    let (score, workspace) = hyst_compile::director::figures::compile_ensemble_with_workspace(
+        &sidecar, config, rig, &zones, &arms, clearance,
+    )
+    .map_err(io::Error::other)?;
+    if let Some(w) = &workspace {
+        print_workspace(w);
+    }
     let cues = &score.cues;
     let count = score.tracks.len();
     // One arm stays small at 60 fps and removes visible frame stepping.
