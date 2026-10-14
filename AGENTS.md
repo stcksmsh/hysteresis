@@ -1597,3 +1597,11 @@ step 1 passes. `scripts/emotion/dial.html` (+ `dial_serve.cjs`, 62 headless chec
 synthetic audio) records the user's valence/arousal at 10 Hz on the audio clock for the
 three songs, served from `/secondary/hyst-data/emotion/dial/` (`HOWTO.txt`). The builder
 never opens `dial.json`. Step 2 not started.
+
+### Whole-song dial, format 2 — 2026-10-14
+
+`scripts/emotion/dial.html` follows the revised dial format: a picker of 2 passes x 3
+songs, pass A an energy slider with Space-bar lift taps, pass B a light/bright and
+heavy/dark pad (both 0..1), redo keeps the discarded take, file `dial2.json`. 87 headless
+checks on synthetic audio. Canvas corners are square now (a rounded corner was not hit by
+the pointer). The user's recordings are not opened. Step 2 not started.

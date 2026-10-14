@@ -3852,3 +3852,81 @@ clean. `three.sh` exports compared with `cmp` against `hexagon-47.html`,
 `five-years-hexagon.html` and `presence-hexagon.html`: all three identical; tmp files
 deleted. Frozen `src/` and `tools/` untouched. No hardware driven. Step 2 (MERP, the mind)
 not started.
+
+### Whole-song dial, format 2: pass A energy, pass B two feelings, song picker — 2026-10-14
+
+`dial.html` reworked to the revised dial format of `NEXT_BODY_THEN_MIND.md` step 2 (commit
+`0fa877d`). The user's recordings are held-out truth: **I did not open any file the user
+recorded** (`dial-ic-try1.json`, any `dial*.json`); tests use synthetic audio and synthetic
+answers only. Not used by the user yet. Not verified by eye.
+
+Built (`scripts/emotion/`):
+- Start screen: a table of 2 passes x 3 songs (Instant Crush, Five Years, Presence), each
+  cell "done" or "not recorded", and "Done: n of 6". Any pair, any order. A done pair
+  offers "Discard and redo": the first click only asks ("Really discard? Click again"),
+  the second marks the take `discarded` (kept with its samples and taps, `discardedAt`)
+  and opens the pair. Optional 30 s practice per pass (no audio, not recorded,
+  `practiceDone.A` / `.B`).
+- Pass A, energy: a 120 x 520 px vertical slider, 0 calm (bottom) to 1 energetic (top).
+  Pointer over it sets the value (no button), the value stays when the pointer leaves;
+  Up / Down 0.05 (Left / Right do nothing). "energy 0.62" in 34 px monospace. Tint: grey
+  rgb(110,110,110) at 0, linear to rgb(235,95,40) at 1. Space bar during the song: a tap
+  at the audio time (`taps`, s, 3 decimals), a 0.4 s white flash on the slider and a tick
+  on the progress bar; in practice a flash only; while paused or idle nothing. Space
+  never presses a focused button.
+- Pass B, two feelings: a 520 px square pad, light / bright horizontal (left 0, right
+  1), heavy / dark vertical (bottom 0, top 1). Line under the title: "How the music
+  sounds, not whether you like it. Both can be high at once." Labels "↑ heavy / dark",
+  "light / bright →", "0" at the origin; no corner words. "light 0.62 / heavy 0.40" in
+  34 px monospace. Tint: grey + light x (LIGHT - grey) + heavy x (HEAVY - grey), LIGHT
+  rgb(245,205,110), HEAVY rgb(40,30,95), clamped: 0,0 grey 110,110,110; 1,0 245,205,110;
+  0,1 40,30,95; 1,1 175,125,95. White marker, 3 s fading trail, arrow keys 0.05.
+- Both passes: Start, audio once, Pause / Resume, no seek (a jump over 0.25 s is undone and
+  logged `seekRefused`), progress bar, 10 Hz samples on the audio clock (`[t, energy]` or
+  `[t, light, heavy]`, t = k / 10 s, floor(10 d) + 1 per song), events `start`, `pause`,
+  `resume`, `seekRefused`, `end`. `localStorage` key `hyst-emotion-dial-v2` (the first
+  page's `-v1` key is left alone), written every second while playing, at pause, resume,
+  each tap and song end. A reload during a song keeps that take as `interrupted`
+  (`reachedT`, `interruptedAt`, samples kept); the pair is not done and starts again.
+  "Download dial2.json" any time; "Load a saved file" resumes.
+- File: `{format: "hyst-emotion-dial", version: 2, rate: 10, passes: {A: {name, axes:
+  {energy}, taps, wording}, B: {name, axes: {light, heavy}, wording}}, songs,
+  practiceDone, takes: [{pass, song, title, status, duration, startedAt, endedAt, samples,
+  taps, events, ...}]}`. A pair is done when it has a take with status `done`.
+- `dial_serve.cjs` unchanged (whitelist `dial.html`, `song1-3.m4a`, port 8778).
+- Found while testing: a rounded canvas corner (border-radius 6 px) is not hit by the
+  pointer, so the pad's corners could not be reached. The canvases are now square. The
+  first page (`e9f0fad`) had the same 6 px radius, so on try 1 the old pad's extreme
+  corners (both |valence| and |arousal| above about 0.99) were reachable by keys only.
+- `test_dial.sh` / `test_dial.cjs`: 87 checks, all pass, 3 runs of 3. Server: `dial.json`,
+  `dial2.json`, `dial-ic-try1.json`, `HOWTO.txt`, other files, traversal, POST refused;
+  ranges serve the right bytes; loopback only. Page: picker with 6 cells and done count,
+  song 3 recorded first, practice not recorded and Space flashes in it, slider by pointer
+  and keys (clamped at 1, Left ignored), slider tint neutral at 0 and following the value,
+  tap flash, tick and saved time, no tap while paused, Space does not press the Pause
+  button, 41 samples at t = k / 10 for 4.000 s carrying pointer and key values, pause
+  stops recording, seeks undone, pad wording and labels, pad tints at the four corners
+  above, numbers and arrow keys on both axes, trail, no taps in pass B, reload keeps an
+  interrupted take, download equals the stored state and states version and axes, load
+  after clearing storage, pass B take `[t, light, heavy]`, redo asks first and keeps the
+  discarded take, final file `A3:discarded B1:interrupted B1:done A3:done`, only the page
+  and songs requested.
+
+Constants and origin: 0..1 axes, 10 Hz, 0.05 step, 30 s practice, 3 s trail, axis words,
+the pass B wording, `dial2.json`: the brief and the revised format. Mine (not set by the
+documents): the tint colours above, 0.4 s flash, two-click redo, 0.25 s seek tolerance,
+slider 120 px wide, every take starts at 0 (0,0 for the pad).
+
+Installed in `/secondary/hyst-data/emotion/dial/`: `dial.html` (new), `HOWTO.txt`
+(rewritten: serve command, URL, Chrome, the two passes, Instant Crush pass A already
+recorded and needs no pass A but stays selectable, file to
+`/secondary/hyst-data/emotion/dial/dial2.json`, tell the overseer). `dial_serve.cjs` and
+the songs unchanged. Smoke check over the real folder (headless, nothing recorded): picker
+with 6 "not recorded" cells, durations 339.824, 283.753, 270.733 s load; `dial-ic-try1.json`,
+`dial2.json` and `HOWTO.txt` answer 404 (status codes only).
+
+Checks: `cargo test -p hyst-compile -p hyst-output -p hyst-previz -p hyst-cli` 73 passed,
+0 failed; clippy -D warnings on the same crates with --all-targets clean; fmt clean.
+`three.sh` exports identical to `hexagon-47.html`, `five-years-hexagon.html`,
+`presence-hexagon.html`; tmp files deleted. Frozen `src/` and `tools/` untouched. No
+hardware driven. Step 2 (MERP, the mind) not started.
