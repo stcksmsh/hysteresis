@@ -3598,3 +3598,132 @@ Checks: `cargo test -p hyst-compile -p hyst-output -p hyst-previz -p hyst-cli` p
 clean. `three.sh` exports compared with `cmp` against `hexagon-47.html`,
 `five-years-hexagon.html` and `presence-hexagon.html`: all three identical; tmp files
 deleted. Frozen `src/` and `tools/` untouched. No hardware driven.
+
+### Body study, round 2 under addendum 8: regions, triplets, clips and the page (★ 2) — 2026-10-14
+
+Rules: `docs/BODY_STUDY.md` with all eight addenda (unchanged). The generator and the sweep
+of `fc73fa5` are unchanged (`r6/sweep.json`). Data in `/secondary/hyst-data/bodystudy/r6/`,
+outside git: `regions.json`, `regions.log`, `regions.txt`, `key.json`, `clips.tsv`,
+`triplets.tsv`, `clips/` (108 recordings with their html, 2a printout and ladder check),
+`test/` (the 108 shown clips and `practice.js`), `render.log`, `silence.m4a`, copies of
+`answer.html` and `serve.cjs`, `HOWTO.txt`. **Not verified by eye.** I did not watch any
+clip or answer anything. The study waits at ★ 2: the user takes the test as
+`r6/HOWTO.txt` says.
+
+Built:
+- `body_regions.rs`: `rank` is now the midrank of addendum 8, (values below + half the
+  values equal) / 2,000; for a sweep value with no tie it equals round 1's (below + 0.5) /
+  2,000. `candidates` (new): the points whose 9th-nearest distance is at or under the median
+  (the mean of the 1,000th and 1,001st for 2,000). `CLIPS_PER_REGION` 12. 8 tests (1 new:
+  candidates; the rank test now covers ties).
+- `body_study regions SWEEP OUT` (`hyst-previz/examples/body_study.rs`): now computes the
+  sorted columns, midranks and candidates from the sweep itself (round 1 read them from
+  `regions.py`'s output). Regions as addendum 4 with 12 clips. Then the practice bodies: the
+  next 8 candidates in farthest-point order after the final centres (each next one farthest
+  from the final centres and the practice bodies already taken; never a centre used before),
+  2 clips each with fresh seeds passing check 2a.
+- `triplets.py REGIONS.json R6DIR`: 32 scored triplets as addendum 8 sets them; 4 practice
+  triplets; `key.json`, `clips.tsv`, `triplets.tsv`, `test/practice.js`.
+- `render.sh R6DIR`: per clip `body_study ladder`, `body_study html` (study camera, check 2a
+  with the frame rule), `record-ensemble.cjs` (start 0, 8 s, `r6/silence.m4a`, which is
+  `r6/first/silence.m4a`); then each shown file is the clip's video stream copied (`-c:v
+  copy -an -map_metadata -1 -movflags +faststart`) to `test/{tNN,pN}-{a,b,c}.mp4`. Any
+  failure stops before the copy.
+- `answer.html` (addendum 8): practice 1-4 first, then 1-32. First pass A, B, C alone, 1 s
+  black between, Pause only, seek undone. After C: replay buttons (at most 2 per triplet,
+  each clip at most once, alone, from the start, no controls, seek undone, no pause) and the
+  counted answer (final, can be given during a replay, which then stops). Practice: right or
+  wrong; if wrong, the odd clip and the first pair clip in A, B, C order side by side, muted,
+  "Play both" restarts both together, as often as wanted. Scored: replays with seek, second
+  answer, text, no feedback. No way back. Saved in `localStorage`
+  (`hyst-bodystudy-r6-v1`) at Start, every pause, the end of the first pass, every replay
+  before and after the counted answer, the counted answer, second answer, text, joint plays
+  and Next. Reload mid first pass restarts it from A; reload after it returns to the counted
+  answer with the replays used kept. Download any time and at the end; load resumes.
+  Records per triplet: addendum 7's fields plus `replaysBeforeCounted` {A, B, C},
+  `firstPassDone`; practice records add `correct` and `pairPlays`. The practice odd
+  positions come from `test/practice.js` (a script, so the page also works from `file://`);
+  it holds only the 4 practice positions. The page never reads `key.json`.
+- `serve.cjs`: whitelist now `answer.html`, `test/{tNN,pN}-{a,b,c}.mp4`, `test/practice.js`.
+  On r6: those answer 200; `key.json`, `clips.tsv`, `regions.json`, `triplets.tsv`,
+  `clips/r0c00.mp4` and `test/../key.json` answer 404.
+- `score.py ANSWERS KEY`: counted answers of the 32 scored only; pass at ≥ 20 with the
+  binomial P under guessing; per region (odd of 4, pair of a correct triplet of 4), per k,
+  odd-position confusion table, first against second half of the shown order, hits on the
+  16 triplets with the largest |mean joint speed of the odd region − of the pair region|
+  (stable sort, ties by shown order) against the other 16, separating descriptors as round
+  1; practice, second answers, times, pauses, replays before and after as data. Region mean
+  joint speed is stored in `key.json` (`speed`).
+- `report4.py` reads `clipsPerRegion` and lists the practice bodies.
+
+Constants and origin:
+- 8 regions, 12 clips, factor 1.5, 200 seeds, 32 triplets, k = 1, 3, 5, 7, positions 11 /
+  11 / 10, seed 20261017, 4 practice triplets from the next 8 candidates, at most 2
+  replays: addendum 8.
+- Seed order of made clips: `SEED_ORDER` 20261015 and the splitmix64 stream per centre of
+  addendum 4 (addendum 8 sets no new one).
+- Mine (the documents do not set them): within a region, clips 0-7 (centre first) go to its
+  4 pair appearances in triplet order, clips 8-11 to its 4 odd appearances (round 1's
+  convention). Shuffle with Python `random.Random(20261017)`: triplet order shuffled, then the
+  position list (A 11, B 11, C 10) shuffled and assigned in shown order. Practice triplet q:
+  pair from practice body 2q (its 2 clips), odd from body 2q + 1 (its first clip; its second
+  clip is made but unused); odd position `randrange(3)` from the same generator after the
+  scored ones. Practice feedback shows the first pair clip. Pre-answer replays have no
+  pause.
+
+Run (2 s):
+- 1,000 candidates. Initial centres 1849, 1479, 50, 1789, 1583, 965, 1047, 1064.
+  **The separation rule holds with 0 replacements.**
+- w: 0.326, 0.761, 0.552, 0.624, 0.263, 0.668, 1.134, 0.617.
+- Smallest ratio 1.519 (pair 2-6, |m| 1.723), next 1.530 (1-6); 0 of 28 pairs under 1.5;
+  |m_i − m_j| min 1.723, median 2.662, max 4.888; largest ratio 9.292 (0-4). Full list in
+  `regions.txt`.
+- Seeds: 11 tried per region, 0 skipped; practice 2 tried per body, 0 skipped.
+- Practice bodies 1733, 1438, 690, 1424, 1623, 1040, 1259, 1852.
+- Independent numpy check (sort, searchsorted midrank, d9, farthest point, w, m, ratio):
+  same 1,000 candidates, same centres, same w, smallest ratio 1.518 (rounding).
+- Lag descriptors 33-35 have 61 distinct values over 2,000 (ties, now midranked); the other
+  34 have 2,000.
+- Region mean joint speed (mean over 12 clips, deg/s; clip range) and size / energy /
+  rhythm of the body: 0: 2.9 (2.5-3.2), 0.01 / 0.14 / 0.24; 1: 42.3 (31.5-46.7), 0.40 /
+  0.88 / 0.93; 2: 35.5 (31.4-38.2), 0.94 / 0.32 / 0.05; 3: 17.5 (16.8-18.3), 0.22 / 0.50 /
+  0.85; 4: 12.8 (12.2-13.5), 0.14 / 0.77 / 0.21; 5: 8.7 (8.2-8.9), 0.10 / 0.37 / 0.39; 6: 49.3
+  (41.4-55.2), 0.88 / 0.78 / 0.74; 7: 16.5 (14.1-18.0), 0.69 / 0.09 / 0.18. Region 0 is the
+  sweep's slowest kind (sweep min 2.8); it passes the stillness cap.
+- Stretches of the 96 scored clips: 94 at 1.0, region 0 has one at 1.1 and one at 1.21. All
+  12 practice clips 1.0.
+
+Clips (automated checks only):
+- 108 recorded (96 scored, 12 practice); all 108 match their stored stretch on the ladder
+  and pass check 2a; smallest frame margin 32 px (rule 20). None failed.
+- Every shown file: video only, 1280 x 720, 240 frames, 8.000 s, tags only language,
+  handler name, vendor id, brand and encoder strings, the same in every file. Decoded frames
+  equal the recorded clip's (`framemd5`), 108 of 108.
+- Sizes: `test/` 58,471,379 bytes (250,319-885,000 per file); `clips/` 70,115,876 bytes.
+- 11 / 11 / 10 odd positions checked by count; key positions not printed.
+
+Page and scorer tests:
+- `test_answer.sh`: headless Chrome at 1366 x 768 on gray 3 s dummy clips, once from
+  `file://`, once over `serve.cjs`; all checks pass in both (78 `ok` lines in all). Covered:
+  no horizontal scroll; practice first; first pass in order, no controls, seek back and
+  forward refused, pause holds; replays offered only after the first pass; a pre-answer
+  replay alone, from the start, no controls, seek refused, no second replay while it plays;
+  a repeat of one clip refused; a third replay refused; replay counts saved and kept over a
+  reload; practice wrong shows odd and a pair clip, both play together twice; practice right
+  shows no pair; practice has no second answer or text; scored shows no right or wrong;
+  counted answer cannot change, also after reload; no way back; replays with seek after it;
+  record fields; reload mid first pass restarts it; download mid test, clear, resume from
+  file; 32 / 32 ends with a final download; `key.json` never requested; only the page,
+  `practice.js` and clips requested; `serve.cjs` refuses `key.json`, serves ranges, practice
+  clips and `practice.js`.
+- Real page over `serve.cjs` on r6, headless (not watched): "Practice 1 / 4", first clip
+  8 s, 1280 wide, practice positions loaded.
+- `test_score.py`: synthetic key and answers; 20 PASS with P 0.0007, 19 and 0 FAIL, 32 all
+  found; halves, confusion table, speed split (checked against a hand count), practice never
+  counted, replay lines.
+
+Checks: `cargo test -p hyst-compile -p hyst-output -p hyst-previz -p hyst-cli` passes
+(hyst-compile 55); clippy -D warnings on the same crates with --all-targets is clean; fmt is
+clean. `three.sh` exports compared with `cmp` against `hexagon-47.html`,
+`five-years-hexagon.html` and `presence-hexagon.html`: all three identical; tmp files
+deleted. Frozen `src/` and `tools/` untouched. No hardware driven.

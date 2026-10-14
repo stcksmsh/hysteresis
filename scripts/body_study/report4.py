@@ -1,10 +1,11 @@
 """report4.py REGIONS.json REGIONS.log: the addendum-4 report (docs/BODY_STUDY.md,
-addendum 4, step 6) from `body_study regions`, plus the spread of w and of the
-worst ratio over every region built."""
+addendum 4, step 6; round 2: addendum 8) from `body_study regions`, plus the spread of
+w and of the worst ratio over every region built."""
 import json, re, sys, collections
 import numpy as np
 
 rg = json.load(open(sys.argv[1]))
+K = rg.get("clipsPerRegion", 9)
 log = open(sys.argv[2]).read().splitlines()
 print("rule holds:", rg["holds"], "| replacements:", rg["replacements"],
       "| initial centres:", rg["initialCentres"], "| final centres:", rg["centres"])
@@ -20,7 +21,7 @@ for b in builds:
     for k, v in re.findall(r'"([^"]+)": (\d+)', b[5]):
         skip[k] += int(v)
 print(f"seeds over all builds: tried {tried}, skipped {sum(skip.values())}: {dict(skip)}")
-print("regions short of 9 clips:", sum(int(b[2]) < 9 for b in builds))
+print(f"regions short of {K} clips:", sum(int(b[2]) < K for b in builds))
 
 ratios = [e["replaced"]["ratio"] for e in rg["events"] if "replaced" in e and e["replaced"]["ratio"] is not None]
 if ratios:
@@ -43,7 +44,10 @@ if "w" in rg:
           f"{sum(p['ratio'] < 1.5 for p in rg['pairs'])} of {len(rg['pairs'])}")
     allstretch = [c["s"] for reg in rg["regions"] for c in reg["clips"]]
     h = collections.Counter(round(np.log(x) / np.log(1.1)) for x in allstretch)
-    print("  stretch histogram of the 72 clips (1.1^0..7):", [h[i] for i in range(8)])
+    print(f"  stretch histogram of the {len(allstretch)} clips (1.1^0..7):", [h[i] for i in range(8)])
     d = [p["distance"] for p in rg["pairs"]]
     print(f"  |m_i - m_j|: min {min(d):.3f} median {np.median(d):.3f} max {max(d):.3f}; "
           f"1.5 x max w needs {1.5 * max(rg['w']):.3f}")
+for q in rg.get("practice", []):
+    print(f"practice body {q['sweep']}: seeds tried {q['seedsTried']}, skipped {q['skipped']}, "
+          f"stretches {' '.join(str(c['s']) for c in q['clips'])}")

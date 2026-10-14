@@ -1,10 +1,10 @@
 'use strict';
 // serve.cjs [DIR] [PORT]: serve the body-study answer page on 127.0.0.1 with byte ranges
-// (seeking needs them). Only answer.html and test/tNN-{a,b,c}.mp4 are served; everything
-// else in DIR (key.json among it) answers 404. DIR defaults to this file's folder.
+// (seeking needs them). Only answer.html, test/{tNN,pN}-{a,b,c}.mp4 and test/practice.js
+// are served; everything else in DIR (key.json among it) answers 404. DIR defaults to this file's folder.
 const http = require('node:http'), fs = require('node:fs'), path = require('node:path');
 const root = path.resolve(process.argv[2] || __dirname), port = Number(process.argv[3] || 8777);
-const allowed = /^\/(answer\.html|test\/t\d\d-[abc]\.mp4)$/;
+const allowed = /^\/(answer\.html|test\/(t\d\d|p\d)-[abc]\.mp4|test\/practice\.js)$/;
 http.createServer((req, res) => {
   let p;
   try { p = decodeURIComponent(new URL(req.url, 'http://localhost').pathname); } catch { res.writeHead(400).end(); return; }
@@ -13,7 +13,7 @@ http.createServer((req, res) => {
   const file = path.join(root, p);
   fs.stat(file, (err, st) => {
     if (err || !st.isFile()) { res.writeHead(404).end(); return; }
-    const h = { 'Content-Type': p.endsWith('.html') ? 'text/html; charset=utf-8' : 'video/mp4', 'Accept-Ranges': 'bytes', 'Cache-Control': 'no-store' };
+    const h = { 'Content-Type': p.endsWith('.html') ? 'text/html; charset=utf-8' : p.endsWith('.js') ? 'text/javascript' : 'video/mp4', 'Accept-Ranges': 'bytes', 'Cache-Control': 'no-store' };
     let start = 0, end = st.size - 1, status = 200;
     const m = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
     if (req.headers.range) {

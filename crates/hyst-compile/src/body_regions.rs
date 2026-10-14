@@ -1,14 +1,14 @@
-//! Body study regions under addendum 4 of `docs/BODY_STUDY.md`: a region is one
-//! body vector (its centre sweep clip plus 8 clips with fresh seeds), and regions
+//! Body study regions under addenda 4 and 8 of `docs/BODY_STUDY.md`: a region is one
+//! body vector (its centre sweep clip plus 11 clips with fresh seeds), and regions
 //! must be separated by 1.5 times their seed spread.
 
 /// Separation factor (overseer's proposal, accepted by the user; addendum 4).
 pub const FACTOR: f64 = 1.5;
-/// Clips per region: the centre plus 8 made clips.
-pub const CLIPS_PER_REGION: usize = 9;
+/// Clips per region: the centre plus 11 made clips (addendum 8).
+pub const CLIPS_PER_REGION: usize = 12;
 /// Seeds tried per region before its centre is replaced.
 pub const MAX_SEEDS: usize = 200;
-/// Seed of the made clips' seed order.
+/// Seed of the made clips' seed order (addendum 4; addendum 8 sets none, so kept).
 pub const SEED_ORDER: u64 = 20_261_015;
 
 pub fn dist(a: &[f64], b: &[f64]) -> f64 {
@@ -19,13 +19,39 @@ pub fn dist(a: &[f64], b: &[f64]) -> f64 {
         .sqrt()
 }
 
-/// Rank of a descriptor vector against the sweep's sorted columns:
-/// (number of sweep values below + 0.5) / N, per descriptor.
+/// Midrank of a descriptor vector against the sweep's sorted columns (addendum 8):
+/// (number of sweep values below + half the number equal) / N, per descriptor.
 pub fn rank(sorted: &[Vec<f64>], d: &[f64]) -> Vec<f64> {
     d.iter()
         .zip(sorted)
-        .map(|(v, col)| (col.partition_point(|x| x < v) as f64 + 0.5) / col.len() as f64)
+        .map(|(v, col)| {
+            let below = col.partition_point(|x| x < v);
+            let equal = col.partition_point(|x| x <= v) - below;
+            (below as f64 + equal as f64 / 2.0) / col.len() as f64
+        })
         .collect()
+}
+
+/// Candidate centres (addendum 1): the points whose distance to their 9th nearest
+/// other point is at or under the median of that distance.
+pub fn candidates(points: &[Vec<f64>]) -> Vec<usize> {
+    let d9: Vec<f64> = points
+        .iter()
+        .map(|p| {
+            let mut d: Vec<f64> = points.iter().map(|q| dist(p, q)).collect();
+            d.sort_by(f64::total_cmp);
+            d[9] // d[0] is the point itself
+        })
+        .collect();
+    let mut s = d9.clone();
+    s.sort_by(f64::total_cmp);
+    let n = s.len();
+    let median = if n % 2 == 1 {
+        s[n / 2]
+    } else {
+        (s[n / 2 - 1] + s[n / 2]) / 2.0
+    };
+    (0..n).filter(|&i| d9[i] <= median).collect()
 }
 
 /// Seed spread w: mean pairwise distance of a region's clips.
@@ -261,13 +287,13 @@ mod tests {
     use super::*;
 
     fn region(c: [f64; 2], w: f64) -> Vec<Vec<f64>> {
-        // 9 points: centre and 8 around it, spread grows with w
-        (0..9)
+        // CLIPS_PER_REGION points: centre and the rest around it, spread grows with w
+        (0..CLIPS_PER_REGION)
             .map(|i| {
                 if i == 0 {
                     c.to_vec()
                 } else {
-                    let a = i as f64 * std::f64::consts::TAU / 8.0;
+                    let a = i as f64 * std::f64::consts::TAU / (CLIPS_PER_REGION - 1) as f64;
                     vec![c[0] + w * a.cos(), c[1] + w * a.sin()]
                 }
             })
@@ -288,10 +314,22 @@ mod tests {
 
     #[test]
     fn rank_counts_values_below() {
-        let sorted = vec![vec![1.0, 2.0, 3.0, 4.0]];
-        assert_eq!(rank(&sorted, &[2.5]), vec![2.5 / 4.0]);
-        assert_eq!(rank(&sorted, &[2.0]), vec![1.5 / 4.0]);
-        assert_eq!(rank(&sorted, &[0.0]), vec![0.5 / 4.0]);
+        let sorted = vec![vec![1.0, 2.0, 2.0, 2.0, 3.0, 4.0]];
+        // midrank: below + half the equal ones
+        assert_eq!(rank(&sorted, &[2.5]), vec![4.0 / 6.0]);
+        assert_eq!(rank(&sorted, &[2.0]), vec![2.5 / 6.0]);
+        assert_eq!(rank(&sorted, &[1.0]), vec![0.5 / 6.0]);
+        assert_eq!(rank(&sorted, &[0.0]), vec![0.0]);
+        assert_eq!(rank(&sorted, &[4.0]), vec![5.5 / 6.0]);
+    }
+
+    #[test]
+    fn candidates_are_the_denser_half() {
+        // 11 points packed near 0, 11 spread out far apart: the packed ones are
+        // the candidates
+        let mut p: Vec<Vec<f64>> = (0..11).map(|i| vec![i as f64 * 0.01]).collect();
+        p.extend((0..11).map(|i| vec![100.0 + i as f64 * 10.0]));
+        assert_eq!(candidates(&p), (0..11).collect::<Vec<_>>());
     }
 
     #[test]
@@ -340,8 +378,8 @@ mod tests {
     fn replaces_later_chosen_of_worst_pair_until_rule_holds() {
         let (p, mean) = line();
         let cand: Vec<usize> = (0..7).collect();
-        // Region at x = 9 (id 3, chosen 4th) has spread 6.7; the others 0.13.
-        // Pair (x 0, x 9): 9 / 6.7 = 1.34, the worst. Its later-chosen centre, id 3,
+        // Region at x = 9 (id 3, chosen 4th) is about 50 times wider than the others.
+        // Pair (x 0, x 9) has the smallest ratio, under 1.5. Its later-chosen centre, id 3,
         // goes; next in farthest-point order from {40, 0, 20}: 14 (id 1).
         let out = select(&p, &cand, &mean, 4, |c| {
             (region([p[c][0], 0.0], if c == 3 { 5.0 } else { 0.1 }), c)

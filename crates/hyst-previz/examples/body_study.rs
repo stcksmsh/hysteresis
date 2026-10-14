@@ -1,6 +1,6 @@
 //! Body study tools (docs/BODY_STUDY.md).
 //!   body_study sweep OUT.json [N]            sample feasible body vectors (default 2000)
-//!   body_study regions SWEEP.json REGIONS.json OUT.json   regions under addendum 4
+//!   body_study regions SWEEP.json OUT.json   regions and practice bodies under addendum 8
 //!   body_study ladder b0,..,b14 SEED S       fail unless S is the clip's stretch-ladder value
 //!   body_study html OUT.html AUDIO_URL b0,..,b14 SEED S [--score OUT.json]   one clip
 use std::{env, fs, io, path::PathBuf};
@@ -103,12 +103,67 @@ fn sweep(out: PathBuf, want: usize) -> io::Result<()> {
     Ok(())
 }
 
-/// Addendum 4: a region is one body vector (centre sweep clip + 8 clips with fresh
-/// seeds passing check 2a), regions separated by 1.5 x their seed spread.
-fn regions(sweep: PathBuf, regions: PathBuf, out: PathBuf) -> io::Result<()> {
+/// Clips of body `b` made with the seed stream of `centre` (`br::made_seeds`): the
+/// first `want` seeds that pass check 2a, in seed order. Returns them (seed,
+/// stretch, descriptors), seeds tried, and skipped seeds by the first rule broken at
+/// the top of the ladder.
+#[allow(clippy::type_complexity)]
+fn made(
+    b: &body::Body,
+    centre: usize,
+    want: usize,
+) -> (
+    Vec<(u64, f64, Vec<f64>)>,
+    usize,
+    std::collections::BTreeMap<String, u64>,
+) {
+    let threads = std::thread::available_parallelism().map_or(4, |n| n.get());
+    let seeds: Vec<u64> = br::made_seeds(centre).collect();
+    let mut out = Vec::new();
+    let mut skipped = std::collections::BTreeMap::<String, u64>::new();
+    let mut tried = 0usize;
+    'outer: for batch in seeds.chunks(threads) {
+        let res: Vec<_> = std::thread::scope(|sc| {
+            batch
+                .iter()
+                .map(|&seed| {
+                    sc.spawn(move || match body::feasible(b, seed) {
+                        Some((s, score)) => Ok((seed, s, body::descriptors(&score))),
+                        None => {
+                            let top = body::clip(b, seed, 1.1f64.powi(body::STRETCH_STEPS as i32));
+                            Err(body::violations(&top)
+                                .0
+                                .first()
+                                .cloned()
+                                .unwrap_or_default())
+                        }
+                    })
+                })
+                .collect::<Vec<_>>()
+                .into_iter()
+                .map(|h| h.join().unwrap())
+                .collect()
+        });
+        for r in res {
+            if out.len() == want {
+                break 'outer;
+            }
+            tried += 1;
+            match r {
+                Ok(x) => out.push(x),
+                Err(why) => *skipped.entry(why).or_default() += 1,
+            }
+        }
+    }
+    (out, tried, skipped)
+}
+
+/// Addenda 4 and 8: midranks against the sweep, candidate centres, 8 regions of one
+/// body vector each (centre sweep clip + 11 clips with fresh seeds passing check 2a),
+/// separated by 1.5 x their seed spread; then the 8 practice bodies.
+fn regions(sweep: PathBuf, out: PathBuf) -> io::Result<()> {
     use serde_json::{json, Value};
     let sw: Value = serde_json::from_slice(&fs::read(sweep)?)?;
-    let rg: Value = serde_json::from_slice(&fs::read(regions)?)?;
     let vec = |v: &Value| -> Vec<f64> {
         v.as_array()
             .unwrap()
@@ -116,74 +171,30 @@ fn regions(sweep: PathBuf, regions: PathBuf, out: PathBuf) -> io::Result<()> {
             .map(|x| x.as_f64().unwrap())
             .collect()
     };
-    let ids = |v: &Value| -> Vec<usize> {
-        v.as_array()
-            .unwrap()
-            .iter()
-            .map(|x| x.as_u64().unwrap() as usize)
-            .collect()
-    };
-    let sorted: Vec<Vec<f64>> = rg["sorted"].as_array().unwrap().iter().map(&vec).collect();
     let clips = sw["clips"].as_array().unwrap();
-    let points: Vec<Vec<f64>> = clips
-        .iter()
-        .map(|c| br::rank(&sorted, &vec(&c["desc"])))
+    let desc: Vec<Vec<f64>> = clips.iter().map(|c| vec(&c["desc"])).collect();
+    let sorted: Vec<Vec<f64>> = (0..desc[0].len())
+        .map(|k| {
+            let mut col: Vec<f64> = desc.iter().map(|d| d[k]).collect();
+            col.sort_by(f64::total_cmp);
+            col
+        })
         .collect();
+    let points: Vec<Vec<f64>> = desc.iter().map(|d| br::rank(&sorted, d)).collect();
     let n = points.len() as f64;
     let mean: Vec<f64> = (0..points[0].len())
         .map(|k| points.iter().map(|p| p[k]).sum::<f64>() / n)
         .collect();
-    let candidates = ids(&rg["candidates"]);
+    let candidates = br::candidates(&points);
     let first = br::initial_centres(&points, &candidates, &mean, 8);
-    if first != ids(&rg["centres"]) {
-        return Err(err(format!(
-            "initial centres {first:?} differ from REGIONS.json"
-        )));
-    }
-    let threads = std::thread::available_parallelism().map_or(4, |n| n.get());
+    println!("{} candidates; initial centres {first:?}", candidates.len());
+    let body_of = |c: usize| -> body::Body { vec(&clips[c]["b"]).try_into().unwrap() };
     let build = |c: usize| {
-        let b: body::Body = vec(&clips[c]["b"]).try_into().unwrap();
-        let seeds: Vec<u64> = br::made_seeds(c).collect();
-        let mut made = Vec::new();
-        let mut skipped = std::collections::BTreeMap::<String, u64>::new();
-        let mut tried = 0usize;
-        'outer: for batch in seeds.chunks(threads) {
-            let res: Vec<_> = std::thread::scope(|sc| {
-                batch
-                    .iter()
-                    .map(|&seed| {
-                        sc.spawn(move || match body::feasible(&b, seed) {
-                            Some((s, score)) => Ok((seed, s, body::descriptors(&score))),
-                            None => {
-                                let top =
-                                    body::clip(&b, seed, 1.1f64.powi(body::STRETCH_STEPS as i32));
-                                Err(body::violations(&top)
-                                    .0
-                                    .first()
-                                    .cloned()
-                                    .unwrap_or_default())
-                            }
-                        })
-                    })
-                    .collect::<Vec<_>>()
-                    .into_iter()
-                    .map(|h| h.join().unwrap())
-                    .collect()
-            });
-            for r in res {
-                tried += 1;
-                match r {
-                    Ok(x) => made.push(x),
-                    Err(why) => *skipped.entry(why).or_default() += 1,
-                }
-                if made.len() == br::CLIPS_PER_REGION - 1 {
-                    break 'outer;
-                }
-            }
-        }
+        let b = body_of(c);
+        let (made, tried, skipped) = made(&b, c, br::CLIPS_PER_REGION - 1);
         let mut ranks = vec![points[c].clone()];
         let mut list = vec![
-            json!({"sweep": c, "b": b, "seed": clips[c]["seed"], "s": clips[c]["s"], "rank": points[c]}),
+            json!({"sweep": c, "b": b, "seed": clips[c]["seed"], "s": clips[c]["s"], "desc": desc[c], "rank": points[c]}),
         ];
         for (seed, s, desc) in made {
             let r = br::rank(&sorted, &desc);
@@ -208,7 +219,7 @@ fn regions(sweep: PathBuf, regions: PathBuf, out: PathBuf) -> io::Result<()> {
             br::Event::Built { slot, centre, clips } => json!({"built": {"slot": slot, "centre": centre, "clips": clips}}),
             br::Event::Replaced { slot, old, new, pair, ratio } => json!({"replaced": {"slot": slot, "old": old, "new": new,
                 "pair": pair, "ratio": ratio,
-                "reason": if pair.is_some() { "separation rule broken (worst pair, later-chosen centre)" } else { "under 9 clips after 200 seeds" }}}),
+                "reason": if pair.is_some() { "separation rule broken (worst pair, later-chosen centre)" } else { "under 12 clips after 200 seeds" }}}),
             br::Event::Exhausted { slot } => json!({"exhausted": {"slot": slot}}),
         })
         .collect();
@@ -221,7 +232,8 @@ fn regions(sweep: PathBuf, regions: PathBuf, out: PathBuf) -> io::Result<()> {
         .iter()
         .filter(|e| e.get("replaced").is_some())
         .count();
-    let mut result = json!({"factor": br::FACTOR, "seedOrder": br::SEED_ORDER, "initialCentres": first,
+    let mut result = json!({"factor": br::FACTOR, "seedOrder": br::SEED_ORDER, "clipsPerRegion": br::CLIPS_PER_REGION,
+        "candidates": candidates, "initialCentres": first,
         "centres": o.centres, "events": events, "replacements": reps, "holds": o.holds});
     if o.regions.len() == 8 {
         let ranks: Vec<Vec<Vec<f64>>> = o
@@ -260,6 +272,41 @@ fn regions(sweep: PathBuf, regions: PathBuf, out: PathBuf) -> io::Result<()> {
         result["smallestRatio"] = json!(smallest);
     }
     result["regions"] = json!(o.regions);
+    // Practice (addendum 8): the next 8 candidates in farthest-point order after the
+    // final centres, never a centre used before; each gets 2 clips with fresh seeds.
+    if o.holds {
+        let mut used = first.clone();
+        used.extend(o.events.iter().filter_map(|e| match e {
+            br::Event::Replaced { new, .. } => Some(*new),
+            _ => None,
+        }));
+        let mut kept = o.centres.clone();
+        let mut practice = Vec::new();
+        while practice.len() < 8 {
+            let Some(c) = br::next_centre(&points, &candidates, &kept, &used, &mean) else {
+                return Err(err("candidates ran out before 8 practice bodies"));
+            };
+            kept.push(c);
+            let b = body_of(c);
+            let (made, tried, skipped) = made(&b, c, 2);
+            println!(
+                "practice body {c}: {} clips, {tried} seeds tried, skipped {skipped:?}",
+                made.len()
+            );
+            if made.len() < 2 {
+                return Err(err(format!(
+                    "practice body {c}: under 2 clips after 200 seeds"
+                )));
+            }
+            let list: Vec<Value> = made
+                .into_iter()
+                .map(|(seed, s, _)| json!({"b": b, "seed": seed, "s": s}))
+                .collect();
+            practice
+                .push(json!({"sweep": c, "clips": list, "seedsTried": tried, "skipped": skipped}));
+        }
+        result["practice"] = json!(practice);
+    }
     println!(
         "{} replacements; separation rule {}",
         reps,
@@ -399,7 +446,7 @@ fn main() -> io::Result<()> {
     match a.iter().map(String::as_str).collect::<Vec<_>>().as_slice() {
         ["sweep", out] => sweep(out.into(), 2000),
         ["sweep", out, n] => sweep(out.into(), n.parse().map_err(|_| err("bad N"))?),
-        ["regions", sweep, rg, out] => regions(sweep.into(), rg.into(), out.into()),
+        ["regions", sweep, out] => regions(sweep.into(), out.into()),
         ["ladder", b, seed, s] => ladder(
             b,
             seed.parse().map_err(|_| err("bad seed"))?,

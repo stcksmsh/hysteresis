@@ -1580,3 +1580,12 @@ sets pattern, pace, size and rhythm, the seed only start phase and small jitter;
 floors removed, stillness cap added; 8 s clips. Sweep 2,000 of 2,002 pass; mean joint speed
 p10 8.5, p90 45.6 deg/s (ratio 5.35). Three first-look clips in `r6/first/`. Not verified by
 eye. Waiting for the user and the overseer before regions.
+
+### Body study round 2, test ready (★ 2) — 2026-10-14
+
+Regions under addendum 8: the separation rule holds with 0 replacements (smallest ratio
+1.519, w 0.263-1.134). 32 scored and 4 practice triplets; 108 clips of 8 s in
+`/secondary/hyst-data/bodystudy/r6/test/`, all on their ladder stretch, frame margin ≥ 32 px.
+Page with practice feedback and capped pre-answer replays, scorer (pass at 20 of 32) and
+their tests in `scripts/body_study/`. The user starts with `r6/HOWTO.txt`. Not verified by
+eye.
