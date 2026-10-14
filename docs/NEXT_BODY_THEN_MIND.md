@@ -152,6 +152,30 @@ pause allowed, no seek. The pad shows the current position with live numbers
 and a colour that follows the position, so the user always sees what is chosen.
 Gate 5 uses the arousal axis; valence is reported, not gated.
 
+**Dial format, revised (user and overseer, 2026-10-14, after one try on Instant
+Crush, before any step-2 result).** The user found "pleasant / unpleasant"
+meaningless (music is nearly always pleasant to them) and the three songs mixed:
+two feelings at once. A single valence line cannot hold that. Replaces the format
+above:
+- **Pass A, energy:** one vertical slider, calm (0) to energetic (1), plus a key
+  tap where something lifts or lands (a build, a drop, an entry). 10 Hz on the
+  audio clock, one pass per song, pause allowed, no seek. Gate 5 uses this track;
+  the taps are the user's own "known lifts" for gate 4 on the three songs.
+- **Pass B, two feelings:** a pad with two one-sided axes, both 0..1, both may be
+  high at once: horizontal **light / bright** (hopeful, joyful), vertical
+  **heavy / dark** (sad, ominous, longing). Wording on the page: "how the music
+  sounds, not whether you like it". Reported, never gated: against the readouts
+  DEAM valence (light minus heavy) and GEMS joyful activation, sadness, tension,
+  nostalgia.
+- A song picker: any song, any order, each pass once per song; a redo only by an
+  explicit "discard and redo", the discarded take kept.
+- **Instant Crush, try 1** (`/secondary/hyst-data/emotion/dial/dial-ic-try1.json`,
+  old 2D pad, 0–329.0 s): its arousal axis is the song's pass A. The spans
+  2:15–2:51 (135–171 s), where the user was undecided, are masked out of every
+  score, and so is everything after 329.0 s. Its valence is kept as data only,
+  marked "old wording". It gets no taps; gate 4 on Instant Crush uses the
+  other sources the gate names.
+
 ### What to build (`scripts/emotion/`)
 
 - **Ear**: stage 1's pick (`baseline+all`, 2,665 per 0.5 s), PCA to 64 fitted on
