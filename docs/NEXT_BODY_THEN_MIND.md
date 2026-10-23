@@ -176,6 +176,31 @@ above:
   marked "old wording". It gets no taps; gate 4 on Instant Crush uses the
   other sources the gate names.
 
+**Known lifts for gate 4, taken from the curves (user, 2026-10-23, after
+recording, before any step-2 result).** The user recorded every pass but made no
+Space-bar taps. Gate 4's "known lifts" on the three songs and on MERP come from one
+rule applied to an energy curve, fixed here before `check1b.py` is written:
+- Curve: on the three songs, the user's pass A energy (0..1); Instant Crush uses
+  try 1's arousal mapped to 0..1 as (a + 1) / 2. On MERP, each song's mean-rater
+  arousal, mapped linearly from MERP's scale range to 0..1.
+- Clean-up, because the user moved the dial in a few quick jitters and may have
+  flicked it at the end: a running median over 1.5 s (15 samples at 10 Hz), then a
+  centred running mean over 2 s. The first 2 s and the last 5 s of every song are
+  never a lift. Instant Crush's masks (135–171 s, after 329.0 s) hold: a rise that
+  touches a masked span is not a lift.
+- A rise is any time t where the cleaned curve at t + 4 s minus at t is at least
+  0.15. Overlapping and touching rise times merge into one rise; its onset is its
+  earliest t.
+- Reaction lag: a person moves the dial after hearing the change. The lift is
+  placed at the rise's onset minus 1.5 s, the same constant for every song and for
+  MERP.
+- Two lifts closer than 16 beats keep only the first.
+- A song with no lift is left out of gate 4 and reported. The number of lifts per
+  song and in total is reported next to gate 4's p-value.
+- The builder applies this rule without opening the dial files before step 2's
+  results are in: `check1b.py` reads the files only when it runs, and lifts are
+  printed only with the results.
+
 ### What to build (`scripts/emotion/`)
 
 - **Ear**: stage 1's pick (`baseline+all`, 2,665 per 0.5 s), PCA to 64 fitted on
