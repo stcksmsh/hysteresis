@@ -3930,3 +3930,43 @@ Checks: `cargo test -p hyst-compile -p hyst-output -p hyst-previz -p hyst-cli` 7
 `three.sh` exports identical to `hexagon-47.html`, `five-years-hexagon.html`,
 `presence-hexagon.html`; tmp files deleted. Frozen `src/` and `tools/` untouched. No
 hardware driven. Step 2 (MERP, the mind) not started.
+
+## 2026-10-23 Python port of the offline analyzer (branch py-analyze)
+
+Status: port written, equivalence check defined below BEFORE any real output was compared.
+Results are appended in a later section of this entry.
+
+Ported: `scripts/analyze.ts` CLI path to `scripts/analyze.py` + package `scripts/analyze/`
+(`wav`, `fftjs`, `dsp`, `brain`, `structure`, `demucs`, `jsjson`). Sources: `scripts/wav.ts`,
+`structure.ts` (`analyzeMix`, `analyzeMixDetailed`, `computeStemPresence`, `labelSections`),
+`demucs.ts`, and from `src/`: `audio/worklet/{fft,bands,spectral,onset,envelope}`,
+`brain/{beat-tracker,build-detector,drop-detector,break-detector,activity,novelty}`,
+`shared/constants`, `SIDECAR_SCHEMA_VERSION`. Not ported: `ssm.ts`, `repetition.ts`,
+`render-video.ts`, relays. No TypeScript deleted or changed.
+
+Method: line-for-line, same constants. `fft.js` `realTransform` is ported butterfly for
+butterfly (float64, same operation order, batched over frames with numpy) instead of using
+numpy FFT, so the magnitudes match bit for bit before they are rounded to float32 as in
+`Float32Array`. Every JS `sum +=` loop uses `np.cumsum` (sequential). Float32 storage points
+(samples, window, windowed frame, magnitudes, novelty buffer, bar slot strengths, per-hop raw
+arrays) are kept as float32. `Math.round` is `floor(x+0.5)`. JSON is written by a
+`JSON.stringify`-compatible writer (integer-valued floats as `1`, JS exponent format).
+Known non-bit-exact points: `cos`, `sin`, `log`, `exp`, `log2` come from glibc, TS uses V8
+(fdlibm); they can differ by 1 ulp.
+
+Equivalence rule (fixed before comparing):
+- Reference: `npx tsx scripts/analyze.ts` of this tree, run now, same WAV.
+- Python: `scripts/analyze.py`, same WAV, same arguments.
+- Identical top-level keys and key order, identical array lengths and object keys.
+- Identical discrete values: counts, event `type`, section `kind`/`label`, beat count, schema,
+  envelopeRate, strings.
+- Every number within 1e-6 absolute or 1e-9 relative of the TS value (either bound).
+- Any difference beyond that is reported with its cause. The rule is not loosened afterwards.
+- Inputs: synthetic WAVs from `scripts/analyze/equiv/gen_synthetic.py` (clicks at 120 and
+  93 BPM, silence, 440 Hz tone, a drop-like build in 16-bit stereo and float32 stereo,
+  24-bit stereo clicks, a 1000-sample file, a 1 s noise file), and the three base WAVs
+  `{instant-crush,five-years,presence}-stereo-analysis.wav` that `song.sh` uses.
+  `--stems` on one song: compare `stemPresence`; if Demucs output differs between runs,
+  feed both ports the same stem WAVs.
+- Tools: `scripts/analyze/equiv/run_equiv.sh` (runs both, times, compares) and
+  `scripts/analyze/equiv/compare.py` (the rule above, per top-level field).
