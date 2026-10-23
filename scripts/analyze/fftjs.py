@@ -32,8 +32,10 @@ class FFT:
         for j in range(1 << self._width):
             v = 0
             for shift in range(0, self._width, 2):
-                v |= ((j >> shift) & 3) << (self._width - shift - 2)
-            bitrev.append(v)
+                # JS shift counts wrap mod 32 (width 11 gives -1 at the last step) and `|=` is int32
+                v |= ((j >> shift) & 3) << ((self._width - shift - 2) & 31)
+            v &= 0xFFFFFFFF
+            bitrev.append(v - (1 << 32) if v >= 1 << 31 else v)
         self._bitrev = bitrev
         self._plan_stages()
 

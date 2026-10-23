@@ -76,6 +76,39 @@ def dropbuild(rng):
     return x
 
 
+def structure(rng):
+    """Quiet intro, loud full section, sparse break, loud again, quiet end; built to make the
+    drop and break detectors fire (the other synthetics do not reach them)."""
+    secs = 70
+    n = SR * secs
+    t = np.arange(n) / SR
+    x = 0.004 * rng.standard_normal(n)
+    loud = ((t >= 10) & (t < 30)) | ((t >= 42) & (t < 62))
+    per = 60 / 126
+    for a, b in ((10, 30), (42, 62)):
+        tt = float(a)
+        while tt < b - 0.3:
+            i = int(tt * SR)
+            e, k = kick(n, i)
+            x[i:e] += k
+            h = int((tt + per / 2) * SR)
+            hb = min(n, h + 2000)
+            x[h:hb] += 0.3 * rng.standard_normal(hb - h) * np.exp(-np.arange(hb - h) / 500)
+            tt += per
+    x += loud * (0.25 * np.sin(2 * np.pi * 55 * t) + 0.15 * np.sin(2 * np.pi * 330 * t) + 0.05 * rng.standard_normal(n))
+    return x
+
+
+def dropstep(rng):
+    """Loud 2 s, quiet 12 s, loud 20 s: the one synthetic found to fire the drop detector
+    (then the build window, the break pair and the build section paths run)."""
+    n = SR * 40
+    t = np.arange(n) / SR
+    loud = ((t < 2) | ((t >= 14) & (t < 34))).astype(float)
+    return 0.001 * rng.standard_normal(n) + loud * (0.5 * np.sin(2 * np.pi * 60 * t)
+                                                     + 0.2 * rng.standard_normal(n) + 0.2 * np.sin(2 * np.pi * 500 * t))
+
+
 def main(out):
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
@@ -92,6 +125,8 @@ def main(out):
     write_wav(out / 'dropbuild_f32.wav', np.stack([db, 0.9 * np.roll(db, 7)], axis=1) * 0.8, 32, 3)
     write_wav(out / 'clicks120_24bit.wav', np.stack([clicks(120, 12, rng)] * 2, axis=1) * 0.5, 24, 1)
     write_wav(out / 'tiny.wav', mono(0.3 * np.sin(np.arange(1000) * 0.1)), 16, 1)
+    write_wav(out / 'structure.wav', mono(structure(rng) * 0.8), 16, 1)
+    write_wav(out / 'dropstep.wav', mono(dropstep(rng) * 0.8), 16, 1)
     # a file just long enough for a few hops
     write_wav(out / 'short.wav', mono(0.3 * rng.standard_normal(SR * 1)), 16, 1)
 
