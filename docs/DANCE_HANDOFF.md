@@ -3970,3 +3970,79 @@ Equivalence rule (fixed before comparing):
   feed both ports the same stem WAVs.
 - Tools: `scripts/analyze/equiv/run_equiv.sh` (runs both, times, compares) and
   `scripts/analyze/equiv/compare.py` (the rule above, per top-level field).
+
+### Results (same entry, written after the comparisons)
+
+Commits: 58b6e4f (port, tools and the rule, before any comparison), f23d4b5 (two more
+synthetics), aed1166 (unit tests, README), then the stems runner and this section. Frozen
+`src/`, `tools/` and all TypeScript untouched. `song.sh` and `$D` untouched.
+
+Rule outcome: no field of any input breaks the rule. Keys, key order, array lengths, event
+types, section kinds and labels, beat counts and all integers are identical in every run. The
+only nonzero differences are in two fields, listed below. Max abs / max rel over all numbers
+of the field; every other field of every input has abs 0 and rel 0 (exactly equal).
+
+| input | numbers compared | onsets abs / rel | events abs / rel |
+|---|---|---|---|
+| tiny (1000 samples) | 12 | 0 / 0 | 0 / 0 |
+| silence | 1753 | 0 / 0 | 0 / 0 |
+| short (1 s noise) | 177 | 0 / 0 | 0 / 0 |
+| tone440 | 1758 | 0 / 0 | 0 / 0 |
+| clicks120 | 5495 | 5.6e-17 / 1.2e-16 | 0 / 0 |
+| clicks93 | 5431 | 5.6e-17 / 1.3e-16 | 0 / 0 |
+| dropbuild (16-bit stereo) | 8024 | 5.6e-17 / 1.2e-16 | 0 / 0 |
+| dropbuild_f32 (float32 stereo) | 8023 | 5.6e-17 / 1.2e-16 | 0 / 0 |
+| clicks120_24bit | 2201 | 5.6e-17 / 1.2e-16 | 0 / 0 |
+| structure (breaks) | 12951 | 1.1e-16 / 2.6e-16 | 0 / 0 |
+| dropstep (one drop, build, break) | 7031 | 0 / 0 | 2.2e-16 / 3.8e-16 |
+| instant-crush base WAV | 62990 | 3.3e-16 / 7.3e-16 | 0 / 0 |
+| five-years base WAV | 54537 | 4.1e-15 / 9.2e-15 | 0 / 0 |
+| presence base WAV | 52319 | 6.7e-15 / 1.6e-14 | 5.6e-17 / 1.4e-16 |
+| presence `--stems`, same stem WAVs | 81468 | 6.7e-15 / 1.6e-14 | 5.6e-17 / 1.4e-16 |
+
+`stemPresence` (vocals, drums, bass, other, leadPresence, 29149 numbers): abs 0, rel 0.
+`tiny`, `silence`, `short`, `tone440` and `clicks*` outputs were byte-identical files. The
+others differ as bytes only through the last-digit values above.
+
+Cause of the nonzero values: libm (Python) against V8 on 1 ulp. `onsets.pan` is
+`sin(t*37.13)*0.6`: `sin` differs on 665 of 20000 test arguments (checked against node);
+the `onsets.strength` and `events.strength` differences come from `exp` envelope
+coefficients: `exp(-hop/ms)` differs on 1 of 25 constants (checked against node) and the
+difference propagates as 1 ulp. These are not thresholds: no discrete value changed in any
+input. Not fixed: matching V8's fdlibm `sin`/`exp` would mean porting those too.
+
+Mismatch during development, fixed before the comparisons above: first run of the port crashed
+on every input with `ValueError: negative shift count` in the `fft.js` bit-reversal table
+(JS wraps shift counts mod 32, width 11 gives -1 at the last step; fix: same wrap and int32).
+The first four inputs were then re-run; the table above is from the re-run. The `dropstep`
+and `structure` inputs were added after the first set because `dropbuild` did not fire the
+drop detector (also none of the three songs has a `drop` event, only `dropstep` does), so
+the drop, build-window and build-section code paths are compared on `dropstep` only.
+
+`--stems`: Demucs differs from run to run (htdemucs default `shifts=1` draws
+`random.randint` offsets in `demucs/apply.py`). Measured on `presence`: two real Demucs runs
+give stemPresence max abs differences 0.91 vocals, 0.46 bass, 0.12 other, 0.12 lead, 0.04
+drums (mean 0.11, 0.022, 0.0035, 0.0033, 0.0012). So the comparison above feeds both
+analyzers the same stem WAVs (copied by `equiv/fake_demucs.sh` into the layout `demucs.ts`
+expects). The Python `--stems` path with real Demucs also ran end to end once (160 s on a
+loaded CPU, temp dir removed afterwards; separate `run_demucs_separation` call 286 s).
+
+Run times (wall clock, `nice -n 19`, includes interpreter start and, for TS, `tsx`
+compile; agent 1 was using the CPU, so these are not benchmarks): instant-crush TS 13.1 s /
+Python 38.4 s; five-years 8.1 / 27.4; presence 12.6 / 16.4; presence `--stems` with
+pre-made stems 30.9 / 56.3; synthetic 10-44 s files 1.2-7.2 s TS, 1.1-9.0 s Python.
+
+Tests: `python -m pytest scripts/analyze` 14 passed (synthetic only); `npm test` 44 files,
+351 tests passed (not modified); `cargo test -p hyst-compile -p hyst-output -p hyst-previz
+-p hyst-cli`: 55 + 18 passed, 0 failed (previz and cli have 0 tests in this tree).
+
+Environment: uv venv `/secondary/hyst-env/analyze-py` (numpy 2.4.6, pytest 9.1.1). Inputs
+and outputs of this check: `/secondary/hyst-env/equiv-synth3`, `equiv-out*`, `equiv-songs`,
+`equiv-stems`, `equiv-stems-out` (not in git). Reproduce:
+`scripts/analyze/equiv/gen_synthetic.py DIR`, then `scripts/analyze/equiv/run_equiv.sh OUT NAME=WAV ...`;
+stems: `scripts/analyze/equiv/run_stems_equiv.sh OUT WAV STEM_DIR`.
+
+To switch `song.sh`: replace the line
+`npx tsx scripts/analyze.ts "$wav" "$D/$slug.sidecar.json"` with
+`/secondary/hyst-env/analyze-py/bin/python scripts/analyze.py "$wav" "$D/$slug.sidecar.json"`.
+Not done: deleting any TypeScript; `analyze.ts` stays until the overseer decides.
