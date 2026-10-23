@@ -201,6 +201,47 @@ rule applied to an energy curve, fixed here before `check1b.py` is written:
   results are in: `check1b.py` reads the files only when it runs, and lifts are
   printed only with the results.
 
+**MERP as fetched, and the open points of check 1b (user and overseer, 2026-10-23,
+after ★ 1, before `check1b.py` is written).** MERP differs from what `MIND.md`
+assumed: 11 of its 54 songs are excerpts of 31–48 s, and the authors' filtered
+labels are 2 Hz series that skip the first 12–17 s of each song (see
+`/secondary/hyst-data/emotion/SOURCES.md`, "MERP"). Decided:
+- **Labels (user: option a).** Use the 3,482 trials the authors kept (277 raters),
+  but take each trial's raw 10 Hz series, which starts at 0 s. Rescale and smooth
+  it the way the authors did; which variant of their steps (rescale per trial or
+  per rater; smoothing before or after taking every 5th sample) is chosen by how
+  well it reproduces the filtered file on the overlap, and the match is reported.
+  Where a rater has more than one raw trial for a song, use the one that matches the
+  filtered series best. Per song, average the trials, then take the mean over each
+  0.5 s step of the ear's grid.
+- **Songs (user).** Only the 43 MERP songs longer than 50 s are used in step 2,
+  everywhere: five folds by song (seeded as `check1.py`), readouts, gates 1–4. The
+  other 11 are not used.
+- **Which pass is scored.** Gates 1–3 and 5 score the dancer (ρ = 1); ρ = 0 is
+  reported beside it. Gate 2 passes when each pooled measure's point value is not
+  below stage 1's pick's lower 95 % bound (stage 1's numbers in `DANCE_HANDOFF.md`).
+- **Gate 1.** "Non-overlapping" means the core's lower 95 % bound is above the
+  reference's upper bound, on DEAM and on MERP each. Bootstrap as `check1.py`
+  (2,000 resamples over songs, percentile).
+- **Gate 3.** One seeded shuffle of the step order per held-out song, both passes
+  shuffled the same way, readouts as trained; it must hold on DEAM and on MERP each.
+- **Gate 4.** Per step, the distance between the ρ = 1 and ρ = 0 mind states (PCA
+  64). Statistic: the mean over lifts of that distance averaged over the 8 beats
+  before each lift. Null: the same number of 8-beat windows per song drawn at
+  random from windows that overlap no lift window, 1,000 draws, p = (1 + draws at
+  or above) / 1,001. It must hold on MERP and on the three songs pooled, each.
+  Beats: the three songs use their sidecar grids (Five Years its tempo map); MERP
+  uses one beat tracker, named in `check1b.py`.
+- **Gate 5.** "Five Years" opening is 0–30 s and its climax 156–258 s (2:36–4:18,
+  from the version-46 notes): the mean arousal readout over the opening must be
+  below the mean over the climax. "Presence" 120–190 s reads sad when sadness is
+  among the top three of the nine predicted GEMS feelings averaged over that span
+  and its mean there is above its mean over the rest of the song. Dial
+  correlation: Pearson r between the arousal readout and the user's pass A, both
+  as means over each 0.5 s step, masked spans left out, no lag shift; the core
+  beats the reference on at least 2 of 3 songs. Readouts for the three songs are
+  fitted on all DEAM 2013/2014 songs and the 43 MERP songs.
+
 ### What to build (`scripts/emotion/`)
 
 - **Ear**: stage 1's pick (`baseline+all`, 2,665 per 0.5 s), PCA to 64 fitted on
