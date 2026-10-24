@@ -242,6 +242,13 @@ labels are 2 Hz series that skip the first 12–17 s of each song (see
   beats the reference on at least 2 of 3 songs. Readouts for the three songs are
   fitted on all DEAM 2013/2014 songs and the 43 MERP songs.
 
+**Gate 2's readouts (user, 2026-10-24, after `check1b.py` was written, before it
+ran).** Gate 2 compares with stage 1's DEAM-only fit, so its pooled timing R² comes
+from valence and arousal readouts fitted on DEAM only, for the core and for the
+reference alike (Emotify GEMS as before). Gates 1, 3, 4 and 5 keep the readout
+fitted on DEAM and MERP together. The other points `check1b.py` lists as left open
+(`POINTS_LEFT_OPEN`, 65a3bc5) stand as written.
+
 ### What to build (`scripts/emotion/`)
 
 - **Ear**: stage 1's pick (`baseline+all`, 2,665 per 0.5 s), PCA to 64 fitted on
