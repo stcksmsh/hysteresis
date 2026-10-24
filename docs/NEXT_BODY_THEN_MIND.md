@@ -300,6 +300,58 @@ Round 2, once: only spectral radius, the time-constant range and the PCA size ma
 change. Fails again: MIND stays parked, the decoder (stage 3) uses the stage-1
 encoding. Write down which gate failed and by how much.
 
+### Round 1 result and step 2b (user, 2026-10-24, after the round-1 result)
+
+Round 1 (`a3fab6e`) failed: gates 1 (MERP by 0.017), 2 and 4 failed; 3 and 5
+passed. MERP gave no lifts under the b1775f8 rule (largest 4 s rise of the
+averaged curves: median 0.05), so gate 4 had no MERP test. The core without
+rehearsal (ρ = 0) tracked within-song arousal better than with it on both
+datasets (DEAM 0.221, MERP 0.566). The user chose not to run round 2 and to try
+**step 2b** instead. Step 2b is designed **after** seeing round 1, so its choices
+(no rehearsal input, readouts on state and ear) are not tested by numbers already
+seen: the fold-based gates below are a diagnostic, and the decision rests on gate
+B, which compares on the three songs' dial with numbers not yet computed for the
+new core.
+
+**What changes (the step-2b core).** The round-1 core with no rehearsal pass at all
+(ρ = 0, rehearsal input absent), and readouts (ridge) on the state PCA 64
+concatenated with the ear PCA 64. Everything else as round 1: ear, units, time
+constants, sparsity, the radius grid chosen inside training folds, folds, seeds,
+bootstrap, the MERP labels and 43 songs, the gate-2 DEAM-only readouts. Anticipation
+is not part of this step: if used later it is an explicit look-ahead in the body
+(the system knows the whole song), described as that, never as learned.
+
+**The smoothing control.** Ratings are smooth and lag the music, so a core with long
+time constants may gain only by smoothing. Control: the reference (stage 1's pick,
+memoryless ridge) with its predictions passed through a causal exponential smoother
+with time constant τ and then delayed by L (prediction at t uses the smoothed
+prediction at t − L). τ from {0, 0.5, 1, 2, 4, 8, 16, 32} s (0 = none), L from
+{0, 0.5, …, 4} s, chosen per outer fold by inner-fold within-song arousal r on
+training songs only. The core's predictions get the same option, chosen the same
+way, so neither side has a post-processing advantage. The chosen τ and L are
+reported per fold.
+
+**Check 2b, committed as `check2b.py` before it runs.**
+- **A1, beats smoothing (diagnostic gate):** within-song arousal r (as gate 1), the
+  core against the smoothed reference, on DEAM and on MERP each: the core's lower
+  95 % bound above the smoothed reference's upper bound.
+- **A2, mood kept (diagnostic gate):** as round-1 gate 2.
+- **A3, memory used (diagnostic gate):** as round-1 gate 3, on the core.
+- **B, the user's dial (the decision):** on the three songs, readouts fitted on all
+  DEAM 2013/2014 and the 43 MERP songs, Pearson r between the arousal readout and
+  the user's pass A (as round-1 gate 5, same masks, no lag shift beyond the chosen
+  L), the core against the smoothed reference. Pass: the core ahead on at least 2 of
+  3 songs. Also reported: the plain reference and round-1's numbers beside them.
+- Round-1 gate 5's two fixed tests (Five Years opening below climax; Presence
+  120–190 s sad) are reported for the new core, not gated.
+
+**Then.** A1 and B pass: the step-2b core is the encoding for stage 3 (the decoder),
+and the claims it licenses are memory and within-song tracking, not rehearsal or
+anticipation. A1 fails: the stage-1 encoding with the chosen smoothing is the
+encoding for stage 3, and the memory claim is dropped. A1 passes and B fails: report,
+the user decides. One run, no second round. ★ Stops: after `check2b.py` is committed
+(before it runs), and after the results.
+
 ---
 
 ## Step 3: decide (the user)
