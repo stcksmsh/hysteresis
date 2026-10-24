@@ -283,9 +283,10 @@ def boot_mean(values, n_boot):
 class Ridge:
     """Standardise, choose the penalty by inner 3-fold on the training songs only, fit."""
 
-    def __init__(self, x, y, groups):
+    def __init__(self, x, y, groups, alpha=None):
         self.std = common.Standardizer().fit(x)
-        self.model = common.ridge_fit(self.std(x), y, common.choose_alpha(x, y, groups))
+        self.alpha = common.choose_alpha(x, y, groups) if alpha is None else alpha
+        self.model = common.ridge_fit(self.std(x), y, self.alpha)
 
     def __call__(self, x):
         return common.ridge_predict(self.model, self.std(x))

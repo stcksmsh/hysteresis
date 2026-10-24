@@ -4157,3 +4157,47 @@ Presence 0.475, 0.537, 0.029, −0.616, 0.328.
 
 ρ = 0 beside ρ = 1: within-song arousal r is higher with ρ = 0 on both DEAM (0.221 against 0.204) and MERP (0.566 against 0.471). Gate 4
 (the rehearsal test) did not pass, on MERP for want of lifts and on the three songs at p = 0.48. Round 2 not started.
+
+### Step 2b: the core without rehearsal, `check2b.py` written (★) — 2026-10-24
+
+Rule: `docs/NEXT_BODY_THEN_MIND.md`, "Round 1 result and step 2b" (5a8297c). **check2b was not run.** Nothing was fitted or scored on real
+data for this step, and the dial files were not read. Code in `scripts/emotion/`:
+- `smoothing.py`: `smooth_delay(pred, tau, lag)`, a causal exponential smoother (y[t] = a y[t−1] + (1 − a) p[t], a = exp(−0.5 / tau),
+  started at the first prediction; tau = 0 is none) followed by a delay of lag / 0.5 steps (the first steps repeat y[0]). Grids as the
+  note: tau in {0, 0.5, 1, 2, 4, 8, 16, 32} s, L in {0, 0.5, …, 4} s.
+- `mind.py`, added only: `MindModel.fit_state` (state PCA only, no rehearsal projector) and `run_plain` (one pass from rest on the ear
+  input, no rehearsal pass, no rehearsal input). Round 1's `run` is unchanged. `check1b.py`: `Ridge` takes an optional fixed penalty;
+  behaviour unchanged.
+- `check2b.py`: ridge readouts on state PCA 64 + ear PCA 64 (128 inputs); ear PCA, 512 units, time constants 0.5–60 s, 10 % sparsity,
+  radius grid, folds, seeds (folds 20261012, bootstrap 20261013, inner 20261014, core 20261016, shuffle 20261017), 2,000 resamples,
+  the MERP labels and 43 songs, the DEAM-only gate-2 readouts: all as round 1. tau and L chosen per outer fold, separately for the core and
+  the reference, by inner-fold (3) within-song arousal r on the training songs (mean of the DEAM and MERP means, the criterion round 1
+  used for the radius). Gates: A1 (core smoothed against reference smoothed, DEAM and MERP each, lower bound above upper bound), A2
+  (round-1 gate 2, DEAM-only readouts), A3 (round-1 gate 3 on the core), B (the three songs against pass A: round 1's gate-5 handling,
+  readouts on all DEAM and the 43 MERP songs, tau and L chosen over those songs, core ahead on 2 of 3). Reported beside B: reference
+  plain, core unsmoothed, round 1's core and reference (read from `check1b/results.json`), round 1's two fixed tests for the new core,
+  pass B. Outcome text follows the note. Per-song predictions (core, core smoothed, reference, reference smoothed; arousal and valence;
+  held-out folds, labels and scored rows; the three songs with their dial step means) go to `/secondary/hyst-data/emotion/check2b/`
+  (`predictions_heldout.npz`, `predictions_songs.npz`) with `results.json` and `folds.json`.
+
+Tests: `test_smoothing.py` 6, `test_check2b.py` 15, with the existing suite 80 in all, passing
+(`cd scripts/emotion && /secondary/hyst-env/emotion/bin/python -m unittest`). The smoother is causal (a changed future leaves the past
+unchanged), tau = 0 and L = 0 is the identity, L shifts by exactly L / 0.5 steps; the step-2b core has no rehearsal projector, ignores the
+beats and equals round 1's ρ = 0 state; the readouts receive state and ear; tau and L are recovered when the labels were made with them;
+wrecking the held-out fold's labels leaves that fold's radius, tau, L and scores unchanged; each gate's direction, both-datasets rule and
+the 2-of-3 rule, the outcome logic, A2 reading the DEAM-only predictions; an end-to-end run on a synthetic world with fake dial files, whose
+saved predictions reproduce gate A1 and the dial correlation. Mutations of these comparisons each broke a test. `cargo test` on the four
+crates 73 passed, 0 failed; clippy -D warnings clean; fmt clean. Frozen `src/` and `tools/` untouched; no hardware.
+
+**Points the note leaves open, fixed in code, to be ruled on** (also in the `check2b.py` docstring):
+1. The smoother starts at the first prediction and the delayed series repeats its first value; it runs over the whole step series of a song and
+   is read at the scored rows.
+2. Order of choices in a fold: radius first (inner-fold criterion, core without smoothing), then tau and L for the core and for the reference.
+   Inner-fold ridges reuse the penalty chosen on the whole training fold, not a new inner search.
+3. A2 and A3 use the core's unsmoothed predictions. A3 shuffles ear input and labels together, so the readout still receives the step's own ear
+   scores; the history is what is scrambled.
+4. A1's "core" and "reference" are the smoothed series; the unsmoothed core and the plain reference are reported beside them.
+5. Gate B's tau and L come from inner folds over all DEAM and 43 MERP songs, as the final readout fit; the same tau and L apply to valence in
+   A1 and in pass B.
+6. Round 1's numbers beside B come from `/secondary/hyst-data/emotion/check1b/results.json`; they are left out if that file is missing.
+7. The inner-fold criterion for tau and L pools DEAM and MERP as in item 2, so one setting serves both datasets.

@@ -218,6 +218,7 @@ def gate_world(n=12, steps=40):
         for i in range(n):
             y = np.zeros((steps, 2))
             y[:, 1] = np.linspace(0, 1, steps) ** 2 + rng.normal(0, 0.01, steps)
+            y[:, 0] = np.linspace(0, 1, steps) ** 3 + rng.normal(0, 0.01, steps)
             out.append(Clip(f"{ds}_{i}", ds, np.zeros((steps, 3), np.float32), np.arange(0, 100, 0.5), y, np.arange(4, steps, 2)))
         return out
     return check1b.World(clips("deam"), [], clips("merp"), [], {}), 

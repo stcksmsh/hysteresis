@@ -194,6 +194,22 @@ class MindModel:
         self.rehearsal = fit_projector([self.state(s) for s in states], self.rehearsal_k, standardise=False, whiten=True)
         return self
 
+    def fit_state(self, clips):
+        """Step 2b: only the state projector (PCA of pass-1 states); there is no rehearsal projector."""
+        self.state = fit_projector(self._pass1([self.ear(c.x) for c in clips]), self.state_k, standardise=False, whiten=False)
+        return self
+
+    def run_plain(self, clips, orders=None):
+        """Step 2b core: one pass from rest on the ear input only, no rehearsal pass and no rehearsal input.
+        -> {key: {"state": (T, state_k) mind state, "ear": (T, ear_k) ear PCA scores}}, both in the permuted
+        order when `orders` {key: permutation} is given."""
+        ears = []
+        for c in clips:
+            e = self.ear(c.x)
+            ears.append(e[orders[c.key]] if orders and c.key in orders else e)
+        states = self._pass1(ears)
+        return {c.key: {"state": self.state(s), "ear": e} for c, s, e in zip(clips, states, ears)}
+
     def run(self, clips, rho=1.0, orders=None):
         """-> {key: {"rehearsal": (T, 64) pass-1 mind state, "mind": (T, 64) pass-2 mind state at rho}}.
         `orders` {key: permutation} runs a clip's steps in that order (the shuffle test); the
