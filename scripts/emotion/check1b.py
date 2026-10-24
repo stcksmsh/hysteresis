@@ -82,8 +82,8 @@ POINTS_LEFT_OPEN = """
 2 Rows scored: the 2 s grid of check1.py (DEAM labels at 15, 17, ...; MERP and Emotify centres 2, 4, ...), for both
   methods, for training and scoring.
 3 One valence/arousal readout per method, fitted on the pooled DEAM + MERP training rows (labels as released, both
-  -1..1); gate 1 and 2 split the held-out predictions by dataset. Gate 2's DEAM timing R^2 is therefore not from a
-  DEAM-only fit as in stage 1.
+  -1..1) for gates 1, 3, 4 and 5, which split the held-out predictions by dataset. RULED (user, 2026-10-24, 57baad0):
+  gate 2's pooled timing R^2 uses readouts fitted on DEAM only, for the core and the reference alike, as stage 1.
 4 MERP label of step k = mean of the 10 Hz series over t in [0.5 k - 0.25, 0.5 k + 0.25), sample i at t = i / 10.
 5 The rho = 0 reading refits the readout on the training clips' rho = 0 states.
 6 Mind-state PCA 64 fitted on training pass-1 states; one rehearsal PCA 8 (of those scores), applied to each of the
@@ -350,6 +350,7 @@ def fit_model(train, cfg):
     model = mind.MindModel(ear, radius, mind.SEED_CORE, cfg.units, cfg.state_k, cfg.rehearsal_k).fit_projectors(train)
     out = model.run(train, 1.0)
     lab = [c for c in train if c.ds in ("deam", "merp")]
+    deam_only = [c for c in train if c.ds == "deam"]
     emo = [c for c in train if c.ds == "emotify"]
     ids = _group_ids(emo)
     emo_groups = np.array([ids[c.key] for c in emo])
@@ -357,6 +358,8 @@ def fit_model(train, cfg):
         "va_core": Ridge(*pooled_rows(lab, out, "mind")),
         "va_core0": Ridge(*pooled_rows(lab, out, "rehearsal")),
         "va_ref": Ridge(*pooled_rows(lab, None, None)),
+        "va_core_deam": Ridge(*pooled_rows(deam_only, out, "mind")),
+        "va_ref_deam": Ridge(*pooled_rows(deam_only, None, None)),
         "gems_core": Ridge(clip_means(emo, out, "mind"), np.stack([c.profile for c in emo]), emo_groups),
         "gems_core0": Ridge(clip_means(emo, out, "rehearsal"), np.stack([c.profile for c in emo]), emo_groups),
         "gems_ref": Ridge(clip_means(emo, None, None), np.stack([c.profile for c in emo]), emo_groups),
@@ -375,6 +378,9 @@ def evaluate(model, readouts, test, rho_runs=True):
             entry["core"] = readouts["va_core"](s1[c.rows])
             entry["core0"] = readouts["va_core0"](s0[c.rows])
             entry["ref"] = readouts["va_ref"](c.x[c.rows])
+        if c.ds == "deam":   # gate 2: readouts fitted on DEAM only, as stage 1
+            entry["core_deam"] = readouts["va_core_deam"](s1[c.rows])
+            entry["ref_deam"] = readouts["va_ref_deam"](c.x[c.rows])
         if c.ds == "emotify":
             entry["core"] = readouts["gems_core"](s1[c.rows].mean(axis=0, keepdims=True))[0]
             entry["core0"] = readouts["gems_core0"](s0[c.rows].mean(axis=0, keepdims=True))[0]
@@ -420,7 +426,7 @@ def gate1(collected, world, cfg):
 def gate2(collected, world, cfg):
     stats = []
     for c in world.deam:
-        p = collected[c.key]["core"]
+        p = collected[c.key]["core_deam"]
         row = []
         for j in range(2):
             t, q = c.y[c.rows, j], p[:, j]
@@ -441,11 +447,11 @@ def gate2(collected, world, cfg):
 
 
 def gate2_reference(collected, world):
-    """Reference's pooled timing R^2 and Emotify rho on the same folds (reported, not gated)."""
+    """Reference's pooled timing R^2 (DEAM-only readout, as gate 2) and Emotify rho on the same folds (reported, not gated)."""
     sse = sst = 0.0
     for j in range(2):
         t = np.concatenate([c.y[c.rows, j] for c in world.deam])
-        q = np.concatenate([collected[c.key]["ref"][:, j] for c in world.deam])
+        q = np.concatenate([collected[c.key]["ref_deam"][:, j] for c in world.deam])
         sse += 1 - ((t - q) ** 2).sum() / ((t - t.mean()) ** 2).sum()
     rho = np.mean([np.nan_to_num(spearmanr(collected[c.key]["ref"], c.profile)[0]) for c in world.emotify])
     return {"timing": float(sse / 2), "rho": float(rho)}

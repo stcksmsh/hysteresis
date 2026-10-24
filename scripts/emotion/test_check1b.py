@@ -148,6 +148,19 @@ class EndToEnd(unittest.TestCase):
         for f in range(5):
             self.assertIn(r["radii"][str(f)]["chosen"], CFG.sr_grid)
 
+    def test_gate_2_uses_its_own_deam_only_readout(self):
+        world = synthetic_world()
+        train = [c for c in world.deam + world.emotify + world.merp if world.folds[c.key] != 0]
+        model, readouts, _, _ = check1b.fit_model(train, CFG)
+        test = [c for c in world.deam if world.folds[c.key] == 0]
+        out = check1b.evaluate(model, readouts, test)
+        deam_train = [c for c in train if c.ds == "deam"]
+        x, y, g = check1b.pooled_rows(deam_train, None, None)
+        expected = check1b.Ridge(x, y, g)(test[0].x[test[0].rows])
+        np.testing.assert_allclose(out[test[0].key]["ref_deam"], expected)           # fitted on DEAM rows only
+        self.assertFalse(np.allclose(out[test[0].key]["ref_deam"], out[test[0].key]["ref"]))   # not the pooled fit
+        self.assertFalse(np.allclose(out[test[0].key]["core_deam"], out[test[0].key]["core"]))
+
     def test_the_core_tracks_the_synthetic_signal(self):
         # the signal is a function of the input: the reference must read it, and the core must not be at chance
         self.assertGreater(self.results["gate1"]["deam"]["reference"][0], 0.5)
@@ -299,7 +312,8 @@ class GateTests(unittest.TestCase):
         world = check1b.World(deam, emotify, [], [], {})
         def collected(r2, good):
             shrink = 1 - np.sqrt(1 - r2)
-            out = {c.key: {"core": shrink * c.y[c.rows], "ref": shrink * c.y[c.rows]} for c in deam}
+            out = {c.key: {"core_deam": shrink * c.y[c.rows], "ref_deam": shrink * c.y[c.rows],
+                           "core": 0 * c.y[c.rows], "ref": 0 * c.y[c.rows]} for c in deam}   # pooled-readout predictions are useless
             out.update({c.key: {"core": c.profile if good else -c.profile, "ref": c.profile} for c in emotify})
             return out
         cfg = check1b.Config(n_boot=50)
@@ -308,6 +322,12 @@ class GateTests(unittest.TestCase):
         self.assertTrue(inside["timing"]["pass"] and inside["rho"]["pass"] and inside["pass"])
         self.assertFalse(check1b.gate2(collected(0.57, True), world, cfg)["timing"]["pass"])
         self.assertFalse(check1b.gate2(collected(0.60, False), world, cfg)["rho"]["pass"])
+        # gate 2 reads the DEAM-only predictions, not the pooled ones: with the pooled ones useless it still passes
+        self.assertTrue(inside["pass"])
+        swapped = collected(0.60, True)
+        for c in deam:
+            swapped[c.key]["core_deam"], swapped[c.key]["core"] = swapped[c.key]["core"], swapped[c.key]["core_deam"]
+        self.assertFalse(check1b.gate2(swapped, world, cfg)["timing"]["pass"])
 
     def test_gate5_dial_and_five_years_rules(self):
         names = [k for k, *_ in check1b.SONGS]
