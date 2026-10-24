@@ -1,16 +1,28 @@
 # AGENTS.md — Hysteresis (native Rust rewrite)
 
-## Current user priority — 2026-10-04 single-arm figure dance
+## Current user priority — 2026-10-05 six-arm mirror ensemble
 
-Read `docs/DANCE_RESTART_PROMPT.md` first, then the last entries of
-`docs/DANCE_HANDOFF.md`. Goal: one 3D arm that dances beautifully to the song,
-planned automatically from offline sidecars, executable on real servo hardware.
-Many arms and projection come later. The base rotates a continuous 360°.
-The only dance path is `hyst_compile::director::figures::compile_figures`,
-previewed by `hyst-previz`'s `ensemble_preview`; all older dance planners were
-deleted on the user's decision (kept in history at branch `dance-checkpoint`).
-The user reviews short clips by eye; unverified layers are settled by blind
-ablation. Human timings in `scripts/instant_crush.acceptance.json` are
+Read `docs/DANCE_RESTART_PROMPT.md` first (branch `keys-decide`), then the last entries of
+`docs/DANCE_HANDOFF.md`. Goal: several servo arms (target six, on a hexagon,
+facing its centre) that hold mirrored objects, dance in synchronized formations
+chosen automatically from offline sidecars, work inside each other's reach
+without colliding, and are lit by a projector showing the visualizer. The
+single arm was approved at version 32 and the ensemble accepted at version 39.
+Version 44 was accepted on Instant Crush ("Its nice now"). A second song,
+"Five Years" (live tempo, wide dynamics), and a third, "Presence" (Justice,
+instrumental), followed. The user found "Five Years" OK and listed jerks and
+weak spots on the other two; version 47 answers them (moments limited in
+speed, surge stretched to the note spacing, arrivals that rise at a drop,
+calmer without drums, honest class names) and awaits the verdict on all three. Tempo map and grid refit live
+outside the repo; see the last `DANCE_HANDOFF.md` entries.
+Open: overlap in the mirrored formation, and red zones as a general tool for
+keeping arms off equipment (shapes wait for the user's answer).
+The only dance path is `hyst_compile::director::figures::compile_ensemble`
+(`compile_figures` is its one-arm case), previewed by `hyst-previz`'s
+`ensemble_preview`; all older dance planners were deleted on the user's
+decision (kept in history at branch `dance-checkpoint`). The user reviews by
+eye: blind side-by-sides for single-arm motion, whole-song videos with a clock
+for the ensemble. Human timings in `scripts/instant_crush.acceptance.json` are
 validation-only. Frozen `src/` and `tools/` remain read-only.
 
 Older dance entries in §5 below describe deleted code and rejected directions;
@@ -1335,3 +1347,261 @@ whip on moments, suspension at figure peaks, three other roll drivers. Planner
 fixes: follower brakes near zones; roll exempt from that; last knot keeps its
 slope. Next is keys-decide in a fresh session; start from
 `docs/DANCE_RESTART_PROMPT.md`.
+
+### Instrument lanes and leading lane — 2026-10-04
+
+Version 27, branch `keys-decide`. `scripts/dance_notes.py` writes one lane per
+stem into the sidecar (`noteTrack.lanes`: onsets, rough pitch, phrases, level
+per beat). The planner ranks the lanes per beat and, while the leading lane
+plays stabs, the hand surges after each stab (blind-test winner). Figure
+snapping and picking by the leader lost and were deleted. A Songsterr tab is
+the validation reference (never input). MuScriptor, pYIN voice curve and
+stereo lane discovery were measured but are not in the repo. Details and
+numbers: last entry of `docs/DANCE_HANDOFF.md`.
+
+### Swell, smoothed clock, voice lift — 2026-10-04
+
+Version 30, branch `keys-decide`. The sidecar lanes gained `brightnessPerBeat`.
+Hand size and height follow the leading lane's loudness and brightness where it
+plays no stabs (blind-test winner at full strength). The figure clock is
+smoothed over two knots: it removes a measured knot-to-knot chatter and cuts
+hand acceleration to a third, but the user saw no difference by eye. The hand
+rises and extends while the voice sings well above its usual pitch (user's
+request for 4:07; strength chosen between two blind variants). Details and
+numbers: last entry of `docs/DANCE_HANDOFF.md`.
+
+### Flourishes per moment — 2026-10-04
+
+Version 31. A flourish is slow and soft where the leading lane plays a steady
+stream (verses, break, end) and sharp as before among stabs; the `--flourish`
+knob is gone. Blind-test verdict: sharp in a verse was "too much", soft "ok".
+
+### Travel direction alternates per section — 2026-10-04
+
+Version 32. "Over-focuses on centre" meant the base turning mostly one way
+(12.5 net turns over the song). Now each section's steady travel round the base
+reverses (3.6 net turns). Chosen by the user as a middle ground, not by a blind
+win. No review knobs remain.
+
+### Implement as rig data, projector overhead — 2026-10-04
+
+Version 33. Concept restated by the user: several arms holding "something with
+mirrors", lit by a projector that shows the visualizer and faces the mounting
+surface head-on (ceiling for a floor arm). The hand object is now data in the
+rig (`Rig.implement`: any set of flat mirrors plus a bounding radius); default
+a lumpy mirror ball, `--implement disc` for the disc. Zone and floor checks
+keep the hand point that radius further away. The preview draws the overhead
+projector's reflections off each mirror. Next: several arms with red zones.
+
+### Several arms with a cross-check — 2026-10-04
+
+Version 34. `compile_ensemble` plans any number of arms (the user's target: six
+on a hexagon); each keeps a tunable clearance from the others' links and
+implements, earlier arms having right of way. All arms dance the same figures
+in their own frame; ensemble choreography (together, inverses, one by one,
+drop-outs, pairs) is the next, separate task. `compile_figures` is the one-arm
+case, unchanged.
+
+### Ensemble formations — 2026-10-05
+
+Version 35. In a ring every arm's forward is the centre. The planner picks a
+formation per section from the music (unison, mirrored, canon, pairs, one by
+one, drop-out); the rule table is a first guess awaiting review. Each hand
+keeps to its own cell of floor so formations never rely on the cross-check,
+which stays as a safety net. One arm alone is unchanged.
+
+### Arms share the floor — 2026-10-05
+
+Version 36. User: arms too far apart and not synchronized enough; overlapping
+red zones are the "wow". The review hexagon is 0.8 m, reaches overlap, and
+formations are built so they never ask for a collision (a shared keep-out
+circle at the centre; mirrored neighbours keep to their side); the cross-check
+is the net. Rest-heavy formations are gone; choruses unison, verses canon or
+mirrored.
+
+### Canon and ripple — 2026-10-05
+
+Version 37. Canon delays are a sixth of the current move per arm, round the
+ring; Ripple spreads from one arm both ways to the opposite arm and comes back
+on the next move. Arms now part freely after meeting, and every formation but
+unison keeps each hand on its own side of the line to its neighbours, so
+overlapping reaches happen in unison only.
+
+### Ensemble accepted; handover — 2026-10-05
+
+Version 39: the preview draws all arms far to near together, canon delays fall
+on the beat, and the user accepted the six-arm ensemble ("It's good now").
+The restart prompt is rewritten for the ensemble. Next task, the user's
+choice: overlap of the arms' reaches in every formation, and general red zones
+against equipment.
+
+### Out-of-step arms share space — 2026-10-05
+
+Version 40, not yet reviewed. The "own sector" limit of canon, ripple and
+mirrored now applies only where arms posed alone would come within the
+clearance, half a beat either side. Ripple is never limited, canon about a
+tenth of the time; hands past half way to a neighbour 0 % → 7–9 % in those
+formations, with fewer stalls and kicks than version 39. Mirrored cannot
+overlap by its geometry. Nothing is retimed. A test now covers an ensemble
+against a box; red-zone shapes wait for the user's answer on the equipment.
+
+### Canon only for short runs — 2026-10-05
+
+Version 41, not yet reviewed. The user found a long canon unsynchronized
+(it has no symmetry) and the ripple fine. A canon longer than sixteen beats is
+now a ripple; two short canons remain on this song. Ripple hands are past half
+way to a neighbour 12 % of arm-time; no arm stands still.
+
+### Unison and mirror; canon and ripple as flourishes — 2026-10-05
+
+Version 42, not yet reviewed; version 41 was superseded unseen. The user:
+unison looks best, mirror is liked, canon and ripple are flourish moves and
+suit "linear" movement in line with the centre. Sections are now Unison or
+Mirrored; the move holding a melodic flourish is passed round the ring as a
+ripple or canon while the arms turn in line with the centre. Wide moves are
+never passed round. No test covers the flourish.
+
+### Version 43; verse formation under blind review — 2026-10-05
+
+The user found version 42 idle at times, "resetting" and following the music
+less. The linear turn is deleted (version 43). A stronger stab surge was
+measured and not adopted. A shuffled side-by-side of the verse as mirrored,
+ripple or unison is with the user; the review knob `HYST_VERSE` stays in the
+tree until the verdict.
+
+### Version 44: verses in unison — 2026-10-05
+
+The user judged the mirrored verse the worst of the side-by-side (weakly; could
+not separate ripple from unison) and accepted unison. Verses are Unison; the
+drums-only passages start Mirrored, so the mirror stays in the song (45 s). The
+`HYST_VERSE` knob is deleted. Idle 32 s → 20 s. Not yet reviewed.
+
+### Second song and version 45 — 2026-10-05
+
+The user accepted version 44 and asked for "Five Years" (Bowie). Its live,
+drifting tempo needed a tempo map (scratch scripts outside the repo; the
+interactive page has none, use the video). The user's critique (arms resting,
+jerky "raving" flourishes in the quiet opening, wrong "bass-led" label, long
+vocal-led stretches boring) led to version 45: loudness against the song's own
+loud passages softens flourishes, arrivals and the stab surge; the voice counts
+by its share of the sound and a loud sung passage is "interlocked"; drop-out
+and pairs are deleted, everyone dances; long vocal-led and interlocked runs
+play a contrasting phrase after about 128 beats; runs under 24 beats keep the
+formation before them. Instant Crush measured nearly unchanged. Not reviewed.
+
+### Third song and version 46 — 2026-10-05
+
+"Presence" (Justice), instrumental and steady. Its grid was 45 ms late (the
+base analysis's tracker lags; refit to drum hits by a scratch script). The
+class rule now counts voice and drums by their share of mean power, which
+removes a phantom voice on the instrumental, reads its drum-led intro and
+clears the label patchwork on "Five Years". Every class but the calm ones has
+a contrast phrase. Version 45 was never shown; 46 replaces it. Not reviewed.
+
+### Version 47: jerks, drops and labels — 2026-10-06
+
+User on version 46: "Five Years" OK; Instant Crush jerks at 3:52, 4:08, 4:36;
+"Presence" strange moments, low energy after drops, no payoff at the 3:52
+drop, wrong labels. Nearly all jerks were sharp flourishes or arrivals (hand
+1.5–2.3 m/s) and the stab surge idling then bursting on sparse notes. Fixed in
+the planner; also the "cannot fit tangents" abort (a hold test that mistook the
+song's last, milliseconds-short knot for a hold). Not reviewed.
+
+### B workspace, round 1 — 2026-10-12
+
+Built `docs/B_WORKSPACE.md` v1 in `hyst-compile` (off by default, `Off` is byte-
+identical to version 47) and measured it on the three songs; `ensemble_preview`
+gained `--workspace` and a stderr summary. In the measurements `Rehearsed`
+breaks a guardrail on all three songs and `Schematic` on one, and Presence
+shows no tension at the 1:32 drop. Nothing judged by eye; blind A|B|C test and
+its commands are in `docs/DANCE_HANDOFF.md`. 157 CPU tests green.
+
+### B workspace, round 2 — 2026-10-12
+
+Round 1 lost the blind test (1 of 4). Round 2: gain centred at 0.5, build start
+skips the last two bars before a drop, one recognition per phrase, two wiring
+constants halved. `Rehearsed` passes the guardrails on all three songs; `Off`
+unchanged. Second blind test is pending; a loss means deleting `workspace.rs`.
+Details in `docs/DANCE_HANDOFF.md`. Not judged by eye.
+
+### Emotion stage 1: encoder — 2026-10-12
+
+Built `scripts/emotion/` (feature extractors, check 1, `encode.py`, `report.py`, 19 tests)
+and ran check 1 on DEAM + Emotify against the stems baseline (Demucs on all 2,144 clips;
+an earlier mix-only run is kept in the handoff). Only baseline+all passed, and is the pick.
+Within-song timing R² is negative for every candidate: the encoding separates songs, it
+does not follow change inside one. Three danced songs encoded to `*.emotion.sidecar.json`
+and an `emotion-report.html` made, outside git; unread by the user. Numbers, deviations
+and rerun steps in `docs/DANCE_HANDOFF.md`. Planner untouched; stages 2-4 not started.
+
+### Body study, addendum 3 run — 2026-10-13
+
+Generator rewritten in `body.rs`: each joint has its own pace and leader-synchronised
+moves, overlapping so none stops dead; overshoot on elbow, wrist and roll only; new
+per-joint floor and in-frame rules (a study-only camera in `body_study html`). 2,000 of
+2,068 clips pass. The final region check fails (within-region 0.85-1.02 against a quarter
+of 0.633), so the study stopped at ★ 1. Not verified by eye. Numbers in
+`docs/DANCE_HANDOFF.md`.
+
+### Body study, addendum 4 run — 2026-10-13
+
+`body_study regions` builds addendum 4's regions (`hyst_compile::body_regions`, 7 tests) on
+the r4 sweep. Seed spread w is 1.33-2.72 (median 1.93), not the 0.85-1.0 the addendum
+assumed. After 992 replacements the candidates ran out; the final set's smallest ratio is
+0.618 and 25 of 28 pairs are under 1.5. The study stops before ★ 2. Not verified by eye.
+Numbers in `docs/DANCE_HANDOFF.md`.
+
+### Body study, test ready (★ 2) — 2026-10-13
+
+Addendum 5: the 8 regions of `90cbec8` as built, factor 0.6. `scripts/body_study/` has
+`triplets.py`, `render.sh`, `answer.html`, `score.py` and their tests. 72 clips rendered
+(all on their ladder stretch, frame margin ≥ 27 px); 24 A | B | C stacks in
+`/secondary/hyst-data/bodystudy/r5/test/`; the user opens the page as `r5/HOWTO.txt` says.
+Not verified by eye. Waiting for the user's answers.
+
+### Body study, test ready under addendum 7 (★ 2) — 2026-10-13
+
+Addendum 7 replaces the stack (addendum 6 unbuilt). A, B, C play alone one after another,
+and the answer after C counts. Replays with seek come only after it, and progress is saved
+after every step. 72 lossless single-clip crops are frame-identical to the stacks. The page,
+a range server (`serve.cjs`), headless tests and the scorer (counted answer only) are in
+`scripts/body_study/`. The user starts with `r5/HOWTO.txt`. Not verified by eye.
+
+### Body study, check 2b scored — 2026-10-13
+
+13 of 24 correct, check 2b fails (pass ≥ 16; p = 0.028 for 13 or more under guessing).
+Every answer came right after the first pass; no replays or second answers. Round 2 waits
+for the user and the overseer. Numbers in `docs/DANCE_HANDOFF.md`.
+
+### Body study round 2, generator and sweep (★ 1) — 2026-10-14
+
+Addendum 8. `body.rs` rewritten: 15 body dimensions (adds size, energy, rhythm); the body
+sets pattern, pace, size and rhythm, the seed only start phase and small jitter; movement
+floors removed, stillness cap added; 8 s clips. Sweep 2,000 of 2,002 pass; mean joint speed
+p10 8.5, p90 45.6 deg/s (ratio 5.35). Three first-look clips in `r6/first/`. Not verified by
+eye. Waiting for the user and the overseer before regions.
+
+### Body study round 2, test ready (★ 2) — 2026-10-14
+
+Regions under addendum 8: the separation rule holds with 0 replacements (smallest ratio
+1.519, w 0.263-1.134). 32 scored and 4 practice triplets; 108 clips of 8 s in
+`/secondary/hyst-data/bodystudy/r6/test/`, all on their ladder stretch, frame margin ≥ 32 px.
+Page with practice feedback and capped pre-answer replays, scorer (pass at 20 of 32) and
+their tests in `scripts/body_study/`. The user starts with `r6/HOWTO.txt`. Not verified by
+eye.
+
+### Body study passes; whole-song dial page — 2026-10-14
+
+Check 2b of round 2: 30 of 32 correct, PASS (pass at 20; P under guessing about 1e-12);
+step 1 passes. `scripts/emotion/dial.html` (+ `dial_serve.cjs`, 62 headless checks on
+synthetic audio) records the user's valence/arousal at 10 Hz on the audio clock for the
+three songs, served from `/secondary/hyst-data/emotion/dial/` (`HOWTO.txt`). The builder
+never opens `dial.json`. Step 2 not started.
+
+### Whole-song dial, format 2 — 2026-10-14
+
+`scripts/emotion/dial.html` follows the revised dial format: a picker of 2 passes x 3
+songs, pass A an energy slider with Space-bar lift taps, pass B a light/bright and
+heavy/dark pad (both 0..1), redo keeps the discarded take, file `dial2.json`. 87 headless
+checks on synthetic audio. Canvas corners are square now (a rounded corner was not hit by
+the pointer). The user's recordings are not opened. Step 2 not started.

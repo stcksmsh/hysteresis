@@ -2,6 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 
+pub mod body;
+pub mod body_regions;
 pub mod director;
 pub mod ensemble;
 
@@ -44,6 +46,8 @@ pub struct CompileConfig {
     /// blind side-by-side over 0 and 120; it about triples wrist travel, so
     /// lower it if real wrist or elbow servos cannot keep up.
     pub wrist_drag_degrees_per_mps: f64,
+    /// The feeling workspace (`docs/B_WORKSPACE.md`). Nothing reads it yet.
+    pub workspace: director::workspace::WorkspaceMode,
 }
 impl Default for CompileConfig {
     fn default() -> Self {
@@ -51,6 +55,7 @@ impl Default for CompileConfig {
             enable_hits: true,
             reuse_repeats: true,
             wrist_drag_degrees_per_mps: 240.0,
+            workspace: director::workspace::WorkspaceMode::Off,
         }
     }
 }
