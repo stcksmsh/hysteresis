@@ -3930,3 +3930,73 @@ Checks: `cargo test -p hyst-compile -p hyst-output -p hyst-previz -p hyst-cli` 7
 `three.sh` exports identical to `hexagon-47.html`, `five-years-hexagon.html`,
 `presence-hexagon.html`; tmp files deleted. Frozen `src/` and `tools/` untouched. No
 hardware driven. Step 2 (MERP, the mind) not started.
+
+### Step 2: the mind spike built, `check1b.py` written (★ 2) — 2026-10-24
+
+Rules: `docs/NEXT_BODY_THEN_MIND.md` step 2 with the notes of b1775f8 and 72ba7bc; `docs/MIND.md` 3.4–3.6, 5. Code in
+`scripts/emotion/`: `mind.py` (core, rehearsal, `mindState` field), `check1b.py` (the five gates), `lifts.py` (lift rule),
+`merp_labels.py` (MERP labels), `merp_features.py` (MERP ear features), `beats.py` (beat grids). **No check was run on real data.**
+`check1b.py` was run only on a synthetic world with fake dial files. Not built: pulse, `audioic`, the core's own expectation
+readout, any trained core. The `mindState` field is a function (`mind.mind_state_field`); it is not written for any song.
+
+**Constants and their origin.** From the rules: 512 units, density 0.1, time constants log-uniform 0.5–60 s, radius grid
+0.7 / 0.8 / 0.9 / 0.95 / 0.99 (start 0.9), ear PCA 64, state PCA 64, rehearsal PCA 8, lags 1 / 4 / 16 bars, 4 beats a bar, 5 folds,
+2,000 bootstrap resamples, 1,000 permutation draws, 8-beat windows, stage 1's bounds (timing 0.617 [0.596, 0.635], rank corr 0.616
+[0.588, 0.643]), Five Years 0–30 s and 156–258 s, Presence 120–190 s, Instant Crush masks 135–171 s and after 329.0 s, seeds of
+`check1.py`. Mine: leak a = 1 − exp(−0.5 / τ), input weights N(0, 1/d_in) with scale 1, tanh, `SEED_CORE` 20261016,
+`SEED_SHUFFLE` 20261017, `SEED_PERM` 20261018, PCA inputs scaled to unit variance, inner folds for the radius = 3 (as
+`common.choose_alpha`), the ridge penalty grid of `common.py`.
+
+**MERP labels.** The 3,482 kept trials taken from the raw series (24 duplicate (rater, song) pairs resolved by best match).
+Variants tested against the filtered file on the overlap (mean RMSE over trials, both axes; share of trials under 0.01):
+rescale none / smooth first 0.0079 (77.7 %); none / smooth after 0.0396 (28.7 %); per rater / first 0.0655 (20.4 %);
+per rater / after 0.0902 (5.3 %); per trial / first 0.2764 (3.7 %); per trial / after 0.2797 (3.6 %). **The data chose "no
+rescale, Savitzky-Golay (15, 2) at 10 Hz, then every 5th sample"**, which is outside the two options the note named; the
+released filtered values are the smoothed raw values with no further rescale (a per-rater rescale over all of a rater's raw
+trials gave 0.063). Alignment found per trial: the filtered series is the end of the raw series, 150–173 raw samples skipped.
+Per song: mean of the trials at 10 Hz, then 0.5 s step means. Raw trials per song 29–64 (279 for the DEAM anchors,
+not used). `pyarrow` was installed into `/secondary/hyst-env/emotion` to read the parquet files.
+
+**MERP ear features.** 43 songs (> 50 s), 2,665 per 0.5 s step, same component functions as `encode.py` (whole-song Demucs
+stems, MERT in 30 s chunks with 5 s context, CLAP at every step, Essentia); stems deleted per song. Run time 11,072 s of
+song time summed (3.1 h, part of it while the beat tracker shared the CPU), cache `/secondary/hyst-data/emotion/cache/mind/merp`
+85 MB, beats 9 MB, nothing on the root disk apart from a throwaway pyarrow venv in a job temp directory. The first run
+stopped at `00_839` (112.01 s): the grid has floor(2 × 112.01) + 1 = 225 steps, MERT's 75 Hz frame count is a few frames under
+75 × duration so its 0.5 s bins number 224. `encode.py` raises on this; `merp_features.py` repeats the last row when exactly one
+step is missing. Any other song that ends within about 0.02 s after a multiple of 0.5 s is treated the same way.
+**Beat tracker** for DEAM, Emotify and MERP: Essentia RhythmExtractor2013, method "multifeature". 2,187 grids, 0 fallbacks,
+median 118.4 bpm.
+
+**Load check on real data (no fit, no score).** `load_real()` gave DEAM 1,744 clips with 26,155 scored rows (stage 1: 26,155),
+Emotify 400 clips with 11,542 rows, MERP 43 songs with 4,100 rows, the three songs 542–680 steps, all 2,665 wide and finite,
+folds 438 / 438 / 438 / 437 / 436. The dial files were not read.
+
+**Tests.** `test_mind.py` 21, `test_check1b.py` 18, `test_check1.py` and `test_encode.py` 19: 58 in all, passing
+(`cd scripts/emotion && /secondary/hyst-env/emotion/bin/python -m unittest`). Same seed gives identical output; shuffling changes
+it; ρ = 0 drops the rehearsal input exactly and ρ scales it; the lift rule on jitter, an end flick, masks, the 16-beat rule; the
+MERP label pipeline on a synthetic trial (variant recovered, duplicate resolved, step means); each gate on crafted inputs; an
+end-to-end run on a synthetic world with fake dial files in both formats. Mutations of the gate comparisons, thresholds,
+p-value formula, lag, rise threshold and step window each broke a test.
+
+**Points the rules leave open, fixed in code as listed, to be ruled on** (also in `check1b.py` `POINTS_LEFT_OPEN`):
+1. Library clips have CLAP only every 2 s in the stage-1 cache; I interpolate it linearly between centres (held at the ends).
+   MERP and the songs have CLAP at every step; MERT of the library was run whole, of MERP and the songs in chunks.
+2. Rows scored: the 2 s grid of `check1.py` for DEAM, MERP and Emotify, for both methods.
+3. One valence/arousal readout per method, fitted on pooled DEAM + MERP training rows; gate 2's DEAM timing R² is therefore not
+   from a DEAM-only fit as in stage 1.
+4. A step's label is the mean over [0.5 k − 0.25, 0.5 k + 0.25) s, sample i at t = i / 10; the same for the dial.
+5. The ρ = 0 reading refits the readout on the ρ = 0 states of the training clips.
+6. State PCA fitted on pass-1 states; one rehearsal PCA 8 for the three lags; nothing remembered past the end of a song (zeros).
+7. Radius chosen per outer fold by 3 inner folds on the DEAM + MERP training songs, score the mean of the DEAM and MERP mean
+   within-song arousal r; the PCAs are fitted once on the whole training fold.
+8. Gate 3 moves labels with their steps (only the history is scrambled).
+9. Gate 4 windows: steps whose centres fall in the 8 beats before the lift; distance Euclidean in the PCA-64 mind state; MERP
+   lifts from the mean-rater arousal at 10 Hz.
+10. Gate 5: Instant Crush pass A is always try 1 as (a + 1) / 2, also if `dial2.json` holds a pass A for it.
+11. Lift rule: median and mean centred and shrinking at the ends, the 2 s mean is 20 samples; "touching" = adjacent samples;
+    the first 2 s and last 5 s are treated as masks against the whole rise span [onset, last rise + 4 s] (reading them as limits
+    on the placed lift would let an end flick through); the 16-beat rule compares against the last lift kept.
+12. Gate 1 drops songs whose r is undefined and counts them. Gate 3 needs the original r above 0.
+
+Checks: `cargo fmt --all --check`, `cargo test -p hyst-compile -p hyst-output -p hyst-previz -p hyst-cli` and clippy -D warnings
+on those crates: 73 passed, 0 failed; clippy clean; fmt clean. Frozen `src/` and `tools/` untouched; no hardware driven.

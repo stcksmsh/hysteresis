@@ -43,6 +43,7 @@ import json
 import os
 import pathlib
 import time
+import zlib
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -168,11 +169,16 @@ def load_library(durations):
             y[_step(c)] = data["y"][cursor]
             rows.append(_step(c))
             cursor += 1
+        if rows[-1] >= len(x):
+            raise ValueError(f"{key}: scored step {rows[-1]} beyond the {len(x)} cached steps")
         deam.append(Clip(key, "deam", x, read_beats(key), y, np.array(rows, dtype=int)))
     emotify = []
     for (key, centres), profile in zip(data["emotify_index"], data["profile"]):
         x = library_vectors(key)
-        emotify.append(Clip(key, "emotify", x, read_beats(key), None, np.array([_step(c) for c in centres], dtype=int), profile))
+        rows = np.array([_step(c) for c in centres], dtype=int)
+        if rows[-1] >= len(x):
+            raise ValueError(f"{key}: scored step {rows[-1]} beyond the {len(x)} cached steps")
+        emotify.append(Clip(key, "emotify", x, read_beats(key), None, rows, profile))
     folds = common.assign_folds([f"deam_{s}" for s in sorted(set(data["song"]))])
     folds.update(common.assign_folds([f"emotify_{t}" for t in data["tids"]],
                                      {f"emotify_{t}": data["genre"][t] for t in data["tids"]}))
@@ -380,7 +386,7 @@ def evaluate(model, readouts, test, rho_runs=True):
 def shuffled_predictions(model, readouts, test):
     """Gate 3: arousal-readout predictions at the scored rows after one seeded shuffle per song."""
     labelled = [c for c in test if c.ds in ("deam", "merp")]
-    orders = {c.key: np.random.default_rng([mind.SEED_SHUFFLE, i]).permutation(len(c.x)) for i, c in enumerate(labelled)}
+    orders = {c.key: np.random.default_rng([mind.SEED_SHUFFLE, zlib.crc32(c.key.encode())]).permutation(len(c.x)) for c in labelled}
     out = model.run(labelled, 1.0, orders)
     pred = {}
     for c in labelled:

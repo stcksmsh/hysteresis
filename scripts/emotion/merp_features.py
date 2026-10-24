@@ -31,6 +31,7 @@ import extract
 COMPONENTS = ("baseline_stems", "mert_avg", "clap", "essentia_effnet", "essentia_mood")
 DIMS = (49, 768, 512, 1280, 56)
 MIN_SECONDS = 50.0
+MAX_PAD = 1
 MERP = common.DATA / "merp"
 OUT = common.CACHE / "mind" / "merp"
 
@@ -70,6 +71,12 @@ def song_vectors(audio_path, duration, stems_dir):
     for name in COMPONENTS:
         fn = encode.COMPONENTS[name][0]
         matrix = np.asarray(fn(audio_path, duration, centres, stems_dir=stems_dir), dtype=np.float32)
+        short = len(centres) - len(matrix)
+        if 0 < short <= MAX_PAD:
+            # The last centre can sit within ~0.02 s after the final MERT bin (MERT's 75 Hz frame count
+            # is a few frames under 75 x duration, so ceil(frames / 37.5) can be one under floor(2 x duration) + 1).
+            # The window there is the last bin's 4 s mean; repeat the last row. encode.py raises on this case.
+            matrix = np.concatenate([matrix, np.repeat(matrix[-1:], short, axis=0)])
         if len(matrix) != len(centres):
             raise ValueError(f"{name}: {len(matrix)} steps for {len(centres)} centres")
         parts.append(matrix)
