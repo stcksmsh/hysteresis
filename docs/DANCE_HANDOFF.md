@@ -4116,3 +4116,44 @@ To switch `song.sh`: replace the line
 `npx tsx scripts/analyze.ts "$wav" "$D/$slug.sidecar.json"` with
 `/secondary/hyst-env/analyze-py/bin/python scripts/analyze.py "$wav" "$D/$slug.sidecar.json"`.
 Not done: deleting any TypeScript; `analyze.ts` stays until the overseer decides.
+
+### Step 2: check 1b run on real data (★ 3) — 2026-10-24
+
+Run once, as committed (4d61000, which includes the gate 2 ruling of 57baad0: pooled timing R² from DEAM-only readouts for the core
+and the reference). It did not crash; no code or rule was changed after the result. Log `/secondary/hyst-data/emotion/check1b_run.log`,
+results `/secondary/hyst-data/emotion/check1b/` (`results.json`, `folds.json`, `lifts.json`). Run time 2,735 s. The dial files were read
+by this run only. **Not verified by eye.** Seeds: folds 20261012, bootstrap 20261013, inner 20261014, core 20261016, shuffle 20261017,
+permutation 20261018. Held-out sets: DEAM 1,744 clips (26,155 scored rows), MERP 43 songs (4,100 rows), Emotify 400 clips, five folds by song;
+the three songs are scored with the model fitted on all DEAM and MERP. Intervals: 95 %, 2,000 bootstrap resamples over songs.
+
+**Overall: FAIL. Gates 1, 2 and 4 failed; gates 3 and 5 passed.**
+
+Spectral radius chosen per fold (inner folds, grid 0.7 / 0.8 / 0.9 / 0.95 / 0.99): fold 0 0.9, fold 1 0.8, fold 2 0.9, fold 3 0.8, fold 4 0.8;
+final model (three songs) 0.7.
+
+| Gate | Result | Numbers |
+|---|---|---|
+| 1 within-song arousal r, DEAM (1,744 songs) | PASS | core ρ=1 0.204 [0.182, 0.226]; reference 0.101 [0.081, 0.120]; core ρ=0 0.221 [0.197, 0.243]. Valence (not gated): core 0.113 [0.090, 0.136], reference 0.038 [0.018, 0.056] |
+| 1 within-song arousal r, MERP (43 songs) | FAIL | core ρ=1 0.471 [0.380, 0.554]; reference 0.316 [0.236, 0.397]; core ρ=0 0.566 [0.497, 0.629]. The core's lower bound 0.380 is below the reference's upper bound 0.397. Valence: core 0.301 [0.202, 0.399], reference 0.121 [0.041, 0.204] |
+| 1 overall | FAIL | |
+| 2 pooled DEAM timing R² | FAIL | core 0.559 [0.537, 0.579] (valence 0.472, arousal 0.647) against stage 1's lower bound 0.596 (stage 1: 0.617 [0.596, 0.635]); reference here 0.617 |
+| 2 Emotify rank correlation | FAIL | core 0.582 [0.552, 0.610] against stage 1's lower bound 0.588 (stage 1: 0.616 [0.588, 0.643]); reference here 0.616 |
+| 3 shuffled steps, DEAM | PASS | r 0.204 → 0.026 [0.012, 0.040] |
+| 3 shuffled steps, MERP | PASS | r 0.471 [0.380, 0.554] → 0.066 [0.011, 0.124] |
+| 4 rehearsal, MERP | FAIL | 0 lifts in 43 songs, no windows, no test possible |
+| 4 rehearsal, three songs pooled | FAIL | 6 windows; statistic 5.089, null mean 5.071 [4.545, 5.513], p = 0.4835 |
+| 5 Five Years opening vs climax | PASS | arousal readout 0–30 s −0.066, 156–258 s 0.159 (reference 0.039, 0.343) |
+| 5 Presence 120–190 s sad | PASS | sadness rank 3 of 9, span mean 0.252, rest of song 0.250 |
+| 5 dial r, core against reference | PASS, 2 of 3 | Instant Crush 585 steps core 0.177, reference 0.111; Five Years 568 steps core 0.817, reference 0.869; Presence 542 steps core 0.767, reference 0.620 |
+
+Lift counts (rule of b1775f8): MERP 0 in all 43 songs; the three songs 6 in total (Instant Crush 1, Five Years 2, Presence 3). Read-only
+afterwards, on the MERP mean-rater curves after the same clean-up: the largest 4 s rise per song has median 0.052, range 0.017 to 0.168;
+only 3 of 43 songs reach the 0.15 threshold at all, and none of those three produced a lift (head, tail or the 16-beat rule). So the zero
+comes from the rule's threshold on averaged curves, not from a crash.
+
+Pass B (reported, not gated; core readouts against the user's light and heavy tracks): Instant Crush light−heavy vs valence 0.173,
+light vs joyful activation 0.528, heavy vs sadness 0.062 / tension −0.382 / nostalgia 0.288; Five Years 0.107, −0.215, 0.448, −0.576, 0.493;
+Presence 0.475, 0.537, 0.029, −0.616, 0.328.
+
+ρ = 0 beside ρ = 1: within-song arousal r is higher with ρ = 0 on both DEAM (0.221 against 0.204) and MERP (0.566 against 0.471). Gate 4
+(the rehearsal test) did not pass, on MERP for want of lifts and on the three songs at p = 0.48. Round 2 not started.
