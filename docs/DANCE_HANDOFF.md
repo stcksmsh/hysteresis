@@ -4201,3 +4201,33 @@ crates 73 passed, 0 failed; clippy -D warnings clean; fmt clean. Frozen `src/` a
    A1 and in pass B.
 6. Round 1's numbers beside B come from `/secondary/hyst-data/emotion/check1b/results.json`; they are left out if that file is missing.
 7. The inner-fold criterion for tau and L pools DEAM and MERP as in item 2, so one setting serves both datasets.
+
+### Step 2b: check 2b run on real data (★) — 2026-10-24
+
+Run once, as committed (9104989). No crash, no code or rule changed after the result. Log `/secondary/hyst-data/emotion/check2b_run.log`; results and
+per-song predictions in `/secondary/hyst-data/emotion/check2b/` (`results.json`, `folds.json`, `predictions_heldout.npz`, `predictions_songs.npz`). Run time
+1,566 s. **Not verified by eye.** Held-out sets: DEAM 1,744 clips (26,155 scored rows), MERP 43 songs (4,100 rows), Emotify 400 clips, five folds by
+song; the three songs are scored with the model fitted on all DEAM and MERP. Intervals: 95 %, 2,000 bootstrap resamples over songs.
+
+**Outcome (per the note): A1 passes and B fails: report, the user decides.** A1 PASS, A2 FAIL, A3 PASS, B FAIL (core ahead on 0 of 3).
+
+Chosen per fold (radius; tau / L in seconds, core and reference): fold 0: 0.99; core 8 / 0, reference 8 / 0. Fold 1: 0.7; 8 / 0, 8 / 0.
+Fold 2: 0.8; 8 / 0, 16 / 0. Fold 3: 0.7; 8 / 0, 8 / 0. Fold 4: 0.9; 8 / 0, 8 / 0. Final model (three songs): 0.7; core 8 / 0, reference 8 / 0.
+
+| Gate | Result | Numbers |
+|---|---|---|
+| A1 within-song arousal r, DEAM (1,744 songs) | PASS | core smoothed 0.277 [0.251, 0.303] against reference smoothed 0.150 [0.124, 0.177]; core unsmoothed 0.200 [0.177, 0.222]; reference plain 0.101 [0.081, 0.120]. Valence: core smoothed 0.197 [0.172, 0.223], reference smoothed 0.073 [0.047, 0.098] |
+| A1 within-song arousal r, MERP (43 songs) | PASS | core smoothed 0.626 [0.556, 0.690] against reference smoothed 0.428 [0.330, 0.519]; core unsmoothed 0.533 [0.460, 0.597]; reference plain 0.316 [0.236, 0.397]. Valence: core smoothed 0.407 [0.300, 0.508], reference smoothed 0.207 [0.098, 0.317] |
+| A2 pooled DEAM timing R² | FAIL | core 0.588 [0.566, 0.607] against stage 1's lower bound 0.596; reference here 0.617 |
+| A2 Emotify rank correlation | PASS | core 0.607 [0.579, 0.633] against 0.588; reference here 0.616 |
+| A3 shuffled steps, DEAM | PASS | r 0.200 [0.177, 0.222] → 0.018 [0.001, 0.035] |
+| A3 shuffled steps, MERP | PASS | r 0.533 [0.460, 0.597] → 0.255 [0.170, 0.344] |
+| B dial r, Instant Crush (585 steps) | core behind | core smoothed 0.252, reference smoothed 0.389; core unsmoothed 0.010, reference plain 0.111; round 1 core 0.177, reference 0.111 |
+| B dial r, Five Years (568 steps) | core behind | core smoothed 0.887, reference smoothed 0.922; core unsmoothed 0.896, reference plain 0.869; round 1 core 0.817, reference 0.869 |
+| B dial r, Presence (542 steps) | core behind | core smoothed 0.628, reference smoothed 0.664; core unsmoothed 0.720, reference plain 0.620; round 1 core 0.767, reference 0.620 |
+| B overall | FAIL | core ahead on 0 of 3 |
+
+Round 1's two fixed tests for the new core (reported, not gated): Five Years opening 0.053 against climax 0.283; Presence sadness rank 4 of 9
+(span mean 0.260, rest of song 0.242). Pass B (reported): Instant Crush light−heavy vs valence 0.366, light vs joyful activation 0.309,
+heavy vs sadness 0.380 / tension −0.163 / nostalgia 0.226; Five Years 0.089, 0.030, 0.349, −0.491, 0.401; Presence 0.635, 0.625, 0.404, −0.589, 0.386.
+No second run and no round 2.
