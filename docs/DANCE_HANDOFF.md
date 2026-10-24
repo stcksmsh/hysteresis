@@ -4206,7 +4206,7 @@ crates 73 passed, 0 failed; clippy -D warnings clean; fmt clean. Frozen `src/` a
 
 Run once, as committed (9104989). No crash, no code or rule changed after the result. Log `/secondary/hyst-data/emotion/check2b_run.log`; results and
 per-song predictions in `/secondary/hyst-data/emotion/check2b/` (`results.json`, `folds.json`, `predictions_heldout.npz`, `predictions_songs.npz`). Run time
-1,566 s. **Not verified by eye.** Held-out sets: DEAM 1,744 clips (26,155 scored rows), MERP 43 songs (4,100 rows), Emotify 400 clips, five folds by
+1,845 s. **Not verified by eye.** Held-out sets: DEAM 1,744 clips (26,155 scored rows), MERP 43 songs (4,100 rows), Emotify 400 clips, five folds by
 song; the three songs are scored with the model fitted on all DEAM and MERP. Intervals: 95 %, 2,000 bootstrap resamples over songs.
 
 **Outcome (per the note): A1 passes and B fails: report, the user decides.** A1 PASS, A2 FAIL, A3 PASS, B FAIL (core ahead on 0 of 3).
