@@ -6,6 +6,7 @@ pub mod body;
 pub mod body_regions;
 pub mod director;
 pub mod ensemble;
+pub mod mind_state;
 
 const Q_V: f64 = 1.875; // max derivative of 6t^5-15t^4+10t^3
 const Q_A: f64 = 5.773_502_691_896_258;
