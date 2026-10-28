@@ -4283,3 +4283,22 @@ accepted by the overseer. The library lookup assignment and the render of its 8 
 
 Not done: nothing reads `mindState` in the planner (D3); `events` and `authored` are empty; the writer was run only on synthetic data (the final model file
 exists, the writer has not been run on the three songs' sidecars); `three.sh` was run by the overseer, not by this step.
+
+### Step D2 round 2: check 3 against human ratings, size bound (built, not run) — 2026-10-28
+
+Built per the user's rule note (`NEXT_DECODER_THEN_BRAIN.md` §4 D2, `940fcae`). **Not run on real data; not verified by eye.** Round 1 (`check3.py` at `fd3fbfe`, results
+`ac08509`) stays as run, a fail on gate 2; its results files are untouched. Round 2 writes to `/secondary/hyst-data/emotion/check3r2/` (log `check3r2_run.log`).
+
+What changed, in `scripts/emotion/check3r2.py` (reuses `check3.py`; round 1's code path is the default and its tests still run):
+- Gate 2 reference: human ratings per held-out segment, one yardstick for every map. DEAM and MERP valence-arousal (mean over the window's labelled steps, a window with none is left
+  out); Emotify's nine GEMS as a separate reported score; the user's 3 songs against the dial (pass A energy, pass B light, heavy), reported. Gate 1 and gate 2 are scored against it:
+  decoder against 1,000 shuffles, decoder minus baseline49 by a 2,000-resample bootstrap over held-out songs. Gate 3 unchanged.
+- Fairness: baseline49 and core-2b use the same `Map` class, the same two anchors, the same folds and the same fitting as the decoder.
+- Size: `decoder.fit_map_bounded`. Fit as in round 1; for each anchored link (mood.energy to energy, size, time; mood.power to weight) whose Pearson r between lane and decoded body
+  dimension on the training segments is below 0.5 + 0.05, raise that link's lower bound on its weight one step of (0.5, 1, 2, 4, 8, 16) and refit, until all hold or the grid ends.
+  Training segments only. Held-out r, train r, the bounds and the attempts are reported per link, map and fold. k is chosen as in round 1 (unbounded fit), so the lanes are round 1's.
+
+Points fixed where the note is silent (to be ruled on): the 0.05 margin; a rating needs one labelled step in the window; DEAM and MERP pooled in one score per fold, ratings not
+standardised; the sixth set's dial score pools the three songs and leaves out windows missing any of the three numbers; a failed segment leaves that map's matrices (round 1: 0).
+
+Tests: 163 Python unittests (144 before), `cargo test` 83, clippy and fmt clean on the four crates; no Rust or planner code changed in round 2.

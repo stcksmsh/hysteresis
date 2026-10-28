@@ -101,6 +101,7 @@ class Config:
     baseline_columns: int = BASELINE_COLUMNS            # the first columns of the stage-1 encoding are the 49-dim baseline
     renderer: object = render.render
     radius: dict = field(default_factory=dict)          # fold tag -> spectral radius, core-2b
+    bound: bool = False                                 # round 2: lower bounds on the anchored weights (check3r2.py)
 
 
 # --------------------------------------------------------------------------- segments
@@ -162,9 +163,13 @@ def prepare(train, test, feats, source, columns, surrogate, cfg, power_anchor=Tr
     k, scores = decoder.choose_k(lanes_tr, keys_tr, surrogate, power_anchor, grid=cfg.k_grid, **cfg.fit)
     model = model.with_k(k)
     lanes_tr, lanes_te = lanes_tr[:, :2 + k], segment_lanes(model, feats, test)
-    fitted = decoder.fit_map(lanes_tr, surrogate, power_anchor, **cfg.fit)
+    links = None
+    if cfg.bound:
+        fitted, links = decoder.fit_map_bounded(lanes_tr, surrogate, power_anchor, **cfg.fit)
+    else:
+        fitted = decoder.fit_map(lanes_tr, surrogate, power_anchor, **cfg.fit)
     return {"model": model, "k": k, "kScores": scores, "map": fitted, "lanes_tr": lanes_tr,
-            "lanes_te": lanes_te[0], "keys_tr": keys_tr, "keys_te": lanes_te[1]}
+            "lanes_te": lanes_te[0], "keys_tr": keys_tr, "keys_te": lanes_te[1], "links": links}
 
 
 def render_map(prep, tag, name, cfg):
@@ -336,8 +341,9 @@ def run_tag(clips, folds, tag, surrogate, cfg, regions, log=print):
     return out
 
 
-def run(clips, folds, surrogate, cfg, dial=None, out_dir=None, log=print):
-    start = time.time()
+def compute_tags(clips, folds, surrogate, cfg, out_dir=None, log=print, start=None):
+    """The five folds and the sixth set: all maps fitted and rendered. -> {tag: {map name: (prep, rendered, feats, test)}}."""
+    start = time.time() if start is None else start
     regions = region_renders(cfg)
     per_tag = {}
     for tag in list(range(common.N_FOLDS)) + [SIXTH]:
@@ -345,6 +351,12 @@ def run(clips, folds, surrogate, cfg, dial=None, out_dir=None, log=print):
         log(f"tag {tag} done ({time.time() - start:.0f} s)")
         if out_dir:
             save_segments(pathlib.Path(out_dir), tag, per_tag[tag])
+    return per_tag
+
+
+def run(clips, folds, surrogate, cfg, dial=None, out_dir=None, log=print):
+    start = time.time()
+    per_tag = compute_tags(clips, folds, surrogate, cfg, out_dir, log, start)
     results = {"maps": {}, "k": {}, "seconds": 0.0}
     names = [n for n in MAPS if n in per_tag[0]]
     mats = {}

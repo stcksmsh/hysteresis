@@ -43,6 +43,10 @@ DIMS = ("curl_extension", "height", "arch", "time", "weight", "flow", "space", "
         "succession_delay", "initiation", "breath_depth", "breath_rate", "size", "energy", "rhythm")
 ENERGY_LANE, POWER_LANE = 0, 1
 ANCHORS = {ENERGY_LANE: ("energy", "size", "time"), POWER_LANE: ("weight",)}
+LANE_NAMES = {ENERGY_LANE: "energy", POWER_LANE: "power"}
+BOUND_GRID = (0.0, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0)   # round 2: lower bounds tried, per anchored link, in this order
+LINK_TARGET = 0.5                                    # round 2: Pearson r of lane and body dimension each link must reach
+LINK_MARGIN = 0.05                                   # on the training segments, so the held-out r is not left at the edge
 STUDY = pathlib.Path("/secondary/hyst-data/bodystudy/r6")
 
 
@@ -108,7 +112,7 @@ class Surrogate:
 class Map:
     """sigmoid(W lanes + b) with sign constraints on the anchor entries (softplus keeps them >= 0)."""
 
-    def __init__(self, width, power_anchor=True, seed=SEED_MAP):
+    def __init__(self, width, power_anchor=True, seed=SEED_MAP, bounds=None):
         g = torch.Generator().manual_seed(seed)
         self.raw = (torch.randn(15, width, generator=g) / np.sqrt(width)).requires_grad_(True)
         self.b = torch.zeros(15, requires_grad=True)
@@ -118,11 +122,15 @@ class Map:
                 continue
             for name in names:
                 self.positive[DIMS.index(name), lane] = True
+        # round 2: a lower bound on an anchored entry, {(lane, dim name): bound}; none (zeros) is round 1's map
+        self.lower = torch.zeros(15, width)
+        for (lane, name), bound in (bounds or {}).items():
+            self.lower[DIMS.index(name), lane] = bound
         self.mean = self.std = None      # standardisation of the lanes for distances
 
     @property
     def weights(self):
-        return torch.where(self.positive, torch.nn.functional.softplus(self.raw), self.raw)
+        return torch.where(self.positive, self.lower + torch.nn.functional.softplus(self.raw), self.raw)
 
     def forward(self, lanes):
         return torch.sigmoid(lanes @ self.weights.T + self.b)
@@ -141,10 +149,10 @@ def _pearson(a, b):
 
 
 def fit_map(lanes, surrogate, power_anchor=True, steps=STEPS, batch=BATCH, lr=LEARNING_RATE, penalty=WEIGHT_PENALTY,
-            seed=SEED_MAP):
+            seed=SEED_MAP, bounds=None):
     """lanes (N, d) in 0..1 -> fitted Map. Segments alike in mood are pushed to bodies alike in the surrogate's
     descriptors; each step takes a random batch and the correlation over its segment pairs."""
-    m = Map(lanes.shape[1], power_anchor, seed)
+    m = Map(lanes.shape[1], power_anchor, seed, bounds)
     m.mean, m.std = lanes.mean(axis=0), np.maximum(lanes.std(axis=0), 1e-8)
     z = torch.tensor(m.standardised(lanes), dtype=torch.float32)
     x = torch.tensor(lanes, dtype=torch.float32)
@@ -161,6 +169,48 @@ def fit_map(lanes, surrogate, power_anchor=True, steps=STEPS, batch=BATCH, lr=LE
         loss.backward()
         opt.step()
     return m
+
+
+def links(power_anchor=True):
+    """The anchored links: [(lane, body dimension)]."""
+    return [(lane, name) for lane, names in ANCHORS.items() if power_anchor or lane != POWER_LANE for name in names]
+
+
+def link_name(link):
+    return f"{LANE_NAMES[link[0]]}->{link[1]}"
+
+
+def _np_pearson(a, b):
+    a, b = a - a.mean(), b - b.mean()
+    den = np.sqrt((a * a).sum() * (b * b).sum())
+    return float((a * b).sum() / den) if den > 0 else float("nan")
+
+
+def link_r(m, lanes, power_anchor=True):
+    """Pearson r between each anchored lane and the body dimension it feeds, over the given segments' decoded bodies."""
+    bodies = m.bodies(lanes)
+    return {link_name(l): _np_pearson(lanes[:, l[0]], bodies[:, DIMS.index(l[1])]) for l in links(power_anchor)}
+
+
+def fit_map_bounded(lanes, surrogate, power_anchor=True, target=LINK_TARGET, margin=LINK_MARGIN, grid=BOUND_GRID,
+                    **fit_args):
+    """Round 2. Fit as round 1 (every bound 0); while a link's training r is below target + margin, move that link's
+    lower bound one step up the grid and refit. Training segments only. -> (Map, report); report["met"] is False when
+    a link is still short at the top of the grid (the map is then the one with the top bound)."""
+    step = {l: 0 for l in links(power_anchor)}
+    attempts = 0
+    while True:
+        bounds = {l: grid[i] for l, i in step.items()}
+        m = fit_map(lanes, surrogate, power_anchor, bounds=bounds, **fit_args)
+        attempts += 1
+        r = link_r(m, lanes, power_anchor)
+        short = [l for l in step if not r[link_name(l)] >= target + margin]
+        movable = [l for l in short if step[l] < len(grid) - 1]
+        if not movable:
+            return m, {"bounds": {link_name(l): b for l, b in bounds.items()}, "trainR": r, "met": not short,
+                       "attempts": attempts, "target": target, "margin": margin}
+        for l in movable:
+            step[l] += 1
 
 
 def surrogate_rsa(m, lanes, surrogate, n=RSA_SEGMENTS, seed=SEED_MAP):
