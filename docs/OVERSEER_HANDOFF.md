@@ -39,7 +39,9 @@ Ignore most of AGENTS.md.
 ## Update 2026-10-28 (read first; the 2026-10-22 state below is history)
 
 Read `docs/ARCHITECTURE.md` first: state, every experiment's numbers, the open
-architecture questions (Q1–Q8). Since 2026-10-22:
+architecture questions (Q1–Q8). **The current work order is
+`docs/NEXT_DECODER_THEN_BRAIN.md`** (2026-10-28; replaces NEXT_BODY_THEN_MIND.md).
+Since 2026-10-22:
 - The user recorded the dial (`dial2.json`, 5 takes, no taps; backup in
   `~/hyst-backup/emotion-dial/`). Lifts come from the energy curves (note b1775f8).
 - MERP fetched (43 songs over 50 s used; raw-trial labels; note 72ba7bc).

@@ -1,3 +1,5 @@
+> **Closed 2026-10-28.** The current work order is `docs/NEXT_DECODER_THEN_BRAIN.md`.
+
 # Next: the body study, then the mind spike (brief for the builder)
 
 Status: brief, 2026-10-13. Branch `keys-decide` (never `master`).

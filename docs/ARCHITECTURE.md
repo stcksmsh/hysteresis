@@ -439,7 +439,8 @@ for research.
 
 | What | Where |
 |---|---|
-| Rules | `docs/NEXT_BODY_THEN_MIND.md` (with dated notes), `docs/EMOTION.md`, `docs/MIND.md`, `docs/BODY_STUDY.md` |
+| Current work order | `docs/NEXT_DECODER_THEN_BRAIN.md` (from 2026-10-28) |
+| Rules | `docs/NEXT_BODY_THEN_MIND.md` (closed; dated notes kept), `docs/EMOTION.md`, `docs/MIND.md`, `docs/BODY_STUDY.md` |
 | History and numbers | `docs/DANCE_HANDOFF.md` (newest last), `AGENTS.md` §5 |
 | How to run and review | `docs/DANCE_RESTART_PROMPT.md`, `docs/OVERSEER_HANDOFF.md` |
 | Planner, body, rig | `crates/hyst-compile/src/director/`, `body.rs`, `body_regions.rs`, `ensemble.rs` |
