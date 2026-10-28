@@ -57,6 +57,62 @@ plus four changes, marked **new**):
 explicit yes before any build.** If the user changes one, write the change here
 as a dated note first.
 
+**Note (user, 2026-10-28, after ★0; the user's yes for ★0).** Five changes to the
+text below. Where they differ from §4, this note wins.
+1. **Anchors (D2).**
+   - *Energy:* the mood direction is fitted on DEAM + MERP arousal, training folds
+     only. The user's dial pass A only checks its sign: the correlation of
+     `mood.energy` with pass A must be positive on each of the 3 songs (part of
+     check 3).
+   - *Power:* the second anchor is Emotify's GEMS "power" → Laban weight (light →
+     strong), fitted on training folds only, sign-checked against the user's pass B
+     heavy/dark axis. **This link is weak:** "power" is not the user's "heavy/dark",
+     and 3 songs is thin. If the sign disagrees on 2 of 3 songs, the anchor is
+     dropped and weight is left free.
+   - Height is not anchored.
+2. **`authored` lane:** empty in check 3, in stage 4 and in every other check.
+3. **Events: a new step D4a, a lift detector with its own check, before D4.**
+   - Truth: the 6 lifts from the user's energy curves (check1b `lifts.json`) plus a
+     tap pass the user records (3 songs, audio only, one tap where something
+     arrives or lands). Stored before any detector result; the builder does not open
+     it until the detector is committed.
+   - Candidates, rules fixed before results, nothing fitted on the user's songs:
+     (a) version 47's own Foresight logic (arrival lift sign, cuts); (b) the analysis
+     chain's section boundaries with an energy rise across them.
+   - Pass: a hit is within ±1 bar; at least 75 % of tapped lifts hit, at most 1 false
+     alarm per minute, over all 3 songs together. Both candidates reported.
+   - Round 2 may change thresholds only. Fails twice: events off, D4 works at phrase
+     edges only.
+   - The tap page goes to the user only when D4a starts.
+4. **Afterglow:** unchanged.
+5. **Interface (D1).** The anchors are named lanes, `mood.energy` and `mood.power`,
+   so a later source keeps their meaning. The remaining components go in
+   `mood.rest`, which is source-specific; the D2 map is refitted per source (a
+   rerun, not a redesign).
+
+**Note (overseer, 2026-10-28, before the D1/D2 builder prompt): check 3 made
+operational.** Fixed here so `check3.py` has nothing to decide:
+- *Segments:* 8 s windows (the body clip length), non-overlapping, from DEAM
+  2013/2014, Emotify, the 43 MERP songs and the user's 3 songs; mood is the mean
+  over the window. Folds: the five folds by song of `check1b.py` (the user's songs
+  are held out together as a sixth set, never trained on).
+- *Motion of a segment:* the decoded 15-dim body vector rendered by `body.rs` with 3
+  fixed seeds; its descriptors are the mean of the 3 clips' 37 descriptors,
+  standardised on training segments. An infeasible body is stretched on the
+  existing ladder; one still infeasible counts as a failed segment and is reported.
+- *Distances:* Euclidean on standardised mood lanes and on standardised descriptors;
+  Spearman rank correlation of the two upper triangles, per held-out fold, then the
+  mean over folds.
+- *Shuffle test:* 1,000 permutations of the segment pairing inside each held-out
+  fold; pass if the observed mean beats 99 % of the permuted means.
+- *Against the baseline encoding:* the same map fitted to the 49-dim baseline
+  encoding; pass if the bootstrap 95 % interval (2,000 resamples over held-out
+  songs) of the difference (decoder minus baseline map) lies above 0.
+- *Energy sign:* as note 1, on each of the user's 3 songs.
+- Reported beside it, not gated: the library lookup and `core-2b`, the power
+  anchor's signs, each anchor's strength on held-out songs, the share of failed
+  segments.
+
 ## 3. Rules (all steps)
 
 - `EMOTION.md` rules hold. Version 47 stays reachable and byte-identical: every
