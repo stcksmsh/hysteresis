@@ -4231,3 +4231,55 @@ Round 1's two fixed tests for the new core (reported, not gated): Five Years ope
 (span mean 0.260, rest of song 0.242). Pass B (reported): Instant Crush light−heavy vs valence 0.366, light vs joyful activation 0.309,
 heavy vs sadness 0.380 / tension −0.163 / nostalgia 0.226; Five Years 0.089, 0.030, 0.349, −0.491, 0.401; Presence 0.635, 0.625, 0.404, −0.589, 0.386.
 No second run and no round 2.
+
+### Step D1 and D2: the `mindState` field, the decoder, check 3 run on real data (★ D2-2) — 2026-10-28
+
+Built in `bd32d84` (D1) and `fd3fbfe` (D2). `check3.py` was run once as committed (`fd3fbfe`), after the overseer's go. No crash, no code or rule changed
+after the result. **Not verified by eye.** Log `/secondary/hyst-data/emotion/check3_run.log`; results, the final mood model and every held-out segment's mood,
+body vector, descriptors and stretches in `/secondary/hyst-data/emotion/check3/` (`results.json`, `mood_model_stage1.npz`, `segments_0..5.npz`). Run time
+3,220 s after the corpus was loaded (about 435 s more to load). Held-out sets: five folds by song of `check1b.py`, 12,528 segments (DEAM, Emotify, MERP);
+the user's 3 songs (110 segments) are a sixth set, never trained on and not in the fold means. Intervals: 95 %, 2,000 bootstrap resamples over 2,187
+held-out songs.
+
+**Outcome: check 3 FAIL.** Gate 1 PASS, gate 2 FAIL, gate 3 PASS.
+
+| Gate | Result | Numbers |
+|---|---|---|
+| 1 shuffle (decoder, stage-1 mood) | PASS | mean rho 0.6243 over five folds (0.6414, 0.6879, 0.7158, 0.5612, 0.5149); beats 1000 of 1000 permuted means (permuted mean 0.0000, max 0.0117) |
+| 2 decoder against the 49-dim baseline map | FAIL | baseline map mean rho 0.7808 (0.8022, 0.7770, 0.7534, 0.8133, 0.7580); decoder minus baseline −0.1551, interval [−0.1730, −0.1374] |
+| 3 energy sign, mood.energy against pass A | PASS | Instant Crush r 0.389 (585 steps), Five Years 0.922 (568), Presence 0.664 (542): positive on 3 of 3 |
+
+Reported, not gated (all four maps scored on the same segments; failed segments 0 of 12,528 for every map):
+
+| Map | Mean rho, five folds | Per fold | Beats of 1000 | Sixth set rho (110 segments) |
+|---|---|---|---|---|
+| decoder | 0.6243 | 0.6414, 0.6879, 0.7158, 0.5612, 0.5149 | 1000 | 0.7544 |
+| baseline-49 map | 0.7808 | 0.8022, 0.7770, 0.7534, 0.8133, 0.7580 | 1000 | 0.6378 |
+| library lookup | 0.6058 | 0.5615, 0.6262, 0.6149, 0.6020, 0.6244 | 1000 | 0.5758 |
+| core-2b as source | 0.7097 | 0.7574, 0.7063, 0.7194, 0.6800, 0.6856 | 1000 | 0.7478 |
+
+The sixth set also beat 1000 of 1000 permutations for every map. The number of rest lanes k chosen by the inner folds was 2 on every fold and for every map.
+
+Power anchor against pass B, r of mood.power with heavy: Instant Crush 0.090 (agrees), Five Years 0.539 (agrees), Presence −0.052 (disagrees). Agrees on 2,
+disagrees on 1, so the anchor is kept (the drop rule needs 2 of 3).
+
+Anchor strength on held-out folds (mean over five folds; the per-fold values are in `results.json`):
+
+| Map | mood.energy against arousal labels | mood.power against Emotify power | mood.energy against body energy / size / time | mood.power against body weight |
+|---|---|---|---|---|
+| decoder | 0.861 | 0.692 | 0.787 / −0.214 / 0.882 | 0.913 |
+| baseline-49 map | 0.777 | 0.541 | −0.678 / 0.902 / 0.876 | 0.886 |
+| core-2b | 0.845 | 0.659 | 0.200 / 0.634 / 0.750 | 0.879 |
+
+Observations, stated as numbers only. The decoder's mood.energy against decoded body size is negative on four of five folds (−0.19 to −0.40) although the map's
+weight from mood.energy to size is constrained to be non-negative. The baseline-49 map's mood.energy against decoded body energy is −0.678. The gate 2
+difference is negative on its whole interval. Round 2 is not started and needs the overseer's word.
+
+Constants and origins: segments 8 s (16 steps), seeds 20261028-30 for rendering, folds 20261012, inner 20261014, bootstrap 20261013, permutations 20261035,
+standardiser draw 20261034, map 20261032, k-means 20261033, surrogate 20261031. The surrogate (15→256→256→37, 16,000 training bodies, held out 3,956:
+R² mean 0.816, median 0.872, min 0.099) is in `/secondary/hyst-data/emotion/check3/surrogate_report.json`. Anchors: mood.energy to body energy, size, time and
+mood.power to weight, entries constrained to be non-negative; height not anchored. The seven points left open are listed in the `check3.py` docstring and were
+accepted by the overseer. The library lookup assignment and the render of its 8 regions are in `results.json` and `segments_*.npz`.
+
+Not done: nothing reads `mindState` in the planner (D3); `events` and `authored` are empty; the writer was run only on synthetic data (the final model file
+exists, the writer has not been run on the three songs' sidecars); `three.sh` was run by the overseer, not by this step.

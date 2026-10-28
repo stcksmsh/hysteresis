@@ -51,7 +51,8 @@ person (stage 4, not built).
  [C] mind core (reservoir) ───── mindState (never written yet)      │   experimental
     │                                                               │
     ▼                                                               │
- [D] decoder, stage 3 ────────── body parameters over time          │   NOT BUILT
+ [D] decoder, stage 3 ────────── body parameters over time          │   built, check 3 FAIL
+      (mindState lanes → 15-dim body vector; not wired to the planner)
     │                                                               │
     ▼                                                               ▼
  [E] body generator (body.rs)            [F] version-47 planner (figures.rs)  built
@@ -351,7 +352,10 @@ Step 2b was designed after round 1; its fold gates are diagnostics, gate B the d
 | ... and on the user's own energy, for their songs | no | 2b B, 0/3 |
 | The machine has rehearsed and anticipates | no | round 1 gate 4; rehearsal hurt |
 | It is surprised / keeps a pulse | untested | not built |
-| The dance conveys the song's feeling | untested | decoder and stage 4 not built |
+| Segments alike in mood move alike (decoder, 8 s segments, held-out songs) | yes, above chance | check 3 gate 1: rho 0.624, beats 1000/1000 shuffles |
+| ... better than the same map on the 49-dim baseline encoding | no | check 3 gate 2: difference −0.155 [−0.173, −0.137] |
+| mood.energy follows the user's energy dial, on their 3 songs | yes | check 3 gate 3: r 0.389 / 0.922 / 0.664 |
+| The dance conveys the song's feeling | untested | decoder built and check 3 failed; not wired to the planner; stage 4 not built |
 
 ---
 
