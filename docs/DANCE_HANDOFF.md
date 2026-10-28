@@ -4302,3 +4302,49 @@ Points fixed where the note is silent (to be ruled on): the 0.05 margin; a ratin
 standardised; the sixth set's dial score pools the three songs and leaves out windows missing any of the three numbers; a failed segment leaves that map's matrices (round 1: 0).
 
 Tests: 163 Python unittests (144 before), `cargo test` 83, clippy and fmt clean on the four crates; no Rust or planner code changed in round 2.
+
+### Step D2 round 2: check 3 against human ratings, run on real data (★ D2-3) — 2026-10-29
+
+`check3r2.py` was run once as committed (`c2afe21`), after the overseer's go. No crash, no code or rule changed after the result. **Not verified by eye.** Log
+`/secondary/hyst-data/emotion/check3r2_run.log`; results, ratings used, and every held-out segment's mood, body vector, descriptors and stretches in
+`/secondary/hyst-data/emotion/check3r2/` (`results.json`, `ratings_0..5.npz`, `segments_0..5.npz`, `mood_model_stage1.npz`). Run time 3,114 s after about 435 s of loading.
+Held-out sets: five folds by song; DEAM/MERP rated segments 7,997 (1,606, 1,611, 1,630, 1,591, 1,559 per fold; segments with no labelled step left out); Emotify 2,787 segments
+(GEMS); the user's songs 106 segments with a complete dial rating (4 left out), a sixth set never trained on. Intervals: 95 %, 2,000 bootstrap resamples over 1,787 held-out songs.
+
+**Outcome: check 3 round 2 FAIL.** Gate 1 PASS, gate 2 FAIL, gate 3 PASS.
+
+| Gate | Round 2 (ratings) | Round 1 (own encoding), for comparison |
+|---|---|---|
+| 1 shuffle, decoder | PASS: mean rho 0.2379 (0.1509, 0.2334, 0.2903, 0.2797, 0.2351); beats 1000 of 1000, permuted max 0.0145 | PASS: 0.6243, beats 1000 of 1000 |
+| 2 decoder minus baseline49 | FAIL: mean −0.0766, interval [−0.1055, −0.0477]; baseline49 rho 0.3143 (0.3587, 0.2814, 0.3228, 0.3280, 0.2805) | FAIL: −0.1551 [−0.1730, −0.1374]; baseline49 0.7808 |
+| 3 energy sign, pass A | PASS: r 0.389 (585 steps), 0.922 (568), 0.664 (542), unchanged | PASS, same numbers |
+
+Reported against the same DEAM/MERP ratings (all four maps beat 1000 of 1000 permuted means):
+
+| Map | DEAM/MERP rho | Per fold | Failed segments (rated) | GEMS rho (Emotify) | Sixth set vs dial, rho (106 segments) |
+|---|---|---|---|---|---|
+| decoder | 0.2379 | 0.1509, 0.2334, 0.2903, 0.2797, 0.2351 | 0 | 0.0759 (0.0812, 0.0426, 0.0447, 0.1634, 0.0476) | 0.3468 |
+| baseline-49 map | 0.3143 | 0.3587, 0.2814, 0.3228, 0.3280, 0.2805 | 36 (23 in fold 2, 13 in fold 4) | 0.1109 (0.1313, 0.0788, 0.0677, 0.2268, 0.0500) | 0.3611 |
+| library lookup | 0.2663 | 0.2307, 0.2764, 0.3153, 0.1913, 0.3180 | 0 | 0.1899 (0.0875, 0.2596, 0.2182, 0.2867, 0.0976) | 0.2591 |
+| core-2b as source | 0.2695 | 0.1248, 0.2982, 0.2320, 0.3498, 0.3425 | 6 (2 in fold 0, 4 in fold 3) | 0.1516 (0.0591, 0.2333, 0.0356, 0.2940, 0.1363) | 0.4348 |
+
+GEMS and sixth-set scores also beat 1000 of 1000 permutations for every map; they are not gated. Failed segments leave that map's distance matrices (3 and 2 of them were Emotify
+segments of baseline-49 in folds 2 and 4).
+
+Power anchor against pass B heavy, unchanged: Instant Crush r 0.090 (agrees), Five Years 0.539 (agrees), Presence −0.052 (disagrees); agrees on 2, disagrees on 1, anchor kept.
+
+**Size bound.** The grid did not run out for any map or fold (met True on all 18 map and fold fits); lower bounds were 0 to 2. Held-out r per link (mood.energy to energy / size / time, mood.power to weight):
+
+| Map | fold 0 | fold 1 | fold 2 | fold 3 | fold 4 | sixth set |
+|---|---|---|---|---|---|---|
+| decoder | 0.615 / 0.953 / 0.697 / 0.753 | 0.955 / 0.954 / 0.581 / 0.796 | 0.973 / 0.957 / 0.726 / 0.788 | 0.926 / 0.962 / 0.907 / 0.794 | 0.946 / 0.965 / 0.923 / 0.770 | 0.877 / 0.946 / 0.912 / 0.699 |
+| baseline-49 | 0.872 / 0.885 / 0.851 / 0.763 | 0.585 / 0.885 / 0.830 / 0.681 | 0.953 / 0.795 / 0.754 / 0.707 | 0.932 / 0.917 / 0.804 / 0.811 | 0.958 / 0.832 / 0.717 / 0.719 | 0.675 / 0.828 / **−0.266** / **−0.161** |
+| core-2b | 0.951 / 0.978 / 0.878 / 0.839 | 0.964 / 0.806 / 0.615 / 0.627 | 0.787 / 0.957 / 0.972 / 0.850 | 0.730 / 0.863 / 0.746 / 0.676 | 0.964 / **0.487** / 0.797 / 0.617 | 0.768 / 0.785 / **0.378** / 0.636 |
+
+**Links that miss held-out r 0.5 (not meeting the spec):** core-2b fold 4 energy to size 0.487; core-2b sixth set energy to time 0.378; baseline-49 sixth set energy to time −0.266 and
+power to weight −0.161. All other 68 links reach 0.5; the decoder reaches it on all 24. The training r of the four misses was 0.555, 0.575, 0.714 and 0.721, so the margin did
+not carry over to those held-out sets. Training r for every link is in `results.json`.
+
+Anchor fairness: baseline-49 and core-2b use the same two anchors, the same `Map` class, folds and fitting as the decoder. Round 2 changed only the reference and the size bound; k
+was chosen as in round 1 (k = 2). Per the rule note, the decoder failed the new gate 2, so the user decides the encoding (option 3); baseline-49 has the higher DEAM/MERP rho and no
+non-commercial model licence. No round 3 without the overseer's word.

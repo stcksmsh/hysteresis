@@ -51,7 +51,7 @@ person (stage 4, not built).
  [C] mind core (reservoir) ───── mindState (never written yet)      │   experimental
     │                                                               │
     ▼                                                               │
- [D] decoder, stage 3 ────────── body parameters over time          │   built, check 3 FAIL
+ [D] decoder, stage 3 ────────── body parameters over time          │   built, check 3 FAIL (rounds 1 and 2)
       (mindState lanes → 15-dim body vector; not wired to the planner)
     │                                                               │
     ▼                                                               ▼
@@ -353,7 +353,11 @@ Step 2b was designed after round 1; its fold gates are diagnostics, gate B the d
 | The machine has rehearsed and anticipates | no | round 1 gate 4; rehearsal hurt |
 | It is surprised / keeps a pulse | untested | not built |
 | Segments alike in mood move alike (decoder, 8 s segments, held-out songs) | yes, above chance | check 3 gate 1: rho 0.624, beats 1000/1000 shuffles |
-| ... better than the same map on the 49-dim baseline encoding | no | check 3 gate 2: difference −0.155 [−0.173, −0.137] |
+| ... better than the same map on the 49-dim baseline encoding, scored on its own encoding's distances (round 1) | no | gate 2: difference −0.155 [−0.173, −0.137] |
+| Segments that people rated alike (DEAM/MERP valence-arousal) move alike, decoder | yes, above chance, weakly | check 3 round 2 gate 1: rho 0.238, beats 1000/1000 shuffles |
+| ... better than the 49-dim baseline map on the same ratings | no | round 2 gate 2: difference −0.077 [−0.106, −0.048]; baseline-49 rho 0.314, decoder 0.238 |
+| Energy → body energy, size, time and power → weight with r ≥ 0.5 on held-out songs | decoder yes (24 of 24 fold links); baseline-49 and core-2b no (4 of 72 links miss) | size bound in round 2; misses: core-2b fold 4 size 0.487, sixth set time 0.378; baseline-49 sixth set time −0.266, weight −0.161 |
+| Baseline-49 and core-2b were given the same anchors as the decoder | yes | same Map class, folds and fitting |
 | mood.energy follows the user's energy dial, on their 3 songs | yes | check 3 gate 3: r 0.389 / 0.922 / 0.664 |
 | The dance conveys the song's feeling | untested | decoder built and check 3 failed; not wired to the planner; stage 4 not built |
 
