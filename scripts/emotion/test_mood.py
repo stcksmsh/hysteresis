@@ -79,6 +79,12 @@ class MoodTests(unittest.TestCase):
         a, b = self.model.lane_scale.copy(), self.model.with_k(2).lane_scale
         np.testing.assert_array_equal(a, b)
 
+    def test_a_lane_that_never_varies_gets_a_finite_scale(self):
+        lanes = np.column_stack([np.full(50, 2.0), np.arange(50.0)])
+        scale = mood.lane_range(lanes)
+        np.testing.assert_allclose(scale[0], [2.0, 3.0])
+        np.testing.assert_allclose(scale[1], np.percentile(np.arange(50.0), [1, 99]))
+
     def test_causal(self):
         x = self.data[1][0].copy()
         before = self.model.lanes(x)

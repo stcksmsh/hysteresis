@@ -88,6 +88,12 @@ def _ridge_direction(z, y, groups):
     return w[:, 0] / std.scale, float(b[0] - (std.mean / std.scale) @ w[:, 0])
 
 
+def lane_range(lanes):
+    """(lanes, 2) lo and hi: the 1st and 99th percentile of each training lane; a lane that never varies gets width 1."""
+    lo, hi = np.percentile(lanes, SCALE_PERCENTILES, axis=0)
+    return np.column_stack([lo, np.where(hi > lo, hi, lo + 1.0)])
+
+
 def fit(steps, arousal, power, source=SOURCE_STAGE1, columns=None, k=K_MAX):
     """Fit the lanes on training data only.
     steps    list of (T, d) encodings of the training clips (energy/power scaling and PCA use every step)
@@ -124,7 +130,5 @@ def fit(steps, arousal, power, source=SOURCE_STAGE1, columns=None, k=K_MAX):
                       b_energy=b_e, b_power=b_p, basis=basis, rest_mean=rest_mean, components=components,
                       lane_scale=np.tile([0.0, 1.0], (2 + K_MAX, 1)))
     lanes = np.concatenate([model.smoothed(a) for a in steps])
-    lo, hi = np.percentile(lanes, SCALE_PERCENTILES, axis=0)
-    hi = np.where(hi > lo, hi, lo + 1.0)
-    model.lane_scale = np.column_stack([lo, hi])
-    return model.with_k(k)
+    model.lane_scale = lane_range(lanes)
+    return model.with_k(min(k, len(components)))
