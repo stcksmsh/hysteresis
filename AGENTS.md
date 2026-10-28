@@ -2,6 +2,9 @@
 
 ## Current user priority — 2026-10-05 six-arm mirror ensemble
 
+**2026-10-28: start with `docs/ARCHITECTURE.md`** (state of the feeling-to-body pipeline,
+every experiment's numbers, open architecture questions).
+
 Read `docs/DANCE_RESTART_PROMPT.md` first (branch `keys-decide`), then the last entries of
 `docs/DANCE_HANDOFF.md`. Goal: several servo arms (target six, on a hexagon,
 facing its centre) that hold mirrored objects, dance in synchronized formations

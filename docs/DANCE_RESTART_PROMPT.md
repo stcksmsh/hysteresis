@@ -1,5 +1,8 @@
 # Fresh-agent prompt — the dancing arm ensemble (state at version 47, 2026-10-06)
 
+**2026-10-28: read `docs/ARCHITECTURE.md` first** (current state, experiments, open
+architecture questions). This prompt describes version 47 and older work.
+
 Continue on branch `keys-decide` (draft pull request open; never push to
 `master`). Frozen `src/` and `tools/` are read-only. Never drive hardware.
 Write to the user in plain, short sentences with numbers; they judge by eye and

@@ -1,4 +1,4 @@
-# Overseer handoff — 2026-10-22
+# Overseer handoff — 2026-10-22, updated 2026-10-28
 
 Paste everything below the line into a fresh overseer agent.
 
@@ -36,7 +36,26 @@ Read, in order:
 5. docs/DANCE_RESTART_PROMPT.md: commands, how I review, settled wishes.
 Ignore most of AGENTS.md.
 
-## Where things stand (2026-10-22)
+## Update 2026-10-28 (read first; the 2026-10-22 state below is history)
+
+Read `docs/ARCHITECTURE.md` first: state, every experiment's numbers, the open
+architecture questions (Q1–Q8). Since 2026-10-22:
+- The user recorded the dial (`dial2.json`, 5 takes, no taps; backup in
+  `~/hyst-backup/emotion-dial/`). Lifts come from the energy curves (note b1775f8).
+- MERP fetched (43 songs over 50 s used; raw-trial labels; note 72ba7bc).
+- Step 2 round 1 (`check1b.py`, a3fab6e): FAIL (gates 1, 2, 4 fail; 3, 5 pass);
+  rehearsal hurt tracking. No round 2.
+- Step 2b (`check2b.py`, c20dec6): A1 PASS (memory beats an 8 s smoothing control on
+  DEAM and MERP), A2 FAIL by 0.008, A3 PASS, B FAIL 0 of 3 on the user's dial. The
+  outcome "A1 passes, B fails" is the user's decision: **open** (ARCHITECTURE.md Q1;
+  overseer recommends smoothed stage 1 as the encoding, the core as a second candidate
+  in stage 3).
+- Housekeeping done: Python analyzer merged (24e63bc), `song.sh` uses it; Demucs
+  `--shifts 0` in `song.sh`. TypeScript deletion: not now (user).
+- The overseer recomputed every check1b/check2b gate from saved data
+  (`/secondary/hyst-data/emotion/check2b/predictions_*.npz`).
+
+## Where things stood (2026-10-22)
 
 **Step 1, the body study: PASSED.**
 - Round 1 failed check 2b, 13 of 24 (pass 16). Causes found: the seed decided
