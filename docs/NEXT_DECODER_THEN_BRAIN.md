@@ -175,6 +175,45 @@ and `core-2b` beside it.
 
 ★ D2: after the check is committed; after results.
 
+**Rule note (user, 2026-10-28, after D2-2, before anything is computed against the
+new reference). This is a rule change after a failure.**
+- *Round 1 stands as run* (`check3.py` at fd3fbfe, results ac08509): gate 1 PASS,
+  gate 2 **FAIL** (decoder 0.624 against baseline49 0.781, difference −0.155
+  [−0.173, −0.137]), gate 3 PASS. It is reported as a fail everywhere.
+- *Why the gate changes.* The old gate 2 scores each map against its own encoding's
+  distances, so it rewards preserving one's own structure (the 49-dim baseline is
+  loudness and spectra, easy to carry into speed and size), not whether segments that
+  people rated alike move alike.
+- *New gate 2: one common yardstick.* Per held-out segment, the human ratings: DEAM
+  and MERP valence-arousal (mean over the segment; segments without labels left
+  out), and, as a separate score, Emotify's nine GEMS (the clip's profile).
+  Distances between ratings (Euclidean) against distances between the segments'
+  body descriptors (as round 1), Spearman per held-out fold, mean over folds. Every
+  map is scored against it: decoder, baseline49, core-2b, library lookup. **Pass:**
+  the decoder beats the baseline49 map on DEAM/MERP, the 95 % bootstrap interval
+  (2,000 resamples over held-out songs) of the difference lying above 0. GEMS is
+  reported, not gated.
+- *Gate 1 rerun against the new reference:* the decoder's DEAM/MERP value beats 99 %
+  of 1,000 within-fold shuffles of the pairing.
+- *Gate 3* (energy sign on the user's 3 songs) is unchanged and rerun.
+- *Fairness.* baseline49 and core-2b get the same two anchors (energy from DEAM +
+  MERP arousal, power from Emotify), fitted the same way on the same folds. (Round 1
+  already did this through the shared map class; round 2 keeps it and the handoff
+  states it.)
+- *Size: the one round-2 change, recorded as spec compliance.* §4 D2 says energy maps
+  to body energy, size and Laban time with a positive sign; round 1's size loading was
+  0.004 (fold 0). For every map, each anchored link must reach a held-out Pearson r of
+  at least 0.5 between its lane and the body dimension (energy → energy, size, time;
+  power → weight), enforced in fitting; the achieved r per link and map is reported.
+  The 0.5 is the overseer's number, set before the run.
+- The user's 3 songs (sixth set, no valence-arousal ratings) are reported against the
+  user's own dial (pass A energy; pass B light, heavy as a 3-number rating), not gated.
+- *Run once.* If the decoder fails the new gate 2: stop; the user decides the encoding
+  (option 3). If baseline49 wins, it is a real candidate (simpler, no non-commercial
+  model licences).
+- Truth table (`ARCHITECTURE.md` §5) and `DANCE_HANDOFF.md`: both gate-2 results, the
+  size fix and the anchor fairness, with numbers.
+
 ### D3. Layer onto version 47 (Q3a), per phrase (Q4b)
 
 - New mode `BodyMode::Off | Layered`. `Off` = golden digests, byte-identical.
