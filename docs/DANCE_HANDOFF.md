@@ -4367,7 +4367,7 @@ made the quintic 2 to 4 times stiffer than the follower. The compile then repeat
 and the continuous bounds to their limits is found per knot; where over, the figure clock runs slower there (target 0.95, spread over about 0.5 s each way, floor 0.15 of the music's rate; catch-up stays 15 %), and a moment
 whose window is over gets a 1.3 times longer approach and release. A global stretch would break sync; this keeps arrival times and costs clock lag (open point 1).
 
-**Knot table.** Body dimension, planner knob, range, and what it must not double-count. 0.5 is the planner's own value for size, energy (spin and surge), time, weight, flow, height, curl_extension; "geo" = geometric about 0.5.
+**Knob table.** Body dimension, planner knob, range, and what it must not double-count. 0.5 is the planner's own value for size, energy (spin and surge), time, weight, flow, height, curl_extension; "geo" = geometric about 0.5.
 
 | Dimension | Knob (`figures.rs`) | Range | Not counted twice |
 |---|---|---|---|
