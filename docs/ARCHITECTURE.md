@@ -364,6 +364,29 @@ Step 2b was designed after round 1; its fold gates are diagnostics, gate B the d
 
 ---
 
+### Truth table as of 2026-10-29 (planning agent's list, accepted with the pivot)
+
+**Licensed:**
+- the arm moves in ways a person tells apart (30/32);
+- the encoding holds a clip's overall mood (R² 0.617);
+- a memory core follows within-song change on public data better than smoothing;
+- the energy direction agrees in sign with the user's dial on 3 songs;
+- the arm keeps the music's timing (≤ 0.13 beat at phrase edges, music clock).
+
+**Forbidden:**
+- entrains, keeps a pulse, meter (B1 failed twice, claims dropped);
+- learned, predicts, surprisal claims, habituates (B3 not built);
+- rehearsed, anticipates (failed);
+- knows the score (D4 not built);
+- conveys the song's feeling (untested);
+- feels, surprised, conscious.
+
+**Planned line once the pivot's mapping exists:** "Its movement is driven by its
+internal state; how state becomes movement was designed by the artist."
+
+**Backlog finding:** B1's beats score higher than the offline analysis grid on Ballroom
+and GTZAN (F 0.46–0.53 against 0.35–0.37). It is not claimed.
+
 ## 6. Open architecture questions
 
 Each has options and the overseer's recommendation. None is decided until the user says

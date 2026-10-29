@@ -215,6 +215,18 @@ Intervals are 95 % bootstrap over clips, 2,000 resamples.
 - **If B1 fails twice:** the pulse comes from the offline analysis grid, labelled
   "beat grid" on the monitor, and the B1 claims are dropped.
 
+- **After the two failures (planning agent, accepted by the user, 2026-10-29).**
+  - No new pulse step now. The body's pulse stays the offline grid, and the B1 claims
+    are dropped.
+  - Lessons: octave ambiguity is the core difficulty; the round-2 prior was a planning
+    error; α = 0 means decay without input.
+  - The round-1 bank may drive the monitor, labelled "an oscillator bank driven by the
+    music", with no entrainment claim.
+  - A learned pulse inside B3 is reported only, never claimed.
+  - B3's pulse input is the grid's phase as cos/sin. It has no amplitude, since the grid
+    has none. The ablation is "with / without grid phase".
+  - The habituation and splice tests cut at fixed times.
+
 ## 3. B2: untrained oscillatory core
 
 - The B3 architecture (§4.1) with its initialisation and no training. Only readouts
@@ -233,7 +245,7 @@ Intervals are 95 % bootstrap over clips, 2,000 resamples.
   |---|---|---|---|
   | L1 | 8–20 Hz | +100 ms | fast, "fast" in every text, never "gamma" |
   | L2 | 4–8 Hz | +0.5 s | theta-like |
-  | L3 | 0.5–4 Hz | +2 s | beat, meter |
+  | L3 | 0.5–4 Hz | +2 s | "the beat band" in every text; never "meter" |
   | L4 | 0.01–0.5 Hz | +8 s | phrase, section |
 
 - Each layer: a gated MLP, a residual and a layer norm.
@@ -365,6 +377,7 @@ tried).
   - "It keeps the pulse through 4-second gaps of silence or beatless noise." (absolute
     phase error and amplitude ratio per kind printed beside it)
   - "Its oscillators resonate at the bar, telling triple from duple time."
+  - *(All three B1 claims are dropped: B1 failed twice, 2026-10-29.)*
 - **B2:** no capacity claim. Allowed wording: "an untrained network of the same shape".
 - **B3:**
   - "It learned to predict music from N hours of Creative Commons music."

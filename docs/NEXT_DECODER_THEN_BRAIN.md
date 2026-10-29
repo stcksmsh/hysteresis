@@ -236,6 +236,30 @@ in advance, and gets the user's yes before any build. D4a, D4 and D5 resume afte
 D5 then compares the brain against `core-2b` as the body's source. Stop at each step
 with numbers.
 
+**Note (user, 2026-10-29, late): the pivot (proposed by the planning agent, accepted by
+the user).** Where it differs from anything above or in `BRAIN_SPEC.md`, it wins.
+- *Two processes.* Public claims (truth table) keep pre-registered gates and two rounds.
+  Design choices (body mapping, spread, look) are judged by the user's eye and iterated
+  fast, with no pre-registered rules.
+- *Body mapping.* The body is driven by the machine's internal state through a mapping
+  the user authors. It no longer comes from emotion decoded from public labels. Inputs:
+  neuromod lanes (arousal, tension, familiarity), surprisal spikes over a threshold
+  (startle), band power, `mood.energy`. Outputs: the 15 body dimensions. Tool: a small
+  authoring page with live sliders and a previz.
+- D2 (the RSA map to DEAM/MERP/Emotify) becomes a reported reference, not the driver.
+  A3's rules are reported, not gated.
+- Truth-table line: "Its movement is driven by its internal state; how state becomes
+  movement was designed by the artist."
+- *Order:*
+  1. the user watches the 9 re-exports in `$D/watch/`;
+  2. B2, plus a quick authored mapping from B2's state (band powers, a surprisal proxy
+     from simple readouts) to the body, for an "is it alive" look;
+  3. meanwhile, in the background: the B3 corpus download, the licence split and the
+     exclusion list;
+  4. B3 as specced.
+- Stage 4 (the user's odd-one-out and match tests) stays as the later check of whether
+  the authored body reads as the song.
+
 ## 3. Rules (all steps)
 
 - `EMOTION.md` rules hold. Version 47 stays reachable and byte-identical: every
