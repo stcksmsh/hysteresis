@@ -3,7 +3,8 @@
 Status: **draft, 2026-10-29, awaiting the user's yes. Nothing is built before it.**
 Source: the planning agent's answers to the overseer's brief (2026-10-29). The overseer
 filled the numbers they left open (marked *overseer*); the planning agent then ruled on
-every fill (marked *planner review*, same day). All of it is proposal, not the user's
+every fill (marked *planner review*, same day), and on the corpus measurements
+(marked *corpus ruling*, same day). All of it is proposal, not the user's
 ruling, until the user says yes. Where
 this file and `NEXT_DECODER_THEN_BRAIN.md` §6 differ, this file wins once accepted.
 Rules of `EMOTION.md` and `NEXT_DECODER_THEN_BRAIN.md` §3 hold: every pass/fail rule
@@ -20,6 +21,9 @@ every ★.
 - Code: Python under `scripts/brain/`, with tests beside it. The environment is
   `/secondary/hyst-env/brain` (torch CPU). Data goes under `/secondary/hyst-data/brain/`.
   Nothing lands on the root disk.
+- Machine: i7-13700H, 14 cores, 20 threads. Training runs at 8 threads, on training
+  nights with the machine otherwise idle (*corpus ruling*). Every rule is in wall time;
+  none depends on the thread count.
 - Compute cap: B3 training gets 3 nights in total. Past that: stop and report. Do not
   scale the model up.
 - *Planner review, a general rule:* wherever a z-score or an SD margin appears, the
@@ -40,7 +44,14 @@ every ★.
 
 ### 1.2 Slow input
 
-- The first build uses fast features only.
+- **Decided by the measurement (2026-10-29): B3 is fast only.** CLAP took 1,452 s per
+  audio hour at best (under load). For 200 h that is about 80 h, or about 40 h even at
+  half that on an idle machine, against the 20 h limit. No re-measurement. A 2.0 s CLAP
+  hop would change the input design and is not taken now.
+- Finding, nothing changed: the stage-1 cache grid is 0.5 s, but its CLAP part is
+  computed every 2.0 s (`common.EVAL_STEP`, `extract.CLAP_HOP`) and interpolated to the
+  0.5 s grid (`check1b.py`). Check 1 was evaluated on a 2 s grid. MERT, Essentia and
+  the baseline are at 0.5 s.
 - **c-lite** = CLAP (music checkpoint, Apache 2.0) plus the mix-only part of the
   49-dim baseline. No stems, no MERT, no Essentia. No non-commercial model goes inside
   the trained brain.
@@ -58,20 +69,36 @@ every ★.
 
 ### 1.4 Corpus (B3)
 
-- **Source:** FMA, filtered to CC BY, CC BY-SA, CC0 and public domain. The per-track
-  licence list goes into `/secondary/hyst-data/brain/SOURCES.md`.
+- **Source:** FMA (`fma_full`, whole tracks), filtered to CC BY, CC BY-SA, CC0 and
+  public domain. Licence strings with NC or ND are out, and so are Free Music Philosophy,
+  Art Libre, Sampling Plus, CopyrightPlus, EFF Open Audio, missing licences and the
+  other unclear strings (317 tracks). The per-track licence list goes into
+  `/secondary/hyst-data/brain/SOURCES.md`.
+- **CC BY-SA (corpus ruling, fixed before the split is looked at):** report hours by
+  licence within the genre rule. If CC BY + CC0 + PD alone reach 200 h with E/P/R
+  ≥ 100 h, CC BY-SA is excluded: whether share-alike reaches trained weights is legally
+  unsettled. Otherwise it is included and noted for the exhibition licence check.
+- **Access (U1, ruled):** single members are read out of the remote `fma_full` zip by
+  HTTP ranges (measured: 206 served, about 125 MB per audio hour, about 0.95 MB/s).
+  Fallback if that breaks: another whole-track CC source, with licences read per item
+  (Internet Archive netlabels, ccMixter).
 - **Not MTG-Jamendo**, because its dataset terms are non-commercial research only.
-- *Overseer, a feasibility point:* `fma_full` is 879 GiB, and `/secondary` has 487 GB
-  free. Whole tracks are needed: habituation needs repeats inside a song, and L4 has an
-  8 s horizon. `fma_large` holds 30 s clips only. **Open point U1.**
-- **Size, by measurement:** N hours such that one training epoch takes ≤ 4 h. The
-  estimate starts at 100 h. If extraction plus one epoch exceeds 2 nights at 100 h,
-  shrink the corpus. Never change the model to fit.
-- **Exclusions, by Chromaprint fingerprint, not only by ID:** DEAM (partly drawn from
-  FMA), MERP, Emotify, Ballroom, GTZAN, SMC and the 3 danced songs. The exclusion list
-  is committed before training.
-- **Balance:** electronic/dance, pop and rock make up at least half the hours, by FMA
-  genre tags. The rest is spread across genres.
+- **Size: N = 200 h (corpus ruling).** Measured training at 48–66 s per audio hour
+  gives an epoch of 2.7–3.7 h; the 3-night cap gives about 8–10 epochs. Download about
+  25 GB, about 7 h. If the first real epoch exceeds 4 h on an idle machine, N shrinks by
+  the one-epoch rule. Never change the model to fit.
+- **Exclusions:**
+  - the 138 open FMA IDs that match DEAM by artist and title;
+  - then Chromaprint on every fetched file, with a fixed bit-error rate < 0.35 (not the
+    vote rule), against all DEAM, MERP and Emotify audio, Ballroom, GTZAN, SMC and the 3
+    danced songs.
+
+  Excluding too much is cheap, so the permissive threshold stands. The number excluded
+  is reported. The list is committed before training.
+- **Balance:** electronic, pop and rock (recorded `genre_top` only) make up at least
+  100 of the 200 h. The open pool has 120.2 h of them. Tracks whose genre is only
+  inferred from `genres_all` may be used, but count as "other". Pop is thin (6.4 h);
+  that is accepted.
 - **Split:** 10 % of artists held out.
 
 ## 2. B1: pulse
@@ -204,30 +231,35 @@ Intervals are 95 % bootstrap over clips, 2,000 resamples.
   reported, not gated.
 - The smoothing control is reported on the mood readouts here and gated in D5.
 
-### 4.4 Check: habituation (an order test)
+### 4.4 Check: habituation (a synthetic repeat test; corpus ruling)
 
-- Pairs (A1, A2) of repeats in held-out songs, taken from `musicalStructure` repeats
-  with similarity ≥ 0.72.
-- Surprisal on A2 is measured twice:
-  - with A1 heard before it;
-  - with A1 cut out of the audio before it.
-
-  The audio of A2 is the same both times; only the history differs.
+It does not depend on `musicalStructure` (mix-only repeats were 0 on the one FMA track
+tried).
+- Per held-out song, with fixed seeds: a 16 s passage S, and a different 16 s passage
+  S' from the same song.
+- Version H: … S, then ≥ 30 s of other material from the song, then S …
+- Version N: the same, with the first S replaced by S'.
+- The second S, the 30 s before it and every cut point are identical in H and N. Only
+  whether S was heard earlier differs.
+- Cuts fall on B1 beats if B1 passed, otherwise at fixed times. 50 ms crossfades at
+  every cut, in both versions.
 - Pass, both conditions:
-  1. the paired drop is above 0, with a bootstrap 95 % interval over pairs;
-  2. *planner review:* the paired drop, as mean total surprisal over A2, is ≥ 0.25 × the
-     SD of that song's section-mean total surprisal (sections from
-     `musicalStructure`). The effect must be at least a quarter of the normal
-     section-to-section variation.
-- B2 is reported on the same test, as the control for "any memory at all".
-- B2 failing this test does not affect B3's pass. If B2 passes it too, the claim still
-  reads "habituates" (never "learned to habituate"), with B2's numbers beside it. If B3
-  beats B2 on the paired drop (interval above 0), that is reported, not gated.
+  1. surprisal on the second S is lower in H than in N, with the paired 95 % bootstrap
+     interval over songs above 0;
+  2. the median drop is ≥ 0.25 × the SD of 8 s window means of total surprisal over the
+     song.
+- Real repeats from mix-only `musicalStructure`: reported only, with their yield on the
+  held-out songs.
+- B2 is reported on the same test, as the control for "any memory at all". B2 failing
+  it does not affect B3's pass. If B2 passes too, the claim stands, with B2's numbers
+  beside it. If B3 beats B2 on the paired drop (interval above 0), that is reported, not
+  gated.
 
 ### 4.5 Check: surprisal at abrupt change (a splice test)
 
-- Cuts on a beat to a different held-out song, and, as a control, cuts within the same
-  song at a matched beat phase. 4 cuts per held-out song, fixed seeds, on a beat, each
+- Cuts on a B1 beat (*corpus ruling*: not the analysis-chain grid, whose fit was flagged
+  unreliable on FMA; fixed times if B1 failed) to a different held-out song, and, as a
+  control, cuts within the same song at a matched beat phase. 4 cuts per held-out song, fixed seeds, on a beat, each
   ≥ 35 s from the start and ≥ 10 s from the end (*planner review*).
 - z = (mean total surprisal in the 1 s after the cut − mean in the 5 s before) / SD of
   the 1 s window means of total surprisal over the 30 s before the cut (*planner
@@ -277,8 +309,8 @@ Intervals are 95 % bootstrap over clips, 2,000 resamples.
 - **B3:**
   - "It learned to predict music from N hours of Creative Commons music."
   - "Its surprisal rises at abrupt changes."
-  - "It habituates: its surprisal on repeated material drops once it has heard it in
-    the same song."
+  - "It habituates: its surprisal on a passage drops when it has heard that passage
+    earlier in the same song."
   - "Its activity is organised in bands modelled on EEG rhythms."
 - **Allowed words:** entrains, surprisal, prediction error, habituates.
 - **Forbidden words:** hears, feels the beat, knows the beat, surprised, bored,
@@ -302,18 +334,5 @@ Ignition (cross-band coherence events), B4 dreaming, B5 monitor, B6 staging.
 
 ## 9. Open points
 
-- **U1. Corpus access.** The planner rules a): fetch only the licence-filtered tracks
-  out of `fma_full` by range reads, with another whole-track CC source as the fallback
-  (to check, licences read per item: Internet Archive netlabel collections, ccMixter).
-  Final ruling after these measurements:
-  1. range-read feasibility and throughput;
-  2. hours passing the licence filter, by genre: can electronic/dance + pop + rock
-     reach half of about 100 h?
-  3. fast-feature and CLAP time per hour of audio;
-  4. B3 forward+backward time per hour of audio (this alone sets the corpus size, by
-     the one-epoch ≤ 4 h rule);
-  5. Chromaprint time per hour, and how many FMA candidates match DEAM, MERP or
-     Emotify;
-  6. analysis-chain time per held-out song for `musicalStructure`, and whether it
-     needs Demucs.
-- U2 and U3 were ruled by the planner review (above).
+None in the design. U1 (corpus access), U2 (the overseer's fills) and U3 (the two changed
+numbers) are ruled above. The spec waits for the user's yes.
