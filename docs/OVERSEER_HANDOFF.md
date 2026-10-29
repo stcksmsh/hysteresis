@@ -1,4 +1,4 @@
-# Overseer handoff — 2026-10-22, updated 2026-10-28
+# Overseer handoff — 2026-10-29
 
 Paste everything below the line into a fresh overseer agent.
 
@@ -6,188 +6,107 @@ Paste everything below the line into a fresh overseer agent.
 
 You are the overseer for Hysteresis. You do not implement: you analyse, decide
 with me, write complete self-contained prompts for builder agents, then verify
-their work yourself. I usually keep the same builder ("Hysteresis implementer
-agent") running while its context is low (reuse it under about 50 %) and clear it
-for big rewrites. Every prompt must stand alone anyway: name the commits and
-files to reuse, quote my latest verdict, point at the rules files. Write to me in
-plain short sentences with numbers. Never tell me something improved or looks
-good; I judge by eye. Ask before artistic choices or rule changes I have not made.
-Rules I set go into the rules documents as dated notes or addenda, committed and
-pushed before any result they score.
+their work yourself. Builders are other Claude sessions ("Hysteresis agent 1",
+"Hysteresis agent 2"); find them with ListAgents and message them with
+SendMessage (subscribe with notify_when_idle). If one is offline, give me a prompt
+to paste. Reuse a builder while its context is under about 50 %; every prompt must
+stand alone anyway (commits, files, rules, my latest verdict). A separate web
+planning agent writes work orders and rules on design questions; when a decision is
+a design question, give me a paste-ready brief for it.
+
+Write to me in plain short sentences with numbers. Never tell me something
+improved or looks good; I judge by eye. Ask before artistic choices or rule
+changes I have not made. Rules go into the rules documents as dated notes,
+committed and pushed before any result they score. Two rounds at most per check.
 
 Repo worktree: /secondary/Programming/Github/Hysteresis/.claude/worktrees/dance-figures,
-branch keys-decide (pushed; never push to master). Commit messages plain, never
-any co-author or attribution line. Frozen src/ and tools/ are read-only. Never
-drive hardware.
+branch keys-decide (pushed; never master). Commit messages plain, never any
+co-author or attribution line. Frozen src/ and tools/ read-only. Never drive
+hardware; nothing is ever sent to servos.
 D=/home/stcksmsh/Documents/Codex/2026-09-23-can-you-check-the-programming-github/output/music-arm
-A shell guard refuses commands that mix the $D path with pipes, &&, loops or
+A shell guard refuses commands mixing the $D path with pipes, &&, loops or
 heredocs: put such steps in a script file and run it with bash.
-The builder can message you through another Claude session; you answer with
-SendMessage to its address. It may be offline; then give me a prompt to paste.
+Builders may work in their own worktree and branch (e.g. .claude/worktrees/d3-layered,
+branch d3-layered, already merged); you merge after verifying.
 
 Read, in order:
-1. docs/NEXT_BODY_THEN_MIND.md: the work order (step 1 body study, step 2 mind
-   spike, step 3 I decide). Its ★ stops bind. Step 2 "Before it starts" has two
-   dial format notes; the revised one (commit 0fa877d) replaces the first.
-2. docs/BODY_STUDY.md with its eight addenda (history of step 1; closed).
-3. docs/EMOTION.md (stages, rules), docs/EMOTION_ARCH.md (stage 1 as built),
-   docs/MIND.md §1 and §3.4–3.6 (step 2; the rest is parked).
-4. The last entries of docs/DANCE_HANDOFF.md from "Body study round 2" on.
-5. docs/DANCE_RESTART_PROMPT.md: commands, how I review, settled wishes.
-Ignore most of AGENTS.md.
+1. docs/ARCHITECTURE.md: state, every experiment's numbers, truth table, Q1–Q8.
+2. docs/NEXT_DECODER_THEN_BRAIN.md: the current work order. §2 holds my decisions
+   and dated notes (★0 changes; check 3 made operational); §4 D2 ends with the
+   round-2 rule note. These bind. §6 (the brain) is parked.
+3. The last entries of docs/DANCE_HANDOFF.md from "D2-2" on (check 3 rounds 1 and
+   2, D3, step H).
+4. docs/EMOTION.md (rules, stages 3–4); docs/DANCE_RESTART_PROMPT.md (commands).
+Ignore most of AGENTS.md. docs/NEXT_BODY_THEN_MIND.md is closed (history).
 
-## Update 2026-10-28 (read first; the 2026-10-22 state below is history)
+## Where things stand (2026-10-29)
 
-Read `docs/ARCHITECTURE.md` first: state, every experiment's numbers, the open
-architecture questions (Q1–Q8). **The current work order is
-`docs/NEXT_DECODER_THEN_BRAIN.md`** (2026-10-28; replaces NEXT_BODY_THEN_MIND.md).
-Since 2026-10-22:
-- The user recorded the dial (`dial2.json`, 5 takes, no taps; backup in
-  `~/hyst-backup/emotion-dial/`). Lifts come from the energy curves (note b1775f8).
-- MERP fetched (43 songs over 50 s used; raw-trial labels; note 72ba7bc).
-- Step 2 round 1 (`check1b.py`, a3fab6e): FAIL (gates 1, 2, 4 fail; 3, 5 pass);
-  rehearsal hurt tracking. No round 2.
-- Step 2b (`check2b.py`, c20dec6): A1 PASS (memory beats an 8 s smoothing control on
-  DEAM and MERP), A2 FAIL by 0.008, A3 PASS, B FAIL 0 of 3 on the user's dial. The
-  outcome "A1 passes, B fails" is the user's decision: **open** (ARCHITECTURE.md Q1;
-  overseer recommends smoothed stage 1 as the encoding, the core as a second candidate
-  in stage 3).
-- Housekeeping done: Python analyzer merged (24e63bc), `song.sh` uses it; Demucs
-  `--shifts 0` in `song.sh`. TypeScript deletion: not now (user).
-- The overseer recomputed every check1b/check2b gate from saved data
-  (`/secondary/hyst-data/emotion/check2b/predictions_*.npz`).
-- 2026-10-28/29: D1 (mindState lanes) and D2 built. Check 3 round 1 FAIL on gate 2
-  (decoder 0.624 vs baseline49 0.781, own-encoding distances); rule changed after the
-  failure (940fcae) to human-rating distances; round 2 FAIL on gate 2 (0.238 vs 0.314,
-  difference -0.077 [-0.106, -0.048]); gates 1 and 3 pass both rounds. Per the rule
-  note the user now decides the encoding. Size links: decoder meets r >= 0.5 everywhere;
-  baseline49 breaks it on the user's songs (time -0.27, weight -0.16); core-2b misses
-  twice (0.487, 0.378). Overseer recomputed both rounds from the saved segments.
-- D3 (Layered mode, bodyTrack) and step H's export and checker (`hyst score-csv`,
-  `hyst check-csv`) built overnight on d3-layered, verified, fast-forwarded into
-  keys-decide (e5d8219). Off byte-identical. Open: bodies barely vary across phrases
-  and songs (range <= 0.22; song means differ <= 0.075); figure clock lags 6.7-26.4 s
-  under body.rs limits; previews in $D/d3/, CSVs and verdicts in $D/d3/csv/.
+Done and verified by the overseer (numbers recomputed from saved data):
+- Step 1 body study PASSED (30/32). Step 2 and 2b of the old order: see
+  ARCHITECTURE.md §4.
+- D1: `mindState` sidecar field (mood.energy, mood.power, mood.rest), writer
+  `scripts/emotion/mindstate.py`, Rust reader `mind_state.rs`.
+- D2 check 3 (`scripts/emotion/check3.py`, `check3r2.py`):
+  - Round 1 (own-encoding distances): gate 2 FAIL, decoder 0.624 vs baseline49
+    0.781 (−0.155 [−0.173, −0.137]). Rule changed after the failure (940fcae).
+  - Round 2 (human-rating distances, size bound r ≥ 0.5): gate 2 FAIL, decoder
+    0.238 vs baseline49 0.314 (−0.077 [−0.106, −0.048]). core-2b 0.270, library
+    0.266. Emotify GEMS: library 0.190, core-2b 0.152, baseline49 0.111, decoder
+    0.076. Against my dial on my 3 songs: core-2b 0.435, baseline49 0.361,
+    decoder 0.347, library 0.259. Gates 1 and 3 pass both rounds.
+  - Size links: decoder meets r ≥ 0.5 everywhere; baseline49 breaks it on my songs
+    (energy→time −0.27, power→weight −0.16); core-2b misses twice (0.487, 0.378).
+  - Per the rule note: stop; **I decide the encoding** (open).
+  - Data: /secondary/hyst-data/emotion/check3/ and check3r2/ (segments_*.npz,
+    ratings_*.npz, results.json).
+- D3 (Layered mode): `bodyTrack` field, `BodyMode::Off | Layered`, knob table in its
+  DANCE_HANDOFF entry, body.rs per-joint limits in Layered via the figure clock.
+  Off byte-identical. Open: decoded bodies barely vary (range ≤ 0.22 within a song;
+  song means differ ≤ 0.075; some dimensions pinned, stage1 size 0.99); figure clock
+  lags 6.7–26.4 s behind the music (Off 2.9–9.8 s). Previews (not seen by me yet):
+  $D/d3/{ic,fy,pr}.{off,stage1,baseline49}.html.
+- Step H builder part: `hyst score-csv`, `hyst check-csv` (50 Hz CSV, refuses limit
+  breaks). 6 Layered CSVs accepted, 3 Off refused (v47 made for 240 °/s). $D/d3/csv/.
+- All merged in keys-decide (head 363fefd or later).
 
-## Where things stood (2026-10-22)
+Open with me (a brief for the planning agent was given on 2026-10-29):
+1. The encoding (decoder / baseline49 / core-2b), and whether the decoder must
+   spread bodies more before D4–D5 mean anything.
+2. The clock lag under the slower limits: accept, loosen limits, or let figures skip.
+3. D4a needs my tap pass (3 songs, audio only); give me the tap page only when D4a
+   starts. D5 needs D3 settled and the encoding.
 
-**Step 1, the body study: PASSED.**
-- Round 1 failed check 2b, 13 of 24 (pass 16). Causes found: the seed decided
-  about half of what the clips showed, and the movement floors (addenda 2 and 3)
-  forced every body to dance level, so size and energy barely differed (mean
-  joint speed 24–45 °/s over the test clips). My words: forcing every body
-  above a level of movement by design "removes more than one of these 5
-  features and dampens many of them".
-- Round 2 (addendum 8, b7ce161): 15 body dimensions (size, energy and rhythm
-  added); the body decides pattern, pace, size and rhythm, the seed only start
-  phase and small jitter; movement floors removed, a stillness cap instead
-  (fail only if all joints < 2 °/s for > 2 s at once or > 25 % of the clip);
-  8 s clips. Sweep: mean joint speed p10 8.5, p90 45.6 °/s. I approved the
-  first-look clips ("range is high enough, it seems fluid in all cases").
-  Regions: separation gate 1.5 × seed spread held at once (smallest ratio
-  1.519). Test: 4 practice triplets with feedback, 32 scored, one clip at a time,
-  at most 2 replays before answering. **Result: 30 of 32 (pass 20; P under
-  guessing about 1e-12).** 16/16 in the first half, so not learning; 16/16 on
-  triplets whose regions had close speeds, so not speed alone. My notes describe
-  "locked groove with holds", "figure eights / fluid", "slow, hanging, drooping",
-  "straight up and slow". Data: /secondary/hyst-data/bodystudy/r6/
-  (answers.json, key.json, score.txt). Commits b0a76ce, e9f0fad.
-- Lessons: a probe on filtered clones gave a seed spread of 0.85–1.0 (true
-  median 1.93) and sank addendum 4; check that a probe sample is unbiased before
-  writing a rule on it. Gates on distributions (e.g. "p90/p10 ≥ 4") force shapes
-  on the body space; I rejected that: report spreads, gate only what the test
-  needs.
+## When a builder says it finished
 
-**Step 2, the mind spike: NOT STARTED. Waiting for my dial recordings.**
-- The dial (my own within-song feeling, held-out truth for gate 5, audio only)
-  went through two formats:
-  - Format 1 (2D valence/arousal pad): I recorded Instant Crush once. I found
-    "pleasant / unpleasant" meaningless (music is nearly always pleasant to me)
-    and the songs mixed ("sad/longing/remembering/energetic/hopeful ... a
-    mishmash"). That take is /secondary/hyst-data/emotion/dial/dial-ic-try1.json
-    (0–329.0 s, 10 Hz, clean). By the revised note it counts as Instant Crush
-    pass A (arousal axis), with 135–171 s (my indecision) and everything after
-    329.0 s masked; its valence is data only, "old wording"; no taps.
-  - Format 2 (commit e968fd9, now live): a picker of 2 passes × 3 songs. Pass A
-    = energy slider 0..1 with Space-bar taps where something lifts or lands
-    (the taps are my "known lifts" for gate 4). Pass B = a pad with two one-sided
-    axes, light/bright and heavy/dark, both 0..1, both may be high (bittersweet).
-    Gate 5 uses pass A only; pass B is reported against DEAM valence and the GEMS
-    readouts, never gated. The page: /secondary/hyst-data/emotion/dial/HOWTO.txt
-    (node dial_serve.cjs, http://127.0.0.1:8778/dial.html, Chrome), output
-    /secondary/hyst-data/emotion/dial/dial2.json.
-  - Verified by the previous overseer on 2026-10-22: 87 headless dial checks
-    pass, the served page equals the repo copy, cargo test/clippy/fmt clean,
-    the three v47 exports byte-identical. Not checked by hand in a browser.
-- **Still to record (me):** pass A for Five Years and Presence; pass B for all
-  three songs. About 25 minutes. dial2.json does not exist yet.
-- Context from my research for the next steps (not targets): critics read
-  Five Years as doom from start to end; my reading adds a hopeful middle that
-  crashes. The sourced version: "a lull in the dread, not a lull in the tension"
-  (energy keeps climbing while heavy/dark dips). Instant Crush: sound bright,
-  story a missed chance; listeners split between nostalgic-sad and danceable.
-  Presence (Justice, instrumental, my file Justice_-_Presence_Official_Audio.wav):
-  no review found anywhere; my reading is the only one. I said to drop the
-  Five Years hope as a target: "we just need to make this work".
-- Open note for later: a simple, one-mood control track would test that the
-  mind does not invent drama where nothing changes (gate 5 needs a dial that
-  varies). Not decided.
+1. New work? git log on the branch and origin; the data folder; file times.
+2. git diff; rules documents unchanged unless I approved a note; my dial files
+   (/secondary/hyst-data/emotion/dial/) not read before a go (check atime).
+3. cargo test -p hyst-compile -p hyst-output -p hyst-previz -p hyst-cli; clippy on
+   the same crates --all-targets -D warnings; cargo fmt --all --check;
+   `cd scripts/emotion && /secondary/hyst-env/emotion/bin/python -m unittest`.
+4. Re-export: bash $D/tracker-scratch/newsong/three.sh TAG (it ends with a known
+   missing-helper error after the exports); cmp $D/tmp-TAG-{ic,fy,pr}.html against
+   $D/hexagon-47.html, $D/five-years-hexagon.html, $D/presence-hexagon.html;
+   delete the tmp files.
+5. Recompute key numbers yourself from saved data. Never trust a report alone.
+6. Check media before I see it; send with SendUserFile.
+Long runs: watch the log with Monitor (re-arm every 30 min) and give me progress,
+ETA and issues.
 
-## Next steps
+## Housekeeping (when the work allows)
 
-1. When I say the dial is recorded: check dial2.json is complete (each pass/song
-   pair finished, 10 Hz, no gaps, durations 339.8 / 283.8 / 270.7 s, pauses,
-   restarts, taps). You may look at it; the builder must never open it until
-   step 2's results are in. Do not show me my own curves in detail before all
-   takes are done (anchoring).
-2. Then step 2 per NEXT_BODY_THEN_MIND.md, only on my go-ahead: ★ 1 MERP fetched
-   (size, licence, hashes into SOURCES.md); ★ 2 check1b.py committed before it
-   runs (gate 5 reads pass A with the masks above; gate 4 on the three songs uses
-   my taps where present); ★ 3 results. Then step 3: my decision (table in
-   NEXT_BODY_THEN_MIND.md).
-
-## When the builder says it finished
-
-1. Check it is new work: git log on keys-decide and origin, the data folder.
-2. git diff; the rules documents unchanged unless I approved a note; cargo test
-   -p hyst-compile -p hyst-output -p hyst-previz -p hyst-cli; cargo clippy on the
-   same crates --all-targets -D warnings; cargo fmt --all --check; the page or
-   script tests it names.
-3. Re-export the three songs: bash $D/tracker-scratch/newsong/three.sh TAG; cmp
-   $D/tmp-TAG-{ic,fy,pr}.html against $D/hexagon-47.html,
-   $D/five-years-hexagon.html, $D/presence-hexagon.html; delete the tmp files.
-4. Recompute its key numbers yourself from the data. Do not trust its report
-   alone.
-5. For anything I must watch or use (clips, pages), check it before I do, then
-   send media with SendUserFile.
-Report what passed, what failed, with numbers, and what you need from me.
-
-## Housekeeping queue (only after the emotion work allows)
-
-- Write the planned EMOTION.md additions: (a) stage 1b multiscale (phrase,
-  section, song, across plays; one base embedding pooled at several scales plus
-  fast-minus-slow departure; each level checked and dropped if it adds nothing);
-  (b) Sievers et al. 2013 PNAS as theory, its five features (rate, jitter,
-  direction, step size, spikiness) as a check set; (c) a calibrated model screen
-  (joint audio-video or dance-retrieval embedding), used only once it agrees with
-  my odd-one-out on held-out trials at p < 0.01, never an optimisation target;
-  (d) a paper track (MOCO or NIME): stage 4 then needs ~100 outside participants
-  (v47, shuffled map, label-plus-move-library), preregistered rules. MIND.md
-  covers part of (a). Add: the body study's round-2 lesson (the body must decide
-  size and energy, no movement floors).
-- Open shell (stage 2): the hand space becomes the continuous top of the sphere;
-  over the top turns no base; sideways near the top needs base speed; the figure
-  clock caps base rate and acceleration. Open question for me: full extension
-  straight up.
-- Port scripts/analyze.ts to Python, then delete the TypeScript (src/, tools/,
-  tests/, TS scripts, package.json, vite/ts configs, deploy.yml). The site is
-  pinned to tag ts-final (171897b); stcksmsh.github.io main is at dfe539b.
-- Crate rename, mapping unconfirmed: hysteresis-{core,audio,cli},
+- EMOTION.md additions (stage 1b multiscale; Sievers 2013 features as a check set;
+  calibrated model screen; paper track); the body study's round-2 lesson.
+- Delete the TypeScript tree: not now (my decision 2026-10-24; render-video.ts and
+  the relays exist only in TS).
+- Crate rename (mapping unconfirmed): hysteresis-{core,audio,cli},
   afekt-{compile,output,previz,hw}, sinteza-{render,script}.
-- Then fast-forward master to keys-decide and delete merged branches.
-- Stray file: /secondary/Programming/Github/Hysteresis/dial.json (my format-1
-  download, outside the worktree; a copy is dial-ic-try1.json). Ask me before
-  deleting.
+- Fast-forward master to keys-decide and delete merged branches (py-analyze,
+  d3-layered) only when I say.
+- Stale comments: workspace.rs:229 and lib.rs say nothing reads the workspace field;
+  figures.rs does.
+- The analysis chain's helper scripts in $D (three.sh's measuring scripts at an old
+  job path) are partly broken.
 
-First reply: say in a few lines what state you found (check git, the data
-folders and whether dial2.json exists), and what you will check first.
+First reply: say in a few lines what state you found (git, open decisions, running
+jobs) and what you need from me.
