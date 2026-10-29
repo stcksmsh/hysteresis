@@ -1,0 +1,191 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>State to body</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; background: #07090c; color: #9fb4c7; font: 11px/1.3 ui-monospace, monospace; }
+  header { position: sticky; top: 0; z-index: 5; background: #07090c; border-bottom: 1px solid #1a222b; padding: 6px 10px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  header audio { height: 28px; width: 360px; }
+  button, select, input[type=text] { background: #0f141a; color: #9fb4c7; border: 1px solid #26313c; padding: 3px 8px; font: inherit; }
+  button:hover { border-color: #5d6b7a; }
+  label { color: #5d6b7a; }
+  #status { color: #c8a15a; min-width: 200px; }
+  main { padding: 8px 10px; }
+  table { border-collapse: collapse; }
+  th { color: #5d6b7a; font-weight: normal; padding: 2px 2px; width: 62px; text-align: center; }
+  th:first-child { width: 140px; text-align: right; }
+  td { padding: 0 2px; text-align: center; }
+  td.dim { text-align: right; color: #7c8da0; white-space: nowrap; padding-right: 6px; }
+  td.dim b { display: inline-block; width: 34px; text-align: right; color: #9fb4c7; font-weight: normal; }
+  input[type=range] { width: 58px; height: 14px; margin: 0; accent-color: #6f8ba6; }
+  input[type=range].w { accent-color: #6f8ba6; }
+  input[type=range].base { accent-color: #c8a15a; }
+  input[type=range].tau { accent-color: #5d6b7a; }
+  #plots { position: relative; margin-top: 8px; }
+  #plots canvas { position: absolute; left: 0; top: 0; }
+  .sp { display: inline-flex; gap: 4px; align-items: center; }
+</style>
+<header>
+  <select id="song"></select>
+  <audio id="audio" controls preload="auto"></audio>
+  <button id="save">Save JSON</button>
+  <button id="loadBtn">Load JSON</button><input id="load" type="file" accept=".json" hidden>
+  <button id="reset">Neutral</button>
+  <label>name <input id="name" type="text" size="14"></label>
+  <label>export <select id="gran"><option value="phrase">per phrase (D3 format)</option><option value="beat">per beat (experimental)</option></select></label>
+  <button id="export">Export bodyTrack</button>
+  <span id="status"></span>
+</header>
+<main>
+  <div class="sp">
+    <label>spike threshold</label><input id="thr" type="range" min="0" max="1" step="0.01" style="width:140px"><b id="thrv"></b>
+    <label>spike decay s</label><input id="stau" type="range" min="0" max="20" step="0.1" style="width:140px"><b id="stauv"></b>
+  </div>
+  <table id="matrix"></table>
+  <div id="plots"><canvas id="bg"></canvas><canvas id="fg"></canvas></div>
+</main>
+<script>/*CORE*/</script>
+<script>
+const DATA = /*DATA*/;
+const A = window.AuthorCore, $ = (id) => document.getElementById(id);
+const KEY = "author.mapping.v1";
+let mapping, song, lanes, body;
+
+try { mapping = A.validateMapping(JSON.parse(localStorage.getItem(KEY))); } catch (e) { mapping = A.neutralMapping(); }
+const say = (s) => { $("status").textContent = s; };
+
+// ---- matrix -------------------------------------------------------------------------------------------------
+const cells = [];
+function slider(cls, min, max, step, get, set, reset, title) {
+  const el = document.createElement("input");
+  Object.assign(el, { type: "range", className: cls, min, max, step, value: get() });
+  const tip = () => { el.title = title + " = " + (+get()).toFixed(2); };
+  el.addEventListener("input", () => { set(+el.value); tip(); say(title + " " + (+el.value).toFixed(2)); schedule(); });
+  el.addEventListener("dblclick", () => { el.value = reset; set(reset); tip(); schedule(); });
+  tip(); cells.push([el, get]);
+  return el;
+}
+function buildMatrix() {
+  const t = $("matrix"); t.textContent = ""; cells.length = 0;
+  const head = t.insertRow(); head.insertCell().outerHTML = "<th></th>";
+  for (const n of A.INPUTS) head.insertCell().outerHTML = `<th>${n}</th>`;
+  head.insertCell().outerHTML = "<th>base</th>"; head.insertCell().outerHTML = "<th>tau s</th>";
+  A.DIMS.forEach((d, di) => {
+    const r = t.insertRow(), c0 = r.insertCell(); c0.className = "dim";
+    c0.innerHTML = `${d} <b id="v${di}"></b>`;
+    A.INPUTS.forEach((n, ii) => r.insertCell().appendChild(slider("w", -1, 1, 0.01,
+      () => mapping.weights[di][ii], (v) => { mapping.weights[di][ii] = v; }, 0, `${d} x ${n}`)));
+    r.insertCell().appendChild(slider("base", 0, 1, 0.01, () => mapping.base[di], (v) => { mapping.base[di] = v; }, 0.5, `${d} base`));
+    r.insertCell().appendChild(slider("tau", 0, 30, 0.1, () => mapping.tau[di], (v) => { mapping.tau[di] = v; }, 2, `${d} tau`));
+  });
+}
+function syncControls() {
+  for (const [el, get] of cells) el.value = get();
+  $("thr").value = mapping.spike.threshold; $("stau").value = mapping.spike.tau;
+  $("thrv").textContent = (+mapping.spike.threshold).toFixed(2); $("stauv").textContent = (+mapping.spike.tau).toFixed(1);
+  $("name").value = mapping.name || "";
+}
+$("thr").addEventListener("input", () => { mapping.spike.threshold = +$("thr").value; syncControls(); schedule(true); });
+$("stau").addEventListener("input", () => { mapping.spike.tau = +$("stau").value; syncControls(); schedule(true); });
+$("name").addEventListener("input", () => { mapping.name = $("name").value; localStorage.setItem(KEY, JSON.stringify(mapping)); });
+
+// ---- compute and plot ---------------------------------------------------------------------------------------
+let pending = false, relane = false;
+function schedule(spikeChanged) { relane = relane || !!spikeChanged; if (!pending) { pending = true; requestAnimationFrame(recompute); } }
+function recompute() {
+  pending = false;
+  if (relane || !lanes) { lanes = A.inputLanes(song, mapping.spike); relane = false; }
+  body = A.computeBody(mapping, lanes);
+  localStorage.setItem(KEY, JSON.stringify(mapping));
+  drawBg();
+}
+const LABEL = 150, RH = 26;
+const bg = $("bg"), fg = $("fg");
+function size() {
+  const w = Math.max(900, innerWidth - 24), h = RH * (A.INPUTS.length + A.DIMS.length) + 28;
+  for (const c of [bg, fg]) { c.width = w * devicePixelRatio; c.height = h * devicePixelRatio; c.style.width = w + "px"; c.style.height = h + "px"; }
+  $("plots").style.height = h + "px";
+  return [w, h];
+}
+const xOf = (t, w) => LABEL + (w - LABEL - 6) * (t / song.duration);
+function lanePath(g, a, w, y0, lo, hi) {
+  g.beginPath();
+  const step = Math.max(1, Math.floor(a.length / (w * 1.5)));
+  for (let k = 0; k < a.length; k += step) {
+    const x = xOf(0.1 * (k + 1), w), y = y0 + (RH - 6) * (1 - (a[k] - lo) / (hi - lo || 1));
+    k ? g.lineTo(x, y) : g.moveTo(x, y);
+  }
+  g.stroke();
+}
+function drawBg() {
+  const [w, h] = size(), g = bg.getContext("2d");
+  g.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+  g.fillStyle = "#07090c"; g.fillRect(0, 0, w, h);
+  g.font = "10px ui-monospace, monospace"; g.textAlign = "right";
+  g.strokeStyle = "#1a222b"; g.lineWidth = 0.5;
+  for (const [s] of song.phrases) { const x = xOf(s, w); g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h - 20); g.stroke(); }
+  const rows = [...A.INPUTS.map((n) => [n, lanes[n], "#9fb4c7"]), ...A.DIMS.map((n, d) => [n, body[d], "#c8a15a"])];
+  rows.forEach(([name, a, col], i) => {
+    const y0 = i * RH + 3 + (i >= A.INPUTS.length ? 6 : 0);
+    g.strokeStyle = "#141b22"; g.beginPath(); g.moveTo(LABEL, y0 + RH - 3); g.lineTo(w, y0 + RH - 3); g.stroke();
+    g.strokeStyle = col; g.lineWidth = 0.7; lanePath(g, a, w, y0, 0, 1);
+    g.fillStyle = "#5d6b7a"; g.fillText(name, LABEL - 8, y0 + RH / 2 + 2);
+  });
+  g.fillStyle = "#5d6b7a"; g.textAlign = "center";
+  for (let t = 0; t <= song.duration; t += 30) g.fillText(`${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`, xOf(t, w), h - 6);
+  drawFg();
+}
+function drawFg() {
+  const w = parseFloat(fg.style.width), h = parseFloat(fg.style.height), g = fg.getContext("2d");
+  g.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+  g.clearRect(0, 0, w, h);
+  const t = $("audio").currentTime, x = xOf(t, w);
+  g.strokeStyle = "#e8edf2"; g.lineWidth = 0.8; g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h - 20); g.stroke();
+  if (body) {
+    const k = Math.min(body[0].length - 1, Math.max(0, Math.round(t / 0.1 - 1)));
+    A.DIMS.forEach((_, d) => { $("v" + d).textContent = body[d][k].toFixed(2); });
+  }
+}
+fg.addEventListener("click", (e) => {
+  const w = parseFloat(fg.style.width), x = e.offsetX;
+  if (x >= LABEL) { $("audio").currentTime = Math.max(0, Math.min(song.duration, (x - LABEL) / (w - LABEL - 6) * song.duration)); drawFg(); }
+});
+(function tick() { if (song) drawFg(); requestAnimationFrame(tick); })();
+addEventListener("resize", () => body && drawBg());
+
+// ---- songs, save, load, export --------------------------------------------------------------------------------
+for (const n of Object.keys(DATA)) $("song").add(new Option(n, n));
+function setSong(n) {
+  song = DATA[n]; lanes = null; $("audio").src = song.audio; schedule(true); say(n);
+}
+$("song").addEventListener("change", () => setSong($("song").value));
+const download = (name, obj) => {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(obj, null, 1)], { type: "application/json" }));
+  a.download = name; a.click(); URL.revokeObjectURL(a.href);
+};
+$("save").addEventListener("click", () => download(`mapping-${mapping.name || "unnamed"}.json`, mapping));
+$("loadBtn").addEventListener("click", () => $("load").click());
+$("load").addEventListener("change", async () => {
+  try { mapping = A.validateMapping(JSON.parse(await $("load").files[0].text())); syncControls(); schedule(true); say("loaded " + (mapping.name || "")); }
+  catch (e) { say("load failed: " + e.message); }
+  $("load").value = "";
+});
+$("reset").addEventListener("click", () => { mapping = A.neutralMapping(); syncControls(); schedule(true); say("neutral"); });
+function spans(kind) {
+  if (kind === "phrase") return song.phrases;
+  const b = song.beats, out = [];
+  if (b[0] > 0.05) out.push([0, b[0]]);
+  for (let i = 0; i + 1 < b.length; i++) out.push([b[i], b[i + 1]]);
+  out.push([b[b.length - 1], Math.max(song.duration, b[b.length - 1] + 0.5)]);
+  return out;
+}
+$("export").addEventListener("click", () => {
+  const kind = $("gran").value;
+  const track = A.bodyTrack(body, spans(kind), "authored-state", "authored:" + (mapping.name || "unnamed"));
+  download(`${song.name}.bodytrack.${kind}.json`, { bodyTrack: track });
+  say(`exported ${track.phrases.length} spans (${kind}); attach with scripts/author/attach.py to ${song.sidecar}`);
+});
+
+buildMatrix(); syncControls(); setSong($("song").value);
+</script>

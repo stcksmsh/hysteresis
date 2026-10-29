@@ -225,4 +225,15 @@ mod tests {
         let t = read(&serde_json::from_str(text).unwrap()).unwrap().unwrap();
         assert_eq!((t.phrases.len(), t.source.as_str()), (2, "stage1-smooth8"));
     }
+
+    #[test]
+    fn reads_what_the_authoring_page_exports() {
+        let text = include_str!("../tests/fixtures/bodytrack_author.json");
+        let t = read(&serde_json::from_str(text).unwrap()).unwrap().unwrap();
+        assert_eq!(
+            (t.phrases.len(), t.source.as_str(), t.map.as_str()),
+            (3, "authored-state", "authored:fixture")
+        );
+        assert_eq!((t.phrases[2].start, t.phrases[2].end), (16.0, 20.0));
+    }
 }
