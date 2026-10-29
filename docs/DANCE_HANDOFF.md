@@ -4612,3 +4612,52 @@ The dial fall from 0.4348 to 0.3668 comes with the power drop (interval excludes
 **Sidecars for the exports.** `/secondary/hyst-data/emotion/a2/a3r2/after/<song>.sidecar.json` for `instant-crush`, `five-years`, `presence`: notes sidecar plus `bodyTrack` (D3 format, version 1) from the round-2 map, with `mind-<song>.json`, `core2b.map.npz` and `core2b.map.quantile.npz` beside them. The Rust reader was not run on them.
 
 **Not done:** no export, CSV or figure work; no look at the bodies; the quantile range was not adjusted further; no spread term in the fit (the note keeps that for a later round).
+
+
+### ★ B1, after results: the pulse layer checked on Ballroom and GTZAN (round 1) — 2026-10-29
+
+Branch `b1-pulse`, code as committed at `1e29968` (clean tree, hash lists verified before the run, one run, 8 workers, 1,868.9 s). **Not verified by eye.**
+`scripts/brain/check_b1.py` ran once on 698 Ballroom clips and 985 GTZAN clips (1,000 minus 14 exact duplicates minus `jazz.00054`); nothing was skipped by the script.
+SMC: not obtained. Output: `/secondary/hyst-data/brain/b1/{results.json,check_b1.log}` (outside git); the commit hash was added to `results.json` after the run, code unchanged.
+**Verdict by the committed rules: gate 1 pass, gate 2 pass (4 s, both kinds), gate 3 fail.** Overall: B1 does not pass; this is round 1 of at most 2.
+
+**Gate 1, non-inferiority (lower bound of the 95 % bootstrap interval of B1 − PLL must be at least −0.05).** The PLL baseline is the centred variant for all four rows (it scored higher).
+
+| Set | Metric | B1 | PLL (centred) | B1 − PLL | 95 % interval | Pass |
+|---|---|---|---|---|---|---|
+| Ballroom | F-measure | 0.5309 | 0.3148 | +0.2160 | 0.1949 .. 0.2379 | yes |
+| Ballroom | AMLt | 0.5256 | 0.2690 | +0.2566 | 0.2314 .. 0.2830 | yes |
+| GTZAN | F-measure | 0.5119 | 0.3545 | +0.1574 | 0.1406 .. 0.1739 | yes |
+| GTZAN | AMLt | 0.5215 | 0.3021 | +0.2194 | 0.1974 .. 0.2421 | yes |
+
+Reported (means over clips): CMLt B1 0.2972 / 0.2392 (Ballroom / GTZAN); PLL raw F 0.2592 / 0.3253, AMLt 0.2348 / 0.2929, CMLt 0.1672 / 0.2156; PLL centred CMLt 0.1889 / 0.2164.
+Offline references, analyze.py beats: F 0.3511 / 0.3637, CMLt 0.1983 / 0.2105, AMLt 0.2869 / 0.3042; regularised dance_memory grid (697 and 982 clips): F 0.3745 / 0.3719, CMLt 0.2423 / 0.2773, AMLt 0.3361 / 0.3737.
+Tempo error (median of the per-clip relative error): B1 0.254 / 0.574, PLL raw 0.248 / 0.175, PLL centred 0.246 / 0.173. Median phase error (ms): B1 52.0 / 54.5, PLL raw 134.7 / 120.6, PLL centred 132.0 / 117.9.
+B1's tempo error is large because its readout often sits at twice the annotated tempo (below); AMLt and F still count that.
+
+**Gate 2, holding through gaps (4 s is gated; 2 s and 8 s are reported).** Clips used are those that passed the permutation verification. B1 / PLL are medians of the phase error at the gap end (ms); the interval is of (median B1 − median PLL), ms; amp ratio = the amplitude of the oscillator that was the readout before the gap, at the gap's end, over its value before the gap, median over clips. Criteria: B1 ≤ 70 ms, upper bound ≤ +10 ms, ratio ≥ 0.5.
+
+| Gap | Kind | Clips | B1 | PLL (variant) | 95 % interval of B1 − PLL | Amp ratio | Result |
+|---|---|---|---|---|---|---|---|
+| 2 s | silence | 1,681 | 54.6 | 116.2 (centred) | −66.3 .. −57.6 | 0.931 | (reported) |
+| 2 s | noise | 1,594 | 52.9 | 606.2 (raw) | −595.1 .. −512.3 | 0.929 | (reported) |
+| **4 s** | **silence** | 1,678 | 60.1 | 114.3 (centred) | −58.2 .. −49.7 | 0.877 | **pass** (all three) |
+| **4 s** | **noise** | 1,585 | 63.2 | 1000.0 (raw) | −941.9 .. −932.9 | 0.869 | **pass** (all three) |
+| 8 s | silence | 1,675 | 77.0 | 108.4 (centred) | −36.9 .. −26.7 | 0.801 | (reported) phase 77.0 ms is above 70 |
+| 8 s | noise | 1,552 | 77.1 | 1000.0 (raw) | −927.8 .. −919.7 | 0.790 | (reported) phase 77.1 ms is above 70 |
+
+The PLL reads 606 ms and 1000 ms (the cap) on noise gaps. Cause, checked on 8 Ballroom clips with 4 s noise gaps (diagnosis only, no change): the PLL emits 0 to 4 beats inside a noise gap against 7 to 9 inside a silence gap of the same clip, so in those clips no PLL beat lies near the gap end and the error is capped. The comparison with the PLL on the noise kind therefore does not measure phase keeping of the PLL; it measures that the PLL stops emitting beats under noise.
+Verification exclusions (gaps failing the permutation test, of 1,683 clips): silence 0 / 3 / 7 (2 / 4 / 8 s) = 0.0 %, 0.2 %, 0.4 %; noise 88 / 96 / 130 = 5.2 %, 5.7 %, 7.7 %. The noise rates at 4 s and 8 s are above the 5 % that white noise would give.
+Readout switches inside the gap (mean per gap; share of gaps with at least one): silence 0.099, 0.122, 0.137; noise 0.069, 0.079, 0.106 for 2 / 4 / 8 s (the share equals the mean to three digits, so almost every switching gap switched once).
+With alpha = 0 (critical) the amplitude decays without input; with alpha > 0 the bank would sustain itself and criterion 3 would pass trivially, so the amplitude result reflects the published alpha. The ratios above are the critical bank's.
+
+**Gate 3, meter (Ballroom, 698 clips, 175 triple).** Ratio of the mean amplitude at beat/3 to that at beat/2, beat = B1's own tempo: **AUC 0.7201, permutation p = 0.0001 (10,000 permutations), needs AUC at least 0.75: fail.** Mean ratio triple 1.637, duple 0.857.
+Reported beside it: with the annotated tempo AUC 0.9147, p = 0.0001 (it would pass). B1's tempo against the annotated one: half 4.4 %, double 30.1 %, either 34.5 % of clips.
+
+**Missing-pulse stimulus (Large 2015, reported only; 11 patterns, tempo 2 Hz, seeded placement of the moved events).** Bank amplitude at 2 Hz / the strongest oscillator in 0.5-4 Hz (Hz, amplitude) / stimulus amplitude at 2 Hz: level 0 0.414 / 2 Hz 0.414 / 0.547; level 1 0.381 / 2 Hz 0.381 / 0.410 (both patterns); level 2 0.336 and 0.338 / 4 Hz 0.373 / 0.273; level 3 0.269 and 0.276 / 4 Hz 0.373 / 0.137; level 4 0.093, 0.075, 0.133, 0.022 / 4 Hz 0.373 / 0.000. At level 4 the stimulus has no energy at 2 Hz and the bank amplitude there is 0.02 to 0.13, against 0.37 at 4 Hz.
+
+**What this says, in plain terms.**
+- B1 is above the PLL on both tracking metrics on both sets by 0.16 to 0.26; gate 1 passes by a wide margin. The offline references score below B1 on F and AMLt.
+- B1 holds its phase through 2 s and 4 s gaps of both kinds (about 55-63 ms median, amplitude kept at 0.87-0.93 of its value), and loses it at 8 s (77 ms, amplitude 0.79-0.80). The amplitude criterion passes because the readout oscillator decays slowly; this is the critical bank's decay, not self-sustaining.
+- The meter ratio separates triple from duple at AUC 0.72 with B1's own tempo and at 0.91 with the annotated tempo. In 30 % of the clips B1's readout is at twice the annotated tempo, which moves beat/3 and beat/2 to the wrong resonances. That is a measured property of the readout rule, not changed.
+- Under the rule "two rounds at most", this is round 1. Nothing was tuned after the numbers were seen.
