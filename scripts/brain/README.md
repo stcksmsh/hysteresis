@@ -1,7 +1,7 @@
 # scripts/brain: B1 pulse (docs/BRAIN_SPEC.md sections 1.1, 2)
 
 Environment: `/secondary/hyst-env/brain` (uv; numpy, scipy, soundfile, librosa 1.0.0, mir_eval 0.8.2, pytest, plus numba and llvmlite from librosa).
-Data and outputs stay outside git: `/secondary/hyst-data/brain/` (test sets in `testsets/`, check outputs in `b1/`).
+Data and outputs stay outside git: `/secondary/hyst-data/brain/` (test sets in `testsets/`, check outputs in `b1/`, B2 readouts and lanes in `b2/`). torch (CPU) is installed in the env for B2.
 
 | File | What |
 |---|---|
@@ -12,6 +12,8 @@ Data and outputs stay outside git: `/secondary/hyst-data/brain/` (test sets in `
 | `testsets.py`, `testsets/*.sha256`, `testsets/AUDIT.md` | Ballroom and GTZAN loaders, hash lists of every file used, audit |
 | `check_b1.py` | one script for all gates; `results.json` and `check_b1.log` go to `/secondary/hyst-data/brain/b1/` |
 | `synthetic_input_sweep.py`, `sd_reference.py`, `synthetic_exclusion.py` | the synthetic sweep that fixed the input gain; the SD reference of the z-score floor; exclusion rates of the gap verification on synthetic audio |
+| `core.py` | B2 core (BRAIN_SPEC 4.1, untrained): 4 LRU layers, heads, precision coupling, state carry, mode clamp; init rules in its docstring |
+| `b2.py` | B2 readouts (ridge on the frozen state), lanes (band power, surprisal, neuromod, grid phase) at 10 Hz, JSON export, static HTML traces; `b2.py fit`, `b2.py run`; fixed choices in its docstring |
 | `test_*.py` | unittest, synthetic data only |
 
 PLL baseline: `crates/hyst-audio/examples/beat_pll.rs` (`cargo build --release -p hyst-audio --example beat_pll`).
