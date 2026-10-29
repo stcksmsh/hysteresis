@@ -4661,3 +4661,56 @@ Reported beside it: with the annotated tempo AUC 0.9147, p = 0.0001 (it would pa
 - B1 holds its phase through 2 s and 4 s gaps of both kinds (about 55-63 ms median, amplitude kept at 0.87-0.93 of its value), and loses it at 8 s (77 ms, amplitude 0.79-0.80). The amplitude criterion passes because the readout oscillator decays slowly; this is the critical bank's decay, not self-sustaining.
 - The meter ratio separates triple from duple at AUC 0.72 with B1's own tempo and at 0.91 with the annotated tempo. In 30 % of the clips B1's readout is at twice the annotated tempo, which moves beat/3 and beat/2 to the wrong resonances. That is a measured property of the readout rule, not changed.
 - Under the rule "two rounds at most", this is round 1. Nothing was tuned after the numbers were seen.
+
+
+### ★ B1 round 2, after results: the pulse-salience readout, same sets and rules (final) — 2026-10-29
+
+Branch `b1-pulse`, code as committed at `1cdef1f` (clean tree, hash lists verified, one run, 8 workers, 1,911.1 s, no crash). **Not verified by eye.**
+Round-2 rules: docs/BRAIN_SPEC.md 2.2 "B1 round 2" (keys-decide `190c273`). Readout score S = A · P(f), P(f) = exp(−2 (log2(f / 2 Hz))²), argmax S in 0.5-4 Hz,
+hysteresis (20 % for 2 s) on S; bank, input, gain and cap unchanged; sources in `GRFNN_PARAMS.md` (Frieler 2004 section 4.3.1 p. 4 read for t_s = 500 ms; the equation text, Parncutt 1994 and van Noorden & Moelants 1999 not read, no page or equation reached).
+Same 698 Ballroom and 985 GTZAN clips; output `/secondary/hyst-data/brain/b1r2/{results.json,check_b1.log}` (outside git; the commit is in `results.json`).
+Round 1 stays in `/secondary/hyst-data/brain/b1/`. **Round-2 verdict by the committed rules: gate 1 pass, gate 2 fail, gate 3 fail. This is the last round: B1 failed twice.**
+Per BRAIN_SPEC 2.2 "If B1 fails twice", the pulse comes from the offline analysis grid, labelled "beat grid", and the B1 claims are dropped. Nothing was changed after seeing any number.
+
+**Gate 1 (lower bound of B1 − PLL ≥ −0.05; the PLL is the centred variant, the better of the two, on every row).** Round 1 beside round 2.
+
+| Set | Metric | R1 B1 | R2 B1 | PLL | R1 diff, interval | R2 diff, interval | R2 pass |
+|---|---|---|---|---|---|---|---|
+| Ballroom | F | 0.5309 | 0.4609 | 0.3148 | +0.2160, 0.1949..0.2379 | +0.1461, 0.1281..0.1638 | yes |
+| Ballroom | AMLt | 0.5256 | 0.4305 | 0.2690 | +0.2566, 0.2314..0.2830 | +0.1616, 0.1399..0.1848 | yes |
+| GTZAN | F | 0.5119 | 0.5082 | 0.3545 | +0.1574, 0.1406..0.1739 | +0.1537, 0.1374..0.1705 | yes |
+| GTZAN | AMLt | 0.5215 | 0.5241 | 0.3021 | +0.2194, 0.1974..0.2421 | +0.2220, 0.2010..0.2438 | yes |
+
+Absolute scores printed for claim 1 (round 2): Ballroom F 0.461, AMLt 0.431; GTZAN F 0.508, AMLt 0.524. Reported: CMLt B1 R2 0.3086 / 0.3767 (R1 0.2972 / 0.2392). Tempo error median R2 0.220 / 0.021 (R1 0.254 / 0.574); mean R2 0.260 / 0.296 (R1 0.437 / 0.586). Median phase error (ms) R2 96.6 / 69.4 (R1 52.0 / 54.5).
+PLL, both variants, and both offline references are unchanged from round 1 (same clips, same code): PLL raw F 0.2592 / 0.3253, centred 0.3148 / 0.3545; analyze.py F 0.3511 / 0.3637; regularised grid F 0.3745 / 0.3719 (Ballroom / GTZAN). B1 stays above both offline references on F and AMLt on GTZAN; on Ballroom it is above them on F and AMLt too (0.4609 and 0.4305 against 0.3745 and 0.3361).
+
+**Gate 2 (4 s gated, 2 s and 8 s reported).** Median phase error at the gap end (ms) and the amplitude ratio of the oscillator that was the readout before the gap, round 2 (round 1 in brackets). Criteria: error ≤ 70 ms; upper bound of (B1 − PLL) ≤ +10 ms; ratio ≥ 0.5.
+
+| Gap | Kind | Clips | B1 error | PLL (variant) | Interval of B1 − PLL | Amp ratio | Criteria 1 / 2 / 3 |
+|---|---|---|---|---|---|---|---|
+| 2 s | silence | 1,681 | 77.3 (54.6) | 116.2 (centred) | −44.7..−34.3 | 0.948 (0.931) | fail / pass / pass |
+| 2 s | noise | 1,594 | 76.2 (52.9) | 606.2 (raw) | −571.8..−488.1 | 0.946 (0.929) | fail / not informative / pass |
+| **4 s** | **silence** | 1,678 | **84.3** (60.1) | 114.3 (centred) | −34.6..−23.3 | 0.911 (0.877) | **fail** / pass / pass |
+| **4 s** | **noise** | 1,585 | **86.2** (63.2) | 1000.0 (raw) | −918.0..−910.5 | 0.901 (0.869) | **fail** / not informative / pass |
+| 8 s | silence | 1,675 | 98.8 (77.0) | 108.4 (centred) | −13.6..−5.9 | 0.851 (0.801) | fail / pass / pass |
+| 8 s | noise | 1,552 | 101.2 (77.1) | 1000.0 (raw) | −902.5..−895.8 | 0.842 (0.790) | fail / not informative / pass |
+
+Criterion 2 on noise: not informative, because the PLL stops emitting beats in noise (round 1 diagnosis). The noise claim rests on criteria 1 and 3.
+**Gate 2 fails on criterion 1 for both kinds at 4 s: B1's median phase error is 84.3 ms (silence) and 86.2 ms (noise), above 70 ms.** The amplitude ratio rose to 0.90-0.91 and criterion 2 against the PLL on silence still passes (upper bound −23.3 ms).
+Claim 2 as worded in round 2, "It keeps the pulse through 4-second gaps of silence or beatless noise": absolute phase error 84.3 ms (silence) and 86.2 ms (noise), amplitude ratio 0.911 and 0.901. The phase-error criterion for it is not met.
+Verification exclusions (permutation test) are the same as round 1: silence 0 / 3 / 7, noise 88 / 96 / 130 of 1,683 for 2 / 4 / 8 s (0.0 %, 0.2 %, 0.4 % and 5.2 %, 5.7 %, 7.7 %). Recomputed after linear detrending of the gap signal (reported only, the gated test is unchanged): silence 0 / 0 / 0, noise 90 / 94 / 104 = 5.3 %, 5.6 %, 6.2 %. The 8 s noise rate falls from 7.7 % to 6.2 %.
+Readout switches inside the gap, mean per gap (round 1 in brackets): silence 0.125 / 0.140 / 0.156 (0.099 / 0.122 / 0.137); noise 0.095 / 0.111 / 0.151 (0.069 / 0.079 / 0.106) for 2 / 4 / 8 s.
+With alpha = 0 (critical) the amplitude decays without input; with alpha > 0 the bank would sustain itself and criterion 3 would pass trivially, so the amplitude result reflects the published alpha.
+
+**Gate 3 (Ballroom, 698 clips, 175 triple): AUC 0.4470, permutation p 0.9834, needs AUC ≥ 0.75 and p < 0.01: fail.** Round 1: AUC 0.7201, p 0.0001. Mean ratio triple 1.071, duple 1.046 (round 1: 1.637 and 0.857).
+Reported: with the annotated tempo AUC 0.9147, p 0.0001 (same as round 1, it does not use the readout). B1's tempo against the annotated one: half 7.6 %, double 7.6 %, either 15.2 % (round 1: half 4.4 %, double 30.1 %, either 34.5 %).
+Half/double per style (clips; half; double): ChaChaCha 111; 0; 0. Jive 60; 0; 0. Quickstep 82; 64.6 %; 0. Rumba-American 7; 0; 0. Rumba-International 51; 0; 13.7 %. Rumba-Misc 40; 0; 35.0 %. Samba 86; 0; 0. Tango 86; 0; 0. VienneseWaltz 65; 0; 0. Waltz 110; 0; 29.1 %.
+The prior removed the double-tempo readouts on most styles; it moved Quickstep to half tempo on 64.6 % of its clips and left Waltz at double on 29.1 %. The meter ratio then no longer separates the two meters.
+
+**Missing-pulse stimulus (reported only), readout frequency per level (the strongest bank oscillator in 0.5-4 Hz is the same as round 1: 2 Hz for levels 0-1, 4 Hz for levels 2-4):** levels 0, 1, 2, 3: readout 2.00 Hz for all seven patterns; level 4: 2.75, 2.48, 2.75, 2.75 Hz (the stimulus has no energy at 2 Hz there; the bank amplitude at 2 Hz is 0.02-0.13).
+
+**What this says, in plain terms.**
+- The pulse-salience prior removed most double-tempo readouts, and GTZAN's median tempo error fell from 0.574 to 0.021. It cost accuracy on Ballroom (F 0.531 to 0.461, AMLt 0.526 to 0.431) and phase accuracy on both sets (median phase error 52 to 97 ms and 55 to 69 ms).
+- The gap phase error rose by 22 to 24 ms at every length and kind, so the 4 s criterion moved from pass to fail; the amplitude ratio rose slightly. Gate 1 passes in both rounds.
+- Gate 3 with B1's own tempo went from AUC 0.720 to 0.447; with the annotated tempo it is 0.915. The meter information is in the bank; B1's own tempo, as read out, does not point at the right resonances.
+- B1 has failed twice by the rules. The pulse for the brain comes from the offline analysis grid, labelled "beat grid"; the B1 claims are dropped (BRAIN_SPEC 2.2). Nothing was tuned or changed after seeing a number.
