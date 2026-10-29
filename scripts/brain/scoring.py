@@ -11,7 +11,11 @@ Gate 2 (holding through gaps), at the end of a 4 s gap, for both gap kinds:
     2. upper bound of the interval of (median B1 error - median PLL error) <= +10 ms;
     3. median over clips of (mean readout amplitude over the last 0.5 s of the gap) / (mean over the 0.5 s before the gap) >= 0.5.
     Phase error at the end of a gap: for the annotated beats in the last 2 s of the gap, the median distance (ms) from each to
-    the nearest estimated beat. 2 s and 8 s gaps are computed the same way and reported.
+    the nearest beat of the system's own readout (hysteresis rule included). 2 s and 8 s gaps are computed the same way and
+    reported. Pulse amplitude (3) is that of the oscillator which was the readout just before the gap, at the gap's end.
+    How often the readout switched oscillator during the gap is reported per kind.
+    The pulse-amplitude criterion tests a critical (alpha = 0) bank: without input its amplitude decays, so the result
+    reflects the published alpha; with alpha > 0 the bank would sustain itself and criterion 3 would pass trivially.
 Gate 3 (meter): per clip, R = mean amplitude of the oscillator nearest f_b / 3 over mean amplitude of the oscillator nearest f_b / 2
     (time means from 5 s on), f_b = the median frequency of B1's readout oscillator from 5 s on; AUC of R for triple against duple
     meter >= 0.75 and permutation p < 0.01 (PERM_N label permutations, seed PERM_SEED). Reported beside it: the same with f_b = the annotated
@@ -92,13 +96,21 @@ def gap_end_error_ms(ref, est, end_s, window=END_WINDOW_S):
     return phase_error_ms(r, est) if len(r) else float("nan")
 
 
-def amplitude_ratio(readout_amp, start_s, end_s, rate=100.0, window=AMP_WINDOW_S):
-    """Mean readout amplitude over the last `window` s of the gap over the mean over the `window` s before it."""
+def amplitude_ratio(bank_amp, k, start_s, end_s, rate=100.0, window=AMP_WINDOW_S):
+    """Gate 2 criterion 3: the amplitude of oscillator k, the readout oscillator just before the gap (not the current readout),
+    mean over the last `window` s of the gap, over its mean over the `window` s before the gap. bank_amp is (frames, oscillators)."""
     w = int(round(window * rate))
     a, b = int(round(start_s * rate)), int(round(end_s * rate))
-    before = float(np.mean(readout_amp[max(0, a - w):a]))
-    end = float(np.mean(readout_amp[max(0, b - w):b]))
+    before = float(np.mean(bank_amp[max(0, a - w):a, k]))
+    end = float(np.mean(bank_amp[max(0, b - w):b, k]))
     return end / before if before > 0 else float("nan")
+
+
+def readout_switches(readout_index, start_s, end_s, rate=100.0):
+    """How often the readout moved to another oscillator during the gap."""
+    a, b = int(round(start_s * rate)), int(round(end_s * rate))
+    seg = np.asarray(readout_index[a:b])
+    return int(np.count_nonzero(np.diff(seg)))
 
 
 def gate2(err_b1, err_pll, ratios):

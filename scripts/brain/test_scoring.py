@@ -68,9 +68,15 @@ class Gap(unittest.TestCase):
         self.assertAlmostEqual(scoring.gap_end_error_ms(ref, est_good, 20.0), 20.0, delta=0.5)
         self.assertAlmostEqual(scoring.gap_end_error_ms(ref, est_bad, 20.0), 200.0, delta=0.5)
         self.assertTrue(np.isnan(scoring.gap_end_error_ms(ref, est_good, 200.0)))      # no annotated beat there
-        amp = np.ones(3000)
-        amp[1600:2000] = 0.4                                   # gap from 16 s to 20 s: the amplitude sagged to 40 %
-        self.assertAlmostEqual(scoring.amplitude_ratio(amp, 16.0, 20.0), 0.4)
+        amp = np.ones((3000, 3))
+        amp[1600:2000, 1] = 0.4                                # gap from 16 s to 20 s: oscillator 1 sagged to 40 %
+        amp[1600:2000, 2] = 5.0                                # another oscillator became the current readout and is loud
+        self.assertAlmostEqual(scoring.amplitude_ratio(amp, 1, 16.0, 20.0), 0.4)   # measured on the readout from before the gap
+        self.assertAlmostEqual(scoring.amplitude_ratio(amp, 2, 16.0, 20.0), 5.0)
+        idx = np.zeros(3000, int)
+        idx[1700:1800] = 2                                     # one excursion: two switches inside the gap
+        self.assertEqual(scoring.readout_switches(idx, 16.0, 20.0), 2)
+        self.assertEqual(scoring.readout_switches(idx, 20.0, 25.0), 0)
 
     def test_gate2_rules(self):
         n = 120

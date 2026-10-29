@@ -1,0 +1,15 @@
+# removed  kept   (exact duplicates by decoded samples; undecodable files are in GTZAN_SKIP)
+gtzan/disco.00099 gtzan/disco.00098
+gtzan/hiphop.00045 gtzan/hiphop.00039
+gtzan/hiphop.00078 gtzan/hiphop.00076
+gtzan/metal.00061 gtzan/metal.00040
+gtzan/metal.00062 gtzan/metal.00041
+gtzan/metal.00063 gtzan/metal.00042
+gtzan/metal.00064 gtzan/metal.00043
+gtzan/metal.00065 gtzan/metal.00044
+gtzan/metal.00066 gtzan/metal.00045
+gtzan/metal.00094 gtzan/metal.00034
+gtzan/pop.00060 gtzan/pop.00054
+gtzan/pop.00071 gtzan/pop.00067
+gtzan/reggae.00082 gtzan/reggae.00081
+gtzan/rock.00016 gtzan/metal.00058

@@ -52,16 +52,24 @@ class CheckB1(unittest.TestCase):
                 self.assertIn(key, r)
             self.assertEqual(sorted(r["gate1"]["rows"]), ["ballroom.amlt", "ballroom.f", "gtzan.amlt", "gtzan.f"])
             self.assertEqual(sorted(r["gate2"]), ["2s", "4s", "8s"])
-            # silence gaps pass the onset rule. Noise gaps all fail it: stationary noise has an onset strength of about 0.5
-            # (a floor of random log-mel rises), music's median is about the same, and the rule asks for 5 % (reported to the overseer).
-            self.assertIn("silence", r["gate2"]["4s"])
             for kind in ("noise", "silence"):
+                ex = r["gate2_exclusions"]["4s"][kind]
+                self.assertEqual(ex["gaps"], 6)
                 scored = r["gate2"]["4s"][kind]["clips"] if kind in r["gate2"]["4s"] else 0
-                self.assertEqual(scored + sum(1 for x in r["gate2_onset_rejected"] if "4s " + kind in x), 6)
-            self.assertEqual(r["gate2_pass"], "noise" in r["gate2"]["4s"] and r["gate2"]["4s"]["noise"]["pass"] and r["gate2"]["4s"]["silence"]["pass"])
+                self.assertEqual(scored + ex["excluded"], 6)
+                self.assertIn("mean", r["gate2_readout_switches"]["4s"][kind])
+            self.assertEqual(r["gate2_exclusions"]["4s"]["silence"]["excluded"], 0)        # silence is valid by definition
+            self.assertIn("alpha = 0 (critical)", r["notes"]["alpha"])
+            for g in r["gate2"].values():
+                for res in g.values():
+                    self.assertIn(res["pll_variant"], ("raw", "centred"))
+                    self.assertLessEqual(res["median_pll_ms"], max(res["raw"]["median_pll_ms"], res["centred"]["median_pll_ms"]))
             # the PLL baseline really ran, and the offline reference too
-            self.assertIn("offline_grid", r["gate1_reported"]["metrics"]["gtzan"])
-            self.assertGreater(r["gate1_reported"]["metrics"]["gtzan"]["pll"]["f"], 0.2)
+            self.assertIn("offline_analyze", r["gate1_reported"]["metrics"]["gtzan"])
+            self.assertIn("offline_regularised_grid", r["gate1_reported"]["metrics"]["gtzan"])
+            self.assertIn("pll_variant", r["gate1"]["rows"]["gtzan.f"])
+            m = r["gate1_reported"]["metrics"]["gtzan"]
+            self.assertGreater(max(m["pll_raw"]["f"], m["pll_centred"]["f"]), 0.2)
             self.assertEqual(r["gate3"]["clips"], 3)
             self.assertEqual(r["gate3"]["triple"], 1)
             self.assertEqual(len(r["missing_pulse"]), 11)

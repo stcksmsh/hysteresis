@@ -7,6 +7,7 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(__file__))
 import fast_features as ff  # noqa: E402
 import gaps  # noqa: E402
+import grfnn  # noqa: E402
 
 SR = ff.SR
 
@@ -63,22 +64,47 @@ class Gaps(unittest.TestCase):
         self.assertGreater(float(np.corrcoef(lb, li)[0, 1]), 0.9)
         self.assertEqual(gaps.make_gap(y, SR, 12.0, 4.0, "noise", clip_id="t").tobytes(), out.tobytes())  # seeded
 
-    def test_onset_rule_passes_a_silent_gap_and_fails_a_gap_with_a_beat_in_it(self):
+    def test_a_click_train_gap_is_rejected_and_a_silent_one_is_valid(self):
+        rng = np.random.default_rng(0)
+        x = np.abs(rng.standard_normal(3000)) * 0.1
+        x[1200:1600] = 0.0
+        for k in range(1200, 1600, 50):                       # 2 Hz clicks inside the gap
+            x[k:k + 4] = 0.5
+        valid, stat, thr = gaps.gap_valid(x, 12.0, 4.0, "c", "noise")
+        self.assertFalse(valid)
+        self.assertGreater(stat, thr)
+        silent = np.zeros(3000)
+        self.assertEqual(gaps.gap_valid(silent, 12.0, 4.0, "c", "silence"), (True, 0.0, 0.0))
+        # a real silence gap through the whole pipeline: finite input, valid
         y = music()
-        f0 = ff.fast_features(y)
-        ok, inside, limit = gaps.onset_ok(ff.fast_features(gaps.make_gap(y, SR, 12.0, 4.0, "silence")), f0, 12.0, 4.0)
-        self.assertTrue(ok, (inside, limit))
-        self.assertGreater(limit, 0.0)
-        # the same clip with the gap not cut: its onset strength inside is far above 5 % of the median
-        ok2, inside2, limit2 = gaps.onset_ok(f0, f0, 12.0, 4.0)
-        self.assertFalse(ok2, (inside2, limit2))
+        out = gaps.make_gap(y, SR, 12.0, 4.0, "silence")
+        p = grfnn.pulse(*(lambda f: (f[:, ff.COL_FLUX_LOW], f[:, ff.COL_ONSET]))(ff.fast_features(out)))
+        self.assertTrue(np.isfinite(p["input"]).all() and np.isfinite(p["amp"]).all())
+        self.assertTrue(gaps.gap_valid(p["input"], 12.0, 4.0, "c", "silence")[0])
+        # the same clip with the music left in the gap (a click train in the input) is rejected
+        pm = grfnn.pulse(*(lambda f: (f[:, ff.COL_FLUX_LOW], f[:, ff.COL_ONSET]))(ff.fast_features(y)))
+        self.assertFalse(gaps.gap_valid(pm["input"], 12.0, 4.0, "c", "noise")[0])
 
-    def test_noise_gap_onset_is_reported_either_way(self):
+    def test_white_noise_passes_at_about_95_percent_and_the_seed_is_per_clip(self):
+        passes = 0
+        for seed in range(200):
+            x = np.abs(np.random.default_rng(seed).standard_normal(1000))
+            passes += gaps.gap_valid(x, 2.0, 4.0, f"clip{seed}", "noise")[0]
+        self.assertTrue(0.90 <= passes / 200 <= 0.995, passes)
+        x = np.abs(np.random.default_rng(1).standard_normal(1000))
+        a = gaps.gap_valid(x, 2.0, 4.0, "same", "noise")
+        self.assertEqual(a, gaps.gap_valid(x, 2.0, 4.0, "same", "noise"))
+        self.assertNotEqual(a[2], gaps.gap_valid(x, 2.0, 4.0, "other", "noise")[2])
+
+    def test_shaped_noise_gaps_pass_at_about_95_percent_through_the_pipeline(self):
         y = music()
-        f0 = ff.fast_features(y)
-        ok, inside, limit = gaps.onset_ok(ff.fast_features(gaps.make_gap(y, SR, 12.0, 4.0, "noise", clip_id="t")), f0, 12.0, 4.0)
-        self.assertIsInstance(ok, bool)
-        self.assertTrue(np.isfinite(inside) and np.isfinite(limit))
+        passes, n = 0, 40
+        for k in range(n):
+            out = gaps.make_gap(y, SR, 12.0, 4.0, "noise", clip_id=f"shaped{k}")
+            f = ff.fast_features(out)
+            p = grfnn.pulse(f[:, ff.COL_FLUX_LOW], f[:, ff.COL_ONSET])
+            passes += gaps.gap_valid(p["input"], 12.0, 4.0, f"shaped{k}", "noise")[0]
+        self.assertGreaterEqual(passes / n, 0.85, passes)
 
 
 if __name__ == "__main__":

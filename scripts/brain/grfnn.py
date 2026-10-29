@@ -16,6 +16,11 @@ ALPHA, BETA1, BETA2, EPS = 0.0, -1.0, -0.25, 1.0
 C_IN = 0.05
 X_MAX = 0.5
 STD_TAU_S = 10.0
+# SD floor of the running z-score: 1e-3 of a fixed reference SD per channel, measured once on a synthetic training-free
+# source (sd_reference.py: 5 seeds x 30 s of a pulse-and-bed generator). Not from a corpus or a test set.
+SD_FLOOR_FRACTION = 1e-3
+SD_REF_FLUX = 4.4373
+SD_REF_ONSET = 1.4513
 Z0 = 1e-3
 R_MAX = 0.95
 FRAME_HZ = 100.0
@@ -75,13 +80,15 @@ def _run(x, w, alpha, b1, b2, eps, c, dt, sub, z0, rmax):
     return out_r, out_i
 
 
-def standardise_causal(x, tau_s=STD_TAU_S, rate=FRAME_HZ):
-    """Running z-score with exponential statistics (prior mean 0, variance 1); uses no future samples."""
+def standardise_causal(x, sd_ref=1.0, tau_s=STD_TAU_S, rate=FRAME_HZ):
+    """Running z-score with exponential statistics (prior mean 0, variance 1); uses no future samples. The running SD
+    never falls below SD_FLOOR_FRACTION * sd_ref, so a silent stretch gives finite values."""
     a = 1.0 / (tau_s * rate)
+    floor = SD_FLOOR_FRACTION * sd_ref
     m, v = 0.0, 1.0
     out = np.empty(len(x), dtype=np.float64)
     for i, s in enumerate(np.asarray(x, dtype=np.float64)):
-        out[i] = (s - m) / np.sqrt(v + 1e-12)
+        out[i] = (s - m) / max(np.sqrt(v), floor)
         m += a * (s - m)
         v += a * ((s - m) ** 2 - v)
     return out
@@ -90,7 +97,7 @@ def standardise_causal(x, tau_s=STD_TAU_S, rate=FRAME_HZ):
 def bank_input(flux_low, onset):
     """The bank's input: low-band flux (< 200 Hz) and onset strength, each standardised, summed with equal
     weight; half-wave rectified, scaled by C_IN and capped at X_MAX so that 1 - sqrt(eps) x stays positive."""
-    u = standardise_causal(flux_low) + standardise_causal(onset)
+    u = standardise_causal(flux_low, SD_REF_FLUX) + standardise_causal(onset, SD_REF_ONSET)
     return np.minimum(C_IN * np.maximum(u, 0.0), X_MAX)
 
 
@@ -143,6 +150,8 @@ def readout(freqs, amp, phase):
 
 def pulse(flux_low, onset):
     """Features of one clip -> {beats, amp (readout amplitude), freq (readout frequency), bank amplitude}."""
-    f, amp, phase = run_bank(bank_input(flux_low, onset))
+    x = bank_input(flux_low, onset)
+    f, amp, phase = run_bank(x)
     beats, chosen, chosen_amp, chosen_freq = readout(f, amp, phase)
-    return {"beats": beats, "readout_amp": chosen_amp, "readout_freq": chosen_freq, "freqs": f, "amp": amp.astype(np.float32)}
+    return {"beats": beats, "readout_index": chosen, "readout_amp": chosen_amp, "readout_freq": chosen_freq, "freqs": f,
+            "amp": amp.astype(np.float32), "input": x}

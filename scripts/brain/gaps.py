@@ -5,8 +5,8 @@ two kinds. The gap replaces audio; the beat annotations are left alone and conti
   noise    noise shaped to the average magnitude spectrum of the 2 s before the gap (STFT 2048, hop 512, Hann),
            random phase, RMS equal to that of those 2 s (an onset-free filler; a low-pass would keep the kick)
 Each gap has 50 ms raised-cosine crossfades at both ends (music to filler over the first 50 ms of the gap, filler to
-music over the last 50 ms). A gap is kept only if its onset strength (fast-feature column 40, frames at least 100 ms
-inside the gap) has mean below 5 % of the clip's median onset strength; a clip that fails is reported and left out.
+music over the last 50 ms). Verification (BRAIN_SPEC 2.2 correction, replacing the 5 % onset rule): `gap_valid` tests the bank's
+input over the gap for rhythm against a permutation null; a clip that fails is reported and left out of gate 2.
 Gap positions come from SEED, fixed here.
 """
 import zlib
@@ -19,8 +19,8 @@ GAPS = (2.0, 4.0, 8.0)
 KINDS = ("silence", "noise")
 MIN_MUSIC_S = 10.0
 XFADE_S = 0.05
-ONSET_FRACTION = 0.05
-EDGE_GUARD_S = 0.1
+PERMUTATIONS = 1000
+LAG_MIN_S, LAG_MAX_S = 0.25, 2.0
 MARGIN_S = 0.5  # the gap ends at least this long before the clip does
 N_FFT, HOP = 2048, 512
 
@@ -70,9 +70,32 @@ def make_gap(y, sr, start_s, gap_s, kind, clip_id=""):
     return out
 
 
-def onset_ok(features_gapped, features_original, start_s, gap_s, rate=100.0, col=40):
-    """(ok, gap onset mean, 5 % of the clip's median onset strength)."""
-    lo, hi = int(round((start_s + EDGE_GUARD_S) * rate)), int(round((start_s + gap_s - EDGE_GUARD_S) * rate))
-    inside = float(features_gapped[lo:hi, col].mean())
-    limit = ONSET_FRACTION * float(np.median(features_original[:, col]))
-    return inside < limit, inside, limit
+def lag_statistic(x, lo, hi):
+    """Maximum of the mean-removed normalised autocorrelation of each row of x over lags lo..hi (frames)."""
+    x = np.atleast_2d(np.asarray(x, dtype=np.float64))
+    x = x - x.mean(axis=1, keepdims=True)
+    n = x.shape[1]
+    power = np.fft.rfft(x, 2 * n, axis=1)
+    ac = np.fft.irfft(power * np.conj(power), 2 * n, axis=1)[:, :n]
+    var = ac[:, 0]
+    r = ac[:, lo:hi + 1] / np.where(var > 0, var, 1.0)[:, None]
+    return r.max(axis=1)
+
+
+def gap_valid(x, start_s, gap_s, clip_id, kind, rate=100.0):
+    """Gap verification (BRAIN_SPEC 2.2 correction): is there rhythm in what the bank was fed over the gap?
+    x = the bank's actual input series (summed standardised onset and low-band flux, as `grfnn.pulse(...)["input"]`).
+    Statistic: max of the mean-removed normalised autocorrelation of the gap's frames over lags 0.25 s .. min(2 s, gap / 2).
+    Null: PERMUTATIONS random permutations of the gap's frames (seed from SEED, the clip id, the gap and the kind).
+    Valid if the statistic <= the 95th percentile of the permuted statistics; a zero-variance gap is valid.
+    Returns (valid, statistic, threshold)."""
+    a, b = int(round(start_s * rate)), int(round((start_s + gap_s) * rate))
+    g = np.asarray(x[a:b], dtype=np.float64)
+    lo, hi = int(round(LAG_MIN_S * rate)), int(round(min(LAG_MAX_S, gap_s / 2.0) * rate))
+    if not np.ptp(g) > 0.0:
+        return True, 0.0, 0.0
+    stat = float(lag_statistic(g, lo, hi)[0])
+    rng = np.random.default_rng([SEED, zlib.crc32(clip_id.encode()), int(round(gap_s * 10)), KINDS.index(kind), 7])
+    perms = np.stack([rng.permutation(g) for _ in range(PERMUTATIONS)])
+    thr = float(np.percentile(lag_statistic(perms, lo, hi), 95))
+    return stat <= thr, stat, thr

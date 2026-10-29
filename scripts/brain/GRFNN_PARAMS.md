@@ -94,3 +94,11 @@ rule, not changed.
 
   The bank entrains to the click frequency at all three; the criterion picks 0.05. (The first draft of `grfnn.py` had 0.1,
   written before this sweep; the change is recorded here.) Script: `scripts/brain/synthetic_input_sweep.py`.
+
+## SD floor of the running z-score (BRAIN_SPEC 2.2 correction, 2026-10-29)
+
+The running SD never falls below 1e-3 of a reference SD, per channel: `SD_REF_FLUX = 4.4373` (30-200 Hz flux) and
+`SD_REF_ONSET = 1.4513` (onset strength). B1 has no training corpus, so these are fixed now from a synthetic,
+training-free source: 5 seeds x 30 s of the test-suite pulse-and-bed generator (`sd_reference.py` prints them). A constant,
+not a corpus value, so that the floor is the same for every clip and B1 does not depend on the B3 corpus. The floor matters
+only where the running SD collapses (digital silence); tested: a silent gap gives finite input (`test_gaps.py`).

@@ -7,11 +7,11 @@ Data and outputs stay outside git: `/secondary/hyst-data/brain/` (test sets in `
 |---|---|
 | `fast_features.py` | the 44 fast features at 100 Hz; STFT, mel range, band groups and onset formula fixed in its docstring |
 | `grfnn.py`, `GRFNN_PARAMS.md` | Hopf bank, beat readout with the 20 % / 2 s hysteresis rule; every value with its source |
-| `gaps.py` | gate 2 gaps (silence, shaped noise), seed 20261029 |
+| `gaps.py` | gate 2 gaps (silence, shaped noise), seed 20261029, and the gap verification by permutation test |
 | `scoring.py` | gates 1 to 3 (pass rules in its docstring), bootstrap and permutation seeds |
 | `testsets.py`, `testsets/*.sha256`, `testsets/AUDIT.md` | Ballroom and GTZAN loaders, hash lists of every file used, audit |
 | `check_b1.py` | one script for all gates; `results.json` and `check_b1.log` go to `/secondary/hyst-data/brain/b1/` |
-| `synthetic_input_sweep.py` | the synthetic sweep that fixed the bank's input gain |
+| `synthetic_input_sweep.py`, `sd_reference.py`, `synthetic_exclusion.py` | the synthetic sweep that fixed the input gain; the SD reference of the z-score floor; exclusion rates of the gap verification on synthetic audio |
 | `test_*.py` | unittest, synthetic data only |
 
 PLL baseline: `crates/hyst-audio/examples/beat_pll.rs` (`cargo build --release -p hyst-audio --example beat_pll`).

@@ -3,6 +3,7 @@ SMC was not obtained (see /secondary/hyst-data/brain/testsets/SOURCES.md). Data 
 
   python testsets.py hash     write scripts/brain/testsets/{ballroom,gtzan}.sha256 (sha256 of every audio and annotation file used)
   python testsets.py verify   check the files on disk against those lists
+  python testsets.py dedupe   write testsets/gtzan_exact_duplicates.txt
 """
 import hashlib
 import os
@@ -45,7 +46,29 @@ def gtzan_beats(path):
     return np.array(beats)
 
 
-def gtzan_clips():
+GTZAN_SKIP = ("gtzan/jazz.00054",)   # does not decode (the known corrupt file); skipped, ruling 2026-10-29
+
+
+def gtzan_removed_duplicates():
+    """{removed id: kept id}: exact-duplicate audio (identical decoded samples), the first copy by id is kept.
+    Read from testsets/gtzan_exact_duplicates.txt, written by `python testsets.py dedupe` and committed before any check."""
+    path = os.path.join(HERE, "testsets", "gtzan_exact_duplicates.txt")
+    if not os.path.exists(path):
+        return {}
+    return dict(line.split() for line in open(path) if line.strip() and not line.startswith("#"))
+
+
+def gtzan_clips(all_files=False):
+    """GTZAN clips. By default the exact duplicates (all but the first copy) and the undecodable file are left out;
+    `all_files=True` returns every audio file (used for the hash list)."""
+    clips = _gtzan_all()
+    if all_files:
+        return clips
+    drop = set(gtzan_removed_duplicates()) | set(GTZAN_SKIP)
+    return [c for c in clips if c["id"] not in drop]
+
+
+def _gtzan_all():
     audio_root = f"{ROOT}/gtzan/audio/genres"
     ann_root = f"{ROOT}/gtzan/annotations/GTZAN-Rhythm_v2_ismir2015_lbd/xml"
     xml = {f: os.path.join(ann_root, kind, f) for kind in sorted(os.listdir(ann_root)) for f in os.listdir(os.path.join(ann_root, kind))}
@@ -70,7 +93,7 @@ def files_to_hash(name):
             out.append(f"ballroom/annotations/BallroomAnnotations-master/{c['id'].split('/')[1]}.beats")
     else:
         ann = f"{ROOT}/gtzan/annotations/GTZAN-Rhythm_v2_ismir2015_lbd"
-        for c in gtzan_clips():
+        for c in gtzan_clips(all_files=True):
             out.append(os.path.relpath(c["audio"], ROOT))
         for kind in sorted(os.listdir(f"{ann}/xml")):
             for f in sorted(os.listdir(f"{ann}/xml/{kind}")):
@@ -89,6 +112,23 @@ def sha256(path):
 
 def list_path(name):
     return os.path.join(HERE, "testsets", f"{name}.sha256")
+
+
+def write_duplicates():
+    """Exact-duplicate GTZAN audio by the sha256 of the decoded samples; first copy (lowest id) kept."""
+    import soundfile as sf
+    seen, lines = {}, ["# removed  kept   (exact duplicates by decoded samples; undecodable files are in GTZAN_SKIP)"]
+    for c in gtzan_clips(all_files=True):
+        if c["id"] in GTZAN_SKIP:
+            continue
+        digest = hashlib.sha256(sf.read(c["audio"], dtype="int16", always_2d=True)[0].tobytes()).hexdigest()
+        if digest in seen:
+            lines.append(f"{c['id']} {seen[digest]}")
+        else:
+            seen[digest] = c["id"]
+    with open(os.path.join(HERE, "testsets", "gtzan_exact_duplicates.txt"), "w") as f:
+        f.write("\n".join(lines) + "\n")
+    print(len(lines) - 1, "exact duplicates listed")
 
 
 def write_lists():
@@ -112,4 +152,4 @@ def verify_lists():
 
 
 if __name__ == "__main__":
-    {"hash": write_lists, "verify": verify_lists}[sys.argv[1]]()
+    {"hash": write_lists, "verify": verify_lists, "dedupe": write_duplicates}[sys.argv[1]]()

@@ -71,7 +71,7 @@ def clip_job(args):
         y = ff.load_mono(clip["audio"])
     except Exception as e:  # undecodable file: reported, not scored
         return {"id": cid, "error": f"decode: {str(e)[:80]}"}
-    f0, p0 = b1_run(y)
+    _, p0 = b1_run(y)
     out = {"id": cid, "set": clip["set"], "style": clip["style"], "duration": len(y) / ff.SR,
            "b1": {"beats": p0["beats"].tolist()}, "meter": meter_numbers(p0, np.asarray(clip["beats"])),
            "wav": {"orig": os.path.join(tmp, f"{safe}.wav")}, "gaps": []}
@@ -84,11 +84,13 @@ def clip_job(args):
                     continue
                 yg = gaps.make_gap(y, ff.SR, t0, g, kind, clip_id=cid)
                 fg, pg = b1_run(yg)
-                ok, inside, limit = gaps.onset_ok(fg, f0, t0, g)
+                valid, stat, thr = gaps.gap_valid(pg["input"], t0, g, cid, kind)
+                k0 = int(pg["readout_index"][int(round(t0 * 100)) - 1])           # the readout oscillator just before the gap
                 path = os.path.join(tmp, f"{safe}.{g:g}.{kind}.wav")
                 write_wav(path, yg)
-                out["gaps"].append({"gap": g, "kind": kind, "start": t0, "onset_ok": bool(ok), "onset_inside": inside, "onset_limit": limit,
-                                    "beats": pg["beats"].tolist(), "amp_ratio": scoring.amplitude_ratio(pg["readout_amp"], t0, t0 + g),
+                out["gaps"].append({"gap": g, "kind": kind, "start": t0, "valid": bool(valid), "stat": stat, "threshold": thr,
+                                    "beats": pg["beats"].tolist(), "amp_ratio": scoring.amplitude_ratio(pg["amp"], k0, t0, t0 + g),
+                                    "switches": scoring.readout_switches(pg["readout_index"], t0, t0 + g),
                                     "wav": path})
     return out
 
@@ -105,6 +107,17 @@ def run_pll(wavs, workers):
         if pr.wait() != 0:
             raise RuntimeError("beat_pll failed")
     return res
+
+
+def regular_grid(beats, duration):
+    """The dance_memory regularised grid (constant period and phase fitted to analyze.py's beats), as beat times."""
+    sys.path.insert(0, os.path.join(REPO, "scripts"))
+    import dance_memory
+    try:
+        period, phase, _ = dance_memory.regularize_beats(beats, duration)
+    except ValueError:                      # fewer than five usable beats
+        return None
+    return np.arange(phase % period, duration, period).tolist()
 
 
 def run_analyze(path):
@@ -186,6 +199,7 @@ def run(clips, out_dir, workers=8, do_analyze=True, do_gaps=True, log=print):
                 p = pll[o["wav"]["orig"]]
                 o["pll"] = {"beats": p["beats"], "beats_centred": p["beats_centred"], "tempo_bpm": p["tempo_bpm"]}
                 o["offline"] = analyzed.get(o["id"])
+                o["offline_grid"] = regular_grid(o["offline"], o["duration"]) if o["offline"] else None
                 o["ref"] = np.asarray(c["beats"]).tolist()
                 for g in o["gaps"]:
                     q = pll[g["wav"]]
@@ -203,61 +217,83 @@ def run(clips, out_dir, workers=8, do_analyze=True, do_gaps=True, log=print):
     return summarise(results, list(errors.values()), clips, t_start)
 
 
+ALPHA_NOTE = ("With alpha = 0 (critical) the amplitude decays without input; with alpha > 0 the bank would sustain itself and "
+              "criterion 3 would pass trivially, so the amplitude result reflects the published alpha.")
+
+
 def summarise(results, skipped, clips, t_start):
     results = sorted(results, key=lambda r: r["id"])
     sets = sorted({r["set"] for r in results})
     out = {"meta": {"seeds": {"gaps": gaps.SEED, "bootstrap": scoring.BOOT_SEED, "permutation": scoring.PERM_SEED},
                     "clips": {s: sum(r["set"] == s for r in results) for s in sets}, "skipped": [s["id"] + ": " + s["error"] for s in skipped],
-                    "smc": "not obtained (see /secondary/hyst-data/brain/testsets/SOURCES.md)"}}
-    # ---- gate 1 and the reported metrics, per set
-    g1_b1, g1_pll, g1_pllc, g1_off, reported = {}, {}, {}, {}, {}
+                    "smc": "not obtained (see /secondary/hyst-data/brain/testsets/SOURCES.md)"},
+           "notes": {"alpha": ALPHA_NOTE,
+                     "pll": "The PLL baseline of each gate is whichever of its raw and centred beat times scores higher on that gate's metric; both are reported."}}
+    # ---- gate 1 and the reported metrics, per set; PLL = the better of raw and centred per set and metric
+    g1_b1, g1_pll, variant, reported = {}, {}, {}, {}
     for s in sets:
         rows = [r for r in results if r["set"] == s]
         m_b1 = [scoring.beat_metrics(r["ref"], r["b1"]["beats"]) for r in rows]
-        m_pll = [scoring.beat_metrics(r["ref"], r["pll"]["beats"]) for r in rows]
-        m_pllc = [scoring.beat_metrics(r["ref"], r["pll"]["beats_centred"]) for r in rows]
+        m_raw = [scoring.beat_metrics(r["ref"], r["pll"]["beats"]) for r in rows]
+        m_cen = [scoring.beat_metrics(r["ref"], r["pll"]["beats_centred"]) for r in rows]
         g1_b1[s] = {k: column(m_b1, k) for k in ("f", "cmlt", "amlt")}
-        g1_pll[s] = {k: column(m_pll, k) for k in ("f", "cmlt", "amlt")}
-        g1_pllc[s] = {k: column(m_pllc, k) for k in ("f", "cmlt", "amlt")}
+        raw = {k: column(m_raw, k) for k in ("f", "cmlt", "amlt")}
+        cen = {k: column(m_cen, k) for k in ("f", "cmlt", "amlt")}
+        g1_pll[s], variant[s] = {}, {}
+        for k in ("f", "cmlt", "amlt"):
+            variant[s][k] = "centred" if cen[k].mean() > raw[k].mean() else "raw"
+            g1_pll[s][k] = cen[k] if variant[s][k] == "centred" else raw[k]
         reported[s] = {name: {"f": float(np.mean(column(m, "f"))), "cmlt": float(np.mean(column(m, "cmlt"))), "amlt": float(np.mean(column(m, "amlt"))),
                               "tempo_error_median": float(np.nanmedian(column(m, "tempo_error"))),
+                              "tempo_error_mean": float(np.nanmean(column(m, "tempo_error"))),
                               "phase_ms_median": float(np.median(np.minimum(column(m, "phase_ms"), scoring.PHASE_CAP_MS)))}
-                       for name, m in (("b1", m_b1), ("pll", m_pll), ("pll_centred", m_pllc))}
-        for name, m in (("b1", m_b1), ("pll", m_pll)):
-            reported[s][name]["tempo_error_mean"] = float(np.nanmean(column(m, "tempo_error")))
-        have = [r for r in rows if r.get("offline")]
-        if have:
-            m_off = [scoring.beat_metrics(r["ref"], r["offline"]) for r in have]
-            reported[s]["offline_grid"] = {"clips": len(have), "f": float(np.mean(column(m_off, "f"))), "cmlt": float(np.mean(column(m_off, "cmlt"))),
-                                           "amlt": float(np.mean(column(m_off, "amlt")))}
+                       for name, m in (("b1", m_b1), ("pll_raw", m_raw), ("pll_centred", m_cen))}
+        for name, key in (("offline_analyze", "offline"), ("offline_regularised_grid", "offline_grid")):
+            have = [r for r in rows if r.get(key)]
+            if have:
+                m = [scoring.beat_metrics(r["ref"], r[key]) for r in have]
+                reported[s][name] = {"clips": len(have), "f": float(np.mean(column(m, "f"))), "cmlt": float(np.mean(column(m, "cmlt"))),
+                                     "amlt": float(np.mean(column(m, "amlt")))}
     out["gate1"] = scoring.gate1(g1_b1, g1_pll)
-    out["gate1_reported"] = {"metrics": reported,
-                             "superiority_vs_pll_raw": {f"{s}.{k}": float(np.mean(g1_b1[s][k] - g1_pll[s][k])) for s in sets for k in ("f", "amlt")},
-                             "gate1_if_the_pll_were_scored_centred": scoring.gate1(g1_b1, g1_pllc)}
-    # ---- gate 2
-    g2, rejected = {}, []
+    for key, row in out["gate1"]["rows"].items():
+        set_, metric = key.split(".")
+        row["pll_variant"] = variant[set_][metric]
+    out["gate1_reported"] = {"metrics": reported, "pll_variant_per_set_and_metric": variant,
+                             "superiority_vs_best_pll": {f"{s}.{k}": float(np.mean(g1_b1[s][k] - g1_pll[s][k])) for s in sets for k in ("f", "amlt")}}
+    # ---- gate 2: verification, exclusions, switches, then the criteria
+    g2, excluded, switches, rejected = {}, {}, {}, []
     for g in gaps.GAPS:
-        g2[f"{g:g}s"] = {}
+        g2[f"{g:g}s"], excluded[f"{g:g}s"], switches[f"{g:g}s"] = {}, {}, {}
         for kind in gaps.KINDS:
-            e_b1, e_pll, e_pllc, ratios, used = [], [], [], [], 0
+            e_b1, e_raw, e_cen, ratios, n_all, sw = [], [], [], [], 0, []
             for r in results:
                 for v in r["gaps"]:
                     if v["gap"] != g or v["kind"] != kind:
                         continue
-                    if not v["onset_ok"]:
-                        rejected.append(f"{r['id']} {g:g}s {kind}: gap onset {v['onset_inside']:.3f} >= {v['onset_limit']:.3f}")
+                    n_all += 1
+                    if not v["valid"]:
+                        rejected.append(f"{r['id']} {g:g}s {kind}: statistic {v['stat']:.3f} > threshold {v['threshold']:.3f}")
                         continue
                     end = v["start"] + g
                     e_b1.append(scoring.gap_end_error_ms(r["ref"], v["beats"], end))
-                    e_pll.append(scoring.gap_end_error_ms(r["ref"], v["pll"], end))
-                    e_pllc.append(scoring.gap_end_error_ms(r["ref"], v["pll_centred"], end))
+                    e_raw.append(scoring.gap_end_error_ms(r["ref"], v["pll"], end))
+                    e_cen.append(scoring.gap_end_error_ms(r["ref"], v["pll_centred"], end))
                     ratios.append(v["amp_ratio"])
+                    sw.append(v["switches"])
+            excluded[f"{g:g}s"][kind] = {"gaps": n_all, "excluded": n_all - len(e_b1), "rate": (n_all - len(e_b1)) / n_all if n_all else float("nan")}
+            switches[f"{g:g}s"][kind] = {"gaps": len(sw), "mean": float(np.mean(sw)) if sw else float("nan"),
+                                         "share_with_a_switch": float(np.mean(np.array(sw) > 0)) if sw else float("nan")}
             if e_b1:
-                res = scoring.gate2(e_b1, e_pll, ratios)
-                res["if_the_pll_were_scored_centred"] = scoring.gate2(e_b1, e_pllc, ratios)
+                raw, cen = scoring.gate2(e_b1, e_raw, ratios), scoring.gate2(e_b1, e_cen, ratios)
+                best = cen if cen["median_pll_ms"] < raw["median_pll_ms"] else raw
+                res = dict(best)
+                res["pll_variant"] = "centred" if best is cen else "raw"
+                res["raw"], res["centred"] = raw, cen
                 g2[f"{g:g}s"][kind] = res
     out["gate2"] = g2
-    out["gate2_onset_rejected"] = rejected
+    out["gate2_exclusions"] = excluded
+    out["gate2_readout_switches"] = switches
+    out["gate2_excluded_gaps"] = rejected
     four = [g2.get("4s", {}).get(k) for k in gaps.KINDS]
     out["gate2_pass"] = bool(all(x is not None and x["pass"] for x in four))
     # ---- gate 3 (Ballroom)
@@ -305,6 +341,7 @@ def main():
         sys.exit(1)
     result = run(clips, a.out, a.workers, not a.no_analyze, not a.no_gaps, log)
     json.dump(result, open(os.path.join(a.out, "results.json"), "w"), indent=1)
+    log(result["notes"]["alpha"])
     log(f"gate1 {result['gate1']['pass']}  gate2 {result['gate2_pass']}  gate3 {result.get('gate3', {}).get('pass')}  overall {result['pass']}  ({result['meta']['seconds']} s)")
 
 
