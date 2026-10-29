@@ -99,10 +99,25 @@ def fetch(member):
     return path, len(data), time.time() - t0, "new"
 
 
+def disk_bytes():
+    """Bytes of finished files only (.part files are in flight and may vanish)."""
+    n = 0
+    for f in os.listdir(AUDIO):
+        if f.endswith(".mp3"):
+            try:
+                n += os.path.getsize(AUDIO + f)
+            except FileNotFoundError:
+                pass
+    return n
+
+
 def main():
     lst = pd.read_csv(sys.argv[1])
     workers = int(sys.argv[2]) if len(sys.argv) > 2 else 4
     os.makedirs(AUDIO, exist_ok=True)
+    for f in os.listdir(AUDIO):
+        if f.endswith(".part"):
+            os.remove(AUDIO + f)      # truncated by an earlier stop; never counted as done
     members = list(lst["member"])
     done = [0, 0, 0]  # files, bytes, have
     t0 = time.time()
@@ -113,18 +128,24 @@ def main():
     def job(m):
         if stop.is_set():
             return
-        try:
-            path, n, dt, how = fetch(m)
-        except Exception as e:
-            with lock:
-                log.write(json.dumps({"member": m, "error": repr(e)[:200]}) + "\n"); log.flush()
+        for attempt in range(4):
+            try:
+                path, n, dt, how = fetch(m)
+                break
+            except Exception as e:
+                with lock:
+                    log.write(json.dumps({"member": m, "attempt": attempt, "error": repr(e)[:200]}) + "\n"); log.flush()
+                if hasattr(_local, "zf"):
+                    del _local.zf     # fresh connection and directory next time
+                time.sleep(5 * (attempt + 1))
+        else:
             return
         with lock:
             done[0] += 1
             done[1] += n
             done[2] += how == "have"
             log.write(json.dumps({"member": m, "bytes": n, "seconds": round(dt, 2), "how": how}) + "\n"); log.flush()
-            have = sum(os.path.getsize(AUDIO + f) for f in os.listdir(AUDIO)) if done[0] % 50 == 0 else 0
+            have = disk_bytes() if done[0] % 50 == 0 else 0
             if have > LIMIT_GB * 1e9:
                 stop.set()
 
