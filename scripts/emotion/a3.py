@@ -25,6 +25,7 @@ import check1b as c1
 import check3 as c3
 import check3r2 as r2
 import common
+import a2stats
 import decoder
 import mindstate
 import mood
@@ -88,6 +89,28 @@ def score_variant(paths, study):
     return spread.score(songs), detail
 
 
+def diagnostics(prep, anchors, paths, study, renderer=render.render):
+    """Reported, not gated (A3 round 2), on the "after" map: (a) the region of the body made from the corpus-median mood vector
+    and the region histogram of all public-corpus training segments through the sixth-set map (rendered here, 3 seeds);
+    (b) the 3 songs' mood distances before the map, in corpus SD per lane."""
+    fitted = prep["map"]
+    fitted.fit_quantile(prep["lanes_tr"], **anchors)
+    median = np.median(prep["lanes_tr"], axis=0)
+    one = spread.regions_of(fitted.bodies(median[None]), study, renderer)
+    every = spread.regions_of(fitted.bodies(prep["lanes_tr"]), study, renderer)
+    fitted.quantile = None
+    counts = np.bincount(every["region"][every["region"] >= 0], minlength=len(study[1]))
+    phrases = {}
+    for key, path in paths.items():
+        sidecar = json.loads(pathlib.Path(path).read_text())
+        mind = json.loads((pathlib.Path(path).parent / f"mind-{key}.json").read_text())["mindState"]
+        spans = [(p["start"], p["end"]) for p in sidecar["bodyTrack"]["phrases"]]
+        phrases[key] = bodytrack.phrase_lanes(bodytrack.lane_matrix(mind), mind["hopSeconds"], spans)
+    return {"medianMood": median.tolist(), "medianRegion": int(one["region"][0]), "medianDistance": float(one["distance"][0]), "medianOk": bool(one["ok"][0]),
+            "corpusSegments": int(len(prep["lanes_tr"])), "corpusRegionCounts": counts.tolist(), "corpusFailed": int((~every["ok"]).sum()),
+            "moodDistances": a2stats.mood_distances(prep["lanes_tr"], phrases)}
+
+
 def report(result, log=print):
     for variant, r in result["variants"].items():
         log(f"{variant} ({'gated' if variant == 'after' else 'reported, not gated'}): rule 1 {r['rule1']}, rule 2 {r['rule2']} (shared pairs {r['rule2SharedPairs']}), "
@@ -103,6 +126,7 @@ def report(result, log=print):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--out", default=str(OUT))
+    parser.add_argument("--tag", default="a3", help="folder and result name under --out")
     parser.add_argument("--anchor", type=float, default=None, help="p_low = out_low = ANCHOR, p_high = out_high = 1 - ANCHOR (the allowed adjustment)")
     args = parser.parse_args(argv)
     cfg = r2.config()
@@ -111,14 +135,19 @@ def main(argv=None):
     clips, folds, _ = c3.load_corpus()
     surrogate = decoder.Surrogate.load(cfg.surrogate_path)
     prep, feats = fit_final(clips, folds, surrogate, cfg, anchors, log=lambda s: print(s, flush=True))
-    out = pathlib.Path(args.out) / "a3"
+    out = pathlib.Path(args.out) / args.tag
     paths = write_sidecars(prep, feats, anchors, out)
     study = spread.load_study()
     result = {"anchors": anchors or "default 0.05/0.95", "variants": {}, "detail": {}}
     for variant in paths:
         result["variants"][variant], result["detail"][variant] = score_variant(paths[variant], study)
-    common.write_json(pathlib.Path(args.out) / "a3.json", result)
+    result["diagnostics"] = diagnostics(prep, anchors, paths["after"], study)
+    common.write_json(pathlib.Path(args.out) / f"{args.tag}.json", result)
     report(result)
+    d = result["diagnostics"]
+    print(f"diagnostics: corpus-median mood {np.round(d['medianMood'], 3).tolist()} -> region {d['medianRegion']} (distance {d['medianDistance']:.3f}); "
+          f"corpus {d['corpusSegments']} segments, region counts {d['corpusRegionCounts']}, failed {d['corpusFailed']}")
+    print(json.dumps(d["moodDistances"], indent=1))
 
 
 if __name__ == "__main__":

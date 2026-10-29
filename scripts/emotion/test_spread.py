@@ -6,6 +6,10 @@ import unittest
 import numpy as np
 
 import a1
+import a2stats
+import a3
+import json
+import rsa
 import bodytrack
 import decoder
 import spread
@@ -226,6 +230,80 @@ class LinkTableTests(unittest.TestCase):
         got = a1.link_table(results)
         self.assertEqual((got["reach"], got["of"]), (10, 12))
         self.assertEqual(got["misses"], [("4", "energy->size", 0.487), ("5", "energy->time", 0.378)])
+
+
+class DiagnosticsTests(unittest.TestCase):
+    def test_median_region_histogram_and_song_distances_on_a_tiny_case(self):
+        rng = np.random.default_rng(7)
+        lanes = rng.random((60, 3))
+        fitted = decoder.fit_map(lanes, small_surrogate(), steps=2, batch=30)
+        calls = []
+
+        def fake(bodies):
+            calls.append(len(bodies))
+            return {"ok": np.ones(len(bodies), bool), "desc": np.tile(np.linspace(0, 9, 37), (len(bodies), 1)) * 0 + 4.0,
+                    "stretch": np.ones((len(bodies), 3))}
+        study = (np.tile(np.arange(10.0), (37, 1)), np.array([np.full(37, 0.1), np.full(37, 0.45)]))
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = pathlib.Path(tmp)
+            paths = {}
+            for key, shift in (("s1", 0.0), ("s2", 0.3)):
+                t = np.arange(12)
+                mind = {"hopSeconds": 0.5, "source": "x", "mood": {"energy": (0.3 + shift + 0 * t).tolist(), "power": (0.5 + 0 * t).tolist(),
+                                                                  "rest": np.zeros((12, 1)).tolist()}}
+                (tmp / f"mind-{key}.json").write_text(json.dumps({"mindState": mind}))
+                paths[key] = tmp / f"{key}.sidecar.json"
+                paths[key].write_text(json.dumps({"bodyTrack": {"phrases": [{"start": 0.0, "end": 3.0}, {"start": 3.0, "end": 6.0}]}}))
+            prep = {"map": fitted, "lanes_tr": lanes}
+            d = a3.diagnostics(prep, {}, paths, study, renderer=fake)
+        self.assertEqual(calls, [1, 60])
+        self.assertIsNone(fitted.quantile)
+        self.assertEqual((d["medianRegion"], d["corpusRegionCounts"], d["corpusSegments"]), (1, [0, 60], 60))     # midrank 0.45 is nearest 0.45
+        np.testing.assert_allclose(d["medianMood"], np.median(lanes, axis=0))
+        sd = lanes.std(axis=0)
+        self.assertAlmostEqual(d["moodDistances"]["meanDistance"]["s1|s2"], 0.3 / sd[0])
+
+
+class StatsTests(unittest.TestCase):
+    def test_distances_are_in_corpus_sd_per_lane(self):
+        rng = np.random.default_rng(0)
+        corpus = rng.normal(size=(2000, 2)) * [2.0, 0.5]
+        sd = corpus.std(axis=0)
+        a = np.array([[0.0, 0.0], [0.0, 0.0]])
+        b = np.array([[2 * sd[0], 0.0], [2 * sd[0], 0.5 * sd[1]]])
+        r = a2stats.mood_distances(corpus, {"a": a, "b": b})
+        np.testing.assert_allclose(r["sd"], sd)
+        self.assertAlmostEqual(r["meanDistance"]["a|b"], np.hypot(2.0, 0.25))
+        d = r["phraseDistance"]["a|b"]
+        self.assertEqual(d["n"], 4)
+        self.assertAlmostEqual(d["median"], (2.0 + np.hypot(2.0, 0.5)) / 2)
+        self.assertEqual(r["within"]["a"]["median"], 0.0)
+        self.assertAlmostEqual(r["within"]["b"]["median"], 0.5)
+        self.assertAlmostEqual(r["within"]["b"]["toSongMean"]["median"], 0.25)
+
+    def test_resampling_stays_inside_each_song_and_is_fixed(self):
+        songs = ["x"] * 4 + ["y"] * 6
+        c = a2stats.within_song_counts(songs, 50)
+        np.testing.assert_array_equal(c[:4].sum(axis=0), np.full(50, 4))
+        np.testing.assert_array_equal(c[4:].sum(axis=0), np.full(50, 6))
+        np.testing.assert_array_equal(c, a2stats.within_song_counts(songs, 50))
+        self.assertGreater(c.max(), 1)
+
+    def test_a_variant_against_itself_has_zero_difference_and_a_better_match_has_a_positive_one(self):
+        rng = np.random.default_rng(1)
+        n = 30
+        rating = rng.normal(size=(n, 2))
+        good = rating @ rng.normal(size=(2, 5)) + 0.1 * rng.normal(size=(n, 5))
+        bad = rng.normal(size=(n, 5))
+        a = rsa.rank_matrix(rating)
+        keep = np.ones(n, bool)
+        variants = {"bad": (a, rsa.rank_matrix(bad), keep), "good": (a, rsa.rank_matrix(good), keep), "good2": (a, rsa.rank_matrix(good), keep)}
+        full, boot = a2stats.paired_sixth(variants, ["p"] * 15 + ["q"] * 15, 200)
+        same = a2stats.difference(boot["good"], boot["good2"])
+        self.assertEqual((same["mean"], same["interval"]), (0.0, [0.0, 0.0]))
+        better = a2stats.difference(boot["bad"], boot["good"])
+        self.assertGreater(better["interval"][0], 0.0)
+        self.assertGreater(full["good"], full["bad"])
 
 
 if __name__ == "__main__":

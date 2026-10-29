@@ -12,7 +12,7 @@ Reported, before and after: DEAM/MERP rho with its gate-1 shuffle (1,000), GEMS 
 failed segments, the 24 links (training and held-out r), and the share of segments within 0.05 of 0 or 1 per
 dimension. The anchors (0.05, 0.95) are arguments; the one allowed later adjustment is made by the overseer.
 
-  python a2.py [--out DIR] [--dial DIR] [--anchor 0.05]
+  python a2.py [--out DIR] [--dial DIR]
 """
 from __future__ import annotations
 
@@ -33,7 +33,10 @@ import render
 import spread
 
 OUT = common.DATA / "a2"
-VARIANTS = ("before", "after")
+# variant -> quantile anchors (None: no fix). "after" is round 1 (5th/95th to 0.05/0.95), "after2" is A3 round 2 (0.10/0.90,
+# chosen after round 1's results). One fit per set serves all three; each is rendered with its own standardiser.
+ANCHORS = {"before": None, "after": {}, "after2": dict(p_low=0.10, p_high=0.90, out_low=0.10, out_high=0.90)}
+VARIANTS = tuple(ANCHORS)
 POWER_ANCHOR = False    # overseer, 2026-10-29: the power anchor is dropped for core-2b (signs disagree on 3 of 3 songs); weight is free
 
 
@@ -53,9 +56,8 @@ def score_variant(per_tag, ratings, dial_rows, cfg):
             "failedSegments": {str(t): int((~per_tag[t][1]["ok"]).sum()) for t in per_tag}}
 
 
-def run(clips, folds, surrogate, cfg, dial, out_dir=None, log=print, anchors=None):
+def run(clips, folds, surrogate, cfg, dial, out_dir=None, log=print):
     start = time.time()
-    anchors = anchors or {}
     prepared, rendered = {}, {v: {} for v in VARIANTS}
     for tag in list(range(common.N_FOLDS)) + [c3.SIXTH]:
         train, test = c3.split(clips, folds, tag)
@@ -63,19 +65,20 @@ def run(clips, folds, surrogate, cfg, dial, out_dir=None, log=print, anchors=Non
         prep = c3.prepare(train, test, feats, mood.SOURCE_CORE2B, None, surrogate, cfg, power_anchor=POWER_ANCHOR)
         prep["radius"], prepared[tag] = radius, (prep, test)
         log(f"tag {tag}: fitted ({time.time() - start:.0f} s), k {prep['k']}")
-        before_links = r2.link_report(prep)
-        rendered["before"][tag] = (dict(prep, links=before_links), c3.render_map(prep, tag, "core2b", cfg))
-        log(f"tag {tag}: rendered before ({time.time() - start:.0f} s)")
-        prep["map"].fit_quantile(prep["lanes_tr"], **anchors)
-        after_links = r2.link_report(prep)       # with the quantile attached: held-out r of lane and fixed body dimension
-        rendered["after"][tag] = (dict(prep, links=after_links), c3.render_map(prep, tag, "core2b", cfg))
+        for v, anchors in ANCHORS.items():
+            if anchors is None:
+                prep["map"].quantile = None
+            else:
+                prep["map"].fit_quantile(prep["lanes_tr"], **anchors)
+            links = r2.link_report(prep)      # with the variant's quantile attached: held-out r of lane and body dimension
+            rendered[v][tag] = (dict(prep, links=links), c3.render_map(prep, tag, "core2b", cfg))
+            log(f"tag {tag}: rendered {v} ({time.time() - start:.0f} s)")
         prep["map"].quantile = None
-        log(f"tag {tag}: rendered after ({time.time() - start:.0f} s)")
         if out_dir:
-            save_segments(pathlib.Path(out_dir), tag, rendered, prep, anchors)
+            save_segments(pathlib.Path(out_dir), tag, rendered, prep)
     ratings = {t: r2.segment_ratings(prepared[t][1]) for t in prepared}
     dial_rows = r2.dial_ratings(prepared[c3.SIXTH][1], dial)
-    result = {"anchors": anchors or "default 0.05/0.95", "variants": {}}
+    result = {"anchors": {v: a if a is not None else "none" for v, a in ANCHORS.items()}, "variants": {}}
     for v in VARIANTS:
         result["variants"][v] = score_variant(rendered[v], ratings, dial_rows, cfg)
         s = result["variants"][v]
@@ -112,11 +115,11 @@ def round2_reference(check_dir=r2.OUT):
             "links": {t: v["heldOutR"] for t, v in m["links"].items()}}
 
 
-def save_segments(out, tag, rendered, prep, anchors):
+def save_segments(out, tag, rendered, prep):
     out.mkdir(parents=True, exist_ok=True)
     arrays = {"keys": np.array(prep["keys_te"]), "lanes": prep["lanes_te"]}
     for v in VARIANTS:
-        for part in ("bodies", "ok", "desc", "stretch"):
+        for part in ("bodies", "ok", "desc", "stretch", "desc_mean", "desc_std"):
             arrays[f"{v}/{part}"] = rendered[v][tag][1][part]
     np.savez_compressed(out / f"segments_{tag}.npz", **arrays)
 
@@ -147,18 +150,16 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--out", default=str(OUT))
     parser.add_argument("--dial", default=str(common.DATA / "dial"))
-    parser.add_argument("--anchor", type=float, default=None, help="p_low = out_low = ANCHOR, p_high = out_high = 1 - ANCHOR (the allowed adjustment)")
     args = parser.parse_args(argv)
     cfg = r2.config()
-    anchors = {} if args.anchor is None else dict(p_low=args.anchor, p_high=1 - args.anchor, out_low=args.anchor, out_high=1 - args.anchor)
     render.build()
     print(f"seeds: folds={common.SEED_FOLDS} bootstrap={common.SEED_BOOTSTRAP} inner={common.SEED_INNER} perm={c3.SEED_PERM} std={c3.SEED_STD} "
-          f"render={render.SEEDS} map={decoder.SEED_MAP}; anchors {anchors or 'default'}", flush=True)
+          f"render={render.SEEDS} map={decoder.SEED_MAP}; variants {ANCHORS}", flush=True)
     clips, folds, _ = c3.load_corpus()
     dial = c1.load_dial(pathlib.Path(args.dial) / "dial2.json", pathlib.Path(args.dial) / "dial-ic-try1.json")
     surrogate = decoder.Surrogate.load(cfg.surrogate_path)
     pathlib.Path(args.out).mkdir(parents=True, exist_ok=True)
-    result = run(clips, folds, surrogate, cfg, dial, args.out, log=lambda s: print(s, flush=True), anchors=anchors)
+    result = run(clips, folds, surrogate, cfg, dial, args.out, log=lambda s: print(s, flush=True))
     report(result)
 
 
