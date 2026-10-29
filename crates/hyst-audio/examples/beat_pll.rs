@@ -103,7 +103,11 @@ mod tests {
             let period = (60.0 / bpm * sr as f32) as usize;
             for i in 0..(30 * sr as usize) {
                 let k = i % period;
-                let v = if k < 200 { (1.0 - k as f32 / 200.0) * 0.9 } else { 0.0 };
+                let v = if k < 200 {
+                    (1.0 - k as f32 / 200.0) * 0.9
+                } else {
+                    0.0
+                };
                 w.write_sample((v * 32767.0) as i16).unwrap();
             }
             w.finalize().unwrap();
