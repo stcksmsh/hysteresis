@@ -4551,3 +4551,64 @@ No render failed (0 failed phrases in all six cases). "Before" is reported, not 
 **Points fixed where the note was silent** (all ruled on 2026-10-29): ties for most visited count as sharing when the tied sets meet; a failed phrase has no region and is left out of the region counts only; within 0.05 means ≤ 0.05 or ≥ 0.95 and over 20 % means strictly above; phrase-mean lanes go through the map, then the quantile.
 
 **Not done:** the Rust reader was not run on the new sidecars (`bodyTrack` is the D3 format, the quantile is applied in Python); no export or CSV was made; no figure or clock work; the quantile range was not adjusted; no check against how the bodies look.
+
+### Task A, round 2: quantile 5th/95th to 0.10/0.90, diagnostics, paired bootstraps — 2026-10-29
+
+Branch `a-spread`, code at `4c24579` (rebased onto `700f5e8`). **Not verified by eye.** **The setting 0.10/0.90 was chosen after round 1's results and is judged on the same 3 songs.** One round, as ruled; nothing else changed (same map, power anchor dropped, k = 2, seeds, folds). Body generator: `body_render` built in this worktree from the `hyst-previz` sources of `9c691c9`. Outputs, outside git: `/secondary/hyst-data/emotion/a2b/` (A2 rerun with three variants, `a2.json`, `stats.json`, `links_recomputed.json`, `segments_*.npz`), `/secondary/hyst-data/emotion/a2/a3r2.json` and `a3r2/{before,after}/`.
+
+**A mistake that cost a run.** The first round-2 run set the percentiles to 0.10/0.90 as well as the outputs. Mapping the 10th and 90th percentile to 0.10 and 0.90 is the same rank map as round 1, so that run repeated round 1 (identical region counts). I found it from the identical counts, corrected the setting (the 5th and 95th percentiles go to 0.10 and 0.90) and reran both scripts. The void outputs are kept as `a2b_void_setting`, `a2/a3r2_void_setting*`; none of their numbers is used. The corrected map is body = 0.10 + (rank − 0.05) × 0.8/0.9, so the values lie between 0.056 and 0.956. Round 1's numbers were reproduced exactly by the rerun (DEAM/MERP 0.3370, sixth set against the dial 0.3850).
+
+**A3 round 2: FAIL (rule 2).** Rule 1 passes on all three songs, rule 3 passes on all three (no dimension within 0.05 of 0 or 1 for any phrase), rule 2 fails: all three songs have region 1 as most visited.
+
+| Song | Round | Region counts (regions 0 to 7) | Visited | Most visited | Mean distance (max) |
+|---|---|---|---|---|---|
+| Instant Crush | 1 | 0, 17, 0, 18, 3, 0, 0, 2 | 4 | 3 | 1.369 (1.772) |
+| | 2 | 0, 31, 0, 4, 3, 0, 0, 2 | 4 | 1 | 1.332 (1.779) |
+| Five Years | 1 | 2, 18, 2, 0, 0, 0, 6, 4 | 5 | 1 | 1.075 (1.821) |
+| | 2 | 2, 18, 2, 0, 0, 0, 6, 4 | 5 | 1 | 1.031 (1.804) |
+| Presence | 1 | 0, 26, 1, 8, 0, 0, 1, 2 | 5 | 1 | 1.325 (1.930) |
+| | 2 | 0, 26, 1, 8, 1, 0, 1, 1 | 6 | 1 | 1.272 (1.888) |
+
+Rule 3 in round 1 failed on Instant Crush (time 0.40) and Five Years (space 0.28, energy 0.31, rhythm 0.38). In round 2 the compressed range removes those. The region counts barely move: Instant Crush goes from regions 1 and 3 almost evenly to 31 of 40 phrases in region 1. D4 stays blocked on `core-2b` by the ruling.
+
+**A2 (power dropped), three variants from one fit per set.** Round 2 reference is check3r2's saved core-2b with the power anchor kept.
+
+| | Round 2 reference | Before (power dropped) | Fix 0.05/0.95 (round 1) | Fix 0.10/0.90 (round 2) |
+|---|---|---|---|---|
+| DEAM/MERP rho | 0.2695 | 0.2554 | 0.3370 | 0.3503 |
+| per fold | 0.1248, 0.2982, 0.2320, 0.3498, 0.3425 | 0.1407, 0.3441, 0.0627, 0.3389, 0.3904 | 0.3708, 0.3597, 0.3853, 0.2817, 0.2874 | 0.3818, 0.3625, 0.3967, 0.2873, 0.3233 |
+| gate-1 shuffle (1,000) | | beats 1000 | beats 1000 | beats 1000 |
+| GEMS rho | 0.1516 | 0.1736 | 0.1605 | 0.1652 |
+| sixth set against the dial (106 segments) | 0.4348 | 0.3668 | 0.3850 | 0.3729 |
+| failed rated segments | 6 | 41 | 39 | 27 |
+| energy links reaching 0.5 (of 18) | | 17 | 17 | 17 |
+
+The one link under 0.5 is the sixth set energy to time (0.365, 0.352, 0.352). Links are unchanged by the second fix because it is an affine change of the first. Power to weight (not an anchor, not gated), sets 0 to 4 and sixth: before 0.433, 0.727, 0.105, 0.592, 0.407, 0.465; fixed 0.413, 0.714, 0.103, 0.584, 0.401, 0.502.
+
+**Paired bootstrap, 95 % intervals, 2,000 resamples, fixed seed (20261013); later minus earlier.** Sixth set: segments resampled within each song (blocked by song), same draw for both variants, ranks of the full set. DEAM/MERP: over held-out songs (1,787), as check3r2.
+
+| Comparison | Sixth set against the dial | DEAM/MERP |
+|---|---|---|
+| power dropped − round 2 reference | −0.0683 [−0.1376, −0.0092] | −0.0137 [−0.0344, +0.0074] |
+| fix 0.05/0.95 − power dropped | +0.0193 [−0.0730, +0.1134] | +0.0822 [+0.0566, +0.1084] |
+| fix 0.10/0.90 − power dropped | +0.0072 [−0.0877, +0.1111] | +0.0954 [+0.0707, +0.1220] |
+| fix 0.10/0.90 − fix 0.05/0.95 | −0.0121 [−0.0580, +0.0363] | +0.0132 [+0.0082, +0.0180] |
+| fix 0.10/0.90 − round 2 reference | −0.0611 [−0.1501, +0.0296] | +0.0818 [+0.0541, +0.1104] |
+
+The dial fall from 0.4348 to 0.3668 comes with the power drop (interval excludes 0); the fix changes the dial rho by amounts whose intervals include 0. The DEAM/MERP rise comes with the fix (intervals above 0).
+
+**Diagnostics (not gated), on the round-2 map.**
+- Corpus-median mood vector (per-lane median of the sixth-set map's 12,528 public training segments; lanes energy, power, rest 1, rest 2 = 0.514, 0.420, 0.533, 0.487): its body lands in region 1, distance 1.405. Region histogram of all 12,528 segments through the same map (bodies rendered here, 3 seeds; 15 failed): regions 0 to 7 = 465, 2554, 405, 1107, 291, 2562, 3808, 1321. Region 1 holds 20 % of the corpus, regions 5 and 6 hold 20 % and 30 %.
+- Mood vectors before the map, in corpus SD per lane (SDs 0.217, 0.204, 0.210, 0.200), all four lanes. Distance between song means: Instant Crush to Five Years 1.47, Instant Crush to Presence 0.82, Five Years to Presence 1.10. Per phrase pair between songs (median, quartiles): 2.30 (1.78 to 2.74), 1.35 (0.98 to 1.83), 2.06 (1.64 to 2.59). Within a song, between phrases: Instant Crush 1.00 (0.67 to 1.43), Five Years 1.80 (0.90 to 2.91), Presence 1.31 (0.94 to 1.69); to the song mean: 0.71, 1.60, 0.90. For scale, two random public segments: 2.56 (1.88 to 3.31).
+- The user's words (from `score.txt` of the body study `r6`, which quotes the user's notes; line numbers there; which clips a note describes is read from `key.json`, and the reading is mine). Mean joint speed per region: 0 2.9, 1 42.3, 2 35.5, 3 17.5, 4 12.8, 5 8.7, 6 49.3, 7 16.5 deg/s (`score.txt` lines 4 to 11).
+  - Region 1: no note describes its clips directly. t31 (`score.txt:61`) had region 1 as the odd one against two region-0 clips described as "slow/sad hanging/drooping"; t17 (`:50`) pair of region 1, odd region 0 "massively slower than A/B"; t32 (`:62`) pair of region 1, odd region 6 "wild and unstructured".
+  - Region 3: pair in t11 (`:48`) "basically figure eights", and in t21 (`:53`) "figure eights/easy/fluid".
+  - Region 4: t09 (`:47`) and t16 (`:49`) and t18 (`:51`) pairs "locked groove" with "hold between lateral/vertical move"; odd in t23 (`:55`) and t27 (`:58`) "locked groove/holds".
+  - Region 7: pair in t22 (`:54`) "sort of 'holds'"; odd in t24 (`:56`) "a lot bigger and free-er".
+  - Region 2: odd in t21 (`:53`) "some quick up-to-down moves, inverting its trajectory sortof".
+  - Region 0: pair in t31 (`:61`) "slow/sad hanging/drooping"; odd in t01 (`:46`) and t17 (`:50`), "small, slow and near the top" for the other two clips of t01, and "massively slower" in t17.
+  - Region 6: odd in t32 (`:62`) "wild and unstructured"; t11 (`:48`) odd, t22 (`:54`) and t29 (`:60`) have it as the odd one without a direct description.
+
+**Sidecars for the exports.** `/secondary/hyst-data/emotion/a2/a3r2/after/<song>.sidecar.json` for `instant-crush`, `five-years`, `presence`: notes sidecar plus `bodyTrack` (D3 format, version 1) from the round-2 map, with `mind-<song>.json`, `core2b.map.npz` and `core2b.map.quantile.npz` beside them. The Rust reader was not run on them.
+
+**Not done:** no export, CSV or figure work; no look at the bodies; the quantile range was not adjusted further; no spread term in the fit (the note keeps that for a later round).
