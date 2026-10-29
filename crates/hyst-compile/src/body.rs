@@ -806,35 +806,52 @@ pub fn movement(fr: &[([f64; 5], Vec<[f64; 3]>)]) -> [f64; 3] {
     [path, side, turn]
 }
 
-/// Every check 2a rule the score breaks, each named (empty = feasible). Joint speed
-/// and acceleration are measured on the rendered curve at 1 kHz (acceleration by
-/// second difference); `validate` (the rig's own envelope) must also pass; hand
-/// speed, jolt, floor, the stillness cap and the frame at 60 fps.
-pub fn violations(score: &EnsembleScore) -> (Vec<String>, Check2a) {
-    let mut out = Vec::new();
-    if let Err(e) = score.validate() {
-        out.push(format!("validate: {e}"));
-    }
+/// What one arm of a score does against the hardware numbers of check 2a.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Measured {
+    /// Largest joint speed (deg/s) and acceleration (deg/s2) on the rendered curve, per joint.
+    pub joint_speed: [f64; 5],
+    pub joint_accel: [f64; 5],
+    pub max_hand_mps: f64,
+    pub max_jolt_mps2: f64,
+    /// Smallest margin over the floor rule, metres (negative = violation).
+    pub min_floor_margin_m: f64,
+}
+
+/// Joint rates are taken on the rendered curve at 1 kHz (acceleration by second
+/// difference); hand speed, jolt and the floor at 60 fps, as `violations` always did.
+pub fn measure(score: &EnsembleScore, agent: usize) -> Measured {
     let dt = 1.0 / CHECK_HZ;
     let n = (score.duration * CHECK_HZ).round() as usize;
     let q: Vec<Vec<f64>> = (0..=n)
-        .map(|i| sample_track(&score.tracks[0].knots, i as f64 * dt).expect("sample"))
+        .map(|i| sample_track(&score.tracks[agent].knots, i as f64 * dt).expect("sample"))
         .collect();
-    for (j, &(v_lim, a_lim)) in LIMITS.iter().enumerate() {
+    let mut m = Measured {
+        joint_speed: [0.0; 5],
+        joint_accel: [0.0; 5],
+        max_hand_mps: 0.0,
+        max_jolt_mps2: 0.0,
+        min_floor_margin_m: f64::MAX,
+    };
+    for j in 0..5 {
         let v = q.windows(2).map(|w| (w[1][j] - w[0][j]).abs() / dt);
         let a = q
             .windows(3)
             .map(|w| (w[2][j] - 2.0 * w[1][j] + w[0][j]).abs() / (dt * dt));
-        let (v, a) = (v.fold(0.0, f64::max), a.fold(0.0, f64::max));
-        if v > v_lim {
-            out.push(format!("{} speed", JOINTS[j]));
-        }
-        if a > a_lim {
-            out.push(format!("{} accel", JOINTS[j]));
-        }
+        (m.joint_speed[j], m.joint_accel[j]) = (v.fold(0.0, f64::max), a.fold(0.0, f64::max));
     }
-    let fr = frames(score);
-    let hand: Vec<[f64; 3]> = fr.iter().map(|f| f.1[5]).collect();
+    let n = (score.duration * FPS).round() as usize;
+    let hand: Vec<[f64; 3]> = (0..=n)
+        .map(|i| {
+            let f = score.sample(i as f64 / FPS).expect("sample");
+            let w = &f.agents[agent].world_points;
+            let ends = w[1..5].iter().map(|p| p[2]).fold(f64::MAX, f64::min) - FLOOR_M;
+            m.min_floor_margin_m = m
+                .min_floor_margin_m
+                .min(ends.min(w[5][2] - FLOOR_M - DISC_M));
+            w[5]
+        })
+        .collect();
     let speed: Vec<f64> = hand
         .windows(2)
         .map(|w| {
@@ -845,26 +862,40 @@ pub fn violations(score: &EnsembleScore) -> (Vec<String>, Check2a) {
                 * FPS
         })
         .collect();
-    let max_hand = speed.iter().copied().fold(0.0, f64::max);
-    let max_jolt = speed
+    m.max_hand_mps = speed.iter().copied().fold(0.0, f64::max);
+    m.max_jolt_mps2 = speed
         .windows(2)
         .map(|w| (w[1] - w[0]).abs() * FPS)
         .fold(0.0, f64::max);
-    let floor = fr
-        .iter()
-        .map(|f| {
-            let z = f.1.iter().map(|p| p[2]);
-            let ends = z.clone().skip(1).take(4).fold(f64::MAX, f64::min) - FLOOR_M;
-            ends.min(f.1[5][2] - FLOOR_M - DISC_M)
-        })
-        .fold(f64::MAX, f64::min);
-    if max_hand > HAND_MPS {
+    m
+}
+
+/// Every check 2a rule the score breaks, each named (empty = feasible). Joint speed
+/// and acceleration are measured on the rendered curve at 1 kHz (acceleration by
+/// second difference); `validate` (the rig's own envelope) must also pass; hand
+/// speed, jolt, floor, the stillness cap and the frame at 60 fps.
+pub fn violations(score: &EnsembleScore) -> (Vec<String>, Check2a) {
+    let mut out = Vec::new();
+    if let Err(e) = score.validate() {
+        out.push(format!("validate: {e}"));
+    }
+    let m = measure(score, 0);
+    for (j, &(v_lim, a_lim)) in LIMITS.iter().enumerate() {
+        if m.joint_speed[j] > v_lim {
+            out.push(format!("{} speed", JOINTS[j]));
+        }
+        if m.joint_accel[j] > a_lim {
+            out.push(format!("{} accel", JOINTS[j]));
+        }
+    }
+    let fr = frames(score);
+    if m.max_hand_mps > HAND_MPS {
         out.push("hand speed".into());
     }
-    if max_jolt > JOLT_MPS2 {
+    if m.max_jolt_mps2 > JOLT_MPS2 {
         out.push("hand jolt".into());
     }
-    if floor < 0.0 {
+    if m.min_floor_margin_m < 0.0 {
         out.push("floor".into());
     }
     let mv = movement(&fr);
@@ -886,9 +917,9 @@ pub fn violations(score: &EnsembleScore) -> (Vec<String>, Check2a) {
     (
         out,
         Check2a {
-            max_hand_mps: max_hand,
-            max_jolt_mps2: max_jolt,
-            min_floor_margin_m: floor,
+            max_hand_mps: m.max_hand_mps,
+            max_jolt_mps2: m.max_jolt_mps2,
+            min_floor_margin_m: m.min_floor_margin_m,
             movement: mv,
             joint_motion: jm,
             still,
@@ -938,7 +969,7 @@ fn p90(v: &[f64]) -> f64 {
 }
 /// Best lag, seconds in -0.5..0.5, of the normalised cross-correlation of a and b
 /// (positive: b follows a).
-fn best_lag(a: &[f64], b: &[f64]) -> f64 {
+pub fn best_lag(a: &[f64], b: &[f64]) -> f64 {
     let norm = |v: &[f64]| {
         let m = mean(v);
         let sd = (v.iter().map(|x| (x - m).powi(2)).sum::<f64>() / v.len() as f64).sqrt();

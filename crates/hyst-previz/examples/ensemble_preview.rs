@@ -1,4 +1,4 @@
-//! cargo run -p hyst-previz --example ensemble_preview -- output.html track-url sidecar.json [--score score.json] [--rig rig.json] [--groove-only] [--no-reuse] [--zone x0,y0,z0,x1,y1,z1] [--workspace off|rehearsed|schematic]
+//! cargo run -p hyst-previz --example ensemble_preview -- output.html track-url sidecar.json [--score score.json] [--rig rig.json] [--groove-only] [--no-reuse] [--zone x0,y0,z0,x1,y1,z1] [--workspace off|rehearsed|schematic] [--body off|layered]
 use std::{env, fs, io, path::PathBuf};
 
 use hyst_compile::director::workspace::{BasinKind, Workspace, WorkspaceMode};
@@ -49,6 +49,66 @@ fn print_workspace(w: &Workspace) {
     }
 }
 
+fn count_one(score: &hyst_compile::ensemble::EnsembleScore) -> bool {
+    score.tracks.len() == 1
+}
+
+/// One arm against the body generator's numbers, and how the figure clock ran, on stderr.
+fn print_one_arm(traced: &hyst_compile::director::figures::Traced) {
+    use hyst_compile::body::{measure, HAND_MPS, JOINTS, JOLT_MPS2, LIMITS};
+    let m = measure(&traced.score, 0);
+    let over = |v: f64, limit: f64| if v > limit { " OVER" } else { "" };
+    eprintln!(
+        "body mode {}, {} pass(es)",
+        if traced.layered { "layered" } else { "off" },
+        traced.passes
+    );
+    if traced.layered {
+        eprintln!(
+            "  worst limit ratio after each pass: {:.3?}, last at {:.1} s",
+            traced.worst, traced.worst_at
+        );
+        eprintln!(
+            "  validate against the limits: {}",
+            traced.invalid.as_deref().unwrap_or("passes")
+        );
+    }
+    for j in 0..5 {
+        eprintln!(
+            "  {:<10} max speed {:6.1}/{:.0} deg/s{}, max accel {:7.1}/{:.0} deg/s2{}",
+            JOINTS[j],
+            m.joint_speed[j],
+            LIMITS[j].0,
+            over(m.joint_speed[j], LIMITS[j].0),
+            m.joint_accel[j],
+            LIMITS[j].1,
+            over(m.joint_accel[j], LIMITS[j].1)
+        );
+    }
+    eprintln!(
+        "  hand max {:.3}/{HAND_MPS} m/s{}, jolt max {:.2}/{JOLT_MPS2} m/s2{}, floor margin {:.4} m{}",
+        m.max_hand_mps,
+        over(m.max_hand_mps, HAND_MPS),
+        m.max_jolt_mps2,
+        over(m.max_jolt_mps2, JOLT_MPS2),
+        m.min_floor_margin_m,
+        if m.min_floor_margin_m < 0.0 { " UNDER" } else { "" }
+    );
+    let lag = traced.lag();
+    let worst: Vec<String> = lag
+        .worst
+        .iter()
+        .map(|(t, g)| format!("{:.0}s +{g:.2}", t))
+        .collect();
+    eprintln!(
+        "  clock lag max {:.2} s at {:.1} s, {:.2} s lost in all; largest gains in ten seconds: {}",
+        lag.max,
+        lag.at,
+        lag.lost,
+        worst.join(", ")
+    );
+}
+
 fn usage() -> &'static str {
     "Usage: ensemble_preview OUTPUT.html AUDIO_URL SIDECAR.json [--score OUT.json] [--rig RIG.json] [--groove-only] [--no-reuse] [--zone BOX] [--workspace MODE]\n\
      AUDIO_URL resolves relative to OUTPUT.html; serve both files with a range-capable local server.\n\
@@ -62,6 +122,7 @@ fn usage() -> &'static str {
      --ring N,R       N arms evenly on a circle of radius R metres, their forward toward its centre (6,1.1 is a hexagon)\n\
      --clearance M    arms keep their checked points this far apart, metres (default 0.1)\n\
      --workspace MODE feeling workspace: off (default), rehearsed or schematic; prints basins, tension peaks and surprises to stderr\n\
+     --body MODE      off (default) or layered: body vectors from the sidecar's bodyTrack set the quality; one arm only; prints limits and clock lag to stderr\n\
      --figures        accepted and ignored; the figure planner is the only mode\n\
      Audio starts only after Play. Score and arm trajectories resolve offline for deterministic seek."
 }
@@ -82,6 +143,13 @@ fn main() -> io::Result<()> {
                 return Ok(());
             }
             "--groove-only" => config.enable_hits = false,
+            "--body" => {
+                config.body = match args.next().as_deref() {
+                    Some("off") => hyst_compile::body_track::BodyMode::Off,
+                    Some("layered") => hyst_compile::body_track::BodyMode::Layered,
+                    _ => return Err(io::Error::other("--body requires off or layered")),
+                }
+            }
             "--no-reuse" => config.reuse_repeats = false,
             "--drag" => {
                 config.wrist_drag_degrees_per_mps = args
@@ -191,13 +259,17 @@ fn main() -> io::Result<()> {
             }
         })
         .collect();
-    let (score, workspace) = hyst_compile::director::figures::compile_ensemble_with_workspace(
+    let traced = hyst_compile::director::figures::compile_traced(
         &sidecar, config, rig, &zones, &arms, clearance,
     )
     .map_err(io::Error::other)?;
-    if let Some(w) = &workspace {
+    if let Some(w) = &traced.workspace {
         print_workspace(w);
     }
+    if count_one(&traced.score) {
+        print_one_arm(&traced);
+    }
+    let score = traced.score;
     let cues = &score.cues;
     let count = score.tracks.len();
     // One arm stays small at 60 fps and removes visible frame stepping.

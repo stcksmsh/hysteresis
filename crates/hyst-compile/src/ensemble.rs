@@ -625,7 +625,30 @@ fn bezier_extents<const N: usize>(controls: [f64; N], depth: u8) -> (f64, f64) {
     (a.0.min(b.0), a.1.max(b.1))
 }
 
-pub(crate) fn fit_tangents(track: &mut AgentTrack, rig: &Rig) -> Result<(), String> {
+/// Per segment of the track, how far its continuous speed and root-acceleration bounds are over the
+/// rig's limits (1 = at a limit).
+pub(crate) fn hull_ratios(track: &AgentTrack, rig: &Rig) -> Result<Vec<f64>, String> {
+    (0..track.knots.len() - 1)
+        .map(|i| {
+            let mut worst = 0.0f64;
+            for (j, c) in rig.channels.iter().enumerate() {
+                let b = channel_bounds(&track.knots[i], &track.knots[i + 1], j)?;
+                worst = worst
+                    .max(b.max_speed_degrees_per_second[0] / c.max_speed_degrees_per_second)
+                    .max(
+                        (b.max_acceleration_degrees_per_second2[0]
+                            / c.max_acceleration_degrees_per_second2)
+                            .sqrt(),
+                    );
+            }
+            Ok(worst)
+        })
+        .collect()
+}
+
+/// `strict` false stops after the halving rounds and leaves a segment still over a limit to the
+/// caller (the layered limit loop measures and slows the clock there).
+pub(crate) fn fit_tangents(track: &mut AgentTrack, rig: &Rig, strict: bool) -> Result<(), String> {
     // Knot velocities come from the planner;
     // only shrink them where a segment's continuous bounds still exceed limits.
     let len = track.knots.len();
@@ -644,6 +667,9 @@ pub(crate) fn fit_tangents(track: &mut AgentTrack, rig: &Rig) -> Result<(), Stri
         if !changed {
             return Ok(());
         }
+    }
+    if !strict {
+        return Ok(());
     }
     // Last resort: bring a still-infeasible segment's end tangents to rest
     // (rest-to-rest quintics fit by construction of the follower limits).

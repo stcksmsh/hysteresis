@@ -7,11 +7,14 @@
 use std::collections::HashMap;
 use std::f64::consts::{PI, TAU};
 
+use super::layered::{self, geo, upper, Layer};
 use super::workspace::{
     arrival_lift, observations, phrase_beats, run, BasinKind, EventKind, Foresight, ObsInput,
     Workspace, WorkspaceMode, NO_LIFT,
 };
 use super::*;
+use crate::body::LIMITS;
+use crate::body_track::{self, BodyMode};
 use crate::ensemble::{
     fit_tangents, forward_kinematics, AgentTrack, EnsembleScore, FieldSample, JointKnot, Placement,
     Rig,
@@ -255,11 +258,201 @@ pub fn compile_ensemble_with_workspace(
     arms: &[ArmPlan],
     clearance_m: f64,
 ) -> Result<(EnsembleScore, Option<Workspace>), String> {
+    compile_traced(json, config, rig, zones, arms, clearance_m).map(|t| (t.score, t.workspace))
+}
+
+/// A compile and how the figure clock ran in it.
+pub struct Traced {
+    pub score: EnsembleScore,
+    pub workspace: Option<Workspace>,
+    /// The planner's knot times and, at each, the figure time reached (the figure clock).
+    pub grid: Vec<f64>,
+    pub clock: Vec<f64>,
+    /// Passes the layered limit loop took; 1 when not layered.
+    pub passes: usize,
+    /// The largest limit ratio found after each layered pass (1 = at a limit); empty when not layered.
+    pub worst: Vec<f64>,
+    /// Song time of the largest limit ratio in the last pass.
+    pub worst_at: f64,
+    /// True when a `bodyTrack` drove the compile (`BodyMode::Layered`).
+    pub layered: bool,
+    /// Layered only: what `EnsembleScore::validate` says of the final score against `body::LIMITS`
+    /// (None: it passes).
+    pub invalid: Option<String>,
+}
+
+/// How far the figure clock ran behind the music (`t - clock`), seconds.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Lag {
+    pub max: f64,
+    /// Song time of the largest lag.
+    pub at: f64,
+    /// Seconds the clock ran slower than the music, summed over the song (it is made up again
+    /// at 15 % extra pace, so this exceeds the largest lag).
+    pub lost: f64,
+    /// The three largest gains of lag within ten seconds, (start, seconds gained), apart.
+    pub worst: Vec<(f64, f64)>,
+}
+
+impl Traced {
+    pub fn lag(&self) -> Lag {
+        let lag: Vec<f64> = self
+            .grid
+            .iter()
+            .zip(&self.clock)
+            .map(|(t, c)| t - c)
+            .collect();
+        let step = self.grid[1] - self.grid[0];
+        let (at, max) = lag
+            .iter()
+            .enumerate()
+            .fold((0, 0.0), |b, (i, v)| if *v > b.1 { (i, *v) } else { b });
+        let lost = lag.windows(2).map(|w| (w[1] - w[0]).max(0.0)).sum();
+        let span = (10.0 / step) as usize;
+        let mut gains: Vec<(f64, f64)> = (0..lag.len().saturating_sub(span))
+            .map(|i| (self.grid[i], lag[i + span] - lag[i]))
+            .collect();
+        let mut worst: Vec<(f64, f64)> = Vec::new();
+        gains.sort_by(|a, b| b.1.total_cmp(&a.1));
+        for g in gains {
+            if worst.len() < 3 && g.1 > 0.0 && worst.iter().all(|w| (w.0 - g.0).abs() >= 10.0) {
+                worst.push(g);
+            }
+        }
+        Lag {
+            max,
+            at: self.grid[at],
+            lost,
+            worst,
+        }
+    }
+}
+
+/// Most passes the limit loop of `BodyMode::Layered` takes.
+const LAYERED_PASSES: usize = 10;
+/// Where the loop aims when a limit is over, and the least the clock runs at.
+const LAYERED_TARGET: f64 = 0.95;
+const LAYERED_FLOOR: f64 = 0.15;
+
+/// `compile_ensemble_with_workspace` with the figure clock. In `BodyMode::Layered` with a
+/// `bodyTrack` and one arm, the body vector sets the dance's quality and the dance is held to
+/// `body::LIMITS`: the compile repeats, each time running the figure clock slower where a joint or
+/// the hand was over a limit and giving a moment a longer approach where it was over one, until
+/// none is (or `LAYERED_PASSES`). Without a `bodyTrack` it is `Off`.
+pub fn compile_traced(
+    json: &str,
+    config: CompileConfig,
+    mut rig: Rig,
+    zones: &[Zone],
+    arms: &[ArmPlan],
+    clearance_m: f64,
+) -> Result<Traced, String> {
     if arms.is_empty() || !(clearance_m.is_finite() && clearance_m >= 0.0) {
         return Err("ensemble needs an arm and a finite clearance >= 0".into());
     }
     let data: Evidence = serde_json::from_str(json).map_err(|error| error.to_string())?;
     validate(&data)?;
+    let track = match (config.body, &data.body_track) {
+        (BodyMode::Layered, Some(field)) => Some(body_track::parse(field)?),
+        _ => None,
+    };
+    let Some(track) = track else {
+        let pass = compile_pass(&data, config, rig, zones, arms, clearance_m, None)?;
+        return Ok(pass.traced(1, Vec::new()));
+    };
+    if arms.len() != 1 {
+        return Err("BodyMode::Layered plans one arm".into());
+    }
+    if rig.channels.len() != LIMITS.len() {
+        return Err("BodyMode::Layered needs the five-axis rig".into());
+    }
+    // The rig's envelope becomes the hardware numbers, so `validate` and the tangent fit prove them.
+    for (c, (speed, accel)) in rig.channels.iter_mut().zip(LIMITS) {
+        c.max_speed_degrees_per_second = speed;
+        c.max_acceleration_degrees_per_second2 = accel;
+    }
+    let (mut rate_scale, mut span_scale): (Vec<f64>, Vec<f64>) = (Vec::new(), Vec::new());
+    let mut worst_per_pass = Vec::new();
+    loop {
+        let passes = worst_per_pass.len() + 1;
+        let layer = Layer {
+            track: &track,
+            rate_scale: &rate_scale,
+            span_scale: &span_scale,
+        };
+        let pass = compile_pass(
+            &data,
+            config,
+            rig.clone(),
+            zones,
+            arms,
+            clearance_m,
+            Some(&layer),
+        )?;
+        if rate_scale.is_empty() {
+            rate_scale = vec![1.0; pass.grid.len()];
+            span_scale = vec![1.0; pass.windows.len()];
+        }
+        let need = layered::demand(&pass.score, &pass.grid);
+        let worst = need.iter().copied().fold(0.0, f64::max);
+        worst_per_pass.push(worst);
+        if worst <= 1.0 || passes >= LAYERED_PASSES {
+            let at = need.iter().position(|r| *r == worst).unwrap_or(0);
+            let mut traced = pass.traced(passes, worst_per_pass);
+            traced.worst_at = traced.grid[at];
+            traced.invalid = traced.score.validate().err();
+            return Ok(traced);
+        }
+        // A moment whose window is over a limit takes a longer approach and release.
+        let step = pass.grid[1] - pass.grid[0];
+        for (scale, (from, to)) in span_scale.iter_mut().zip(&pass.windows) {
+            let (a, b) = ((from / step).max(0.0) as usize, (to / step).ceil() as usize);
+            if need[a.min(need.len() - 1)..=b.min(need.len() - 1)]
+                .iter()
+                .any(|r| *r > 1.0)
+            {
+                *scale = (*scale * 1.3).min(4.0);
+            }
+        }
+        rate_scale = layered::slower(&rate_scale, &need, LAYERED_TARGET, 8, LAYERED_FLOOR);
+    }
+}
+
+/// What one compile pass makes.
+struct Pass {
+    score: EnsembleScore,
+    workspace: Option<Workspace>,
+    grid: Vec<f64>,
+    clock: Vec<f64>,
+    /// Each moment's window (seconds) from the start of its preparation to the end of its release.
+    windows: Vec<(f64, f64)>,
+}
+
+impl Pass {
+    fn traced(self, passes: usize, worst: Vec<f64>) -> Traced {
+        Traced {
+            score: self.score,
+            workspace: self.workspace,
+            grid: self.grid,
+            clock: self.clock,
+            passes,
+            layered: !worst.is_empty(),
+            invalid: None,
+            worst_at: 0.0,
+            worst,
+        }
+    }
+}
+
+fn compile_pass(
+    data: &Evidence,
+    config: CompileConfig,
+    rig: Rig,
+    zones: &[Zone],
+    arms: &[ArmPlan],
+    clearance_m: f64,
+    layer: Option<&Layer>,
+) -> Result<Pass, String> {
     rig.validate()?;
     if zones.iter().any(|z| {
         !z.min.iter().chain(&z.max).all(|v| v.is_finite()) || (0..3).any(|i| z.min[i] >= z.max[i])
@@ -291,18 +484,18 @@ pub fn compile_ensemble_with_workspace(
 
     // Measured transitions, strongest first, at least eight beats apart.
     let mut arrivals: Vec<(f64, f64)> = Vec::new();
-    let mut ranked = transitions(&data, &sources);
+    let mut ranked = transitions(data, &sources);
     ranked.sort_by(|a, b| b.2.total_cmp(&a.2));
     for (time, _, strength) in ranked {
         if arrivals.iter().all(|a| (a.0 - time).abs() >= 8.0 * beat) {
             arrivals.push((time, strength));
         }
     }
-    let foresight = Foresight::new(&data, &arrivals, &level, loud, rate, beat);
+    let foresight = Foresight::new(data, &arrivals, &level, loud, rate, beat);
     // Spans: those transitions, then phrase edges at least four beats from any edge.
     let mut edges: Vec<f64> = vec![0.0, data.duration];
     edges.extend(arrivals.iter().map(|a| a.0));
-    for edge in boundaries(&data, &[]) {
+    for edge in boundaries(data, &[]) {
         if edges.iter().all(|e| (e - edge).abs() >= 4.0 * beat) {
             edges.push(edge);
         }
@@ -532,8 +725,13 @@ pub fn compile_ensemble_with_workspace(
     // A figure grows and shrinks with the leader's loudness. The user chose
     // this strength (with the height below) over half of it and over none, on
     // the break's solo and on a strummed verse.
+    // The body vector at a time (D3); None, and no knob below moves, outside `Layered`.
+    let body_at = |t: f64| layer.map(|l| l.track.at(t, beat));
     let sized = |scale: f64, t: f64| {
-        let size = scale * (1.0 + 0.35 * swell_at(t)[0]);
+        let mut size = scale * (1.0 + 0.35 * swell_at(t)[0]);
+        if let Some(b) = body_at(t) {
+            size *= geo(b[12], layered::SIZE.0, layered::SIZE.1);
+        }
         match &ws {
             Some(w) => {
                 let f = w.field_at(t);
@@ -591,7 +789,7 @@ pub fn compile_ensemble_with_workspace(
         let mut recall_from = None;
         if config.reuse_repeats {
             let probe = start + (0.5 * (end - start)).min(8.0 * beat);
-            if let Some((earlier, _)) = recall_at(&data, probe) {
+            if let Some((earlier, _)) = recall_at(data, probe) {
                 let source = chosen.partition_point(|c| c.0 <= earlier).checked_sub(1);
                 if let Some(&(source_start, dir, source_class)) = source.map(|i| &chosen[i]) {
                     if source_class == class {
@@ -745,6 +943,8 @@ pub fn compile_ensemble_with_workspace(
         build_start: Option<f64>,
         /// Beats the preparation starts before the moment; None: twice `span`.
         lead: Option<f64>,
+        /// Overshoot of the arrival, as a share of its travel (flow, D3).
+        over: f64,
     }
     let mut moments: Vec<Moment> = Vec::new();
     if config.enable_hits {
@@ -780,6 +980,7 @@ pub fn compile_ensemble_with_workspace(
                     frozen: false,
                     build_start: e.build_start,
                     lead: None,
+                    over: 0.0,
                 });
             }
         }
@@ -808,6 +1009,7 @@ pub fn compile_ensemble_with_workspace(
                     frozen: false,
                     build_start: None,
                     lead: None,
+                    over: 0.0,
                 });
             }
         }
@@ -825,6 +1027,7 @@ pub fn compile_ensemble_with_workspace(
                 frozen: true,
                 build_start: None,
                 lead: None,
+                over: 0.0,
             });
         }
         moments.sort_by(|a, b| a.time.total_cmp(&b.time));
@@ -835,6 +1038,16 @@ pub fn compile_ensemble_with_workspace(
                 m.strength = (m.strength * k).min(1.0);
                 m.hold_beats *= k;
             }
+        }
+    }
+    // Weight sets how long a moment's approach and hold are (a firm arrival is short and holds;
+    // a light one floats in); flow lets an arrival pass its pose and settle back.
+    if let Some(l) = layer {
+        for m in moments.iter_mut().filter(|m| !m.frozen) {
+            let b = l.track.at(m.time, beat);
+            m.span *= geo(b[4], layered::SPAN.0, layered::SPAN.1);
+            m.hold_beats *= geo(b[4], layered::HOLD.0, layered::HOLD.1);
+            m.over = layered::OVERSHOOT * upper(b[5]);
         }
     }
     for &Moment { time, label, .. } in &moments {
@@ -971,8 +1184,9 @@ pub fn compile_ensemble_with_workspace(
     // the hand faster than HAND_SPEED_CAP; lost time is made up at 15% extra pace.
     let mut clock: Vec<f64> = Vec::with_capacity(grid.len());
     let mut s = 0.0;
-    for &t in &grid {
+    for (gi, &t) in grid.iter().enumerate() {
         clock.push(s);
+        let body = body_at(t);
         let held = moments
             .iter()
             .any(|m| (m.time..m.time + m.hold_beats * beat).contains(&t));
@@ -1006,11 +1220,14 @@ pub fn compile_ensemble_with_workspace(
                     let gap = ((next - last) / beat).max(0.9);
                     let bump = (-(t - last) / (0.35 * beat * gap / 0.9)).exp();
                     // Less so in a gentle passage.
-                    lerp(
-                        1.0,
-                        0.3 + 1.9 * bump,
-                        stabs[index.min(stabs.len() - 1)] * intensity(t),
-                    )
+                    let mut weight = stabs[index.min(stabs.len() - 1)] * intensity(t);
+                    if let Some(b) = &body {
+                        // Energy deepens the surge, sudden time sharpens it, sustained time
+                        // flattens it; the planner's own intensity still sets how much.
+                        let gain = geo(b[13], layered::SURGE.0, layered::SURGE.1);
+                        weight = (weight * gain * (2.0 * b[3]).min(1.0)).min(1.0);
+                    }
+                    lerp(1.0, 0.3 + 1.9 * bump, weight)
                 }
                 _ => 1.0,
             }
@@ -1040,12 +1257,18 @@ pub fn compile_ensemble_with_workspace(
                 }
                 None => lerp(0.65, 1.0, calm),
             };
+            // Sudden time kicks the clock on each beat (mean 1 over the beat).
+            let kick = body.map_or(1.0, |b| {
+                layered::kick(b[3], (t - data.musical_memory.beat_zero) / beat)
+            });
+            let pulse = pulse * kick;
             drive
                 * f64::min(
                     pulse * if s < t { 1.15 } else { 1.0 },
                     // A pulse may exceed the cap by as much as it exceeds even pace.
                     HAND_SPEED_CAP * pulse.clamp(1.0, 1.5) / pace.max(1e-9),
                 )
+                * layer.map_or(1.0, |l| l.rate_scale.get(gi).copied().unwrap_or(1.0))
         };
         s = (s + rate * step).min(t + step);
     }
@@ -1060,6 +1283,21 @@ pub fn compile_ensemble_with_workspace(
     // Approach as the body feels it: it settles in over four beats. The hand's
     // speed cap acts on the figure, not on this lift, and a step in the lift
     // carried the hand 0.2 to 0.5 m/s past the cap.
+    // Breath: a slow swell of the hand's height and reach, its phase the integral of its rate so
+    // that a change of rate at a phrase edge bends no cycle.
+    let breath_phase: Vec<f64> = if layer.is_some() {
+        let mut phase = 0.0;
+        grid.iter()
+            .map(|&t| {
+                let at = phase;
+                let b = body_at(t).unwrap();
+                phase += TAU * lerp(layered::BREATH_HZ.0, layered::BREATH_HZ.1, b[11]) * step;
+                at
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
     let felt: Vec<f64> = ws.as_ref().map_or(Vec::new(), |w| {
         let (k, mut x) = (1.0 - (-0.25f64).exp(), 0.0);
         let smooth = |f: &super::workspace::Field| {
@@ -1089,6 +1327,16 @@ pub fn compile_ensemble_with_workspace(
         }
         (p[1], p[2]) = (p[1] + lift, p[2] + lift);
         p[1] += height;
+        if let Some(b) = body_at(t) {
+            // Height and curl_extension move the posture the figures dance about; breath swells
+            // it (nothing at depth 0.5, the planner having none).
+            let x = (t / step).clamp(0.0, (breath_phase.len() - 1) as f64);
+            let i = (x.floor() as usize).min(breath_phase.len() - 2);
+            let swell =
+                lerp(breath_phase[i], breath_phase[i + 1], x - i as f64).sin() * upper(b[10]);
+            p[1] += layered::HEIGHT * (b[1] - 0.5) + layered::BREATH.0 * swell;
+            p[2] += layered::EXTENSION * (b[0] - 0.5) + layered::BREATH.1 * swell;
+        }
         p
     };
     // A moment adds no more than 0.6 m/s to the hand's travel along its
@@ -1096,7 +1344,7 @@ pub fn compile_ensemble_with_workspace(
     // long as its travel needs (from the prepared pose to the arrival; a smooth
     // blend peaks at 1.5 times its mean speed). Sharp flourishes threw the
     // hand at 1.5 to 2.3 m/s, which the user saw as jerks on two songs.
-    for m in moments.iter_mut().filter(|m| !m.frozen) {
+    for (n, m) in moments.iter_mut().enumerate().filter(|(_, m)| !m.frozen) {
         let base = waited(m.time);
         let from = [
             base[0],
@@ -1111,6 +1359,9 @@ pub fn compile_ensemble_with_workspace(
         let (a, b) = (place(from).0, place(to).0);
         let travel = (0..3).map(|k| (a[k] - b[k]).powi(2)).sum::<f64>().sqrt();
         m.span = m.span.max(1.5 * travel / (0.6 * beat));
+        if let Some(l) = layer {
+            m.span *= l.span_scale.get(n).copied().unwrap_or(1.0);
+        }
     }
     // A lift is prepared from where tension starts, with the span it has now.
     if let Some(w) = &ws {
@@ -1135,7 +1386,8 @@ pub fn compile_ensemble_with_workspace(
             let blend = if tau < -span {
                 0.0
             } else if tau < 0.0 {
-                smooth((tau + span) / span)
+                let x = (tau + span) / span;
+                smooth(x) + m.over * (PI * x).sin()
             } else if tau < hold {
                 1.0
             } else {
@@ -1146,7 +1398,7 @@ pub fn compile_ensemble_with_workspace(
                 * if tau < -span {
                     smooth((tau + lead) / (lead - span))
                 } else {
-                    1.0 - blend
+                    (1.0 - blend).max(0.0)
                 }
                 * f64::from(tau < 0.0);
             p[1] -= 0.2 * prepare;
@@ -1181,6 +1433,12 @@ pub fn compile_ensemble_with_workspace(
 
     let neutral: Vec<f64> = rig.channels.iter().map(|c| c.neutral_degrees).collect();
     let held = rig.implement.radius_m;
+    // The follower's design acceleration as a share of the joint's limit.
+    let accel_share = if layer.is_some() {
+        layered::FOLLOW_ACCEL
+    } else {
+        0.1
+    };
     // A last joint that turns about its own link is a tool roll: it moves no
     // point of the chain, so it is driven here, not by the position solver.
     let roll_joint = rig.channels.last().and_then(|c| {
@@ -1189,6 +1447,8 @@ pub fn compile_ensemble_with_workspace(
         (length > 0.0 && (along.abs() - length).abs() < 1e-9).then_some(rig.channels.len() - 1)
     });
     struct Arm<'a> {
+        /// Every knot's solved joints, for the lagged commands of succession (Layered only).
+        history: Vec<Vec<f64>>,
         placement: &'a Placement,
         /// (hand target in the world, base facing in the arm's own frame).
         targets: Vec<([f64; 3], f64)>,
@@ -1391,6 +1651,7 @@ pub fn compile_ensemble_with_workspace(
     let mut dancers: Vec<Arm> = Vec::with_capacity(count);
     for (plan, local) in arms.iter().zip(locals) {
         dancers.push(Arm {
+            history: Vec::new(),
             placement: &plan.placement,
             targets: local
                 .into_iter()
@@ -1480,7 +1741,10 @@ pub fn compile_ensemble_with_workspace(
                 let (lo, hi) = (i.saturating_sub(4), (i + 4).min(targets.len() - 1));
                 let rise =
                     (targets[hi].0[2] - targets[lo].0[2]) / (times[hi] - times[lo]).max(1e-9);
-                let lean = (config.wrist_drag_degrees_per_mps * rise).clamp(-45.0, 45.0);
+                // Flow lets the wrist trail more (free) or less (bound).
+                let drag = config.wrist_drag_degrees_per_mps
+                    * body_at(time).map_or(1.0, |b| geo(b[5], layered::DRAG.0, layered::DRAG.1));
+                let lean = (drag * rise).clamp(-45.0, 45.0);
                 let wrist = roll_joint.map_or(rig.channels.len() - 1, |r| r - 1);
                 arm.wanted = solve(
                     &rig,
@@ -1520,7 +1784,11 @@ pub fn compile_ensemble_with_workspace(
                     let (lo, hi) = (i.saturating_sub(16), (i + 16).min(targets.len() - 1));
                     let steady = (targets[hi].1 - targets[lo].1) / (times[hi] - times[lo]);
                     let way = (((facing - bearing) / dt - steady) / 30.0).tanh();
-                    arm.turned += SPIN_DEGREES_PER_METRE * travel * fast * way;
+                    // Energy sets how far the disc turns with the hand's travel.
+                    let spin = SPIN_DEGREES_PER_METRE
+                        * body_at(time)
+                            .map_or(1.0, |b| geo(b[13], layered::SPIN.0, layered::SPIN.1));
+                    arm.turned += spin * travel * fast * way;
                 }
                 arm.wanted[r] = flips + arm.turned;
             }
@@ -1529,26 +1797,55 @@ pub fn compile_ensemble_with_workspace(
             // braking early enough to stop on target (trapezoid profile). The rig's
             // own limits are the hard validation envelope, reached only when a zone
             // forces an abrupt stop. Both are assumptions until measured on hardware.
-            let wanted = &arm.wanted;
+            // Succession: each joint follows the solved pose of a moment ago, the chain and the
+            // initiating joint set by the body. (The checks below see the pose actually commanded.)
+            let lagged: Vec<f64>;
+            let wanted = match body_at(time) {
+                Some(b) => {
+                    arm.history.push(arm.wanted.clone());
+                    let (last, lag) = (arm.history.len() - 1, layered::lags(&b));
+                    lagged = (0..arm.wanted.len())
+                        .map(|j| {
+                            let x = (last as f64 - lag[j] / step).max(0.0);
+                            let i = (x.floor() as usize).min(last);
+                            let next = (i + 1).min(last);
+                            lerp(arm.history[i][j], arm.history[next][j], x - i as f64)
+                        })
+                        .collect();
+                    &lagged
+                }
+                None => &arm.wanted,
+            };
             let speed = &mut arm.speed;
             let mut q = wanted.clone();
             if dt.is_finite() {
                 for (j, c) in rig.channels.iter().enumerate() {
                     let top = 0.75 * c.max_speed_degrees_per_second;
-                    let accel = 0.1 * c.max_acceleration_degrees_per_second2;
+                    let accel = accel_share * c.max_acceleration_degrees_per_second2;
                     let gap = wanted[j] - prior[j];
                     let brake = (2.0 * accel * gap.abs())
                         .sqrt()
                         .min(top)
                         .min(gap.abs() / dt);
-                    let v =
-                        (gap.signum() * brake).clamp(speed[j] - accel * dt, speed[j] + accel * dt);
                     // Never approach a joint end stop faster than it can brake.
                     let room = |d: f64| (2.0 * accel * (d - 1.0).max(0.0)).sqrt();
-                    let v = v.clamp(
-                        -room(prior[j] - c.min_degrees),
-                        room(c.max_degrees - prior[j]),
-                    );
+                    let v = if layer.is_some() {
+                        // Layered: the end stop shapes the wanted speed and the acceleration
+                        // limit has the last word, so a stop is never sudden.
+                        (gap.signum() * brake)
+                            .clamp(
+                                -room(prior[j] - c.min_degrees),
+                                room(c.max_degrees - prior[j]),
+                            )
+                            .clamp(speed[j] - accel * dt, speed[j] + accel * dt)
+                    } else {
+                        let v = (gap.signum() * brake)
+                            .clamp(speed[j] - accel * dt, speed[j] + accel * dt);
+                        v.clamp(
+                            -room(prior[j] - c.min_degrees),
+                            room(c.max_degrees - prior[j]),
+                        )
+                    };
                     q[j] = (prior[j] + v * dt).clamp(c.min_degrees + 0.5, c.max_degrees - 0.5);
                 }
             }
@@ -1560,7 +1857,7 @@ pub fn compile_ensemble_with_workspace(
             if dt.is_finite() {
                 let before = link_samples(&forward_kinematics(&rig, placement, &prior)?, held);
                 let after = link_samples(&forward_kinematics(&rig, placement, &q)?, held);
-                let brake = (0.1 * rig.channels[0].max_acceleration_degrees_per_second2)
+                let brake = (accel_share * rig.channels[0].max_acceleration_degrees_per_second2)
                     .to_radians()
                     * reach_m;
                 let mut scale: f64 = 1.0;
@@ -1645,11 +1942,33 @@ pub fn compile_ensemble_with_workspace(
                 .map(|j| (last.joints_degrees[j] - before.joints_degrees[j]) / dt)
                 .collect();
         }
+        if layer.is_some() {
+            // Layered: the curve is the natural cubic spline through the follower's knots (its
+            // derivatives at each knot), so the quintic between knots is as gentle as the follower.
+            // A last step much shorter than the rest would make that spline wild: it is merged.
+            let step = knots[1].time - knots[0].time;
+            let n = knots.len();
+            if n > 3 && knots[n - 1].time - knots[n - 2].time < 0.5 * step {
+                knots.remove(n - 2);
+            }
+            let times: Vec<f64> = knots.iter().map(|k| k.time).collect();
+            for j in 0..rig.channels.len() {
+                let q: Vec<f64> = knots.iter().map(|k| k.joints_degrees[j]).collect();
+                let (v, a) = layered::spline_derivatives(&times, &q);
+                for (i, k) in knots.iter_mut().enumerate() {
+                    k.velocity_degrees_per_second[j] = v[i];
+                    if k.acceleration_degrees_per_second2.is_empty() {
+                        k.acceleration_degrees_per_second2 = vec![0.0; rig.channels.len()];
+                    }
+                    k.acceleration_degrees_per_second2[j] = a[i];
+                }
+            }
+        }
         let mut track = AgentTrack {
             id: id as u32,
             knots,
         };
-        fit_tangents(&mut track, &rig)?;
+        fit_tangents(&mut track, &rig, layer.is_none())?;
         tracks.push(track);
     }
     let score = EnsembleScore {
@@ -1674,8 +1993,26 @@ pub fn compile_ensemble_with_workspace(
                 .collect()
         }),
     };
-    score.validate()?;
-    Ok((score, ws))
+    // Layered measures the score and loops; `compile_traced` reports what `validate` says last.
+    if layer.is_none() {
+        score.validate()?;
+    }
+    let windows = (moments.iter())
+        .map(|m| {
+            let lead = m.lead.unwrap_or(2.0 * m.span);
+            (
+                m.time - lead * beat,
+                m.time + (m.hold_beats + m.span) * beat,
+            )
+        })
+        .collect();
+    Ok(Pass {
+        score,
+        workspace: ws,
+        grid,
+        clock,
+        windows,
+    })
 }
 
 /// `series` at fractional index `x`, averaged under a bell `sigma` samples
@@ -2531,5 +2868,328 @@ mod tests {
             })
             .collect();
         assert!(wrong.is_empty(), "digests changed: {wrong:?}");
+    }
+
+    // ---- D3: the body vector layered on the dance ----
+
+    /// `json` with one body for every phrase as its `bodyTrack`.
+    fn with_body(json: &str, body: crate::body::Body) -> String {
+        let mut value: serde_json::Value = serde_json::from_str(json).unwrap();
+        let phrases: Vec<serde_json::Value> = value["musicalMemory"]["phrases"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| serde_json::json!({"start": p["start"], "end": p["end"], "body": body}))
+            .collect();
+        value["bodyTrack"] = serde_json::json!({"version": 1, "source": "test", "map": "test",
+            "dims": crate::body::PARAMS, "authored": [], "phrases": phrases});
+        value.to_string()
+    }
+
+    fn layered() -> CompileConfig {
+        CompileConfig {
+            body: BodyMode::Layered,
+            ..CompileConfig::default()
+        }
+    }
+
+    fn one_arm(json: &str, config: CompileConfig) -> Traced {
+        let rig = Rig::illustrative_five_axis();
+        let alone = ArmPlan {
+            placement: Placement {
+                origin_m: [0.0; 3],
+                yaw_degrees: 0.0,
+            },
+            mirrored: false,
+        };
+        compile_traced(json, config, rig, &[], &[alone], 0.0).unwrap()
+    }
+
+    const NEUTRAL: crate::body::Body = [0.5; 15];
+
+    fn at(dim: &str, value: f64) -> crate::body::Body {
+        let mut b = NEUTRAL;
+        b[crate::body::PARAMS.iter().position(|p| *p == dim).unwrap()] = value;
+        b
+    }
+
+    fn compile_json(json: &str, config: CompileConfig) -> String {
+        serde_json::to_string(&one_arm(json, config).score).unwrap()
+    }
+
+    fn frames_of(body: crate::body::Body) -> Vec<([f64; 5], Vec<[f64; 3]>)> {
+        crate::body::frames(&one_arm(&with_body(&drop_song(false), body), layered()).score)
+    }
+
+    fn joint(fr: &[([f64; 5], Vec<[f64; 3]>)], j: usize) -> Vec<f64> {
+        fr.iter().map(|f| f.0[j]).collect()
+    }
+
+    /// Mean over the five joints of each joint's mean speed (body.rs's first descriptors).
+    fn mean_speed(fr: &[([f64; 5], Vec<[f64; 3]>)]) -> f64 {
+        crate::body::joint_motion(fr).iter().sum::<f64>() / 5.0 / (fr.len() as f64 / 60.0)
+    }
+
+    /// Mean over the five joints of each joint's 90th-percentile acceleration, deg/s2.
+    fn peak_accel(fr: &[([f64; 5], Vec<[f64; 3]>)]) -> f64 {
+        (0..5)
+            .map(|j| {
+                let q = joint(fr, j);
+                let mut a: Vec<f64> = q
+                    .windows(3)
+                    .map(|w| (w[2] - 2.0 * w[1] + w[0]).abs() * 3600.0)
+                    .collect();
+                a.sort_by(f64::total_cmp);
+                a[a.len() * 9 / 10]
+            })
+            .sum::<f64>()
+            / 5.0
+    }
+
+    #[test]
+    fn a_missing_body_track_is_off_and_off_ignores_one() {
+        let json = drop_song(false);
+        let off = compile_json(&json, CompileConfig::default());
+        assert_eq!(compile_json(&json, layered()), off);
+        let with = with_body(&json, at("size", 1.0));
+        assert_eq!(compile_json(&with, CompileConfig::default()), off);
+        assert_ne!(compile_json(&with, layered()), off);
+        assert!(!one_arm(&json, layered()).layered);
+        assert!(one_arm(&with, layered()).layered);
+    }
+
+    #[test]
+    fn layered_needs_one_arm_and_a_good_body_track() {
+        let json = with_body(&drop_song(false), NEUTRAL);
+        let rig = Rig::illustrative_five_axis();
+        assert!(compile_ensemble(&json, layered(), rig.clone(), &[], &pair(), 0.1).is_err());
+        let mut value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        value["bodyTrack"]["phrases"][0]["body"][3] = serde_json::json!(1.5);
+        let alone = ArmPlan {
+            placement: Placement {
+                origin_m: [0.0; 3],
+                yaw_degrees: 0.0,
+            },
+            mirrored: false,
+        };
+        let bad = compile_traced(&value.to_string(), layered(), rig, &[], &[alone], 0.0);
+        assert!(bad.err().unwrap().contains("outside 0..1"));
+    }
+
+    #[test]
+    fn unmapped_dimensions_change_nothing() {
+        // arch, space and rhythm have no knob in the planner (docs/DANCE_HANDOFF.md knob table).
+        let json = drop_song(false);
+        let base = compile_json(&with_body(&json, NEUTRAL), layered());
+        for dim in ["arch", "space", "rhythm"] {
+            for v in [0.0, 1.0] {
+                assert_eq!(
+                    compile_json(&with_body(&json, at(dim, v)), layered()),
+                    base,
+                    "{dim} {v}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn layered_keeps_the_hardware_limits_for_neutral_extreme_and_drawn_bodies() {
+        use crate::body::{measure, HAND_MPS, JOLT_MPS2};
+        let json = drop_song(false);
+        let mut bodies = vec![NEUTRAL, [0.0; 15], [1.0; 15]];
+        bodies.extend((0..3).map(|i| crate::body::draw(i).0));
+        for b in bodies {
+            let t = one_arm(&with_body(&json, b), layered());
+            assert_eq!(t.invalid, None, "{b:?}");
+            let m = measure(&t.score, 0);
+            for (j, (v, a)) in LIMITS.iter().enumerate() {
+                assert!(
+                    m.joint_speed[j] <= *v && m.joint_accel[j] <= *a,
+                    "joint {j} {m:?} {b:?}"
+                );
+            }
+            assert!(
+                m.max_hand_mps <= HAND_MPS && m.max_jolt_mps2 <= JOLT_MPS2,
+                "{m:?} {b:?}"
+            );
+            assert!(m.min_floor_margin_m >= 0.0, "{m:?} {b:?}");
+        }
+    }
+
+    #[test]
+    fn size_widens_what_the_hand_covers() {
+        let (small, large) = (frames_of(at("size", 0.1)), frames_of(at("size", 0.9)));
+        let side = |fr: &[([f64; 5], Vec<[f64; 3]>)]| crate::body::movement(fr)[1];
+        assert!(
+            side(&large) > 1.1 * side(&small),
+            "{} {}",
+            side(&small),
+            side(&large)
+        );
+        assert!(mean_speed(&large) > 1.3 * mean_speed(&small));
+    }
+
+    #[test]
+    fn energy_raises_mean_joint_speed_and_time_sharpens_acceleration() {
+        let (calm, wild) = (frames_of(at("energy", 0.1)), frames_of(at("energy", 0.9)));
+        assert!(
+            mean_speed(&wild) > 1.2 * mean_speed(&calm),
+            "{} {}",
+            mean_speed(&calm),
+            mean_speed(&wild)
+        );
+        let (slow, sudden) = (frames_of(at("time", 0.1)), frames_of(at("time", 0.9)));
+        assert!(
+            peak_accel(&sudden) > 1.2 * peak_accel(&slow),
+            "{} {}",
+            peak_accel(&slow),
+            peak_accel(&sudden)
+        );
+    }
+
+    #[test]
+    fn weight_holds_an_arrival_longer_and_flow_reaches_it_sooner() {
+        // The drop song's arrival is at 16 s. Time the hand spends nearly still from 15 s to 20 s.
+        let still = |fr: &[([f64; 5], Vec<[f64; 3]>)]| {
+            let speed = |i: usize| {
+                (0..3)
+                    .map(|k| (fr[i + 1].1[5][k] - fr[i].1[5][k]).powi(2))
+                    .sum::<f64>()
+                    .sqrt()
+                    * 60.0
+            };
+            (900..1200).filter(|i| speed(*i) < 0.1).count() as f64 / 60.0
+        };
+        let (light, strong) = (frames_of(at("weight", 0.1)), frames_of(at("weight", 0.9)));
+        assert!(
+            still(&strong) > still(&light) + 0.5,
+            "{} {}",
+            still(&light),
+            still(&strong)
+        );
+        // Flow: the hand is higher sooner on the way to the arrival (it cannot pass the top of its reach).
+        let height = |fr: &[([f64; 5], Vec<[f64; 3]>)], t: f64| fr[(t * 60.0) as usize].1[5][2];
+        let (bound, free) = (frames_of(at("flow", 0.5)), frames_of(at("flow", 1.0)));
+        assert!(height(&free, 15.5) > height(&bound, 15.5) + 0.05);
+        assert!(
+            (height(&free, 17.0) - height(&bound, 17.0)).abs() < 0.03,
+            "settles to the same pose"
+        );
+        assert!(mean_speed(&free) > mean_speed(&frames_of(at("flow", 0.1))));
+    }
+
+    #[test]
+    fn height_and_curl_extension_move_the_posture() {
+        let fr = |dim, v| frames_of(at(dim, v));
+        let mean = |fr: &[([f64; 5], Vec<[f64; 3]>)], k: usize| {
+            fr.iter().map(|f| f.1[5][k]).sum::<f64>() / fr.len() as f64
+        };
+        assert!(mean(&fr("height", 0.9), 2) > mean(&fr("height", 0.1), 2) + 0.08);
+        let reach = |f: &[([f64; 5], Vec<[f64; 3]>)]| {
+            f.iter()
+                .map(|f| {
+                    (0..3)
+                        .map(|k| (f.1[5][k] - f.1[1][k]).powi(2))
+                        .sum::<f64>()
+                        .sqrt()
+                })
+                .sum::<f64>()
+                / f.len() as f64
+        };
+        assert!(reach(&fr("curl_extension", 0.9)) > reach(&fr("curl_extension", 0.1)) + 0.05);
+    }
+
+    #[test]
+    fn succession_and_initiation_delay_the_joints_they_name() {
+        let shifts = |dir: f64, init: f64, delay: f64| -> Vec<f64> {
+            let mut still = NEUTRAL;
+            (still[7], still[8], still[9]) = (dir, 0.0, init);
+            let mut moved = still;
+            moved[8] = delay;
+            let (a, b) = (frames_of(still), frames_of(moved));
+            (1..4)
+                .map(|j| crate::body::best_lag(&joint(&a, j), &joint(&b, j)))
+                .collect()
+        };
+        // Base to tip: the more delay, the later the elbow and the wrist, the wrist most.
+        let down = shifts(0.0, 0.0, 1.0);
+        assert!(down[1] > 0.1 && down[2] > down[1], "{down:?}");
+        // Tip to base: the elbow is held back more than the wrist.
+        let up = shifts(1.0, 0.0, 1.0);
+        assert!(up[1] > 0.05 && up[1] > up[2], "{up:?}");
+        // The initiating joint is not held back: with the wrist bend leading it moves 0.06 s
+        // sooner than when the shoulder leads.
+        let (mut shoulder_leads, mut wrist_leads) = (NEUTRAL, NEUTRAL);
+        (shoulder_leads[8], wrist_leads[8]) = (0.0, 0.0);
+        (shoulder_leads[9], wrist_leads[9]) = (0.3, 0.9);
+        let (a, b) = (frames_of(shoulder_leads), frames_of(wrist_leads));
+        let early = crate::body::best_lag(&joint(&a, 3), &joint(&b, 3));
+        assert!(early < -0.03, "{early}");
+    }
+
+    #[test]
+    fn breath_swells_at_its_own_rate() {
+        let amplitude = |fr: &[([f64; 5], Vec<[f64; 3]>)], hz: f64| {
+            let q = joint(fr, 1);
+            let m = q.iter().sum::<f64>() / q.len() as f64;
+            let (mut c, mut s) = (0.0, 0.0);
+            for (i, v) in q.iter().enumerate() {
+                let w = std::f64::consts::TAU * hz * i as f64 / 60.0;
+                c += (v - m) * w.cos();
+                s += (v - m) * w.sin();
+            }
+            2.0 * c.hypot(s) / q.len() as f64
+        };
+        let breathing = |depth: f64, rate: f64| {
+            let mut b = NEUTRAL;
+            (b[10], b[11]) = (depth, rate);
+            frames_of(b)
+        };
+        // Rate 0.5 breathes at 0.19 Hz, rate 1 at 0.3 Hz.
+        let (none, slow, fast) = (
+            breathing(0.5, 0.5),
+            breathing(1.0, 0.5),
+            breathing(1.0, 1.0),
+        );
+        assert!(amplitude(&slow, 0.19) > amplitude(&none, 0.19) + 1.0);
+        assert!(amplitude(&slow, 0.19) > amplitude(&fast, 0.19) + 1.0);
+        assert!(amplitude(&fast, 0.3) > amplitude(&slow, 0.3) + 1.0);
+        assert!(amplitude(&fast, 0.3) > amplitude(&none, 0.3) + 1.0);
+    }
+
+    /// The three danced songs with each encoding's `bodyTrack` (`scripts/emotion/d3_bodies.sh`,
+    /// outside git): Layered holds `body::LIMITS`, the hand and the floor. Run in release:
+    /// `HYST_D3_DIR=... cargo test --release -p hyst-compile -- --ignored real_songs`.
+    #[test]
+    #[ignore]
+    fn real_songs_keep_the_hardware_limits() {
+        use crate::body::{measure, HAND_MPS, JOLT_MPS2};
+        let dir = std::env::var("HYST_D3_DIR").expect("HYST_D3_DIR");
+        let mut seen = 0;
+        for song in ["ic", "fy", "pr"] {
+            for enc in ["stage1", "baseline49"] {
+                let path = format!("{dir}/{song}.{enc}.sidecar.json");
+                let Ok(json) = std::fs::read_to_string(&path) else {
+                    continue;
+                };
+                seen += 1;
+                let t = one_arm(&json, layered());
+                assert!(t.layered && t.invalid.is_none(), "{path}: {:?}", t.invalid);
+                let m = measure(&t.score, 0);
+                for (j, (v, a)) in LIMITS.iter().enumerate() {
+                    assert!(
+                        m.joint_speed[j] <= *v && m.joint_accel[j] <= *a,
+                        "{path} joint {j} {m:?}"
+                    );
+                }
+                assert!(
+                    m.max_hand_mps <= HAND_MPS && m.max_jolt_mps2 <= JOLT_MPS2,
+                    "{path} {m:?}"
+                );
+                assert!(m.min_floor_margin_m >= 0.0, "{path} {m:?}");
+                println!("{path}: lag {:?}", t.lag());
+            }
+        }
+        assert!(seen > 0, "no sidecars in {dir}");
     }
 }

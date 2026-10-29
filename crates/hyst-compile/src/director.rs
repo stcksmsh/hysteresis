@@ -5,6 +5,7 @@ use crate::CompileConfig;
 use serde::{Deserialize, Serialize};
 
 pub mod figures;
+pub(crate) mod layered;
 pub mod workspace;
 
 const SOURCES: [&str; 4] = ["bass", "drums", "vocals", "other"];
@@ -41,6 +42,9 @@ struct Evidence {
     /// Onsets and phrases per instrument lane (`scripts/dance_notes.py`).
     #[serde(default)]
     note_track: Option<NoteTrack>,
+    /// Per-phrase body vectors (`body_track::read`), used only in `BodyMode::Layered`.
+    #[serde(default)]
+    body_track: Option<serde_json::Value>,
 }
 
 #[derive(Deserialize)]
