@@ -359,6 +359,7 @@ Step 2b was designed after round 1; its fold gates are diagnostics, gate B the d
 | Energy → body energy, size, time and power → weight with r ≥ 0.5 on held-out songs | decoder yes (24 of 24 fold links); baseline-49 and core-2b no (4 of 72 links miss) | size bound in round 2; misses: core-2b fold 4 size 0.487, sixth set time 0.378; baseline-49 sixth set time −0.266, weight −0.161 |
 | Baseline-49 and core-2b were given the same anchors as the decoder | yes | same Map class, folds and fitting |
 | mood.energy follows the user's energy dial, on their 3 songs | yes | check 3 gate 3: r 0.389 / 0.922 / 0.664 |
+| `core-2b` is the better source for the body (the user's choice, 2026-10-29) | weakly, nothing beyond the numbers | best on the user's dial (sixth set rho 0.435 vs baseline49 0.361, decoder 0.347, library 0.259); second on DEAM/MERP (0.270 vs baseline49 0.314); 22 of 24 anchored links reach r 0.5. The differences are small and every score is weak. A placeholder until the brain |
 | The dance conveys the song's feeling | untested | decoder built and check 3 failed; not wired to the planner; stage 4 not built |
 
 ---

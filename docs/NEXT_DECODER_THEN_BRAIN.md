@@ -113,6 +113,96 @@ operational.** Fixed here so `check3.py` has nothing to decide:
   anchor's signs, each anchor's strength on held-out songs, the share of failed
   segments.
 
+**Note (user, 2026-10-29, after D2 round 2, D3 and step H; before anything below is
+computed). Rulings A and B and an order change. New rules; where they differ from §4
+or §6, this note wins.**
+
+*A. Encoding: `core-2b`.* Best on the user's dial (sixth set rho 0.435), second on
+the public references (DEAM/MERP 0.270), near the anchor spec. baseline49 is out: on
+the user's songs its anchored links run backwards (energy→time −0.27, power→weight
+−0.16). The decoder is last on every human reference. The differences are small and
+every score is weak; the truth table says so and claims nothing beyond the numbers.
+`core-2b` is the placeholder source of `mindState` until the brain (§6) replaces it;
+no further encoding work.
+
+- A1, anchors. The anchor spec is enforced on `core-2b` as on the decoder (each
+  anchored link held-out r ≥ 0.5). Report whether it meets all 24 links (five folds
+  plus the sixth set, four links each). Also report, for `core-2b`'s own lanes, the
+  energy sign against pass A on each of the 3 songs and the power sign against pass B
+  (the drop rule of the 2026-10-28 note applies).
+- A2, spread fix (new rule). Cause: every check is rank-based, so a compressed or
+  saturated map scores the same as a full-range one; the forced links likely saturated
+  the sigmoid (stage1 size 0.99, time 0.98–0.99; `core-2b` on the sixth set: arch 0.98,
+  succession_direction 0.98–0.99, succession_delay 0.95, breath_rate 0.02, energy
+  0.97–0.99). Fix: no saturation. Each body dimension goes through its quantiles over
+  the training corpus: 5th percentile → 0.05, 95th → 0.95, linear in rank between.
+  Order is kept. The D2 references are rerun on the fixed map and every change is
+  reported.
+- A3, spread requirement, fixed here before results, scored on the user's 3 songs in
+  the body-study region space (the 8 regions of round 2, told apart 30/32):
+  1. each song's phrase bodies visit at least 2 regions;
+  2. no two songs share their most-visited region;
+  3. no body dimension sits within 0.05 of 0 or 1 for more than 20 % of phrases.
+  Fails: one adjustment, of the quantile range only, then stop and report. Nothing
+  goes to D4 with flat bodies.
+
+*Operational points (overseer, fixed with this note, before results):*
+- The quantile map acts on each dimension's value before the sigmoid (same order as
+  after it, no float ties at saturation). Empirical CDF of the training corpus's
+  decoded values, linear between ranks (so the 5th percentile lands at 0.05 and the
+  95th at 0.95), clipped to [0, 1]. Training corpus: a fold's training segments for the
+  fold scores; all five folds' segments for the sixth set and the 3 songs' phrases, as
+  `final_maps.py` fits the sixth-set map.
+- "Rerun the D2 references": `core-2b`'s DEAM/MERP rho (gate 1 shuffle and the value),
+  GEMS rho, the sixth set against the dial, failed segments and the 24 links, before
+  and after the fix, same folds, seeds and code path as `check3r2.py`.
+- Region of a phrase: its body rendered by `body.rs` with the 3 check-3 seeds, mean of
+  the 37 descriptors, midrank against the r6 sweep (`body_regions::rank`); the region is
+  the nearest (Euclidean) mean of a region's 12 clips' midrank vectors. Every phrase
+  gets a region; the distance to it is reported.
+- Phrases: `bodyTrack.phrases` (the planner's `musicalMemory.phrases`). Rule 3 is
+  scored per song and per dimension, all 15 dimensions.
+- The one adjustment allowed: the two quantile anchors (5th/95th → 0.05/0.95) moved
+  symmetrically, nothing else.
+- A1 (user's answer, 2026-10-29): round 2 already fitted `core-2b` with the
+  decoder's bound, and it is deterministic. A1 is therefore the report of round 2's
+  links (22 of 24; misses fold 4 energy→size 0.487 and sixth set energy→time 0.378),
+  plus the signs above. The 24 links are reported again after the A2 fix. No stricter
+  margin.
+
+*B. Clock lag: keep the music's timing; shrink amplitude, not time.*
+- Under the per-joint limits, a figure that would break a limit is scaled down in
+  amplitude until it fits. It is not time-stretched. Report the shrink per figure. If
+  a song needs more than 50 % shrink on more than 20 % of its figures, report it,
+  because body size then loses its meaning.
+- Backstop: at every phrase edge the figure clock re-syncs to the bar grid. An
+  unfinished figure is cut, and the next one starts on the bar.
+- Limits stay as they are (`body::LIMITS`). They are assumptions and change only
+  after a real servo is measured under load (step H). The v47 CSVs being refused is
+  expected.
+- v47 stays byte-identical.
+- Form (user's answers, 2026-10-29): a new flag `ClockMode::V47 | Music`
+  (`--clock v47|music`), default `V47`, orthogonal to `BodyMode`. `V47` is today's
+  behaviour in both body modes: v47 Off is byte-identical and D3's Layered is
+  unchanged. `Music` = the amplitude fit plus the phrase-edge re-sync, with the
+  body.rs per-joint limits in both body modes. D3's slow-down loop is not used, so
+  body Off + `Music` CSVs go through `check-csv` like Layered ones.
+- **Pass:** lag ≤ half a beat at every phrase edge, on all 3 songs, for body Off +
+  `Music` and for Layered + `Music`. Lag = figure clock position minus music time,
+  at the phrase edge, after the re-sync. Also reported, not gated: the largest lag
+  inside each phrase, before the re-sync; seconds cut per edge; hand-target arrival
+  times of moments against their measured times. v47 and D3's Layered + `V47` are
+  reported as references.
+- Exports for the user's watch: per song, v47 Off, body Off + `Music`, Layered +
+  `Music` (`core-2b` bodies after A2), with CSVs and `check-csv` verdicts.
+
+*Order:* A1 → A2 and A3 → B → re-export the 3 songs → the user watches. Then D is
+paused. Next is the brain (§6): the overseer writes the spec of B1 (pulse) and B2/B3
+(oscillatory core, untrained then trained, 100 Hz two-rate input) with checks fixed
+in advance, and gets the user's yes before any build. D4a, D4 and D5 resume after B3;
+D5 then compares the brain against `core-2b` as the body's source. Stop at each step
+with numbers.
+
 ## 3. Rules (all steps)
 
 - `EMOTION.md` rules hold. Version 47 stays reachable and byte-identical: every
