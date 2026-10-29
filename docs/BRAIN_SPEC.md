@@ -191,6 +191,26 @@ Intervals are 95 % bootstrap over clips, 2,000 resamples.
   - Pass: the ratio separates triple from duple with AUC ≥ 0.75, permutation p < 0.01
     (10,000 label permutations).
 - **Reported only:** the missing-pulse stimulus of Large 2015.
+- **B1 round 2 (planning agent's rulings, passed on by the user, 2026-10-29, after round
+  1: gates 1 and 2 passed, gate 3 failed, AUC 0.720 against 0.75; B1's tempo was
+  double the annotated one on 30 % of clips).** It is chosen after results and judged
+  on the same sets.
+  - Readout score per oscillator in 0.5–4 Hz: S(f) = A(f) · P(f), with
+    P(f) = exp(−2·(log2(f / 2 Hz))²). This is Parncutt 1994's pulse-salience curve as
+    adapted by Frieler 2004 (t_s = 500 ms); van Noorden & Moelants 1999 give the same
+    ~2 Hz resonance. Sources are recorded with page or equation.
+  - The readout = argmax S. The hysteresis rule applies to S (switch only when another
+    oscillator's S exceeds the current one's by 20 % for 2 s).
+  - Gate 3's beat = the new readout's median frequency.
+  - Bank, input, gain and cap are unchanged.
+  - Gates 1, 2 and 3 all rerun under the new readout with the same rules. Round-1
+    passes are not carried over. There is no round 3.
+  - Reported: the missing-pulse readout per level; half/double tempo shares per
+    Ballroom style; 8 s noise exclusions recomputed after linear detrending of the gap
+    signal.
+  - Gate 2 on noise: criterion 2 (against the PLL) is reported as not informative,
+    because the PLL stops emitting beats in noise. The claim rests on criteria 1 and 3
+    there.
 - ★ B1: after the checks are committed; after results.
 - **If B1 fails twice:** the pulse comes from the offline analysis grid, labelled
   "beat grid" on the monitor, and the B1 claims are dropped.
@@ -339,8 +359,11 @@ tried).
 ## 6. Truth table claims
 
 - **B1:**
-  - "An oscillator bank entrains to the beat of music it has not heard."
-  - "It keeps the pulse through short silences."
+  - "An oscillator bank entrains to the beat of music it has not heard." (absolute F and AMLt printed
+    beside it; "tracks the beat accurately" and any claim of published-tracker accuracy
+    are forbidden; the body's beat timing comes from v47's grid, not from B1)
+  - "It keeps the pulse through 4-second gaps of silence or beatless noise." (absolute
+    phase error and amplitude ratio per kind printed beside it)
   - "Its oscillators resonate at the bar, telling triple from duple time."
 - **B2:** no capacity claim. Allowed wording: "an untrained network of the same shape".
 - **B3:**
