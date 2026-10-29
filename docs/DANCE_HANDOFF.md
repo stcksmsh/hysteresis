@@ -4348,3 +4348,74 @@ not carry over to those held-out sets. Training r for every link is in `results.
 Anchor fairness: baseline-49 and core-2b use the same two anchors, the same `Map` class, folds and fitting as the decoder. Round 2 changed only the reference and the size bound; k
 was chosen as in round 1 (k = 2). Per the rule note, the decoder failed the new gate 2, so the user decides the encoding (option 3); baseline-49 has the higher DEAM/MERP rho and no
 non-commercial model licence. No round 3 without the overseer's word.
+
+### Step D3: body vectors layered on version 47 (★ D3) — 2026-10-29
+
+Branch `d3-layered` (from `c20b2da` on `keys-decide`), one arm only. **Not verified by eye.** Nothing is scored; the only checks are the safety and byte-identity ones below.
+The encoding is the user's to decide (D2 round 2 failed gate 2), so D3 reads a per-phrase body vector and does not care which map made it.
+
+**Interface.** Sidecar field `bodyTrack` (additive, version 1): `source`, `map`, `dims` (must equal `body::PARAMS`), `phrases` = the planner's own `musicalMemory.phrases` with one
+15-value body (0..1) each, `authored` (must be empty). Written by `scripts/emotion/bodytrack.py NOTES MINDSTATE MAP.npz OUT` from a `mindState` (`mindstate.py`) and a saved decoder map
+(sigmoid of W times the phrase's mean lanes, as the maps were fitted on 8 s mean lanes). Read by `crates/hyst-compile/src/body_track.rs`; a missing field is `None`. The body at a time is
+the phrase's own vector, moving to the next phrase's over the last beat before that phrase starts (smoothstep); nothing changes inside a phrase.
+**Mode.** `CompileConfig.body: BodyMode::Off | Layered` (`--body off|layered` in `ensemble_preview`). Layered with no `bodyTrack` compiles exactly as Off (tested). Layered with more than one arm is an error.
+
+**Limits in Layered.** The rig envelope becomes `body::LIMITS` (speed, acceleration per joint), so `validate` and the tangent fit prove them; hand speed 1.2 m/s, jolt 9 m/s2 and the floor rule
+of `body::measure` are checked on the export. The follower keeps 0.75 of each joint's speed and 0.3 of its acceleration limit (version 47: 0.75 and 0.1 of 8,000); the end stop shapes the wanted speed and the
+acceleration limit has the last word. The curve through the knots is the natural cubic spline (its velocity and acceleration at each knot); version 47's central differences with a forced stop at held knots
+made the quintic 2 to 4 times stiffer than the follower. The compile then repeats (at most 10 passes): after each, the largest ratio of joint speed, root of joint acceleration (1 kHz), hand speed, root of hand jolt (60 fps)
+and the continuous bounds to their limits is found per knot; where over, the figure clock runs slower there (target 0.95, spread over about 0.5 s each way, floor 0.15 of the music's rate; catch-up stays 15 %), and a moment
+whose window is over gets a 1.3 times longer approach and release. A global stretch would break sync; this keeps arrival times and costs clock lag (open point 1).
+
+**Knot table.** Body dimension, planner knob, range, and what it must not double-count. 0.5 is the planner's own value for size, energy (spin and surge), time, weight, flow, height, curl_extension; "geo" = geometric about 0.5.
+
+| Dimension | Knob (`figures.rs`) | Range | Not counted twice |
+|---|---|---|---|
+| size | figure scale in `sized()`, times the planner's class size and swell, then the planner's cap of 1 | x0.55 .. x1.25 (geo) | the planner's class size and leader swell stay; intensity does not touch figure size |
+| energy | roll spin per metre of hand travel; depth of the stab surge | spin x0.35 .. x1.8, surge weight x0.5 .. x1.5 (geo, surge weight still capped at 1) | surge is still `stabs x intensity`: the planner's intensity sets how much, energy scales within it; hand path, figure timing and the clock are untouched (a clock slower than the music only grows lag) |
+| time | beat kick of the clock (above 0.5): smooth bump on the beat, mean 1 over a beat; surge depth below 0.5 | kick up to +-1.2 x (2t-1) of the bump, peak speed up to x1.8; surge x(2t) below 0.5 | surge is shared with energy (product); the hand cap 0.8 m/s still limits the kick as it does a pulse |
+| weight | approach and release length of every non-cut moment, and the hold of arrivals | span x1.5 (light) .. x0.7 (strong), hold x0.7 .. x1.4 (geo) | the planner's speed rule (a moment adds at most 0.6 m/s) is applied after, so it still wins |
+| flow | wrist trail (`wrist_drag`), and overshoot of the arrival blend | trail x0.4 .. x1.5 (geo); overshoot up to 0.25 of the travel above 0.5 only | overshoot is clipped where the pose is at the reach limit, which arrival poses mostly are: the visible effect is an earlier rise (open point 5) |
+| height | hand elevation offset in `waited()` | +-0.25 shell units (about +-17 degrees of elevation) | the planner's voice lift and brightness lift are added, not replaced |
+| curl_extension | hand extension offset | +-0.25 shell units | none |
+| succession_direction, succession_delay, initiation | each joint's command trails the solved pose; the checks see the pose commanded | joint lag = 0.15 s x delay x rank/4 (rank from the base below 0.5, from the roll above), plus 0.06 s for every joint but the initiating one (base, shoulder, elbow, wrist bend from initiation 0..1); half of body.rs's numbers | arrival times of moments are for the hand's target: lagged joints reach it up to 0.21 s late |
+| breath_depth, breath_rate | slow swell of hand elevation and extension, phase = integral of the rate | elevation 0.10, extension 0.06 shell units at depth 1, none at depth 0.5 and below; 0.08 .. 0.3 Hz | none; the planner has no breath |
+| arch, space, rhythm | **unmapped** | | arch: the planner's wrist posture is a soft preference and its sign against body.rs's is unchecked; space: the figures carry their own indirectness; rhythm: the planner has no moves-per-move structure. Raising any alone changes nothing (tested) |
+
+**Done and checked.** `cargo test -p hyst-compile -p hyst-output -p hyst-previz -p hyst-cli`: hyst-compile 85 passed + 1 ignored (the real-song test), hyst-output 18, previz and cli 0 Rust tests in this tree; clippy `-D warnings` on those four crates and `cargo fmt --check` clean; 169 Python unittests in
+`scripts/emotion` (6 new, `test_bodytrack.py`). Golden digests of `compile_ensemble` unchanged; the three six-arm Off exports are byte-identical to `hexagon-47.html`, `five-years-hexagon.html`, `presence-hexagon.html` (`cmp`, tmp files deleted).
+New tests: reader (schema, transitions, writer fixture), missing field = Off and Off ignores a field, one-arm requirement, unmapped dimensions change nothing, Layered limits on the drop song for neutral, all-0, all-1 and three drawn bodies, one test per knob (size: hand box and mean joint speed; energy: mean joint speed x1.2;
+time: 90th-percentile acceleration x1.2; weight: still time from 15 to 20 s +0.5 s; flow: height at 15.5 s +0.05 m and same pose at 17 s; height and curl_extension: mean hand height +0.08 m, reach +0.05 m; succession and initiation: per-joint shift against delay 0 by cross-correlation; breath: amplitude of the shoulder at the breath rate),
+and the ignored `real_songs_keep_the_hardware_limits` (release, `HYST_D3_DIR`), which passed on all six sidecars.
+
+**Bodies and reproduction.** `scripts/emotion/final_maps.py` fits the sixth-set model and map of each encoding exactly as `check3r2.py` does (all five folds' clips, bounded map, k = 2 for both) and compares with the saved `segments_5.npz`:
+110 segments, keys equal, **largest absolute difference 0.0** for lanes and for bodies, both encodings. Lanes read back from the three emotion sidecars match the saved segment lanes to 2.3e-6 (the 5-decimal rounding of `mindState`).
+The bodies vary little: over the 40, 32 and 38 phrases of the three songs, the range of each dimension is at most 0.2 (stage1: time 0.98..0.99, size 0.98..0.99, energy 0.18..0.21, flow 0.39..0.57, weight 0.35..0.46; baseline49: energy 0.93..0.99, time 0.83..0.96, arch 0.93..0.94, breath depth 0.07, size 0.42..0.60), and the three songs get nearly the same vector. That is the maps' output, not changed here.
+
+**Exports (outside git), `$D/d3/`.** For each song (`ic`, `fy`, `pr`): `S.off.html` (one arm, Off), `S.stage1.html` (Layered, bodies from the stage1-smooth8 map), `S.baseline49.html` (Layered, baseline49 map), each with `.score.json` and `.txt` (the exporter's limits and clock-lag report),
+`S.off.jolts.txt`, `S.stage1.jolts.txt`, `S.baseline49.jolts.txt`, `S.spans-off-vs-stage1.txt`, `S.spans-off-vs-baseline49.txt` (60 s windows), and the two sidecars with `bodyTrack` (`S.stage1.sidecar.json`, `S.baseline49.sidecar.json`). Audio links are `../S.m4a`. Scripts: `d3_bodies.sh`, `d3_export.sh` in `scripts/emotion/`.
+
+| Song | Mode | Passes | Limit breaches (body.rs) | Hand max m/s, jolt max m/s2 | `jolts.py` jolts | Clock lag max s (at), lost in all s |
+|---|---|---|---|---|---|---|
+| Instant Crush | Off | 1 | base, shoulder, elbow speed and acceleration, wrist acceleration over; hand 1.617, jolt 12.45 | 1.617, 12.45 | 2 | 3.67 (286.8 s), 28.67 |
+| | stage1 | 4 | none; `validate` passes | 1.127, 5.68 | 0 | 6.66 (290.0 s), 38.62 |
+| | baseline49 | 8 | none | 1.177, 5.50 | 0 | 26.36 (339.8 s), 57.45 |
+| Five Years | Off | 1 | base, shoulder, elbow over; hand 1.492, jolt 9.33 | 1.492, 9.33 | 0 | 2.88 (214.8 s), 33.25 |
+| | stage1 | 4 | none | 1.059, 4.72 | 1 (at 283.7 s, the song's last partial frame; `measure` says 4.72) | 14.04 (283.7 s), 42.36 |
+| | baseline49 | 6 | none | 1.093, 6.49 | 0 | 19.13 (248.8 s), 48.86 |
+| Presence | Off | 1 | base, shoulder, elbow, wrist acceleration over; hand 1.395, jolt 17.26 | 1.395, 17.26 | 8 | 9.83 (211.9 s), 29.14 |
+| | stage1 | 8 | none | 1.136, 4.23 | 0 | 24.13 (270.7 s), 44.96 |
+| | baseline49 | 9 | none | 1.159, 6.37 | 0 | 24.78 (270.7 s), 47.05 |
+
+Floor margin (body.rs rule) was at least 0.018 m in all nine. Largest gains of lag within ten seconds (start s, seconds gained), stage1: Instant Crush 113 +4.59, 280 +4.40, 234 +2.70; Five Years 216 +4.95, 167 +3.44, 149 +2.62; Presence 196 +7.40, 125 +6.04, 261 +4.59.
+baseline49: Instant Crush 213 +7.02, 246 +6.49, 114 +5.23; Five Years 220 +5.36, 182 +4.33, 150 +4.18; Presence 198 +6.68, 143 +4.18, 188 +3.98. Off lag is the clock holding at moments plus the 0.65 drumless pace; "lost" is the seconds the clock ran slower than the music, made up at 15 % extra pace.
+
+**Open points for the user.**
+1. **Clock lag.** To hold body.rs's slower limits without a global stretch, Layered lets the figure clock fall behind the music: up to 6.7 to 26.4 s behind (Off: 2.9 to 9.8 s), with 38 to 57 s run slow in all. Figures and the hand's arrival times then drift from the bar grid where the clock is far behind (moments still land on their measured times, because they are timed by the music, not the clock). Decide: accept, stretch less (looser limits), or let a figure skip ahead.
+2. The follower's 0.3 of the acceleration limit, the knot ranges above, the loop target 0.95 and floor 0.15, the 1.3 span growth and 10 passes are guesses, untuned by eye.
+3. The bodies hardly vary across phrases or songs (above), so the three songs get almost the same quality; the knob table is exercised by the synthetic tests rather than by these exports.
+4. Half-range knobs: time below 0.5 only flattens the surge; flow overshoot, breath and the kick exist only above 0.5; space, arch and rhythm are unmapped.
+5. Flow's overshoot is clipped at the reach limit for most arrivals.
+6. Succession delays joints up to 0.21 s, so a lagged joint arrives late at a moment's pose; the hand is off its figure while moving.
+7. `fit_tangents` has a non-strict mode (no last-resort rest-to-rest tangents, which were O(n^2) and took minutes on the first Layered tries); Off still uses the strict one.
+8. Layered with more than one arm is refused; the ensemble, braking and collision checks between arms are out of scope here.
