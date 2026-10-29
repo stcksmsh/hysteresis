@@ -44,7 +44,7 @@ def fit_final(clips, folds, surrogate, cfg, anchors, log=print):
     """-> (prep of the sixth set, features of every clip). prep["map"] has no quantile; the caller's `fixed` copy has."""
     train, test = c3.split(clips, folds, c3.SIXTH)
     feats, radius = c3.core_features(train, test, c3.SIXTH, cfg)
-    prep = c3.prepare(train, test, feats, mood.SOURCE_CORE2B, None, surrogate, cfg)
+    prep = c3.prepare(train, test, feats, mood.SOURCE_CORE2B, None, surrogate, cfg, power_anchor=False)   # a2.POWER_ANCHOR
     log(f"core-2b sixth set: radius {radius}, k {prep['k']}, bounds {json.dumps(prep['links']['bounds'])}, met {prep['links']['met']}")
     return prep, feats
 

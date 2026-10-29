@@ -6,7 +6,7 @@ k choice and map fit (check3.prepare), render (check3.render_map), ratings and s
 check3.score_map). For each of the five folds and the sixth set the map is fitted once. "Before" is that map
 as round 2 had it. "After" attaches quantile.QuantileMap, fitted on the pre-sigmoid values of the same training
 segments (a fold's training segments for a fold, all five folds' segments for the sixth set), and renders again.
-Nothing else changes, so "before" must reproduce check3r2's core-2b numbers (compared in the result, `reproduces`).
+The power anchor is dropped (overseer's ruling), so "before" is not round 2's map; round 2's saved core-2b numbers are reported beside it.
 
 Reported, before and after: DEAM/MERP rho with its gate-1 shuffle (1,000), GEMS rho, the sixth set against the dial,
 failed segments, the 24 links (training and held-out r), and the share of segments within 0.05 of 0 or 1 per
@@ -34,6 +34,7 @@ import spread
 
 OUT = common.DATA / "a2"
 VARIANTS = ("before", "after")
+POWER_ANCHOR = False    # overseer, 2026-10-29: the power anchor is dropped for core-2b (signs disagree on 3 of 3 songs); weight is free
 
 
 def score_variant(per_tag, ratings, dial_rows, cfg):
@@ -59,7 +60,7 @@ def run(clips, folds, surrogate, cfg, dial, out_dir=None, log=print, anchors=Non
     for tag in list(range(common.N_FOLDS)) + [c3.SIXTH]:
         train, test = c3.split(clips, folds, tag)
         feats, radius = c3.core_features(train, test, tag, cfg)
-        prep = c3.prepare(train, test, feats, mood.SOURCE_CORE2B, None, surrogate, cfg)
+        prep = c3.prepare(train, test, feats, mood.SOURCE_CORE2B, None, surrogate, cfg, power_anchor=POWER_ANCHOR)
         prep["radius"], prepared[tag] = radius, (prep, test)
         log(f"tag {tag}: fitted ({time.time() - start:.0f} s), k {prep['k']}")
         before_links = r2.link_report(prep)
@@ -79,24 +80,21 @@ def run(clips, folds, surrogate, cfg, dial, out_dir=None, log=print, anchors=Non
         s = result["variants"][v]
         log(f"{v}: DEAM/MERP rho {s['va']['rho']:.4f} {np.round(s['va']['rhoPerFold'], 4).tolist()} beats {s['va']['beaten']}/{s['va']['of']}; "
             f"GEMS {s['gems']['rho']:.4f}; sixth vs dial {s['sixthDial']['rhoPerFold'][0]:.4f} over {s['sixthDial']['segments']}; failed {s['failedSegments']}")
-    result["reproduces"] = reproduces(result["variants"]["before"])
+    result["round2"] = round2_reference()
     result["seconds"] = round(time.time() - start, 1)
     if out_dir:
         common.write_json(pathlib.Path(out_dir) / "a2.json", result)
     return result
 
 
-def reproduces(before, check_dir=r2.OUT):
-    """The 'before' numbers against check3r2's results.json for core2b (largest absolute differences)."""
+def round2_reference(check_dir=r2.OUT):
+    """check3r2's saved core-2b numbers (power anchor kept), the reference column beside 'before' and 'after'."""
     path = pathlib.Path(check_dir) / "results.json"
     if not path.exists():
         return None
     m = json.loads(path.read_text())["maps"]["core2b"]
-    diff = lambda a, b: float(np.max(np.abs(np.asarray(a, dtype=np.float64) - np.asarray(b, dtype=np.float64))))
-    links = max(diff([v for _, v in sorted(before["links"][t]["heldOutR"].items())], [v for _, v in sorted(m["links"][t]["heldOutR"].items())])
-                for t in before["links"])
-    return {"vaRhoPerFold": diff(before["va"]["rhoPerFold"], m["va"]["rhoPerFold"]), "gemsRho": diff(before["gems"]["rho"], m["gems"]["rho"]),
-            "sixthDialRho": diff(before["sixthDial"]["rhoPerFold"], m["sixthDial"]["rhoPerFold"]), "heldOutLinkR": links}
+    return {"va": m["va"], "gems": m["gems"], "sixthDial": m["sixthDial"],
+            "links": {t: v["heldOutR"] for t, v in m["links"].items()}}
 
 
 def save_segments(out, tag, rendered, prep, anchors):
@@ -118,10 +116,16 @@ def report(result, log=print):
             f"over {d['segments']} segments, beats {d['beaten']} of {d['of']}")
         log(f"{v}: failed segments (all, per tag) {s['failedSegments']}")
         for tag, links in s["links"].items():
-            log(f"{v}: links tag {tag}: held-out r {json.dumps({k: round(x, 3) for k, x in links['heldOutR'].items()})}")
+            log(f"{v}: links tag {tag}: held-out r {json.dumps({k: round(x, 3) for k, x in links['heldOutR'].items()})} (power->weight is not an anchor, not gated)")
         for tag, share in s["edgeShare"].items():
             log(f"{v}: tag {tag} share within 0.05 of 0 or 1, per dimension: " + ", ".join(f"{n} {x:.2f}" for n, x in zip(decoder.DIMS, share)))
-    log(f"before against check3r2's saved core2b (largest absolute differences): {json.dumps(result['reproduces'])}")
+    ref = result["round2"]
+    if ref:
+        va, g, d = ref["va"], ref["gems"], ref["sixthDial"]
+        log(f"round 2 (power anchor kept, reference): DEAM/MERP mean rho {va['rho']:.4f}, per fold {np.round(va['rhoPerFold'], 4).tolist()}; GEMS {g['rho']:.4f}; "
+            f"sixth set against the dial {d['rhoPerFold'][0]:.4f}; failed {sum(va['failed'])}")
+        for tag, links in ref["links"].items():
+            log(f"round 2: links tag {tag}: held-out r {json.dumps({k: round(x, 3) for k, x in links.items()})}")
 
 
 def main(argv=None):
