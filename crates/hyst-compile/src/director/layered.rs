@@ -9,11 +9,18 @@ use crate::body_track::BodyTrack;
 use crate::ensemble::{hull_ratios, sample_track, EnsembleScore};
 
 pub(super) struct Layer<'a> {
-    pub track: &'a BodyTrack,
+    /// The body vectors (D3); None in `ClockMode::Music` with `BodyMode::Off`.
+    pub track: Option<&'a BodyTrack>,
     /// Per grid knot: 1, or less where the figure clock runs slower to keep a limit.
     pub rate_scale: &'a [f64],
     /// Per moment: 1, or more where a moment takes a longer approach and release.
     pub span_scale: &'a [f64],
+    /// `ClockMode::Music`: the amplitude each figure (by index) is drawn at, and the share of
+    /// each moment's strength kept. Empty slices mean 1.
+    pub fit: &'a [f64],
+    pub moment_fit: &'a [f64],
+    /// `ClockMode::Music`: the figure clock re-syncs to the music at every phrase edge.
+    pub resync: bool,
 }
 
 /// 1 at x = 0.5, `lo` at 0 and `hi` at 1, geometric between.

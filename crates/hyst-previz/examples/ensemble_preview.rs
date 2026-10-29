@@ -1,4 +1,4 @@
-//! cargo run -p hyst-previz --example ensemble_preview -- output.html track-url sidecar.json [--score score.json] [--rig rig.json] [--groove-only] [--no-reuse] [--zone x0,y0,z0,x1,y1,z1] [--workspace off|rehearsed|schematic] [--body off|layered]
+//! cargo run -p hyst-previz --example ensemble_preview -- output.html track-url sidecar.json [--score score.json] [--rig rig.json] [--groove-only] [--no-reuse] [--zone x0,y0,z0,x1,y1,z1] [--workspace off|rehearsed|schematic] [--body off|layered] [--clock v47|music]
 use std::{env, fs, io, path::PathBuf};
 
 use hyst_compile::director::workspace::{BasinKind, Workspace, WorkspaceMode};
@@ -54,13 +54,15 @@ fn count_one(score: &hyst_compile::ensemble::EnsembleScore) -> bool {
 }
 
 /// One arm against the body generator's numbers, and how the figure clock ran, on stderr.
-fn print_one_arm(traced: &hyst_compile::director::figures::Traced) {
+fn print_one_arm(traced: &hyst_compile::director::figures::Traced, body: &str) {
     use hyst_compile::body::{measure, HAND_MPS, JOINTS, JOLT_MPS2, LIMITS};
     let m = measure(&traced.score, 0);
     let over = |v: f64, limit: f64| if v > limit { " OVER" } else { "" };
+    let music = traced.music.as_ref();
     eprintln!(
-        "body mode {}, {} pass(es)",
-        if traced.layered { "layered" } else { "off" },
+        "body mode {}, clock {}, {} pass(es)",
+        body,
+        if music.is_some() { "music" } else { "v47" },
         traced.passes
     );
     if traced.layered {
@@ -109,6 +111,141 @@ fn print_one_arm(traced: &hyst_compile::director::figures::Traced) {
     );
 }
 
+/// The figure clock of a `ClockMode::V47` compile read the way the music clock is: its lag at each
+/// phrase edge (no re-sync), the largest lag inside each phrase, and the moments' arrivals.
+fn print_reference(traced: &hyst_compile::director::figures::Traced, starts: &[f64], beat: f64) {
+    let step = traced.grid[1] - traced.grid[0];
+    let at = |t: f64| ((t / step).round() as usize).min(traced.grid.len() - 1);
+    let lag_at: Vec<f64> = starts.iter().map(|&e| traced.clock[at(e)] - e).collect();
+    let edges: Vec<f64> = [0.0]
+        .iter()
+        .chain(starts)
+        .copied()
+        .chain([traced.grid[traced.grid.len() - 1]])
+        .collect();
+    let inside: Vec<f64> = edges
+        .windows(2)
+        .map(|w| {
+            (at(w[0])..=at(w[1]))
+                .map(|k| traced.grid[k] - traced.clock[k])
+                .fold(0.0, f64::max)
+        })
+        .collect();
+    let worst = lag_at.iter().map(|l| l.abs()).fold(0.0, f64::max);
+    eprintln!(
+        "reference (version 47 clock, no re-sync): {} phrase edges; lag at an edge: max |lag| {worst:.2} s = {:.2} beat, edges within half a beat {}/{}; largest lag inside a phrase: max {:.2} s",
+        starts.len(),
+        worst / beat,
+        lag_at.iter().filter(|l| l.abs() <= 0.5 * beat).count(),
+        starts.len(),
+        inside.iter().copied().fold(0.0, f64::max)
+    );
+    for (e, (l, i)) in starts.iter().zip(lag_at.iter().zip(&inside)) {
+        eprintln!("  edge {e:7.2} s lag at edge {l:+.2} s lag inside the phrase before {i:5.2} s");
+    }
+    let diff: Vec<f64> = traced
+        .arrivals
+        .iter()
+        .filter_map(|a| a.1.map(|x| x - a.0))
+        .collect();
+    eprintln!(
+        "  moments: {} with an arrival, hand-target arrival minus measured time: min {:.3}, max {:.3} s, mean |d| {:.3} s",
+        diff.len(),
+        diff.iter().copied().fold(f64::MAX, f64::min),
+        diff.iter().copied().fold(f64::MIN, f64::max),
+        diff.iter().map(|d| d.abs()).sum::<f64>() / diff.len().max(1) as f64
+    );
+}
+
+/// `ClockMode::Music`: re-syncs, amplitude fit and moment arrivals, on stderr.
+fn print_music(music: &hyst_compile::director::figures::MusicReport, beat: f64) {
+    let edges = &music.edges;
+    let worst = |f: fn(&hyst_compile::director::figures::EdgeSync) -> f64| {
+        edges.iter().map(f).fold(f64::MIN, f64::max)
+    };
+    eprintln!(
+        "music clock: {} phrase edges, fit loop {} pass(es), beat {beat:.4} s",
+        edges.len(),
+        music.passes
+    );
+    let lag = edges.iter().map(|e| e.lag_after.abs()).fold(0.0, f64::max);
+    eprintln!(
+        "  lag after re-sync: max |lag| {lag:.4} s = {:.3} beat (pass: <= 0.5 beat at every edge): {}",
+        lag / beat,
+        if lag <= 0.5 * beat { "PASS" } else { "FAIL" }
+    );
+    eprintln!(
+        "  lag inside a phrase before re-sync: max {:.2} s ({:.2} beat); seconds cut per edge: max {:.2}, mean {:.2}, total {:.1}; edges where a figure starts: {}/{}",
+        worst(|e| e.lag_inside),
+        worst(|e| e.lag_inside) / beat,
+        worst(|e| e.cut),
+        edges.iter().map(|e| e.cut).sum::<f64>() / edges.len().max(1) as f64,
+        edges.iter().map(|e| e.cut).sum::<f64>(),
+        edges.iter().filter(|e| e.figure_starts).count(),
+        edges.len()
+    );
+    for e in edges {
+        eprintln!(
+            "  edge {:7.2} s knot {:7.2} s cut {:5.2} s lag after {:+.4} s lag inside {:5.2} s figure starts {}",
+            e.edge, e.knot, e.cut, e.lag_after, e.lag_inside, e.figure_starts
+        );
+    }
+    let figures = &music.figures;
+    let shrunk = |limit: f64| figures.iter().filter(|f| 1.0 - f.kept > limit).count();
+    let mut shrink: Vec<f64> = figures.iter().map(|f| 1.0 - f.kept).collect();
+    shrink.sort_by(f64::total_cmp);
+    let at = |q: f64| shrink[((shrink.len() - 1) as f64 * q) as usize];
+    let share = shrunk(0.5) as f64 / figures.len().max(1) as f64;
+    eprintln!(
+        "  shrink per figure ({} figures): none {}, any {}, over 10 % {}, over 50 % {} ({:.1} % of figures){}; median {:.3}, p90 {:.3}, max {:.3}",
+        figures.len(),
+        figures.len() - shrunk(1e-9),
+        shrunk(1e-9),
+        shrunk(0.1),
+        shrunk(0.5),
+        100.0 * share,
+        if share > 0.2 { " FLAG: more than 50 % shrink on more than 20 % of figures" } else { "" },
+        at(0.5),
+        at(0.9),
+        at(1.0)
+    );
+    for f in figures.iter().filter(|f| f.kept < 1.0) {
+        eprintln!(
+            "  figure {:7.2}..{:7.2} s keeps {:.3}",
+            f.start, f.end, f.kept
+        );
+    }
+    let arrivals: Vec<_> = music
+        .moments
+        .iter()
+        .filter(|m| m.arrival.is_some())
+        .collect();
+    let diff: Vec<f64> = arrivals
+        .iter()
+        .map(|m| m.arrival.unwrap() - m.time)
+        .collect();
+    eprintln!(
+        "  moments: {} with an arrival, hand-target arrival minus measured time: min {:.3}, max {:.3} s, mean |d| {:.3} s; strength shrunk on {}",
+        arrivals.len(),
+        diff.iter().copied().fold(f64::MAX, f64::min),
+        diff.iter().copied().fold(f64::MIN, f64::max),
+        diff.iter().map(|d| d.abs()).sum::<f64>() / diff.len().max(1) as f64,
+        music.moments.iter().filter(|m| m.kept < 1.0).count()
+    );
+    for m in &music.moments {
+        if let Some(a) = m.arrival {
+            eprintln!(
+                "  moment {} measured {:7.2} s arrives {:7.2} s ({:+.3}) keeps {:.3}",
+                m.label,
+                m.time,
+                a,
+                a - m.time,
+                m.kept
+            );
+        }
+    }
+}
+
 fn usage() -> &'static str {
     "Usage: ensemble_preview OUTPUT.html AUDIO_URL SIDECAR.json [--score OUT.json] [--rig RIG.json] [--groove-only] [--no-reuse] [--zone BOX] [--workspace MODE]\n\
      AUDIO_URL resolves relative to OUTPUT.html; serve both files with a range-capable local server.\n\
@@ -123,6 +260,7 @@ fn usage() -> &'static str {
      --clearance M    arms keep their checked points this far apart, metres (default 0.1)\n\
      --workspace MODE feeling workspace: off (default), rehearsed or schematic; prints basins, tension peaks and surprises to stderr\n\
      --body MODE      off (default) or layered: body vectors from the sidecar's bodyTrack set the quality; one arm only; prints limits and clock lag to stderr\n\
+     --clock MODE     v47 (default) or music: figures keep the music's timing, one over a limit is drawn smaller, the clock re-syncs at each phrase edge; one arm only\n\
      --figures        accepted and ignored; the figure planner is the only mode\n\
      Audio starts only after Play. Score and arm trajectories resolve offline for deterministic seek."
 }
@@ -148,6 +286,13 @@ fn main() -> io::Result<()> {
                     Some("off") => hyst_compile::body_track::BodyMode::Off,
                     Some("layered") => hyst_compile::body_track::BodyMode::Layered,
                     _ => return Err(io::Error::other("--body requires off or layered")),
+                }
+            }
+            "--clock" => {
+                config.clock = match args.next().as_deref() {
+                    Some("v47") => hyst_compile::director::figures::ClockMode::V47,
+                    Some("music") => hyst_compile::director::figures::ClockMode::Music,
+                    _ => return Err(io::Error::other("--clock requires v47 or music")),
                 }
             }
             "--no-reuse" => config.reuse_repeats = false,
@@ -267,7 +412,34 @@ fn main() -> io::Result<()> {
         print_workspace(w);
     }
     if count_one(&traced.score) {
-        print_one_arm(&traced);
+        let value = serde_json::from_str::<serde_json::Value>(&sidecar).ok();
+        let beat = value
+            .as_ref()
+            .and_then(|v| v["musicalMemory"]["beatPeriod"].as_f64())
+            .unwrap_or(0.5);
+        let body = if config.body == hyst_compile::body_track::BodyMode::Layered
+            && value.as_ref().is_some_and(|v| v.get("bodyTrack").is_some())
+        {
+            "layered"
+        } else {
+            "off"
+        };
+        print_one_arm(&traced, body);
+        if let Some(music) = &traced.music {
+            print_music(music, beat);
+        } else {
+            let starts: Vec<f64> = value
+                .as_ref()
+                .and_then(|v| v["musicalMemory"]["phrases"].as_array().cloned())
+                .map(|p| {
+                    p.iter()
+                        .skip(1)
+                        .filter_map(|x| x["start"].as_f64())
+                        .collect()
+                })
+                .unwrap_or_default();
+            print_reference(&traced, &starts, beat);
+        }
     }
     let score = traced.score;
     let cues = &score.cues;

@@ -165,6 +165,14 @@ struct Instance {
     turn: f64,
 }
 
+/// A re-sync's leftover: the hand's target was `offset` (shell units) from the figure when the
+/// clock jumped at `time`, and settles onto the figure over `span` seconds.
+struct Cut {
+    time: f64,
+    offset: [f64; 3],
+    span: f64,
+}
+
 /// How the arms of an ensemble share one dance.
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Formation {
@@ -279,6 +287,55 @@ pub struct Traced {
     /// Layered only: what `EnsembleScore::validate` says of the final score against `body::LIMITS`
     /// (None: it passes).
     pub invalid: Option<String>,
+    /// `ClockMode::Music` only: the amplitude fit, the re-syncs and the moments' arrivals.
+    pub music: Option<MusicReport>,
+    /// Each moment: (measured time, time its hand target arrives); a cut has no arrival.
+    pub arrivals: Vec<(f64, Option<f64>)>,
+}
+
+/// One figure of a `ClockMode::Music` compile: how much of its amplitude was kept.
+#[derive(Debug, Clone, PartialEq)]
+pub struct FigureFit {
+    pub start: f64,
+    pub end: f64,
+    /// 1 = drawn at the planner's own size, 0.4 = shrunk by 60 %.
+    pub kept: f64,
+}
+
+/// One moment of a `ClockMode::Music` compile.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MomentFit {
+    pub time: f64,
+    pub label: &'static str,
+    /// When the hand target is within 1 % of its arrival pose (None: a cut, which only freezes).
+    pub arrival: Option<f64>,
+    /// Share of the moment's strength kept.
+    pub kept: f64,
+}
+
+/// One phrase edge of a `ClockMode::Music` compile.
+#[derive(Debug, Clone, PartialEq)]
+pub struct EdgeSync {
+    pub edge: f64,
+    /// The grid knot the clock was put back on.
+    pub knot: f64,
+    /// Seconds of figure the jump cut (the clock's lag just before it).
+    pub cut: f64,
+    /// Clock position at the knot minus the edge, after the re-sync (seconds).
+    pub lag_after: f64,
+    /// Largest lag (music time minus clock) in the phrase that ends here, before the re-sync.
+    pub lag_inside: f64,
+    /// A figure starts within one knot of the edge.
+    pub figure_starts: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct MusicReport {
+    pub figures: Vec<FigureFit>,
+    pub moments: Vec<MomentFit>,
+    pub edges: Vec<EdgeSync>,
+    /// Passes of the fit loop, and the worst limit ratio after each.
+    pub passes: usize,
 }
 
 /// How far the figure clock ran behind the music (`t - clock`), seconds.
@@ -328,6 +385,24 @@ impl Traced {
     }
 }
 
+/// How the figure clock keeps time with the music.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ClockMode {
+    /// Version 47's clock; in `BodyMode::Layered` also D3's slow-down loop.
+    #[default]
+    V47,
+    /// The music's timing: a figure over a limit is drawn smaller (never slower), and at each
+    /// phrase edge the clock is put back on the music. Limits are `body::LIMITS` in both body
+    /// modes; one arm only.
+    Music,
+}
+
+/// Most passes the amplitude fit of `ClockMode::Music` takes, where it aims, and the least share
+/// of a figure's amplitude it keeps.
+const MUSIC_PASSES: usize = 24;
+const MUSIC_TARGET: f64 = 0.95;
+const MUSIC_FLOOR: f64 = 0.1;
+
 /// Most passes the limit loop of `BodyMode::Layered` takes.
 const LAYERED_PASSES: usize = 10;
 /// Where the loop aims when a limit is over, and the least the clock runs at.
@@ -356,6 +431,9 @@ pub fn compile_traced(
         (BodyMode::Layered, Some(field)) => Some(body_track::parse(field)?),
         _ => None,
     };
+    if config.clock == ClockMode::Music {
+        return compile_music(&data, config, rig, zones, arms, clearance_m, track.as_ref());
+    }
     let Some(track) = track else {
         let pass = compile_pass(&data, config, rig, zones, arms, clearance_m, None)?;
         return Ok(pass.traced(1, Vec::new()));
@@ -376,9 +454,12 @@ pub fn compile_traced(
     loop {
         let passes = worst_per_pass.len() + 1;
         let layer = Layer {
-            track: &track,
+            track: Some(&track),
             rate_scale: &rate_scale,
             span_scale: &span_scale,
+            fit: &[],
+            moment_fit: &[],
+            resync: false,
         };
         let pass = compile_pass(
             &data,
@@ -418,6 +499,140 @@ pub fn compile_traced(
     }
 }
 
+/// `ClockMode::Music`: the figure clock keeps the music's timing, a figure or moment that would
+/// break a `body::LIMITS` number is drawn smaller until it fits (figures scaled about `CENTRE`,
+/// moments in strength), and at each phrase edge the clock is put back on the music.
+fn compile_music(
+    data: &Evidence,
+    config: CompileConfig,
+    mut rig: Rig,
+    zones: &[Zone],
+    arms: &[ArmPlan],
+    clearance_m: f64,
+    track: Option<&body_track::BodyTrack>,
+) -> Result<Traced, String> {
+    if arms.len() != 1 {
+        return Err("ClockMode::Music plans one arm".into());
+    }
+    if rig.channels.len() != LIMITS.len() {
+        return Err("ClockMode::Music needs the five-axis rig".into());
+    }
+    for (c, (speed, accel)) in rig.channels.iter_mut().zip(LIMITS) {
+        c.max_speed_degrees_per_second = speed;
+        c.max_acceleration_degrees_per_second2 = accel;
+    }
+    let (mut fit, mut moment_fit): (Vec<f64>, Vec<f64>) = (Vec::new(), Vec::new());
+    let mut worst_per_pass = Vec::new();
+    loop {
+        let passes = worst_per_pass.len() + 1;
+        let layer = Layer {
+            track,
+            rate_scale: &[],
+            span_scale: &[],
+            fit: &fit,
+            moment_fit: &moment_fit,
+            resync: true,
+        };
+        let pass = compile_pass(
+            data,
+            config,
+            rig.clone(),
+            zones,
+            arms,
+            clearance_m,
+            Some(&layer),
+        )?;
+        if fit.is_empty() {
+            fit = vec![1.0; pass.figures.len()];
+            moment_fit = vec![1.0; pass.arrivals.len()];
+        }
+        let need = layered::demand(&pass.score, &pass.grid);
+        let worst = need.iter().copied().fold(0.0, f64::max);
+        worst_per_pass.push(worst);
+        if worst <= 1.0 || passes >= MUSIC_PASSES {
+            let at = need.iter().position(|r| *r == worst).unwrap_or(0);
+            let report = music_report(&pass, &fit, &moment_fit, passes);
+            let mut traced = pass.traced(passes, worst_per_pass);
+            traced.worst_at = traced.grid[at];
+            traced.invalid = traced.score.validate().err();
+            traced.music = Some(report);
+            return Ok(traced);
+        }
+        // Where a limit is over, the moment whose window holds it, else the figure the clock
+        // is in, is drawn smaller by the share it is over.
+        let (mut figure_need, mut moment_need) =
+            (vec![0.0f64; fit.len()], vec![0.0f64; moment_fit.len()]);
+        for (gi, &r) in need.iter().enumerate().filter(|(_, r)| **r > 1.0) {
+            let t = pass.grid[gi];
+            let moment = (pass.windows.iter().zip(&pass.arrivals))
+                .position(|(w, a)| a.2.is_some() && (w.0..=w.1).contains(&t));
+            match moment {
+                Some(n) => moment_need[n] = moment_need[n].max(r),
+                None => {
+                    let s = pass.clock[gi];
+                    let i = pass
+                        .figures
+                        .partition_point(|f| f.1 <= s)
+                        .min(fit.len() - 1);
+                    figure_need[i] = figure_need[i].max(r);
+                }
+            }
+        }
+        for (kept, r) in fit.iter_mut().zip(&figure_need) {
+            if *r > 1.0 {
+                *kept = (*kept * MUSIC_TARGET / r).max(MUSIC_FLOOR);
+            }
+        }
+        for (kept, r) in moment_fit.iter_mut().zip(&moment_need) {
+            if *r > 1.0 {
+                *kept = (*kept * MUSIC_TARGET / r).max(MUSIC_FLOOR);
+            }
+        }
+    }
+}
+
+/// What `ClockMode::Music` did, from its last pass.
+fn music_report(pass: &Pass, fit: &[f64], moment_fit: &[f64], passes: usize) -> MusicReport {
+    let step = pass.grid[1] - pass.grid[0];
+    let mut previous = 0;
+    let edges = (pass.jumps.iter())
+        .map(|&(edge, knot)| {
+            let before = pass.reach[knot].unwrap_or(pass.clock[knot]);
+            let inside = (previous..knot)
+                .map(|k| pass.grid[k] - pass.clock[k])
+                .fold(pass.grid[knot] - before, f64::max);
+            previous = knot;
+            EdgeSync {
+                edge,
+                knot: pass.grid[knot],
+                cut: pass.grid[knot] - before,
+                lag_after: pass.clock[knot] - edge,
+                lag_inside: inside,
+                figure_starts: pass.figures.iter().any(|f| (f.0 - edge).abs() <= step),
+            }
+        })
+        .collect();
+    MusicReport {
+        figures: (pass.figures.iter().zip(fit))
+            .map(|(f, &kept)| FigureFit {
+                start: f.0,
+                end: f.1,
+                kept,
+            })
+            .collect(),
+        moments: (pass.arrivals.iter().zip(moment_fit))
+            .map(|(a, &kept)| MomentFit {
+                time: a.0,
+                label: a.1,
+                arrival: a.2,
+                kept,
+            })
+            .collect(),
+        edges,
+        passes,
+    }
+}
+
 /// What one compile pass makes.
 struct Pass {
     score: EnsembleScore,
@@ -426,6 +641,14 @@ struct Pass {
     clock: Vec<f64>,
     /// Each moment's window (seconds) from the start of its preparation to the end of its release.
     windows: Vec<(f64, f64)>,
+    /// Each figure's (start, end) in music time, in order.
+    figures: Vec<(f64, f64)>,
+    /// Each moment: (measured time, label, time its hand target arrives, None for a cut).
+    arrivals: Vec<(f64, &'static str, Option<f64>)>,
+    /// Each re-sync: (phrase edge, grid knot index).
+    jumps: Vec<(f64, usize)>,
+    /// Clock position at the end of the interval before each knot, where it jumped.
+    reach: Vec<Option<f64>>,
 }
 
 impl Pass {
@@ -440,6 +663,8 @@ impl Pass {
             invalid: None,
             worst_at: 0.0,
             worst,
+            music: None,
+            arrivals: self.arrivals.iter().map(|a| (a.0, a.2)).collect(),
         }
     }
 }
@@ -726,7 +951,16 @@ fn compile_pass(
     // this strength (with the height below) over half of it and over none, on
     // the break's solo and on a strummed verse.
     // The body vector at a time (D3); None, and no knob below moves, outside `Layered`.
-    let body_at = |t: f64| layer.map(|l| l.track.at(t, beat));
+    let body_at = |t: f64| layer.and_then(|l| l.track).map(|b| b.at(t, beat));
+    // `ClockMode::Music`: the amplitude figure `i` is drawn at (scaled about the planner's figure
+    // centre, `CENTRE`), and the share of moment `n`'s strength kept; 1 outside it.
+    let fit_of = |i: usize| layer.and_then(|l| l.fit.get(i)).copied().unwrap_or(1.0);
+    let moment_fit_of = |n: usize| {
+        layer
+            .and_then(|l| l.moment_fit.get(n))
+            .copied()
+            .unwrap_or(1.0)
+    };
     let sized = |scale: f64, t: f64| {
         let mut size = scale * (1.0 + 0.35 * swell_at(t)[0]);
         if let Some(b) = body_at(t) {
@@ -841,7 +1075,8 @@ fn compile_pass(
             let repeat =
                 k / phrase.len() * phrases + (k % phrase.len() / sequence.len()).min(phrases - 1);
             let dir = first_dir * step_dir * if repeat % 2 == 1 { -1.0 } else { 1.0 };
-            let heading = entry - scaled(shape(0.0, dir), sized(scale, t))[0];
+            let fit = fit_of(instances.len());
+            let heading = entry - scaled(shape(0.0, dir), sized(scale, t) * fit)[0];
             let turn = way * travel * 2.0 * (stop - t) / (32.0 * beat);
             instances.push(Instance {
                 start: t,
@@ -852,7 +1087,7 @@ fn compile_pass(
                 heading,
                 turn,
             });
-            entry = scaled(shape(1.0, dir), sized(scale, stop))[0] + heading + turn;
+            entry = scaled(shape(1.0, dir), sized(scale, stop) * fit)[0] + heading + turn;
             cues.push(IntentCue {
                 start: t,
                 end: stop,
@@ -890,7 +1125,7 @@ fn compile_pass(
             .min(instances.len() - 1);
         let x = &instances[i];
         let u = ((t - x.start) / (x.end - x.start).max(1e-9)).clamp(0.0, 1.0);
-        let mut p = scaled((x.shape)(u, x.dir), sized(x.scale, t));
+        let mut p = scaled((x.shape)(u, x.dir), sized(x.scale, t) * fit_of(i));
         p[0] += x.heading + x.turn * u;
         p
     };
@@ -1042,9 +1277,9 @@ fn compile_pass(
     }
     // Weight sets how long a moment's approach and hold are (a firm arrival is short and holds;
     // a light one floats in); flow lets an arrival pass its pose and settle back.
-    if let Some(l) = layer {
+    if let Some(track) = layer.and_then(|l| l.track) {
         for m in moments.iter_mut().filter(|m| !m.frozen) {
-            let b = l.track.at(m.time, beat);
+            let b = track.at(m.time, beat);
             m.span *= geo(b[4], layered::SPAN.0, layered::SPAN.1);
             m.hold_beats *= geo(b[4], layered::HOLD.0, layered::HOLD.1);
             m.over = layered::OVERSHOOT * upper(b[5]);
@@ -1184,7 +1419,28 @@ fn compile_pass(
     // the hand faster than HAND_SPEED_CAP; lost time is made up at 15% extra pace.
     let mut clock: Vec<f64> = Vec::with_capacity(grid.len());
     let mut s = 0.0;
+    // `ClockMode::Music`: at each phrase edge the clock is put back on the music (grid knot of
+    // the edge); `jumps` has each knot and the clock position it jumped from.
+    let edge_knots: Vec<(usize, f64)> = if layer.is_some_and(|l| l.resync) {
+        let mut v: Vec<(usize, f64)> = data
+            .musical_memory
+            .phrases
+            .iter()
+            .skip(1)
+            .map(|p| ((p.start / step).round() as usize, p.start))
+            .filter(|&(k, _)| k > 0 && k < grid.len() - 1)
+            .collect();
+        v.dedup_by_key(|e| e.0);
+        v
+    } else {
+        Vec::new()
+    };
+    let mut jumps: Vec<(usize, f64)> = Vec::new();
     for (gi, &t) in grid.iter().enumerate() {
+        if edge_knots.binary_search_by_key(&gi, |e| e.0).is_ok() {
+            jumps.push((gi, s));
+            s = t;
+        }
         clock.push(s);
         let body = body_at(t);
         let held = moments
@@ -1277,15 +1533,51 @@ fn compile_pass(
     // disc alternate knot by knot. The hand stays within 1 cm of the unsmoothed
     // path; hand acceleration outside moments falls from 5.8 to 1.8 m/s² p95.
     // The user saw no difference by eye: kept for the hardware.
-    let clock: Vec<f64> = (0..clock.len())
-        .map(|i| bell(&clock, i as f64, 2.0))
+    // With re-syncs each stretch between two is smoothed on its own (the jump stays a jump), and
+    // `reach[k]` keeps what the clock ran up to at the end of the interval before knot k.
+    let mut reach: Vec<Option<f64>> = vec![None; clock.len()];
+    let clock: Vec<f64> = if jumps.is_empty() {
+        (0..clock.len())
+            .map(|i| bell(&clock, i as f64, 2.0))
+            .collect()
+    } else {
+        let mut out = Vec::with_capacity(clock.len());
+        let mut from = 0;
+        for stop in jumps.iter().map(|j| Some(*j)).chain([None]) {
+            let to = stop.map_or(clock.len(), |j| j.0);
+            let mut piece = clock[from..to].to_vec();
+            if let Some((_, before)) = stop {
+                piece.push(before);
+            }
+            out.extend((0..to - from).map(|i| bell(&piece, i as f64, 2.0)));
+            if let Some((knot, _)) = stop {
+                reach[knot] = Some(bell(&piece, (to - from) as f64, 2.0));
+            }
+            from = to;
+        }
+        out
+    };
+    // The jump leaves the hand's target where the figure was; it settles onto the figure at a
+    // pace the hand can keep (peak 0.5 m/s, at least two beats), the follower absorbing the rest.
+    let cuts: Vec<Cut> = jumps
+        .iter()
+        .map(|&(knot, _)| {
+            let (old, new) = (flow(reach[knot].unwrap()), flow(clock[knot]));
+            let (a, b) = (place(old).0, place(new).0);
+            let metres = (0..3).map(|k| (a[k] - b[k]).powi(2)).sum::<f64>().sqrt();
+            Cut {
+                time: grid[knot],
+                offset: std::array::from_fn(|k| old[k] - new[k]),
+                span: (2.0 * beat).max(3.0 * metres),
+            }
+        })
         .collect();
     // Approach as the body feels it: it settles in over four beats. The hand's
     // speed cap acts on the figure, not on this lift, and a step in the lift
     // carried the hand 0.2 to 0.5 m/s past the cap.
     // Breath: a slow swell of the hand's height and reach, its phase the integral of its rate so
     // that a change of rate at a phrase edge bends no cycle.
-    let breath_phase: Vec<f64> = if layer.is_some() {
+    let breath_phase: Vec<f64> = if body_at(0.0).is_some() {
         let mut phase = 0.0;
         grid.iter()
             .map(|&t| {
@@ -1309,7 +1601,16 @@ fn compile_pass(
     let waited = |t: f64| -> [f64; 3] {
         let x = (t / step).clamp(0.0, (clock.len() - 1) as f64);
         let i = (x.floor() as usize).min(clock.len() - 2);
-        let mut p = flow(lerp(clock[i], clock[i + 1], x - i as f64));
+        let end = reach[i + 1].unwrap_or(clock[i + 1]);
+        let mut p = flow(lerp(clock[i], end, x - i as f64));
+        for c in &cuts {
+            if (c.time..c.time + c.span).contains(&t) {
+                let left = 1.0 - smooth((t - c.time) / c.span);
+                for (v, o) in p.iter_mut().zip(c.offset) {
+                    *v += o * left;
+                }
+            }
+        }
         // The hand rises while the voice sings well above its usual pitch.
         let sung = (t - data.musical_memory.beat_zero) / beat - 0.5;
         // 0.65: the user put it between 0.45 and 0.9 in a blind side-by-side.
@@ -1345,6 +1646,7 @@ fn compile_pass(
     // blend peaks at 1.5 times its mean speed). Sharp flourishes threw the
     // hand at 1.5 to 2.3 m/s, which the user saw as jerks on two songs.
     for (n, m) in moments.iter_mut().enumerate().filter(|(_, m)| !m.frozen) {
+        m.strength *= moment_fit_of(n);
         let base = waited(m.time);
         let from = [
             base[0],
@@ -2006,12 +2308,37 @@ fn compile_pass(
             )
         })
         .collect();
+    let figures = instances.iter().map(|x| (x.start, x.end)).collect();
+    // The hand target's arrival at a moment: the first time its blend is within 1 % of 1.
+    let arrivals = (moments.iter())
+        .map(|m| {
+            let arrival = (!m.frozen).then(|| {
+                let tau = (0..=4000)
+                    .map(|i| -m.span + m.span * i as f64 / 4000.0)
+                    .find(|&tau| {
+                        let x = (tau + m.span) / m.span;
+                        smooth(x) + m.over * (PI * x).sin() >= 0.99
+                    })
+                    .unwrap_or(0.0);
+                m.time + tau * beat
+            });
+            (m.time, m.label, arrival)
+        })
+        .collect();
+    let jumps = jumps
+        .iter()
+        .map(|&(knot, _)| (edge_knots.iter().find(|e| e.0 == knot).unwrap().1, knot))
+        .collect();
     Ok(Pass {
         score,
         workspace: ws,
         grid,
         clock,
         windows,
+        figures,
+        arrivals,
+        jumps,
+        reach,
     })
 }
 
@@ -3210,5 +3537,105 @@ mod tests {
         let off = one_arm(&json, CompileConfig::default());
         let breaches = check(&export(&off.score, 50.0, &meta("off")).unwrap()).unwrap();
         assert!(!breaches.is_empty());
+    }
+
+    fn music() -> CompileConfig {
+        CompileConfig {
+            clock: ClockMode::Music,
+            ..CompileConfig::default()
+        }
+    }
+
+    fn music_layered() -> CompileConfig {
+        CompileConfig {
+            clock: ClockMode::Music,
+            body: BodyMode::Layered,
+            ..CompileConfig::default()
+        }
+    }
+
+    /// The drop song with a faster beat, so figures that were fine at 0.5 s break a limit.
+    fn fast_song(beat: f64) -> String {
+        let mut value: serde_json::Value = serde_json::from_str(&drop_song(false)).unwrap();
+        value["musicalMemory"]["beatPeriod"] = serde_json::json!(beat);
+        value.to_string()
+    }
+
+    #[test]
+    fn music_scores_pass_validate_for_body_off_and_drawn_bodies() {
+        let json = drop_song(false);
+        let t = one_arm(&json, music());
+        assert_eq!(t.invalid, None);
+        assert!(t.music.is_some() && !t.music.as_ref().unwrap().edges.is_empty());
+        for b in [NEUTRAL, [0.0; 15], [1.0; 15], crate::body::draw(1).0] {
+            let t = one_arm(&with_body(&json, b), music_layered());
+            assert_eq!(t.invalid, None, "{b:?}");
+        }
+        // Layered + Music without a bodyTrack is Music alone, and more than one arm is refused.
+        let bare = one_arm(&json, music_layered());
+        assert_eq!(
+            serde_json::to_string(&bare.score).unwrap(),
+            compile_json(&json, music())
+        );
+        let rig = Rig::illustrative_five_axis();
+        assert!(compile_traced(&json, music(), rig, &[], &pair(), 0.0).is_err());
+    }
+
+    #[test]
+    fn the_music_clock_is_back_on_the_bar_at_every_phrase_edge() {
+        let t = one_arm(&drop_song(false), music());
+        let music = t.music.unwrap();
+        // The song has phrases at 8, 16 and 24 s (16 beats of 0.5 s).
+        assert_eq!(music.edges.len(), 3);
+        for e in &music.edges {
+            assert!((e.lag_after).abs() < 0.5 * 0.5, "{e:?}");
+            assert!(e.lag_inside >= e.cut - 1e-9);
+        }
+        // The clock really jumped: its largest lag before a re-sync is far more than after.
+        assert!(music.edges.iter().any(|e| e.cut > 0.2), "{:?}", music.edges);
+        // Version 47 has the same clock up to the first edge, so the music clock only adds the jumps.
+        let v47 = one_arm(&drop_song(false), CompileConfig::default());
+        let first = t.grid.iter().position(|g| *g >= 8.0 - 1e-9).unwrap() - 1;
+        assert_eq!(&t.clock[..first - 8], &v47.clock[..first - 8]);
+        let end = t.clock.len() - 1;
+        assert!((t.clock[end] - t.grid[end]).abs() < 8.0);
+    }
+
+    #[test]
+    fn a_figure_over_a_limit_is_shrunk_not_stretched() {
+        // The fastest beat the planner takes, and the extreme body.
+        let json = fast_song(0.2);
+        let t = one_arm(&with_body(&json, [1.0; 15]), music_layered());
+        let report = t.music.unwrap();
+        assert_eq!(t.invalid, None);
+        assert!(report.figures.iter().any(|f| f.kept < 0.999), "{report:?}");
+        assert!(report.figures.iter().all(|f| f.kept >= MUSIC_FLOOR));
+        // No time stretch: with no body the clock is version 47's up to the first edge.
+        let t = one_arm(&json, music());
+        let v47 = one_arm(&json, CompileConfig::default());
+        let first = t.grid.iter().position(|g| *g >= 8.0 - 1e-9).unwrap() - 1;
+        assert_eq!(&t.clock[..first - 8], &v47.clock[..first - 8]);
+        // The shrink is reported per figure, in order, covering the song.
+        assert_eq!(report.figures.first().map(|f| f.start), Some(0.0));
+        assert!(report
+            .figures
+            .windows(2)
+            .all(|w| w[0].end <= w[1].start + 1e-9));
+    }
+
+    #[test]
+    fn a_moment_keeps_its_measured_arrival() {
+        let t = one_arm(&drop_song(false), music());
+        let music = t.music.unwrap();
+        let arrivals: Vec<_> = music
+            .moments
+            .iter()
+            .filter(|m| m.arrival.is_some())
+            .collect();
+        assert!(!arrivals.is_empty());
+        for m in arrivals {
+            let d = m.arrival.unwrap() - m.time;
+            assert!((-1.5..=0.0).contains(&d), "{m:?}");
+        }
     }
 }
