@@ -46,7 +46,7 @@ def score_variant(per_tag, ratings, dial_rows, cfg):
     d = take(c3.SIXTH, dial_rows)
     sixth = dict(c3.score_map([d], cfg.n_perm, seed=c3.SEED_PERM + 99), segments=len(d["songs"]),
                  segmentsWithoutDial=int(len(dial_rows) - len(d["songs"])))
-    links = {str(t): r2.link_report(per_tag[t][0]) for t in per_tag}
+    links = {str(t): per_tag[t][0]["links"] for t in per_tag}
     bodies = {str(t): per_tag[t][1]["bodies"] for t in per_tag}
     edge = {t: spread.edge_share(b).tolist() for t, b in bodies.items()}
     return {"va": va, "gems": gems, "sixthDial": sixth, "links": links, "edgeShare": edge,
@@ -67,7 +67,8 @@ def run(clips, folds, surrogate, cfg, dial, out_dir=None, log=print, anchors=Non
         rendered["before"][tag] = (dict(prep, links=before_links), c3.render_map(prep, tag, "core2b", cfg))
         log(f"tag {tag}: rendered before ({time.time() - start:.0f} s)")
         prep["map"].fit_quantile(prep["lanes_tr"], **anchors)
-        rendered["after"][tag] = (dict(prep, links=r2.link_report(prep)), c3.render_map(prep, tag, "core2b", cfg))
+        after_links = r2.link_report(prep)       # with the quantile attached: held-out r of lane and fixed body dimension
+        rendered["after"][tag] = (dict(prep, links=after_links), c3.render_map(prep, tag, "core2b", cfg))
         prep["map"].quantile = None
         log(f"tag {tag}: rendered after ({time.time() - start:.0f} s)")
         if out_dir:
@@ -85,6 +86,20 @@ def run(clips, folds, surrogate, cfg, dial, out_dir=None, log=print, anchors=Non
     if out_dir:
         common.write_json(pathlib.Path(out_dir) / "a2.json", result)
     return result
+
+
+def held_out_links(out_dir):
+    """Held-out Pearson r of each lane and body dimension per variant, recomputed from the saved segments_*.npz
+    (lanes and rendered bodies); the same quantity as check3r2.link_report's heldOutR."""
+    out = {}
+    for v in VARIANTS:
+        out[v] = {}
+        for tag in list(range(common.N_FOLDS)) + [c3.SIXTH]:
+            z = np.load(pathlib.Path(out_dir) / f"segments_{tag}.npz")
+            lanes, bodies = z["lanes"], z[f"{v}/bodies"]
+            out[v][str(tag)] = {decoder.link_name(l): decoder._np_pearson(lanes[:, l[0]], bodies[:, decoder.DIMS.index(l[1])])
+                                for l in decoder.links(True)}
+    return out
 
 
 def round2_reference(check_dir=r2.OUT):

@@ -4513,3 +4513,41 @@ D3 Layered + V47 (stage1 bodies), max |lag| 5.72 s (10.49), 13.41 s (23.15), 21.
 10. `three.sh` points at the `dance-figures` worktree; I ran a copy that points at `b-clock` (same commands, same files). The D3 check wrote to a scratch directory, not to `$D/d3`. Spans windows end at 338, 282, 269 s as D3's did. `score-csv --mode` is a label: `off` for Off + Music, `layered` for Layered + Music.
 
 Open: figure starts that miss the bar (point 5) may read as cut mid-figure by eye; the 0.95 aim, floor 0.1, 24 passes and the 2-beat, 3 s per metre cut span are guesses.
+
+### Task A: core-2b anchors, body-spread fix, spread check (A1, A2, A3) — 2026-10-29
+
+Branch `a-spread` (from `e06324a` on `keys-decide`). **Not verified by eye.** Code at `74c3033` plus the fix to `a2.py` committed with this entry. Run once as committed, after the overseer's go; no rule or threshold changed after the result. Outputs, outside git: `/secondary/hyst-data/emotion/a2/` (`a1.json`, `a2.json`, `a3.json`, `links_recomputed.json`, `segments_*.npz`, `a3/{before,after}/` sidecars, logs). Body generator: `body_render` built in this worktree from the `hyst-previz` sources of `9c691c9` (e06324a changed docs only). Tests: 193 Python unittests before the A2 and A3 runs (169 before this task, 24 new in `test_spread.py` at that time plus one link-table test added later); no Rust touched.
+
+**A1.** Round 2's core-2b links: 22 of 24 reach held-out r 0.5. Misses: fold 4 energy to size 0.487, sixth set energy to time 0.378. The sixth-set core-2b was refitted with check3r2's functions; its saved segment lanes match `segments_5.npz` with largest absolute difference 0.0. Energy against pass A on the 3 songs: 0.252 (585 steps), 0.887 (568), 0.628 (542), all positive. Power against pass B heavy: −0.098, −0.260, −0.227; light: −0.445, −0.134, 0.138. The sign disagrees on 3 of 3 songs, so the power anchor is dropped for core-2b (rule of 2026-10-28), by the overseer's ruling. Weight is free; mood.power stays as a lane.
+
+**A2.** Core-2b refitted without the power anchor (energy anchor and its three bounded links kept; k = 2 on all six sets), same folds, seeds and code path as check3r2. "Before" is that map. "After" is the same map with the quantile map on the pre-sigmoid values (5th to 0.05, 95th to 0.95, linear in rank, clipped), fitted on each set's training segments. Round 2's saved core-2b numbers (power anchor kept) are the reference. Run time 5,954 s for the six sets (fit about 100 to 130 s each; render under 40 s each).
+
+| | Round 2 (reference) | Before | After |
+|---|---|---|---|
+| DEAM/MERP rho | 0.2695 | 0.2554 | 0.3370 |
+| per fold | 0.1248, 0.2982, 0.2320, 0.3498, 0.3425 | 0.1407, 0.3441, 0.0627, 0.3389, 0.3904 | 0.3708, 0.3597, 0.3853, 0.2817, 0.2874 |
+| gate-1 shuffle (1,000) | | beats 1000 of 1000, permuted max 0.0112 | beats 1000 of 1000, permuted max 0.0102 |
+| GEMS rho | 0.1516 | 0.1736 | 0.1605 |
+| sixth set against the dial (106 segments) | 0.4348 | 0.3668 | 0.3850 |
+| failed rated segments | 6 | 41 (fold 4) | 39 (folds 0 to 4) |
+| energy links reaching 0.5 (18) | | 17 | 17 |
+
+The only energy link under 0.5 in both is the sixth set energy to time (0.365 before, 0.352 after). Held-out r of the 18 energy links, before / after, per set (energy, size, time): fold 0 0.981, 0.887, 0.952 / 0.973, 0.873, 0.945; fold 1 0.730, 0.822, 0.955 / 0.715, 0.861, 0.954; fold 2 0.794, 0.972, 0.985 / 0.783, 0.965, 0.975; fold 3 0.729, 0.915, 0.579 / 0.715, 0.918, 0.588; fold 4 0.594, 0.966, 0.655 / 0.542, 0.953, 0.646; sixth set 0.749, 0.731, 0.365 / 0.754, 0.726, 0.352. Power to weight, not an anchor and not gated, before / after: 0.433 / 0.413, 0.727 / 0.714, 0.105 / 0.103, 0.592 / 0.584, 0.407 / 0.401, 0.465 / 0.502.
+Known defect: the `after` links inside `a2.json` repeat the `before` ones (the quantile was reset before they were read). The numbers above come from `links_recomputed.json`, computed from the saved lanes and rendered bodies; the `before` values equal the saved ones exactly. `a2.py` is fixed for a rerun. Share of sixth-set segments within 0.05 of 0 or 1 before: arch, succession direction, succession delay, breath rate and energy 1.00; after: time 0.22, energy 0.11, rhythm 0.12, space 0.08, others 0. DEAM/MERP failed segments are not comparable between columns by count alone.
+
+**A3, spread check on the 3 songs (core-2b without the power anchor, phrases of `bodyTrack`).** Rules fixed in the note of 2026-10-29 and `e06324a`. **After the fix: FAIL.** Rule 1 passes on all three songs. Rule 2 fails (Five Years and Presence share region 1). Rule 3 fails on Instant Crush (time 0.40 within 0.05 of 0 or 1) and Five Years (space 0.28, energy 0.31, rhythm 0.38); Presence passes.
+
+| Song | Variant | Phrases | Region counts (regions 0 to 7) | Visited | Most visited | Mean distance to region (max) | Dimensions over 20 % |
+|---|---|---|---|---|---|---|---|
+| Instant Crush | before | 40 | 0, 40, 0, 0, 0, 0, 0, 0 | 1 | 1 | 1.400 (1.549) | arch, succession direction, succession delay, breath rate, energy (all 1.00) |
+| | after | 40 | 0, 17, 0, 18, 3, 0, 0, 2 | 4 | 3 | 1.369 (1.772) | time 0.40 |
+| Five Years | before | 32 | 0, 32, 0, 0, 0, 0, 0, 0 | 1 | 1 | 1.355 (1.547) | same five (1.00) |
+| | after | 32 | 2, 18, 2, 0, 0, 0, 6, 4 | 5 | 1 | 1.075 (1.821) | space 0.28, energy 0.31, rhythm 0.38 |
+| Presence | before | 38 | 0, 38, 0, 0, 0, 0, 0, 0 | 1 | 1 | 1.419 (1.574) | same five (1.00) |
+| | after | 38 | 0, 26, 1, 8, 0, 0, 1, 2 | 5 | 1 | 1.325 (1.930) | none |
+
+No render failed (0 failed phrases in all six cases). "Before" is reported, not gated. Per rule, the run stopped here; the one allowed adjustment (symmetric move of the quantile anchors) was not made and is the overseer's to call. Distances to the nearest region are about 1.1 to 1.4 on a 37-dimension midrank space, so most phrases sit far from every region mean; the region labels are the nearest of eight, not a claim that a phrase belongs to it.
+
+**Points fixed where the note was silent** (all ruled on 2026-10-29): ties for most visited count as sharing when the tied sets meet; a failed phrase has no region and is left out of the region counts only; within 0.05 means ≤ 0.05 or ≥ 0.95 and over 20 % means strictly above; phrase-mean lanes go through the map, then the quantile.
+
+**Not done:** the Rust reader was not run on the new sidecars (`bodyTrack` is the D3 format, the quantile is applied in Python); no export or CSV was made; no figure or clock work; the quantile range was not adjusted; no check against how the bodies look.
