@@ -23,14 +23,29 @@ import numpy as np
 
 import common
 from decoder import DIMS
+from quantile import QuantileMap
 
 VERSION = 1
 
 
 def save_map(path, fitted, map_id):
-    """Save a fitted decoder.Map as W (15, width), b (15) and a name for the sidecar."""
+    """Save a fitted decoder.Map as W (15, width), b (15) and a name for the sidecar. A map with a spread fix
+    (decoder.Map.quantile) is saved with it beside the file as `<name>.quantile.npz`, see `load_quantile`."""
     np.savez_compressed(path, W=fitted.weights.detach().numpy().astype(np.float64),
                         b=fitted.b.detach().numpy().astype(np.float64), id=map_id)
+    if fitted.quantile is not None:
+        fitted.quantile.save(quantile_path(path))
+
+
+def quantile_path(path):
+    path = pathlib.Path(path)
+    return path.with_name(path.stem + ".quantile.npz")
+
+
+def load_quantile(path):
+    """The spread fix saved beside a map file, or None."""
+    q = quantile_path(path)
+    return QuantileMap.load(q) if q.exists() else None
 
 
 def load_map(path):
@@ -46,9 +61,10 @@ def lane_matrix(mind):
     return np.column_stack([energy, power, rest])
 
 
-def bodies_of(lanes, w, b):
-    """The map: sigmoid(W lanes + b) for each row of lanes."""
-    return 1.0 / (1.0 + np.exp(-(np.asarray(lanes) @ w.T + b)))
+def bodies_of(lanes, w, b, quantile=None):
+    """The map: sigmoid(W lanes + b) for each row of lanes; with a QuantileMap, that map of W lanes + b instead."""
+    pre = np.asarray(lanes) @ w.T + b
+    return quantile(pre) if quantile is not None else 1.0 / (1.0 + np.exp(-pre))
 
 
 def phrase_lanes(lanes, hop, phrases):
@@ -65,14 +81,14 @@ def phrase_lanes(lanes, hop, phrases):
     return np.array(out)
 
 
-def body_track(mind, w, b, map_id, phrases):
+def body_track(mind, w, b, map_id, phrases, quantile=None):
     """The `bodyTrack` object: phrases are (start, end) seconds in order."""
     lanes = lane_matrix(mind)
     if w.shape != (len(DIMS), lanes.shape[1]) or b.shape != (len(DIMS),):
         raise ValueError(f"map is {w.shape} but the mood has {lanes.shape[1]} lanes")
     if abs(mind["hopSeconds"] - common.HOP_SECONDS) > 1e-9:
         raise ValueError("mindState hop is not the 0.5 s grid")
-    bodies = bodies_of(phrase_lanes(lanes, mind["hopSeconds"], phrases), w, b)
+    bodies = bodies_of(phrase_lanes(lanes, mind["hopSeconds"], phrases), w, b, quantile)
     return {
         "version": VERSION, "source": mind["source"], "map": map_id, "dims": list(DIMS),
         "phrases": [{"start": float(s), "end": float(e), "body": np.round(body, 6).tolist()}
@@ -93,7 +109,7 @@ def write(notes_path, mind_path, map_path, output_path):
         raise ValueError("mind sidecar has no mindState")
     phrases = [(p["start"], p["end"]) for p in sidecar["musicalMemory"]["phrases"]]
     w, b, map_id = load_map(map_path)
-    field = body_track(mind, w, b, map_id, phrases)
+    field = body_track(mind, w, b, map_id, phrases, load_quantile(map_path))
     output_path.write_text(json.dumps(dict(sidecar, bodyTrack=field), separators=(",", ":")))
     return field
 
