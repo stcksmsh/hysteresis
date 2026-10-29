@@ -1,9 +1,10 @@
 # The brain, B1–B3: spec with checks fixed in advance
 
 Status: **draft, 2026-10-29, awaiting the user's yes. Nothing is built before it.**
-Source: the planning agent's answers to the overseer's brief (2026-10-29). They are
-proposals, not the user's rulings, until the user says yes. The overseer made them
-operational (marked *overseer*) where they left a number or a definition open. Where
+Source: the planning agent's answers to the overseer's brief (2026-10-29). The overseer
+filled the numbers they left open (marked *overseer*); the planning agent then ruled on
+every fill (marked *planner review*, same day). All of it is proposal, not the user's
+ruling, until the user says yes. Where
 this file and `NEXT_DECODER_THEN_BRAIN.md` §6 differ, this file wins once accepted.
 Rules of `EMOTION.md` and `NEXT_DECODER_THEN_BRAIN.md` §3 hold: every pass/fail rule
 is committed before any result it scores; two rounds at most per check; stop at
@@ -21,6 +22,8 @@ every ★.
   Nothing lands on the root disk.
 - Compute cap: B3 training gets 3 nights in total. Past that: stop and report. Do not
   scale the model up.
+- *Planner review, a general rule:* wherever a z-score or an SD margin appears, the
+  yardstick is the same statistic's own variation at the same scale (not frame noise).
 
 ## 1. Shared parts
 
@@ -83,7 +86,8 @@ every ★.
   recorded.
 - Input: onset strength at 100 Hz from the full mix, plus a low-band flux channel
   below 200 Hz as a kick proxy. *Overseer:* how the two channels combine into the
-  bank's input is fixed in code before results.
+  bank's input is fixed in code before results. *Planner review:* the bank's input is
+  the sum of the two channels, each standardised, with equal weight.
 - Baseline: the `hyst-audio` PLL (`BeatTracker`), run through a small Rust example on
   the same audio. It is not re-implemented.
 - **Beat readout:** beats are the phase-zero crossings of the strongest oscillator in
@@ -95,14 +99,17 @@ every ★.
 Metrics: F-measure at ±70 ms, CMLt, AMLt, tempo error, median phase error in ms.
 Intervals are 95 % bootstrap over clips, 2,000 resamples.
 
-- **Gate 1, tracking.** B1 minus PLL on F-measure and on AMLt, on Ballroom and on GTZAN
-  separately. All four intervals lie above 0. The offline analysis grid is reported as
-  an upper reference, not a target. There is no absolute floor.
+- **Gate 1, tracking (non-inferiority; planner review).** The claim "entrains to the
+  beat" needs good-enough tracking, not superiority over a dedicated tracker. On
+  F-measure and on AMLt, on Ballroom and on GTZAN separately, the lower bound of the
+  95 % interval of (B1 − PLL) is ≥ −0.05. All four must hold. Superiority is reported,
+  not gated. The offline analysis grid is reported as an upper reference, not a target.
 - **Gate 2, holding through gaps.** Synthetic gaps are cut into clips after at least
-  10 s of music. They are 2, 4 and 8 s long, of two kinds: silence, and the same audio
-  low-passed so it carries no onsets (*overseer:* a 4th-order low-pass at 150 Hz, and
-  the gap's onset strength is checked below 5 % of the clip's median). The gap
-  replaces audio; the beat annotations continue through it. Measured at the end of a
+  10 s of music. They are 2, 4 and 8 s long, of two kinds: silence, and an onset-free
+  filler (*planner review:* noise shaped to the average spectrum of the 2 s before the
+  gap, with 50 ms crossfades; a low-pass would keep the kick). The gap's onset strength
+  must be below 5 % of the clip's median. The gap replaces audio; the beat annotations
+  continue through it. Measured at the end of a
   4 s gap, both kinds:
   1. median phase error ≤ 70 ms;
   2. not worse than the PLL coasting: *overseer:* the upper bound of the interval of
@@ -115,7 +122,8 @@ Intervals are 95 % bootstrap over clips, 2,000 resamples.
   beat/3 to the mean amplitude at beat/2.
   - *Overseer:* beat = B1's own tempo, i.e. the readout oscillator's median frequency.
     The amplitude at a frequency is taken from the nearest oscillator. The ratio with
-    the annotated tempo is reported beside it.
+    the annotated tempo is reported beside it, and so is how often B1's tempo is half
+    or double the annotated one.
   - Pass: the ratio separates triple from duple with AUC ≥ 0.75, permutation p < 0.01
     (10,000 label permutations).
 - **Reported only:** the missing-pulse stimulus of Large 2015.
@@ -153,9 +161,13 @@ Intervals are 95 % bootstrap over clips, 2,000 resamples.
   reported.
 - The hierarchy is an objective, not literal error-unit predictive coding. Each
   layer's prediction error is computed and written out.
-- **Precision is learned.** Each head predicts a variance; precision = 1/σ². The
-  higher layer's precision multiplies the lower layer's error before it feeds back up.
-  This is the slow-to-fast coupling.
+- **Precision is learned.** Each head predicts a variance; precision = 1/σ².
+  *Planner review, the coupling defined:* at step t, layer i receives as an extra input
+  layer (i−1)'s prediction error from step t−1, multiplied by the precision layer i
+  predicts for it. It is causal, and it is the slow-to-fast gain.
+- **Sequences (planner review).** Training uses 60 s chunks with the recurrent state
+  carried across chunks (gradients truncated at chunk edges). Evaluation runs whole
+  songs with the state carried throughout.
 - Seeds are fixed and committed.
 
 ### 4.2 Objective
@@ -169,16 +181,16 @@ Intervals are 95 % bootstrap over clips, 2,000 resamples.
 - **Neuromod lanes** (time constants fixed now):
   - arousal = total surprisal smoothed with rise τ 1 s and decay τ 8 s;
   - tension = L4 predicted variance, τ 8 s;
-  - familiarity = minus the 30 s trend of total surprisal, τ 30 s (*overseer:* the
-    slope of a least-squares line over the past 30 s, then smoothed at τ 30 s).
+  - familiarity = minus the least-squares slope of total surprisal over the past 30 s,
+    with no further smoothing (*planner review*).
 
 ### 4.3 Gate: it learned to predict music
 
 - Held-out artists. B3 is compared with three baselines on the same features and
   horizons:
   - a) persistence;
-  - b) linear autoregressive (*overseer:* ridge on the last 1 s of fast features, one
-    per horizon);
+  - b) linear autoregressive (*planner review:* ridge on the last 1 s at full rate plus
+    the last 16 s pooled to 0.5 s steps, one model per horizon);
   - c) B2.
 - Each baseline gets a predicted variance fitted on training data, so NLL is
   comparable.
@@ -187,8 +199,9 @@ Intervals are 95 % bootstrap over clips, 2,000 resamples.
      lies above 0;
   2. B3's mean squared error of the predicted mean is ≥ 5 % below the best baseline's.
 
-  *Overseer:* the planner's "5 % better on mean NLL" is moved to MSE, because a
-  Gaussian NLL can be negative, so a percentage of it is undefined.
+  *Overseer, kept by the planner review:* the 5 % margin is on MSE, because a Gaussian
+  NLL can be negative, so a percentage of it is undefined. Bits per feature-frame are
+  reported, not gated.
 - The smoothing control is reported on the mood readouts here and gated in D5.
 
 ### 4.4 Check: habituation (an order test)
@@ -202,19 +215,23 @@ Intervals are 95 % bootstrap over clips, 2,000 resamples.
   The audio of A2 is the same both times; only the history differs.
 - Pass, both conditions:
   1. the paired drop is above 0, with a bootstrap 95 % interval over pairs;
-  2. the median drop is ≥ 10 %. *Overseer, same reason as §4.3:* measured on surprisal
-     above the song's 5th-percentile surprisal, which is positive by construction.
+  2. *planner review:* the paired drop, as mean total surprisal over A2, is ≥ 0.25 × the
+     SD of that song's section-mean total surprisal (sections from
+     `musicalStructure`). The effect must be at least a quarter of the normal
+     section-to-section variation.
 - B2 is reported on the same test, as the control for "any memory at all".
-- *Overseer:* B2 failing this test does not affect B3's pass. If B2 passes it too, the
-  claim reads "habituates", with B2's numbers beside it.
+- B2 failing this test does not affect B3's pass. If B2 passes it too, the claim still
+  reads "habituates" (never "learned to habituate"), with B2's numbers beside it. If B3
+  beats B2 on the paired drop (interval above 0), that is reported, not gated.
 
 ### 4.5 Check: surprisal at abrupt change (a splice test)
 
 - Cuts on a beat to a different held-out song, and, as a control, cuts within the same
-  song at a matched beat phase. *Overseer:* 4 cuts per held-out song, with fixed seeds;
-  each cut point is at least 20 s from the song's ends.
+  song at a matched beat phase. 4 cuts per held-out song, fixed seeds, on a beat, each
+  ≥ 35 s from the start and ≥ 10 s from the end (*planner review*).
 - z = (mean total surprisal in the 1 s after the cut − mean in the 5 s before) / SD of
-  the 100 Hz total surprisal in those 5 s.
+  the 1 s window means of total surprisal over the 30 s before the cut (*planner
+  review*).
 - Pass, both conditions:
   1. z ≥ 3 on ≥ 80 % of the cross-song cuts;
   2. cross-song z exceeds within-song z, with a paired bootstrap interval above 0.
@@ -283,16 +300,20 @@ Ignition (cross-band coherence events), B4 dreaming, B5 monitor, B6 staging.
 - The feature code.
 - The GrFNN parameters with their sources.
 
-## 9. Open points for the user
+## 9. Open points
 
-- **U1. Corpus access.** `fma_full` (879 GiB) does not fit the free 487 GB.
-  - a) Fetch only the filtered tracks from `fma_full`. A builder first checks it can
-    read single files out of the remote zip (HTTP ranges). About 100 h is about
-    1,500 tracks, about 15 GB.
-  - b) `fma_large`: 30 s clips, 93 GiB. These break the habituation test and starve L4.
-  - c) Another whole-track CC source.
-
-  *Overseer recommends* a), with c) if a) is not possible.
-- **U2.** The overseer's operational numbers above, marked *overseer*.
-- **U3.** The NLL-to-MSE change in §4.3 and the surprisal floor in §4.4. These are
-  changes to the planner's numbers, not just fills.
+- **U1. Corpus access.** The planner rules a): fetch only the licence-filtered tracks
+  out of `fma_full` by range reads, with another whole-track CC source as the fallback
+  (to check, licences read per item: Internet Archive netlabel collections, ccMixter).
+  Final ruling after these measurements:
+  1. range-read feasibility and throughput;
+  2. hours passing the licence filter, by genre: can electronic/dance + pop + rock
+     reach half of about 100 h?
+  3. fast-feature and CLAP time per hour of audio;
+  4. B3 forward+backward time per hour of audio (this alone sets the corpus size, by
+     the one-epoch ≤ 4 h rule);
+  5. Chromaprint time per hour, and how many FMA candidates match DEAM, MERP or
+     Emotify;
+  6. analysis-chain time per held-out song for `musicalStructure`, and whether it
+     needs Demucs.
+- U2 and U3 were ruled by the planner review (above).
