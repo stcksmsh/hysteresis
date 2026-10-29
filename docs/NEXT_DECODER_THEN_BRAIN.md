@@ -199,6 +199,10 @@ no further encoding work.
   inside each phrase, before the re-sync; seconds cut per edge; hand-target arrival
   times of moments against their measured times. v47 and D3's Layered + `V47` are
   reported as references.
+- User, 2026-10-29, after step B's results: the clock-only re-sync is accepted as
+  built. The figure schedule stays in music time, so a figure starts at the edge only
+  where the schedule puts one there. A restart of figures at every edge stays open as
+  B's round 2, if it reads badly when watched.
 - Exports for the user's watch: per song, v47 Off, body Off + `Music`, Layered +
   `Music` (`core-2b` bodies after A2), with CSVs and `check-csv` verdicts.
 
