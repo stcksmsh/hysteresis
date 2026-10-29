@@ -95,6 +95,13 @@ every ★.
 
   Excluding too much is cheap, so the permissive threshold stands. The number excluded
   is reported. The list is committed before training.
+- **Size and balance amended (user, 2026-10-30, after the training-side count and
+  before download):** electronic, pop and rock (recorded `genre_top`, 60–600 s, training
+  side, DEAM IDs out) come to only 89.1 h, so 100 of 200 h cannot be met. N becomes
+  2 × the E/P/R training hours that remain after both exclusions (about 178 h), with
+  "other" filling the second half. Both "half E/P/R" and the epoch rule then hold. CC
+  BY-SA is included by the BY-SA rule (BY + CC0 + PD give 66.1 h of E/P/R). Held-out
+  cap 20 h.
 - **Balance:** electronic, pop and rock (recorded `genre_top` only) make up at least
   100 of the 200 h. The open pool has 120.2 h of them. Tracks whose genre is only
   inferred from `genres_all` may be used, but count as "other". Pop is thin (6.4 h);
