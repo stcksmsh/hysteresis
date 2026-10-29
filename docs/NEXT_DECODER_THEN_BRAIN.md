@@ -164,6 +164,12 @@ no further encoding work.
   scored per song and per dimension, all 15 dimensions.
 - The one adjustment allowed: the two quantile anchors (5th/95th → 0.05/0.95) moved
   symmetrically, nothing else.
+- Further points (overseer, 2026-10-29, on the builder's questions, before results):
+  a tie for most-visited region counts as shared when the tied sets meet; a phrase whose
+  body fails the stretch ladder gets no region, is counted and reported, and is left out
+  of the region counts only (rule 3 reads every phrase's body); "within 0.05" means
+  ≤ 0.05 or ≥ 0.95, and a share strictly above 0.20 fails; a phrase's body is its mean
+  lanes through the map and then the quantile map (as D3's `bodytrack.py`).
 - A1 (user's answer, 2026-10-29): round 2 already fitted `core-2b` with the
   decoder's bound, and it is deterministic. A1 is therefore the report of round 2's
   links (22 of 24; misses fold 4 energy→size 0.487 and sixth set energy→time 0.378),
