@@ -4452,3 +4452,64 @@ sample with no speed breach ("wrist_roll acceleration"), a NaN, a deleted row (t
 
 Off was made for 240 deg/s and 8,000 deg/s2, so the refusal is expected. The checker at 50 Hz sees less peak than the 1 kHz measure used for Layered, so a file it accepts is not a proof of the continuous curve; `validate` on the score is (it passed for all six Layered scores).
 Open: the player on the servo side must reproduce 50 Hz rows by its own interpolation, which the checker does not model; the 0.06 m hand disc in the floor rule is body.rs's, whatever implement the score was compiled with.
+
+### Step B: music clock, amplitude fit and phrase-edge re-sync (★ B) — 2026-10-29
+
+Branch `b-clock` (from `9c691c9` on `keys-decide`), one arm only. **Not verified by eye.** Nothing is sent to hardware. Binding text: `docs/NEXT_DECODER_THEN_BRAIN.md` §2, note of 2026-10-29, part B.
+
+**Built.** `ClockMode::V47 | Music` (`figures.rs`, `CompileConfig.clock`, `--clock v47|music` in `ensemble_preview`, default V47), orthogonal to `BodyMode`.
+V47 is unchanged: golden digests unchanged; the three six-arm Off exports are `cmp` identical to `hexagon-47.html`, `five-years-hexagon.html`, `presence-hexagon.html`; the six D3 Layered + V47 scores (stage1, baseline49) have the same SHA256 before and after.
+Music, in both body modes, with `body::LIMITS` as the rig envelope and the follower of Layered (acceleration share 0.3, natural-spline curve):
+1. The figure clock is version 47's (holds, 0.8 m/s cap, calm pace, pulses, catch-up). D3's `rate_scale` slow-down is not used, so figure timing is the music's.
+2. Amplitude fit loop (at most 24 passes, aim 0.95, floor 0.1 kept): the same measure as D3's (`layered::demand`: joint speed, root of joint acceleration at 1 kHz, hand speed, root of hand jolt at 60 fps, continuous bounds). A knot over a limit shrinks the moment whose window holds it, else the figure the clock is in at that knot, by the share it is over. Figures (one per planner figure instance: 86, 67, 67 on the three songs) are scaled about `CENTRE`, the planner's own figure centre, in shell units; a moment's strength (its pose offset from the path) is scaled instead, its time and span untouched. The shrink per figure and per moment is reported.
+3. Phrase edges are the starts of `musicalMemory.phrases` after the first. At the grid knot nearest the edge (knot step = beat/8) the clock is set to the music's time; the stretch before is smoothed on its own so the jump stays a jump. The cut: the hand's target keeps its old place and settles onto the figure over max(2 beats, 3 s per metre of jump) (peak about 0.5 m/s); the follower and the solver take the rest; the fit loop then measures the final score, so a cut that breaks a limit shrinks its figure.
+4. Moments keep their measured times (arrival = hand target within 1 % of its pose).
+Layered + Music reads `bodyTrack` as D3 does (no `bodyTrack` = Music with body Off, tested). Music with more than one arm is an error, for both body modes.
+
+**Checks.** `cargo test -p hyst-compile -p hyst-output -p hyst-previz -p hyst-cli`: hyst-compile 96 passed + 1 ignored (4 new), hyst-output 18, previz and cli 0. Clippy `-D warnings` on the four crates with `--all-targets`, `cargo fmt --all --check`, and 169 Python unittests in `scripts/emotion` pass.
+New tests: Music passes `validate` for body Off and for neutral, all-0, all-1 and one drawn body, and refuses two arms; the clock is back on the bar at each of the 3 phrase edges of the drop song (lag within half a beat) and equals version 47's clock up to the first edge; a figure forced over a limit (beat 0.2 s, all-1 body) is shrunk (kept < 1, floor held) and the clock is not slowed; moments arrive 0 to 1.5 s before their measured time (target); shrink, cut and lag are in `Traced.music`.
+
+**Pass: lag <= half a beat at every phrase edge** (clock position at the edge's knot minus the edge, after the re-sync; the clock is smoothed, so it is not exactly 0). All six: PASS.
+
+| Song | Body | Edges | Max lag after re-sync, s (beats) | Largest lag inside a phrase before re-sync, s (beats) | Seconds cut per edge: max / mean / total | Edges where a figure starts |
+|---|---|---|---|---|---|---|
+| Instant Crush | Off + Music | 39 | 0.0705 (0.129) | 2.11 (3.86) | 1.42 / 0.26 / 10.1 | 8 |
+| | Layered + Music | 39 | 0.0683 (0.125) | 2.35 (4.30) | 1.86 / 0.32 / 12.5 | 8 |
+| Five Years | Off + Music | 31 | 0.0771 (0.133) | 2.67 (4.60) | 2.67 / 0.51 / 15.9 | 17 |
+| | Layered + Music | 31 | 0.0756 (0.130) | 2.72 (4.69) | 2.72 / 0.62 / 19.1 | 17 |
+| Presence | Off + Music | 37 | 0.0487 (0.106) | 2.07 (4.49) | 2.07 / 0.51 / 19.0 | 30 |
+| | Layered + Music | 37 | 0.0487 (0.106) | 2.01 (4.36) | 2.01 / 0.54 / 20.1 | 30 |
+
+References (no re-sync; lag = clock minus music at each edge, from the same exporter): version 47 Off, max |lag| at an edge 3.32 s (6.09 beats) on Instant Crush, 2.61 s (4.51) on Five Years, 9.40 s (20.37) on Presence; edges within half a beat 27/39, 13/31, 14/37.
+D3 Layered + V47 (stage1 bodies), max |lag| 5.72 s (10.49), 13.41 s (23.15), 21.59 s (46.77); edges within half a beat 17/39, 10/31, 10/37. Largest lag inside a phrase: V47 Off 3.67, 2.88, 9.83 s; Layered + V47 6.66, 14.04, 24.13 s.
+
+**Shrink** (figures shrunk by any amount / over 50 %, largest shrink, moments with less strength, fit passes). No song has more than 50 % shrink on more than 20 % of its figures (largest share 4.7 %).
+
+| Song | Body | Figures | Shrunk | Over 50 % | Largest shrink | Moments shrunk | Passes |
+|---|---|---|---|---|---|---|---|
+| Instant Crush | Off | 86 | 4 | 4 | 0.775 | 1 | 3 |
+| | Layered | 86 | 4 | 4 | 0.755 | 3 | 3 |
+| Five Years | Off | 67 | 0 | 0 | 0 | 1 | 2 |
+| | Layered | 67 | 0 | 0 | 0 | 1 | 6 |
+| Presence | Off | 67 | 2 | 2 | 0.755 | 3 | 4 |
+| | Layered | 67 | 4 | 2 | 0.787 | 6 | 3 |
+
+**Moments, hand-target arrival minus measured time** (s, negative = early; mean of |d| in brackets): Music Off: Instant Crush -0.096 .. -0.036 (0.073), Five Years -0.102 .. -0.045 (0.065), Presence -0.087 .. -0.041 (0.061). Music Layered: -0.104 .. -0.039 (0.078), -0.134 .. -0.045 (0.069), -0.114 .. -0.044 (0.066). References: V47 Off -0.096 .. -0.039 (0.074), -0.102 .. -0.051 (0.065), -0.087 .. -0.041 (0.061); Layered + V47 -0.123 .. -0.052 (0.084), -0.134 .. -0.053 (0.072), -0.139 .. -0.049 (0.075). These are the hand target's, not the joints': a lagged joint (Layered succession, up to 0.21 s) arrives later.
+
+**Limits on the Music exports** (`body::measure` on the final score): `validate` passes in all six; hand max 1.124 to 1.197 m/s (limit 1.2), jolt max 5.31 to 7.41 m/s2 (limit 9), floor margin at least 0.0187 m; `jolts.py` finds 0 jolts in all six; `hyst check-csv` accepts all six (V47 Off CSVs of D3 are refused, as before).
+
+**Exports (outside git), `$D/b/`.** Per song `S` in `ic`, `fy`, `pr`: `S.off.music.*` (body Off + Music, sidecar of the song) and `S.layered.music-d3stage1.*` (Layered + Music, bodies from D3's `$D/d3/S.stage1.sidecar.json`; the final Layered export waits for core-2b bodies from task A), each with `.html`, `.score.json`, `.txt` (the exporter's limits, lag, per-edge and per-figure shrink, per-moment arrival), `.jolts.txt`; `S.spans-d3off-vs-off.music.txt` and `S.spans-d3stage1-vs-layered.music-d3stage1.txt` (60 s windows, A = D3 export, B = Music); `csv/S.off.music.csv`, `csv/S.layered.music-d3stage1.csv`, `csv/verdicts.txt`; references in `ref/` (`S.off.v47.*`, `S.layered.v47-d3stage1.*`). Audio links are `../S.m4a`.
+
+**Where the note was silent and I chose.**
+1. Amplitude is scaled about `CENTRE` (shell space) per figure instance; a moment is scaled in strength. Everything else (height and extension offsets of the body, breath, voice lift) is not scaled; if one of those alone breaks a limit the loop cannot fix it (it did not happen here).
+2. An over-limit knot is blamed on the moment whose window holds it, else the figure the clock is in (not the figure at the music's time).
+3. The clock keeps all of version 47's own rate rules, so lag still builds inside a phrase (up to 2.7 s here); the re-sync removes it at the edge.
+4. The re-sync is on the grid knot nearest the edge; the lag after is measured on the smoothed clock (two-knot bell), so it is up to 0.13 beat, not 0.
+5. "The next figure starts on the bar" holds for the clock only. The figure schedule is fixed in music time and was not moved, so a figure begins at the edge in 8 of 39, 17 of 31 and 30 of 37 edges; elsewhere the figure in progress continues from its place in music time.
+6. The cut is carried by a decaying offset of the hand's target (span above) plus the follower, then proven by the fit loop on the final score; the shrink is not the only cover.
+7. Music takes one arm only, also with body Off.
+8. The last phrase has no edge after it, so it is not in the lag table.
+9. Moment arrival is the hand target's (blend 0.99); the loop does not move a moment's time or lengthen its span.
+10. `three.sh` points at the `dance-figures` worktree; I ran a copy that points at `b-clock` (same commands, same files). The D3 check wrote to a scratch directory, not to `$D/d3`. Spans windows end at 338, 282, 269 s as D3's did. `score-csv --mode` is a label: `off` for Off + Music, `layered` for Layered + Music.
+
+Open: figure starts that miss the bar (point 5) may read as cut mid-figure by eye; the 0.95 aim, floor 0.1, 24 passes and the 2-beat, 3 s per metre cut span are guesses.

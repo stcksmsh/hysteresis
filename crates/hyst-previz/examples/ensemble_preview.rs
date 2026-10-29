@@ -54,18 +54,14 @@ fn count_one(score: &hyst_compile::ensemble::EnsembleScore) -> bool {
 }
 
 /// One arm against the body generator's numbers, and how the figure clock ran, on stderr.
-fn print_one_arm(traced: &hyst_compile::director::figures::Traced) {
+fn print_one_arm(traced: &hyst_compile::director::figures::Traced, body: &str) {
     use hyst_compile::body::{measure, HAND_MPS, JOINTS, JOLT_MPS2, LIMITS};
     let m = measure(&traced.score, 0);
     let over = |v: f64, limit: f64| if v > limit { " OVER" } else { "" };
     let music = traced.music.as_ref();
     eprintln!(
         "body mode {}, clock {}, {} pass(es)",
-        if traced.layered && music.is_none() {
-            "layered"
-        } else {
-            "off or per --body"
-        },
+        body,
         if music.is_some() { "music" } else { "v47" },
         traced.passes
     );
@@ -112,6 +108,52 @@ fn print_one_arm(traced: &hyst_compile::director::figures::Traced) {
         lag.at,
         lag.lost,
         worst.join(", ")
+    );
+}
+
+/// The figure clock of a `ClockMode::V47` compile read the way the music clock is: its lag at each
+/// phrase edge (no re-sync), the largest lag inside each phrase, and the moments' arrivals.
+fn print_reference(traced: &hyst_compile::director::figures::Traced, starts: &[f64], beat: f64) {
+    let step = traced.grid[1] - traced.grid[0];
+    let at = |t: f64| ((t / step).round() as usize).min(traced.grid.len() - 1);
+    let lag_at: Vec<f64> = starts.iter().map(|&e| traced.clock[at(e)] - e).collect();
+    let edges: Vec<f64> = [0.0]
+        .iter()
+        .chain(starts)
+        .copied()
+        .chain([traced.grid[traced.grid.len() - 1]])
+        .collect();
+    let inside: Vec<f64> = edges
+        .windows(2)
+        .map(|w| {
+            (at(w[0])..=at(w[1]))
+                .map(|k| traced.grid[k] - traced.clock[k])
+                .fold(0.0, f64::max)
+        })
+        .collect();
+    let worst = lag_at.iter().map(|l| l.abs()).fold(0.0, f64::max);
+    eprintln!(
+        "reference (version 47 clock, no re-sync): {} phrase edges; lag at an edge: max |lag| {worst:.2} s = {:.2} beat, edges within half a beat {}/{}; largest lag inside a phrase: max {:.2} s",
+        starts.len(),
+        worst / beat,
+        lag_at.iter().filter(|l| l.abs() <= 0.5 * beat).count(),
+        starts.len(),
+        inside.iter().copied().fold(0.0, f64::max)
+    );
+    for (e, (l, i)) in starts.iter().zip(lag_at.iter().zip(&inside)) {
+        eprintln!("  edge {e:7.2} s lag at edge {l:+.2} s lag inside the phrase before {i:5.2} s");
+    }
+    let diff: Vec<f64> = traced
+        .arrivals
+        .iter()
+        .filter_map(|a| a.1.map(|x| x - a.0))
+        .collect();
+    eprintln!(
+        "  moments: {} with an arrival, hand-target arrival minus measured time: min {:.3}, max {:.3} s, mean |d| {:.3} s",
+        diff.len(),
+        diff.iter().copied().fold(f64::MAX, f64::min),
+        diff.iter().copied().fold(f64::MIN, f64::max),
+        diff.iter().map(|d| d.abs()).sum::<f64>() / diff.len().max(1) as f64
     );
 }
 
@@ -370,13 +412,33 @@ fn main() -> io::Result<()> {
         print_workspace(w);
     }
     if count_one(&traced.score) {
-        print_one_arm(&traced);
+        let value = serde_json::from_str::<serde_json::Value>(&sidecar).ok();
+        let beat = value
+            .as_ref()
+            .and_then(|v| v["musicalMemory"]["beatPeriod"].as_f64())
+            .unwrap_or(0.5);
+        let body = if config.body == hyst_compile::body_track::BodyMode::Layered
+            && value.as_ref().is_some_and(|v| v.get("bodyTrack").is_some())
+        {
+            "layered"
+        } else {
+            "off"
+        };
+        print_one_arm(&traced, body);
         if let Some(music) = &traced.music {
-            let beat = serde_json::from_str::<serde_json::Value>(&sidecar)
-                .ok()
-                .and_then(|v| v["musicalMemory"]["beatPeriod"].as_f64())
-                .unwrap_or(0.5);
             print_music(music, beat);
+        } else {
+            let starts: Vec<f64> = value
+                .as_ref()
+                .and_then(|v| v["musicalMemory"]["phrases"].as_array().cloned())
+                .map(|p| {
+                    p.iter()
+                        .skip(1)
+                        .filter_map(|x| x["start"].as_f64())
+                        .collect()
+                })
+                .unwrap_or_default();
+            print_reference(&traced, &starts, beat);
         }
     }
     let score = traced.score;

@@ -289,6 +289,8 @@ pub struct Traced {
     pub invalid: Option<String>,
     /// `ClockMode::Music` only: the amplitude fit, the re-syncs and the moments' arrivals.
     pub music: Option<MusicReport>,
+    /// Each moment: (measured time, time its hand target arrives); a cut has no arrival.
+    pub arrivals: Vec<(f64, Option<f64>)>,
 }
 
 /// One figure of a `ClockMode::Music` compile: how much of its amplitude was kept.
@@ -662,6 +664,7 @@ impl Pass {
             worst_at: 0.0,
             worst,
             music: None,
+            arrivals: self.arrivals.iter().map(|a| (a.0, a.2)).collect(),
         }
     }
 }
@@ -1603,8 +1606,8 @@ fn compile_pass(
         for c in &cuts {
             if (c.time..c.time + c.span).contains(&t) {
                 let left = 1.0 - smooth((t - c.time) / c.span);
-                for k in 0..3 {
-                    p[k] += c.offset[k] * left;
+                for (v, o) in p.iter_mut().zip(c.offset) {
+                    *v += o * left;
                 }
             }
         }
