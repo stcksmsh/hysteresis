@@ -7,9 +7,10 @@ Rules fixed before the split was looked at:
              The split ignores duration, genre and the BY-SA decision, so those cannot move an artist.
   window     60 s <= duration <= 600 s (a choice, reported for ruling)
   BY-SA      if BY+CC0+PD alone give 200 h of training-side tracks with E/P/R (recorded genre_top) >= 100 h, BY-SA is out
-  order      training: stage A = E/P/R tracks (recorded genre_top) in seeded order until 100 h;
-             stage B = every other pool track in a second seeded order until N_HOURS. A track skipped for
-             an exclusion is replaced by the next one in its stage, so a top-up needs no new rule.
+  order      (user ruling b, 2026-10-30, BRAIN_SPEC 1.4) training = every E/P/R track (recorded genre_top) plus "other"
+             tracks from one seeded order until their hours reach (never pass) the E/P/R hours: N = 2 x E/P/R.
+             Excluded tracks are skipped, so after exclusions "other" is cut at the end of the order or topped up
+             from it, and E/P/R is never topped up from inferred genres.
   held-out   all window tracks of held-out artists, seeded order, until HELD_OUT_HOURS
 """
 import re
@@ -21,12 +22,12 @@ M = "/secondary/hyst-data/brain/measure/"
 OUT = "/secondary/hyst-data/brain/corpus/"
 ZIP_URL = "https://os.unil.cloud.switch.ch/fma/fma_full.zip"
 SEED_SPLIT = 20261030
-SEED_A = 20261031
+SEED_A = 20261031  # unused since ruling b
+N_HOURS = 200.0   # BY-SA rule only (BRAIN_SPEC 1.4)
+EPR_HOURS = 100.0
 SEED_B = 20261032
 SEED_HELD = 20261033
 HELD_FRACTION = 0.10
-N_HOURS = 200.0
-EPR_HOURS = 100.0
 HELD_OUT_HOURS = 20.0
 DUR_MIN, DUR_MAX = 60.0, 600.0
 EPR = ("Electronic", "Pop", "Rock")
@@ -73,8 +74,8 @@ def split_artists(pool):
     return set(artists[:k].tolist())
 
 
-def take(frame, seed, hours_cap, skip=frozenset()):
-    """Seeded order over `frame`; take until the hours reach the cap; skip IDs in `skip`."""
+def take(frame, seed, hours_cap, skip=frozenset(), strict=False):
+    """Seeded order over `frame`; take until the hours reach the cap (strict: never pass it); skip IDs in `skip`."""
     order = frame.index.to_numpy().copy()
     np.random.default_rng(seed).shuffle(order)
     got, h = [], 0.0
@@ -83,6 +84,8 @@ def take(frame, seed, hours_cap, skip=frozenset()):
             break
         if i in skip:
             continue
+        if strict and h + frame.at[i, "hours"] > hours_cap:
+            break
         got.append(i)
         h += frame.at[i, "hours"]
     return got
@@ -91,10 +94,9 @@ def take(frame, seed, hours_cap, skip=frozenset()):
 def select(pool, held, skip=frozenset()):
     """pool: licence-passing, window, in-zip, DEAM-excluded tracks (BY-SA already decided). Returns (train_ids, held_ids)."""
     train = pool[~pool["artist.id"].isin(held)]
-    a = take(train[train["epr"]], SEED_A, EPR_HOURS, skip)
-    rest = train.drop(index=a)
+    a = [i for i in train[train["epr"]].index if i not in skip]          # all E/P/R (recorded genre_top)
     h = train.loc[a, "hours"].sum()
-    b = take(rest, SEED_B, N_HOURS - h, skip)
+    b = take(train[~train["epr"]], SEED_B, h, skip, strict=True)         # "other" never above E/P/R hours
     hold = take(pool[pool["artist.id"].isin(held)], SEED_HELD, HELD_OUT_HOURS, skip)
     return a + b, hold
 
