@@ -60,6 +60,15 @@ class CheckB1(unittest.TestCase):
                 self.assertIn("mean", r["gate2_readout_switches"]["4s"][kind])
             self.assertEqual(r["gate2_exclusions"]["4s"]["silence"]["excluded"], 0)        # silence is valid by definition
             self.assertIn("alpha = 0 (critical)", r["notes"]["alpha"])
+            self.assertEqual(r["gate2"]["4s"]["silence"]["pll_variant"] in ("raw", "centred"), True)
+            if "noise" in r["gate2"]["4s"]:
+                self.assertIn("not informative", r["gate2"]["4s"]["noise"]["criterion2_note"])
+            self.assertIn("8s", r["gate2_exclusions_after_linear_detrending_reported_only"])
+            self.assertEqual(sorted(r["half_double_per_ballroom_style"]), ["Jive", "Tango", "Waltz"])
+            self.assertIn("4-second gaps of silence or beatless noise", r["claims"]["claim2"])
+            self.assertIn("AMLt", r["claims"]["claim1"])
+            self.assertEqual(len(r["meta"]["commit"]), 40)
+            self.assertTrue(all("readout_hz" in row for row in r["missing_pulse"]))
             for g in r["gate2"].values():
                 for res in g.values():
                     self.assertIn(res["pll_variant"], ("raw", "centred"))

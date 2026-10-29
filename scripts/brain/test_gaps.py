@@ -85,6 +85,19 @@ class Gaps(unittest.TestCase):
         pm = grfnn.pulse(*(lambda f: (f[:, ff.COL_FLUX_LOW], f[:, ff.COL_ONSET]))(ff.fast_features(y)))
         self.assertFalse(gaps.gap_valid(pm["input"], 12.0, 4.0, "c", "noise")[0])
 
+    def test_linear_detrending_removes_a_ramp_but_the_gated_test_is_unchanged(self):
+        rng = np.random.default_rng(3)
+        ramp = np.linspace(0.0, 1.0, 1000)
+        rejected_plain = rejected_detrended = 0
+        for k in range(60):
+            x = np.abs(rng.standard_normal(1000)) * 0.3 + ramp
+            rejected_plain += not gaps.gap_valid(x, 2.0, 4.0, f"r{k}", "noise")[0]
+            rejected_detrended += not gaps.gap_valid(x, 2.0, 4.0, f"r{k}", "noise", detrend=True)[0]
+        self.assertGreater(rejected_plain, 40)           # the ramp looks like rhythm to the autocorrelation
+        self.assertLess(rejected_detrended, 12)          # about 5 % once the trend is out
+        self.assertEqual(gaps.gap_valid(np.zeros(1000), 2.0, 4.0, "z", "silence", detrend=True), (True, 0.0, 0.0))
+        self.assertEqual(gaps.gap_valid(np.full(1000, 0.7), 2.0, 4.0, "z", "silence", detrend=True), (True, 0.0, 0.0))
+
     def test_white_noise_passes_at_about_95_percent_and_the_seed_is_per_clip(self):
         passes = 0
         for seed in range(200):

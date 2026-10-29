@@ -81,42 +81,69 @@ class Bank(unittest.TestCase):
 
 
 class Readout(unittest.TestCase):
-    def synthetic(self, amp_b, frames=1200):
-        """two oscillators in the beat band, 1 Hz and 2 Hz; phase advances at their own frequency."""
-        freqs = np.array([1.0, 2.0])
+    """The round-2 readout: S = A * P(f), P(f) = exp(-2 (log2(f / 2 Hz))^2); argmax S with hysteresis on S."""
+
+    @staticmethod
+    def synthetic(freqs, amps, frames=1200):
+        """oscillators at `freqs` (Hz) with amplitude series `amps` (frames x oscillators); phase advances at the oscillator's own frequency."""
+        freqs = np.asarray(freqs, float)
         t = np.arange(frames) / 100.0
         phase = np.angle(np.exp(2j * np.pi * (np.outer(t, freqs) - 0.25)))
-        amp = np.stack([np.full(frames, 1.0), amp_b], axis=1)
-        return freqs, amp, phase
+        return freqs, np.asarray(amps, float), phase
 
-    def test_beats_are_upward_phase_zero_crossings(self):
-        freqs, amp, phase = self.synthetic(np.full(1200, 0.5))
+    def test_the_prior_is_one_at_2_hz_and_falls_by_octaves(self):
+        p = grfnn.pulse_prior([0.5, 1.0, 2.0, 3.0, 4.0])
+        self.assertAlmostEqual(p[2], 1.0)
+        self.assertAlmostEqual(p[1], np.exp(-2.0))
+        self.assertAlmostEqual(p[4], np.exp(-2.0))
+        self.assertAlmostEqual(p[0], np.exp(-8.0))
+        self.assertAlmostEqual(p[3], np.exp(-2.0 * np.log2(1.5) ** 2))
+
+    def test_equal_amplitudes_at_2_and_4_hz_read_out_2_hz(self):
+        freqs, amp, phase = self.synthetic([2.0, 4.0], np.full((1200, 2), 0.5))
+        _, chosen, _, f = grfnn.readout(freqs, amp, phase)
+        self.assertTrue((f == 2.0).all() and (chosen == 0).all())
+
+    def test_a_strong_3_hz_oscillator_wins_where_the_score_says_so(self):
+        # S(3 Hz) = 0.5 * 0.505 = 0.2525 > S(2 Hz) = 0.2; a weak 3 Hz one (0.3 * 0.505 = 0.15) loses
+        strong = self.synthetic([2.0, 3.0], np.tile([0.2, 0.5], (1200, 1)))
+        weak = self.synthetic([2.0, 3.0], np.tile([0.2, 0.3], (1200, 1)))
+        self.assertTrue((grfnn.readout(*strong)[3] == 3.0).all())
+        self.assertTrue((grfnn.readout(*weak)[3] == 2.0).all())
+        # the amplitude returned is the oscillator's own, not the score
+        self.assertTrue(np.allclose(grfnn.readout(*strong)[2], 0.5))
+
+    def test_beats_are_upward_phase_zero_crossings_of_the_selected_oscillator(self):
+        freqs, amp, phase = self.synthetic([1.0, 2.0], np.tile([0.1, 0.9], (1200, 1)))
         beats, chosen, _, f = grfnn.readout(freqs, amp, phase)
-        self.assertTrue((chosen == 0).all())
-        self.assertTrue(np.allclose(beats, 0.25 + np.arange(len(beats)), atol=0.011))
+        self.assertTrue((chosen == 1).all())
+        self.assertTrue(np.allclose(beats, 0.125 + 0.5 * np.arange(len(beats)), atol=0.011))
 
-    def test_switches_only_after_2_s_at_more_than_20_percent(self):
+    def test_hysteresis_applies_to_the_score_20_percent_for_2_s(self):
+        prior = grfnn.pulse_prior([2.0, 2.0001])             # equal priors, so S ratios are amplitude ratios
         n = 1200
-        for ratio, frames, expect in [(1.19, 1000, False), (1.25, 150, False), (1.25, 205, True)]:
-            amp_b = np.full(n, 0.5)
-            amp_b[100:100 + frames] = ratio
-            freqs, amp, phase = self.synthetic(amp_b)
-            _, chosen, _, _ = grfnn.readout(freqs, amp, phase)
-            self.assertEqual(bool((chosen == 1).any()), expect, (ratio, frames))
-        # an interruption resets the run
-        amp_b = np.full(n, 0.5)
-        amp_b[100:250] = 1.25
-        amp_b[250] = 1.0
-        amp_b[251:350] = 1.25
-        freqs, amp, phase = self.synthetic(amp_b)
-        self.assertFalse((grfnn.readout(freqs, amp, phase)[1] == 1).any())
-        # it switches at the end of the 2 s, not before
-        amp_b = np.full(n, 0.5)
-        amp_b[100:600] = 1.25
-        freqs, amp, phase = self.synthetic(amp_b)
-        chosen = grfnn.readout(freqs, amp, phase)[1]
-        first = int(np.flatnonzero(chosen == 1)[0])
-        self.assertTrue(299 <= first <= 301, first)
+
+        def run(ratio, frames, interrupt=None):
+            amp = np.tile([1.0, 0.5], (n, 1))                # oscillator 0 is the readout
+            amp[100:100 + frames, 1] = ratio
+            if interrupt is not None:
+                amp[interrupt, 1] = 0.5
+            return grfnn.readout(*self.synthetic([2.0, 2.0001], amp))[1]
+
+        self.assertFalse((run(1.19, 1000) == 1).any())        # 19 % for ever: never
+        self.assertFalse((run(1.25, 150) == 1).any())         # 25 % for 1.5 s: not yet
+        self.assertTrue((run(1.25, 205) == 1).any())          # 25 % for 2.05 s: switches
+        self.assertFalse((run(1.25, 300, interrupt=200) == 1).any())   # an interruption resets the run
+        first = int(np.flatnonzero(run(1.25, 500) == 1)[0])
+        self.assertTrue(299 <= first <= 301, first)           # it switches at the end of the 2 s
+        # the prior counts: a 25 % larger amplitude at 4 Hz does not beat the 2 Hz readout
+        amp = np.tile([1.0, 1.25], (n, 1))
+        self.assertFalse((grfnn.readout(*self.synthetic([2.0, 4.0], amp))[1] == 1).any())
+
+    def test_readout_is_deterministic(self):
+        x, _ = clicks(2.0, 20)
+        a, b = grfnn.pulse(x, x), grfnn.pulse(x, x)
+        self.assertTrue(np.array_equal(a["readout_index"], b["readout_index"]) and np.array_equal(a["beats"], b["beats"]))
 
 
 if __name__ == "__main__":

@@ -26,6 +26,9 @@ R_MAX = 0.95
 FRAME_HZ = 100.0
 SUBSTEPS = 2
 BEAT_BAND = (0.5, 4.0)
+# Round 2 readout score (BRAIN_SPEC 2.2 "B1 round 2"): S(f) = A(f) * P(f), P(f) = exp(-2 (log2(f / 2 Hz))^2).
+PRIOR_HZ = 2.0
+PRIOR_WIDTH = 2.0
 SWITCH_RATIO = 1.2
 SWITCH_SECONDS = 2.0
 
@@ -110,12 +113,20 @@ def run_bank(x):
     return f, np.hypot(zr, zi), np.arctan2(zi, zr)
 
 
+def pulse_prior(freqs):
+    """P(f) = exp(-PRIOR_WIDTH * (log2(f / PRIOR_HZ))^2): Parncutt's pulse-period salience curve as adapted by Frieler 2004."""
+    return np.exp(-PRIOR_WIDTH * np.log2(np.asarray(freqs, dtype=float) / PRIOR_HZ) ** 2)
+
+
 def readout(freqs, amp, phase):
-    """Beat readout: the strongest oscillator in 0.5-4 Hz, switching to another only when some oscillator's
-    amplitude exceeds the current one's by 20 % on 2 s of consecutive frames. Beats are the upward phase-zero
-    crossings of the selected oscillator. Returns beat times (s), the selected index per frame, its amplitude,
-    and its frequency."""
+    """Beat readout: the oscillator in 0.5-4 Hz with the largest score S = amplitude * P(f) (`pulse_prior`), switching to
+    another only when some oscillator's S exceeds the current one's by 20 % on 2 s of consecutive frames. Beats are the
+    upward phase-zero crossings of the selected oscillator. Returns beat times (s), the selected index per frame, its
+    amplitude (not its score), and its frequency."""
     band = np.flatnonzero((freqs >= BEAT_BAND[0]) & (freqs <= BEAT_BAND[1]))
+    prior = pulse_prior(freqs[band])
+    score = np.zeros_like(amp)
+    score[:, band] = amp[:, band] * prior
     T = amp.shape[0]
     need = int(round(SWITCH_SECONDS * FRAME_HZ))
     cur, run = None, 0
@@ -123,13 +134,12 @@ def readout(freqs, amp, phase):
     beats = []
     prev_phase = None
     for t in range(T):
-        a = amp[t, band]
-        best = band[int(np.argmax(a))]
+        best = band[int(np.argmax(score[t, band]))]
         if cur is None:
             cur = best
             prev_phase = phase[t, cur]
         else:
-            if amp[t, best] > SWITCH_RATIO * amp[t, cur]:
+            if score[t, best] > SWITCH_RATIO * score[t, cur]:
                 run += 1
             else:
                 run = 0

@@ -57,12 +57,27 @@ Also in the papers, not used here (listed so they are not lost): a critical bank
 beta = -0.1, eps = 0.5 with 128 oscillators over 0.25-16 Hz; the double-limit-cycle motor network of Velasco & Large
 2011 section 3.2 uses alpha = 0.3, beta1 = 1, beta2 = -1, eps = 1. B1 has the sensory (critical) network only.
 
-## Readout (spec, BRAIN_SPEC 2.1)
+## Readout, round 1 (BRAIN_SPEC 2.1; replaced in round 2, below)
 
 Beats are the upward phase-zero crossings of the strongest oscillator (by amplitude abs(z)) with natural frequency
 in 0.5-4 Hz. The readout switches to another oscillator only when some oscillator's amplitude exceeds the current
 one's by more than 20 % on 2 s of consecutive frames (`SWITCH_RATIO = 1.2`, `SWITCH_SECONDS = 2.0`). Crossing times
-are linearly interpolated inside a frame.
+are linearly interpolated inside a frame. Round 1 result: B1's tempo was twice the annotated one on 30.1 % of Ballroom clips.
+
+## Readout, round 2 (BRAIN_SPEC 2.2 "B1 round 2", 2026-10-29)
+
+Score per oscillator in 0.5-4 Hz: S(f) = A(f) P(f), A = abs(z), P(f) = exp(-2 (log2(f / 2 Hz))^2) (`grfnn.pulse_prior`, `PRIOR_HZ = 2`,
+`PRIOR_WIDTH = 2`). The readout is argmax S; the same hysteresis rule (20 % for 2 s) applies to S; beats are the same phase-zero
+crossings. Bank, input, gain, cap and everything else are unchanged. Gate 3's beat is the new readout's median frequency; gate 2's
+"readout just before the gap" is the new readout.
+
+| Item | Source | Status |
+|---|---|---|
+| The form of the prior: a pulse-period (tempo) preference curve centred on a spontaneous tempo, a Gaussian on the log tempo scale | Parncutt R (1994), A perceptual model of pulse salience and metrical accent in musical rhythms, Music Perception 11(4):409-464 ("pulse-period salience", fitted to tapping data) | **Not read.** Cited through Frieler 2004 (section 4.3.1, p. 4 of the PDF), which names it; no page or equation of Parncutt's own text was reached |
+| Spontaneous tempo t_s = 500 ms, that is 2 Hz | Frieler K (2004), Beat and meter extraction using Gaussified onsets, Proc. ISMIR 2004, `https://archives.ismir.net/ismir2004/paper/000215.pdf`, section 4.3.1 "tempo preference function", Eq. (12), PDF p. 4: "the spontaneous tempo ... a free model parameter that was set by us to 500 ms throughout", with a free damping factor. The text layer of the PDF does not preserve the equation, so the exact form of Eq. (12) and the damping range were **not** read | the value 500 ms read; the exact equation not read |
+| About 2 Hz resonance of pulse perception | van Noorden L, Moelants D (1999), Resonance in the perception of musical pulse, J. New Music Research 28(1):43-66, cited as [12] in Frieler 2004 as the critically damped resonance model of the tempo preference | **Not read**; no page or equation reached |
+| Width factor 2 in P(f) | the spec (BRAIN_SPEC 2.2 "B1 round 2"); not a value read from any of the three texts | fixed by the spec |
+| 0.5-4 Hz band | BRAIN_SPEC 2.1 | spec |
 
 ## What the synthetic tests show (not a check result)
 

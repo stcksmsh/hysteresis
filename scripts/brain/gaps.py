@@ -82,15 +82,20 @@ def lag_statistic(x, lo, hi):
     return r.max(axis=1)
 
 
-def gap_valid(x, start_s, gap_s, clip_id, kind, rate=100.0):
+def gap_valid(x, start_s, gap_s, clip_id, kind, rate=100.0, detrend=False):
     """Gap verification (BRAIN_SPEC 2.2 correction): is there rhythm in what the bank was fed over the gap?
     x = the bank's actual input series (summed standardised onset and low-band flux, as `grfnn.pulse(...)["input"]`).
     Statistic: max of the mean-removed normalised autocorrelation of the gap's frames over lags 0.25 s .. min(2 s, gap / 2).
     Null: PERMUTATIONS random permutations of the gap's frames (seed from SEED, the clip id, the gap and the kind).
     Valid if the statistic <= the 95th percentile of the permuted statistics; a zero-variance gap is valid.
+    detrend=True (round 2, reported only): the gap's linear trend is removed first; the gated test never uses it.
     Returns (valid, statistic, threshold)."""
     a, b = int(round(start_s * rate)), int(round((start_s + gap_s) * rate))
     g = np.asarray(x[a:b], dtype=np.float64)
+    if detrend:
+        g = g - np.polyval(np.polyfit(np.arange(len(g)), g, 1), np.arange(len(g)))
+        if not np.ptp(g) > 1e-9:
+            return True, 0.0, 0.0
     lo, hi = int(round(LAG_MIN_S * rate)), int(round(min(LAG_MAX_S, gap_s / 2.0) * rate))
     if not np.ptp(g) > 0.0:
         return True, 0.0, 0.0

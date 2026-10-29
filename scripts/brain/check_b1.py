@@ -36,7 +36,7 @@ REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
 PLL_BIN = os.path.join(REPO, "target", "release", "examples", "beat_pll")
 ANALYZE = os.path.join(REPO, "scripts", "analyze.py")
 ANALYZE_PY = "/secondary/hyst-env/analyze-py/bin/python"
-DEFAULT_OUT = "/secondary/hyst-data/brain/b1"
+DEFAULT_OUT = "/secondary/hyst-data/brain/b1r2"
 CHUNK = 24
 
 
@@ -85,10 +85,11 @@ def clip_job(args):
                 yg = gaps.make_gap(y, ff.SR, t0, g, kind, clip_id=cid)
                 fg, pg = b1_run(yg)
                 valid, stat, thr = gaps.gap_valid(pg["input"], t0, g, cid, kind)
+                valid_dt = gaps.gap_valid(pg["input"], t0, g, cid, kind, detrend=True)[0]      # reported only
                 k0 = int(pg["readout_index"][int(round(t0 * 100)) - 1])           # the readout oscillator just before the gap
                 path = os.path.join(tmp, f"{safe}.{g:g}.{kind}.wav")
                 write_wav(path, yg)
-                out["gaps"].append({"gap": g, "kind": kind, "start": t0, "valid": bool(valid), "stat": stat, "threshold": thr,
+                out["gaps"].append({"gap": g, "kind": kind, "start": t0, "valid": bool(valid), "valid_detrended": bool(valid_dt), "stat": stat, "threshold": thr,
                                     "beats": pg["beats"].tolist(), "amp_ratio": scoring.amplitude_ratio(pg["amp"], k0, t0, t0 + g),
                                     "switches": scoring.readout_switches(pg["readout_index"], t0, t0 + g),
                                     "wav": path})
@@ -153,7 +154,8 @@ def missing_pulse_report():
             band = (f >= 0.5) & (f <= 4.0)
             spec = np.abs(np.fft.rfft(x - x.mean())) / len(x)
             sf_ = np.fft.rfftfreq(len(x), 0.01)
-            rows.append({"level": level, "moved": sorted(moved), "bank_amp_at_2hz": float(a[np.argmin(abs(f - 2.0))]),
+            rows.append({"level": level, "moved": sorted(moved), "readout_hz": float(np.median(p["readout_freq"][1000:])),
+                         "bank_amp_at_2hz": float(a[np.argmin(abs(f - 2.0))]),
                          "bank_peak_hz": float(f[band][np.argmax(a[band])]), "bank_peak_amp": float(a[band].max()),
                          "stimulus_amp_at_2hz": float(spec[np.argmin(abs(sf_ - 2.0))])})
     return rows
@@ -219,6 +221,18 @@ def run(clips, out_dir, workers=8, do_analyze=True, do_gaps=True, log=print):
 
 ALPHA_NOTE = ("With alpha = 0 (critical) the amplitude decays without input; with alpha > 0 the bank would sustain itself and "
               "criterion 3 would pass trivially, so the amplitude result reflects the published alpha.")
+
+
+def claim_text(out):
+    """The B1 claims as they are to be printed (BRAIN_SPEC 6, round-2 wording), with the numbers beside them."""
+    g1 = out["gate1_reported"]["metrics"]
+    c1 = "; ".join(f"{s}: F {m['b1']['f']:.3f}, AMLt {m['b1']['amlt']:.3f}" for s, m in g1.items())
+    four = out["gate2"].get("4s", {})
+    c2 = "; ".join(f"{k}: median phase error {four[k]['median_b1_ms']:.1f} ms, amplitude ratio {four[k]['median_amp_ratio']:.3f}" for k in gaps.KINDS if k in four)
+    return {"claim1": "An oscillator bank entrains to the beat of music it has not heard. Absolute scores: " + c1,
+            "claim2": "It keeps the pulse through 4-second gaps of silence or beatless noise. Per kind: " + c2,
+            "claim3": "Its oscillators resonate at the bar, telling triple from duple time. Gate 3 AUC "
+                      + (f"{out['gate3']['auc']:.4f}" if "gate3" in out else "n/a")}
 
 
 def summarise(results, skipped, clips, t_start):
@@ -290,6 +304,17 @@ def summarise(results, skipped, clips, t_start):
                 res["pll_variant"] = "centred" if best is cen else "raw"
                 res["raw"], res["centred"] = raw, cen
                 g2[f"{g:g}s"][kind] = res
+    for g_, kinds_ in g2.items():
+        if "noise" in kinds_:
+            kinds_["noise"]["criterion2_note"] = "not informative: the PLL stops emitting beats in noise"
+    detrended = {}
+    for g in gaps.GAPS:
+        detrended[f"{g:g}s"] = {}
+        for kind in gaps.KINDS:
+            vs = [v["valid_detrended"] for r in results for v in r["gaps"] if v["gap"] == g and v["kind"] == kind]
+            detrended[f"{g:g}s"][kind] = {"gaps": len(vs), "excluded_after_linear_detrending": len(vs) - sum(vs),
+                                          "rate": (len(vs) - sum(vs)) / len(vs) if vs else float("nan")}
+    out["gate2_exclusions_after_linear_detrending_reported_only"] = detrended
     out["gate2"] = g2
     out["gate2_exclusions"] = excluded
     out["gate2_readout_switches"] = switches
@@ -307,9 +332,18 @@ def summarise(results, skipped, clips, t_start):
                                  "half_double": scoring.half_or_double_share(column([r["meter"] for r in bal], "f_b")[ok],
                                                                              column([r["meter"] for r in bal], "f_ann")[ok]),
                                  "mean_ratio_triple": float(np.mean(ratio_b1[triple])), "mean_ratio_duple": float(np.mean(ratio_b1[~triple]))}
+    if bal:
+        per_style = {}
+        for style in sorted({r["style"] for r in bal}):
+            rows = [r for r in bal if r["style"] == style and np.isfinite(r["meter"]["f_ann"])]
+            per_style[style] = dict(clips=len(rows), **scoring.half_or_double_share([r["meter"]["f_b"] for r in rows], [r["meter"]["f_ann"] for r in rows]))
+        out["half_double_per_ballroom_style"] = per_style
+    out["claims"] = claim_text(out)
     out["missing_pulse"] = missing_pulse_report()
     out["pass"] = bool(out["gate1"]["pass"] and out["gate2_pass"] and out.get("gate3", {}).get("pass", False))
     out["meta"]["seconds"] = round(time.time() - t_start, 1)
+    out["meta"]["commit"] = subprocess.run(["git", "rev-parse", "HEAD"], cwd=REPO, capture_output=True, text=True).stdout.strip()
+    out["meta"]["tree_changes"] = len(subprocess.run(["git", "status", "--short"], cwd=REPO, capture_output=True, text=True).stdout.splitlines())
     return out
 
 
