@@ -3192,4 +3192,23 @@ mod tests {
         }
         assert!(seen > 0, "no sidecars in {dir}");
     }
+
+    #[test]
+    fn a_layered_score_goes_through_the_csv_and_the_checker_and_an_off_score_does_not() {
+        use crate::score_csv::{check, export, Meta};
+        let json = drop_song(false);
+        let meta = |mode| Meta {
+            source_score: "drop song",
+            mode,
+            body_source: "test",
+        };
+        for body in [NEUTRAL, [1.0; 15]] {
+            let t = one_arm(&with_body(&json, body), layered());
+            let text = export(&t.score, 50.0, &meta("layered")).unwrap();
+            assert_eq!(check(&text).unwrap(), vec![], "{body:?}");
+        }
+        let off = one_arm(&json, CompileConfig::default());
+        let breaches = check(&export(&off.score, 50.0, &meta("off")).unwrap()).unwrap();
+        assert!(!breaches.is_empty());
+    }
 }

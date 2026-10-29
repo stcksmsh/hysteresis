@@ -4419,3 +4419,36 @@ baseline49: Instant Crush 213 +7.02, 246 +6.49, 114 +5.23; Five Years 220 +5.36,
 6. Succession delays joints up to 0.21 s, so a lagged joint arrives late at a moment's pose; the hand is off its figure while moving.
 7. `fit_tangents` has a non-strict mode (no last-resort rest-to-rest tangents, which were O(n^2) and took minutes on the first Layered tries); Off still uses the strict one.
 8. Layered with more than one arm is refused; the ensemble, braking and collision checks between arms are out of scope here.
+
+### Step H, the builder's part: joint-angle CSV and limit checker (★ H) — 2026-10-29
+
+Branch `d3-layered`. **Not verified by eye; nothing is sent to hardware** (no serial, no network). Off is unchanged (three six-arm exports `cmp` identical).
+
+**Export.** `hyst score-csv SCORE_JSON OUT.csv [--hz 50] [--mode off|layered] [--body-source NAME]` (extends `hyst-cli`; logic in `hyst_compile::score_csv`). Rows are `EnsembleScore::sample` (the previz sampler, no new interpolation)
+at 50 Hz from 0 while within the score, columns `time_s,base_yaw,shoulder,elbow,wrist_bend,wrist_roll`, degrees, six decimals. The header comments carry source score, mode (inferred from the rig envelope: body.rs LIMITS means layered),
+body source, hz, the limits used, the rig and the placement as JSON (so the checker needs no other file).
+
+**Checker.** `hyst check-csv FILE.csv`: exit 0 accepted, exit 1 refused (names the first 10 breaches and their count: time, what, value, limit), exit 2 a malformed file. The same method for every file, no filtering:
+joint speed = |next row - row| x hz, acceleration = |second difference| x hz^2, against `body::LIMITS`; each row inside the rig's joint position limits (the base and roll turn without end in this rig, ±1e6); the hand point by forward kinematics of the header's rig, hand speed per row interval
+against 1.2 m/s and jolt = |change of speed| x hz against 9 m/s2; floor by body.rs's rule (points 1 to 4 clear by 0.05 m, the hand by 0.05 + 0.06 m). Also refused: a non-finite or unparsable cell, a row of the wrong width, a wrong column header, a missing hz, rig or placement line,
+a first time other than 0, a time step other than 1/hz (a gap, a repeat, or going back).
+
+**Tests** (`score_csv.rs`, `figures.rs`): a feasible clip and two Layered scores (neutral and all-1 body) go score -> CSV -> checker and pass; the rows equal the sampler; an Off score of the drop song is refused; one injected over-speed sample ("base_yaw speed"), one over-acceleration
+sample with no speed breach ("wrist_roll acceleration"), a NaN, a deleted row (time step), a repeated time, a joint beyond its position limit and a header error each fail with the right message. cargo: hyst-compile 92 passed + 1 ignored, hyst-output 18; clippy `-D warnings` and fmt clean.
+
+**The nine scores in `$D/d3/`** to `$D/d3/csv/<song>.<off|stage1|baseline49>.csv`; verdicts in `$D/d3/csv/verdicts.txt`.
+
+| Song | Mode | Verdict | First breach |
+|---|---|---|---|
+| Instant Crush | Off | refused, 1,399 | 2.160 s shoulder acceleration 720 against 300 |
+| | stage1 | accepted | |
+| | baseline49 | accepted | |
+| Five Years | Off | refused, 1,089 | 55.660 s shoulder acceleration 315 against 300 |
+| | stage1 | accepted | |
+| | baseline49 | accepted | |
+| Presence | Off | refused, 2,007 | 0.020 s base_yaw acceleration 2,164 against 600 (also elbow 1,256, wrist_bend 2,249, hand jolt 15.4 at that sample) |
+| | stage1 | accepted | |
+| | baseline49 | accepted | |
+
+Off was made for 240 deg/s and 8,000 deg/s2, so the refusal is expected. The checker at 50 Hz sees less peak than the 1 kHz measure used for Layered, so a file it accepts is not a proof of the continuous curve; `validate` on the score is (it passed for all six Layered scores).
+Open: the player on the servo side must reproduce 50 Hz rows by its own interpolation, which the checker does not model; the 0.06 m hand disc in the floor rule is body.rs's, whatever implement the score was compiled with.
