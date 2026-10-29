@@ -1,6 +1,6 @@
 # The brain, B1–B3: spec with checks fixed in advance
 
-Status: **draft, 2026-10-29, awaiting the user's yes. Nothing is built before it.**
+Status: **accepted by the user, 2026-10-29** (the user's yes after the corpus ruling, commit 045144b).
 Source: the planning agent's answers to the overseer's brief (2026-10-29). The overseer
 filled the numbers they left open (marked *overseer*); the planning agent then ruled on
 every fill (marked *planner review*, same day), and on the corpus measurements
@@ -335,4 +335,4 @@ Ignition (cross-band coherence events), B4 dreaming, B5 monitor, B6 staging.
 ## 9. Open points
 
 None in the design. U1 (corpus access), U2 (the overseer's fills) and U3 (the two changed
-numbers) are ruled above. The spec waits for the user's yes.
+numbers) are ruled above. The user said yes on 2026-10-29.
