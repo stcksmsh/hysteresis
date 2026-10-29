@@ -33,9 +33,9 @@ import render
 import spread
 
 OUT = common.DATA / "a2"
-# variant -> quantile anchors (None: no fix). "after" is round 1 (5th/95th to 0.05/0.95), "after2" is A3 round 2 (0.10/0.90,
+# variant -> quantile anchors (None: no fix). "after" is round 1 (5th/95th to 0.05/0.95), "after2" is A3 round 2 (5th/95th to 0.10/0.90,
 # chosen after round 1's results). One fit per set serves all three; each is rendered with its own standardiser.
-ANCHORS = {"before": None, "after": {}, "after2": dict(p_low=0.10, p_high=0.90, out_low=0.10, out_high=0.90)}
+ANCHORS = {"before": None, "after": {}, "after2": dict(out_low=0.10, out_high=0.90)}
 VARIANTS = tuple(ANCHORS)
 POWER_ANCHOR = False    # overseer, 2026-10-29: the power anchor is dropped for core-2b (signs disagree on 3 of 3 songs); weight is free
 

@@ -64,6 +64,12 @@ class QuantileMapTests(unittest.TestCase):
         wide = QuantileMap(self.values, p_low=0.05, p_high=0.95, out_low=0.0, out_high=1.0)
         np.testing.assert_allclose(wide(np.array([[self.values[5, 0], 0.0], [self.values[95, 0], 0.0]]))[:, 0], [0.0, 1.0], atol=1e-12)
 
+    def test_round_2_setting_maps_the_5th_and_95th_to_010_and_090(self):
+        q = QuantileMap(self.values, out_low=0.10, out_high=0.90)
+        col = lambda i: q(np.array([[self.values[i, 0], 0.0]]))[0, 0]
+        np.testing.assert_allclose([col(5), col(50), col(95), col(0), col(100)], [0.10, 0.50, 0.90, 0.10 - 0.05 * 0.8 / 0.9, 0.90 + 0.05 * 0.8 / 0.9], atol=1e-12)
+        self.assertFalse(np.allclose(q(self.values), QuantileMap(self.values)(self.values)))
+
     def test_bad_input_is_refused(self):
         with self.assertRaises(ValueError):
             QuantileMap(np.zeros((1, 2)))
