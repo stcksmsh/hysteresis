@@ -13,7 +13,7 @@ F_MIN, F_MAX, N_PER_OCTAVE = 0.25, 8.0, 48
 ALPHA, BETA1, BETA2, EPS = 0.0, -1.0, -0.25, 1.0
 # Not in the cited papers (see GRFNN_PARAMS.md): input gain, input cap, input standardisation time constant,
 # the initial state, the clip of |z| that keeps 1 - sqrt(eps)|z| away from zero.
-C_IN = 0.1
+C_IN = 0.05
 X_MAX = 0.5
 STD_TAU_S = 10.0
 Z0 = 1e-3

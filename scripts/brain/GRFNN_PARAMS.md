@@ -44,10 +44,10 @@ P = x / (1 - sqrt(eps) x), A = 1 / (1 - sqrt(eps) conj z), w = 2 pi f.
 | Range used | 0.25-8 Hz, log spaced, 5 octaves x 48 + 1 = 241 oscillators | the spec's range (BRAIN_SPEC 2.1) at the density above | spec + derived |
 | Frequency spacing | logarithmic | Velasco & Large 2011 section 2.1; Lambert 2014 section 3.1 (128 oscillators, 0.25-16 Hz, logarithmic - a different count) | from the paper |
 | Coupling c | 1 (the gain is applied in the input scaling below) | not in the papers: Velasco & Large 2011 names c "strength of coupling to the external stimulus" and gives no value | **not published here; chosen** |
-| Input gain C_IN | 0.1 per unit of summed z-score | not in the papers | **chosen** |
-| Input cap X_MAX | 0.5, so that x < 1 / sqrt(eps) = 1 and P stays finite | follows from the form of P with eps = 1; the value 0.5 is not published | **chosen** |
-| Input half-wave rectification | negative sums are set to 0 | not in the papers | **chosen** |
-| Input standardisation | running z-score, exponential mean and variance, time constant 10 s, prior mean 0 and variance 1, causal | spec says "each standardised, summed with equal weight" (BRAIN_SPEC 2.1 planner review); the form is not specified | **chosen** |
+| Input gain C_IN | 0.05 per unit of summed z-score | not in the papers | **chosen from synthetic signals** (see below) |
+| Input cap X_MAX | 0.5, so that x < 1 / sqrt(eps) = 1 and P stays finite | follows from the form of P with eps = 1; the value 0.5 is not published | **chosen from the bound** (see below) |
+| Input half-wave rectification | negative sums are set to 0 | not in the papers | **chosen** (see below) |
+| Input standardisation | running z-score, exponential mean and variance, time constant 10 s, prior mean 0 and variance 1, causal | spec says "each standardised, summed with equal weight" (BRAIN_SPEC 2.1 planner review); the form is not specified | **chosen** (see below) |
 | Integration | RK4, 5 ms sub-step (two per 10 ms frame), input held over each frame | not in the papers (Velasco & Large 2011 section 2.3 only says Matlab 7.4) | **chosen** |
 | Initial state | z = 0.001 (real), same for every oscillator | not in the papers | **chosen** |
 | Safety clip | abs(z) is clipped to 0.95 after each step, so A stays finite when eps = 1 | not in the papers | **chosen** |
@@ -71,3 +71,26 @@ the 46 ms STFT gives real onset strength). A one-frame impulse train has equal a
 strongest oscillator in 0.5-4 Hz is then the one at the band edge (4 Hz for 2 Hz clicks, 3 Hz for 1.5 Hz clicks):
 the readout rule picks a harmonic. The tests use the bump; this is reported to the overseer as a property of the
 rule, not changed.
+
+## How the four input choices were made (synthetic signals only; no Ballroom, GTZAN or SMC audio was used)
+
+- **X_MAX = 0.5.** P(eps, x) = x / (1 - sqrt(eps) x) is singular at x = 1 when eps = 1, so x must stay below 1. Half the bound
+  was taken as a margin. Fixed from the equation, not from any signal.
+- **Half-wave rectification.** The input channels are non-negative series with a mean taken out by standardisation. A
+  negative forcing would act as an anti-pulse between events; the stimulus the papers describe is a train of positive
+  "onset bumps" (Velasco & Large 2011 section 2.2). Fixed from that description, not from any signal.
+- **Standardisation, 10 s.** Chosen a priori: long against a beat (0.25-2 s) and about four bars at 120 bpm, short
+  against a clip (30 s), causal so that the live system can use it. Not swept.
+- **C_IN = 0.05.** The only value chosen by looking at signals. Candidates 0.05, 0.1, 0.2, fixed in advance. Criterion
+  fixed in advance: the largest ratio of the readout amplitude on a 2 Hz click train to the readout amplitude on
+  half-wave-rectified Gaussian noise alone. Results (40 s synthetic inputs, bump width 30 ms, height 4, mean over the
+  last 15 s; the noise is 4000 frames from a seeded generator):
+
+  | C_IN | 2 Hz clicks: readout Hz, amplitude | 1.5 Hz clicks: readout Hz, amplitude | noise only: readout amplitude | ratio (2 Hz clicks / noise) |
+  |---|---|---|---|---|
+  | 0.05 | 2.00, 0.41 | 1.50, 0.41 | 0.068 | 6.0 |
+  | 0.1 | 2.03, 0.56 | 1.50, 0.57 | 0.166 | 3.4 |
+  | 0.2 | 2.03, 0.62 | 1.52, 0.61 | 0.201 | 3.1 |
+
+  The bank entrains to the click frequency at all three; the criterion picks 0.05. (The first draft of `grfnn.py` had 0.1,
+  written before this sweep; the change is recorded here.) Script: `scripts/brain/synthetic_input_sweep.py`.
