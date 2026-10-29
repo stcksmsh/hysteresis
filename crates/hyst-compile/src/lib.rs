@@ -53,6 +53,8 @@ pub struct CompileConfig {
     pub workspace: director::workspace::WorkspaceMode,
     /// Body quality from the sidecar's `bodyTrack` (docs/NEXT_DECODER_THEN_BRAIN.md, D3).
     pub body: body_track::BodyMode,
+    /// How the figure clock keeps time with the music (docs/NEXT_DECODER_THEN_BRAIN.md, part B).
+    pub clock: director::figures::ClockMode,
 }
 impl Default for CompileConfig {
     fn default() -> Self {
@@ -62,6 +64,7 @@ impl Default for CompileConfig {
             wrist_drag_degrees_per_mps: 240.0,
             workspace: director::workspace::WorkspaceMode::Off,
             body: body_track::BodyMode::Off,
+            clock: director::figures::ClockMode::V47,
         }
     }
 }
