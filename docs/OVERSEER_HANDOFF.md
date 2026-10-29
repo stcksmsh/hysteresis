@@ -56,6 +56,18 @@ Since 2026-10-22:
   `--shifts 0` in `song.sh`. TypeScript deletion: not now (user).
 - The overseer recomputed every check1b/check2b gate from saved data
   (`/secondary/hyst-data/emotion/check2b/predictions_*.npz`).
+- 2026-10-28/29: D1 (mindState lanes) and D2 built. Check 3 round 1 FAIL on gate 2
+  (decoder 0.624 vs baseline49 0.781, own-encoding distances); rule changed after the
+  failure (940fcae) to human-rating distances; round 2 FAIL on gate 2 (0.238 vs 0.314,
+  difference -0.077 [-0.106, -0.048]); gates 1 and 3 pass both rounds. Per the rule
+  note the user now decides the encoding. Size links: decoder meets r >= 0.5 everywhere;
+  baseline49 breaks it on the user's songs (time -0.27, weight -0.16); core-2b misses
+  twice (0.487, 0.378). Overseer recomputed both rounds from the saved segments.
+- D3 (Layered mode, bodyTrack) and step H's export and checker (`hyst score-csv`,
+  `hyst check-csv`) built overnight on d3-layered, verified, fast-forwarded into
+  keys-decide (e5d8219). Off byte-identical. Open: bodies barely vary across phrases
+  and songs (range <= 0.22; song means differ <= 0.075); figure clock lags 6.7-26.4 s
+  under body.rs limits; previews in $D/d3/, CSVs and verdicts in $D/d3/csv/.
 
 ## Where things stood (2026-10-22)
 
