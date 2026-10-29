@@ -234,6 +234,18 @@ Intervals are 95 % bootstrap over clips, 2,000 resamples.
     has none. The ablation is "with / without grid phase".
   - The habituation and splice tests cut at fixed times.
 
+- **Go for B3 training (user, 2026-10-30, 00:2x):** real B3 training may start overnight
+  without the user, if all of these hold:
+  1. the corpus is complete, with the exclusion lists, hashes and training-side
+     standardisation statistics committed;
+  2. B3's training and check code (§4.3–§4.6) is committed before any real result and
+     verified by the overseer;
+  3. the smoke test passes;
+  4. the measured epoch time for the corpus is ≤ 4 h.
+
+  Training runs at 8 threads under the 3 × 10 h cap. The checks run on the final
+  checkpoint only after training ends.
+
 ## 3. B2: untrained oscillatory core
 
 - The B3 architecture (§4.1) with its initialisation and no training. Only readouts
