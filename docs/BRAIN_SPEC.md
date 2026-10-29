@@ -144,6 +144,43 @@ Intervals are 95 % bootstrap over clips, 2,000 resamples.
   3. pulse amplitude ≥ 50 % of its value just before the gap (median over clips).
 
   The 2 s and 8 s gaps are reported, not gated.
+
+  **Correction (planning agent, passed on by the user, 2026-10-29, before any B1
+  result).** A dB-domain onset measure reads any stationary noise at about 0.49,
+  whatever its level, so the 5 % onset rule could never pass for the noise kind. It is
+  dropped. One verification rule now covers both gap kinds:
+  - Signal: the bank's actual input over the gap (summed standardised onset and
+    low-band flux).
+  - Statistic: the maximum of the mean-removed normalised autocorrelation over lags
+    0.25 s to min(2 s, gap length / 2).
+  - Null: 1,000 random permutations of the gap's frames, with a fixed seed per clip.
+  - A gap is valid if its statistic is at or below the 95th percentile of the permuted
+    statistics. A zero-variance gap (silence) is valid by definition.
+  - The exclusion rate is reported per kind. A rate well above 5 % means the filler
+    carries rhythm, and is reported as such.
+
+  The running z-score has an SD floor (1e-3 of the corpus SD). Both kinds are kept and
+  gated as written: silence tests free decay, noise tests phase stability under random
+  forcing.
+
+  Measurement definitions:
+  - Pulse amplitude (criterion 3): the amplitude of the oscillator that was the readout
+    just before the gap, measured at the gap's end.
+  - Phase error (criteria 1–2): from the system's beat readout at the gap's end,
+    hysteresis rule included.
+  - Reported: how often the readout switched oscillator during the gap, per kind.
+  - The report states that with α = 0 (critical) the amplitude decays without input;
+    with α > 0 the bank would sustain itself and criterion 3 would pass trivially. The
+    amplitude result therefore reflects the published α. α is not changed.
+
+  Further fills accepted by the planning agent:
+  - The PLL baseline is the better of raw and centred, per gate.
+  - The `dance_memory` grid is reported beside `analyze.py`'s.
+  - GTZAN exact duplicates are removed (first copy kept), the undecodable file is
+    skipped, and near-duplicates and short clips are listed.
+  - SMC is recorded as not obtained.
+  - GrFNN values come from Velasco & Large 2011, input gain 0.05 from the synthetic
+    sweep, cap 0.5 from the singularity bound, all with sources in `GRFNN_PARAMS.md`.
 - **Gate 3, meter.** Ballroom style labels give the meter: Waltz and VienneseWaltz are
   triple, the rest duple. Per clip, take the ratio of the mean oscillator amplitude at
   beat/3 to the mean amplitude at beat/2.

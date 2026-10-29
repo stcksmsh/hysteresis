@@ -28,6 +28,7 @@ from sklearn.cluster import KMeans
 
 import common
 import rsa
+from quantile import QuantileMap
 
 SEED_SURROGATE = 20261031
 SEED_MAP = 20261032
@@ -127,17 +128,30 @@ class Map:
         for (lane, name), bound in (bounds or {}).items():
             self.lower[DIMS.index(name), lane] = bound
         self.mean = self.std = None      # standardisation of the lanes for distances
+        self.quantile = None             # A2: quantile.QuantileMap on the pre-sigmoid values, set by `fit_quantile`
 
     @property
     def weights(self):
         return torch.where(self.positive, self.lower + torch.nn.functional.softplus(self.raw), self.raw)
 
+    def pre(self, lanes):
+        """The value before the sigmoid."""
+        return lanes @ self.weights.T + self.b
+
     def forward(self, lanes):
-        return torch.sigmoid(lanes @ self.weights.T + self.b)
+        return torch.sigmoid(self.pre(lanes))
 
     def bodies(self, lanes):
         with torch.no_grad():
+            if self.quantile is not None:
+                return self.quantile(self.pre(torch.tensor(lanes, dtype=torch.float32)).numpy().astype(np.float64))
             return self.forward(torch.tensor(lanes, dtype=torch.float32)).numpy().astype(np.float64)
+
+    def fit_quantile(self, lanes, **anchors):
+        """A2, spread fix: from now on `bodies` are the quantile map of the pre-sigmoid values of the training `lanes`."""
+        with torch.no_grad():
+            self.quantile = QuantileMap(self.pre(torch.tensor(lanes, dtype=torch.float32)).numpy().astype(np.float64), **anchors)
+        return self
 
     def standardised(self, lanes):
         return (lanes - self.mean) / self.std

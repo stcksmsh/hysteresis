@@ -214,16 +214,22 @@ def report(result, log=print):
     log("CHECK 3 ROUND 2: " + ("PASS" if result["check3r2"] else "FAIL") + "  " + json.dumps(result["pass"]))
 
 
+def config(no_core=False):
+    """The round-2 settings: bounded map, check 2b's spectral radius per fold when its results file exists."""
+    cfg = c3.Config(core=not no_core, bound=True)
+    if c3.CHECK2B_RESULTS.exists():
+        chosen = json.loads(c3.CHECK2B_RESULTS.read_text())["chosen"]
+        cfg.radius = {**{f: chosen[str(f)]["radius"] for f in range(common.N_FOLDS)}, c3.SIXTH: chosen["all"]["radius"]}
+    return cfg
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--out", default=str(OUT))
     parser.add_argument("--dial", default=str(common.DATA / "dial"))
     parser.add_argument("--no-core", action="store_true")
     args = parser.parse_args(argv)
-    cfg = c3.Config(core=not args.no_core, bound=True)
-    if c3.CHECK2B_RESULTS.exists():
-        chosen = json.loads(c3.CHECK2B_RESULTS.read_text())["chosen"]
-        cfg.radius = {**{f: chosen[str(f)]["radius"] for f in range(common.N_FOLDS)}, c3.SIXTH: chosen["all"]["radius"]}
+    cfg = config(args.no_core)
     render.build()
     print(f"seeds: folds={common.SEED_FOLDS} bootstrap={common.SEED_BOOTSTRAP} inner={common.SEED_INNER} perm={c3.SEED_PERM} std={c3.SEED_STD} "
           f"render={render.SEEDS} map={decoder.SEED_MAP}; link target {decoder.LINK_TARGET} margin {decoder.LINK_MARGIN} grid {decoder.BOUND_GRID}", flush=True)

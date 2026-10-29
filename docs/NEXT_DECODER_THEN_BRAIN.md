@@ -176,6 +176,29 @@ no further encoding work.
   plus the signs above. The 24 links are reported again after the A2 fix. No stricter
   margin.
 
+- **A3 round 2 (planning agent's rulings, passed on by the user, 2026-10-29, after A3
+  failed rules 2 and 3).** The adjustment was chosen after the results and is judged on
+  the same 3 songs; every report says so.
+  - The one round: the 5th/95th percentiles map to 0.10/0.90, symmetric. No other
+    setting.
+  - Rule 2 stays as committed. If it fails again, it is recorded as FAIL.
+  - Diagnostics, reported and not gated:
+    a) the region of the body made from the corpus-median mood vector (3 seeds), and the
+       region histogram of all public-corpus segments through the map;
+    b) the distances between the 3 songs' mood vectors (mean and per phrase), before the
+       map, in units of the corpus SD per lane;
+    c) the user's word for each region visited, from the body study.
+  - The dial and public-rating changes (0.435 → 0.385; 0.270 → 0.337) are reported with
+    paired bootstrap 95 % intervals over segments, blocked by song. Power-drop-only and
+    power-drop + fix are reported separately.
+  - If rule 2 fails: D4 stays blocked on `core-2b`. When B3 passes and becomes the
+    source, A2 and A3 are rerun with the same committed rules and the quantile setting
+    of this round. A spread term in the map fit is a new design, committed only if B3
+    also fails rule 2, and before that rerun's results exist.
+  - The power anchor stays dropped. The same sign check against pass B applies fresh to
+    B3's power readout. The user watches weight specifically in the re-exports.
+  - The re-exports for the user's watch use this round's bodies (by eye, not gated).
+
 *B. Clock lag: keep the music's timing; shrink amplitude, not time.*
 - Under the per-joint limits, a figure that would break a limit is scaled down in
   amplitude until it fits. It is not time-stretched. Report the shrink per figure. If
