@@ -9,6 +9,9 @@ Fixed here, before any result:
              x  = x' + C [Re h, Im h] + D x'      then  x = x + gatedMLP(ln2(x))
   modes      lam = exp(-nu + i theta); theta = 2 pi f dt, nu = dt / tau; f log-uniform in the layer's band,
              tau = Q / (pi f), Q log-uniform in 2..8. `clamp_modes` clamps f to the band (nu stays free > 0).
+  head_norm  heads and the precision read take a parameter-free layer norm of the layer output (default True). B2 as first committed
+             (5fe01a2) had none (head_norm=False reproduces it exactly): without it the deep layers' unnormalised stream gives huge head
+             means at init and the first training steps diverge (L4 NLL 5e7 before any update).
   heads      per layer: Gaussian mean and log-variance (44 each) of the mean of the features over
              [t + h, t + 2h), h = 10, 50, 200, 800 frames (+100 ms, +0.5 s, +2 s, +8 s).
   coupling   err_i[t]  = mean(f[t-h+1 .. t]) - head_mean_i[t-2h+1]    (the prediction made 2h-1 frames ago, now scored;
@@ -61,15 +64,15 @@ def scan(lam_log, u, h0, block=SCAN_BLOCK):
     lam = torch.exp(lam_log)
     ub = u.reshape(B * nb, block, M)
     h, loc = torch.zeros(B * nb, M, dtype=u.dtype), []
-    for k in range(block):
-        h = lam * h + ub[:, k]
+    for uk in ub.unbind(1):              # unbind, not ub[:, k]: indexing makes autograd fill a full-size zero gradient per slice
+        h = lam * h + uk
         loc.append(h)
     loc = torch.stack(loc, 1).reshape(B, nb, block, M)
     lam_block = torch.exp(lam_log * block)
     carry, carries = h0, []
-    for c in range(nb):
+    for end in loc[:, :, -1].unbind(1):
         carries.append(carry)
-        carry = lam_block * carry + loc[:, c, -1]
+        carry = lam_block * carry + end
     carries = torch.stack(carries, 1)
     pw = torch.exp(lam_log[None, :] * torch.arange(1, block + 1, dtype=torch.float32)[:, None])
     out = (loc + pw[None, None] * carries[:, :, None]).reshape(B, nb * block, M)[:, :T]
@@ -86,9 +89,9 @@ def sample_modes(g, band, n=N):
 
 
 class Layer(nn.Module):
-    def __init__(self, g, band, coupled):
+    def __init__(self, g, band, coupled, head_norm=True):
         super().__init__()
-        self.band = band
+        self.band, self.head_norm = band, head_norm
         theta, nu = sample_modes(g, band)
         self.theta = nn.Parameter(theta)
         self.nu_log = nn.Parameter(torch.log(nu))
@@ -123,17 +126,17 @@ class Layer(nn.Module):
         x = x + self.out(torch.cat([h.real, h.imag], -1)) + self.skip * x
         g, v = self.mlp_in(self.ln2(x)).chunk(2, -1)
         x = x + self.mlp_out(F.gelu(g) * v)
-        mean, logvar = self.head(x).chunk(2, -1)
+        mean, logvar = self.head(F.layer_norm(x, (D,)) if self.head_norm else x).chunk(2, -1)
         return x, h, hT, mean, logvar.clamp(LOGVAR_MIN, LOGVAR_MAX)
 
 
 class Core(nn.Module):
-    def __init__(self, seed=SEED, phase=True):
+    def __init__(self, seed=SEED, phase=True, head_norm=True):
         super().__init__()
         g = torch.Generator().manual_seed(seed)
-        self.phase = phase
+        self.phase, self.head_norm = phase, head_norm
         self.embed = _lin(g, N_IN, D)
-        self.layers = nn.ModuleList(Layer(g, b, i > 0) for i, b in enumerate(BANDS))
+        self.layers = nn.ModuleList(Layer(g, b, i > 0, head_norm) for i, b in enumerate(BANDS))
 
     def n_params(self):
         return sum(p.numel() for p in self.parameters())
@@ -143,14 +146,32 @@ class Core(nn.Module):
             L.clamp_modes()
 
     def init_state(self, B=1):
-        return {"n": 0,
+        return {"n": torch.zeros(B, dtype=torch.long),
                 "h": [torch.zeros(B, N, dtype=torch.complex64) for _ in BANDS],
                 "q": [torch.zeros(B, FEAT) for _ in BANDS],
                 "f": torch.zeros(B, HORIZONS[-1], FEAT),
                 "mean": [torch.zeros(B, 2 * h, FEAT) for h in HORIZONS]}
 
+    @staticmethod
+    def detach_state(state):
+        """The state with the autograd graph cut (truncated backprop across chunks)."""
+        return {"n": state["n"], "f": state["f"].detach(), "h": [h.detach() for h in state["h"]],
+                "q": [q.detach() for q in state["q"]], "mean": [m.detach() for m in state["mean"]]}
+
+    @staticmethod
+    def reset_rows(state, rows):
+        """Zero the state of batch rows `rows` (bool mask or index list): a new song starts there."""
+        fresh = {"n": state["n"], "f": state["f"], "h": state["h"], "q": state["q"], "mean": state["mean"]}
+        keep = torch.ones(state["n"].shape[0], dtype=torch.bool)
+        keep[rows] = False
+        def z(t):
+            return t * keep.view(-1, *([1] * (t.dim() - 1))).to(t.dtype)
+        return {"n": state["n"] * keep.long(), "f": z(fresh["f"]), "h": [z(h) for h in fresh["h"]],
+                "q": [z(q) for q in fresh["q"]], "mean": [z(m) for m in fresh["mean"]]}
+
     def forward(self, f, state):
-        """f: (B, T, 46) -> (out, state). out: per layer dict h (B,T,N complex), mean, logvar, err (B,T,44)."""
+        """f: (B, T, 46) -> (out, state). out: per layer dict h (B,T,N complex), mean, logvar, err (B,T,44), x (B,T,128).
+        state["n"] counts frames per batch row, so rows can be reset independently (`reset_rows`)."""
         if not self.phase:
             f = torch.cat([f[..., :FEAT], torch.zeros_like(f[..., FEAT:])], -1)
         B, T, _ = f.shape
@@ -170,11 +191,11 @@ class Core(nn.Module):
             # err: the prediction made 2h-1 frames ago, scored against the window of the last h frames; 0 until 2h frames exist
             m_all = torch.cat([state["mean"][i], mean], 1)
             win = (cs[:, hf + idx + 1] - cs[:, hf + idx + 1 - hz]) / hz
-            err = (win - m_all[:, 1:1 + T]) * ((n0 + idx) >= 2 * hz - 1).float()[None, :, None]
-            out.append({"h": h, "mean": mean, "logvar": logvar, "err": err})
+            err = (win - m_all[:, 1:1 + T]) * ((n0[:, None] + idx[None]) >= 2 * hz - 1).float()[..., None]
+            out.append({"h": h, "mean": mean, "logvar": logvar, "err": err, "x": x})
             st["h"].append(hT)
             st["mean"].append(m_all[:, -2 * hz:])
             if i + 1 < len(self.layers):
-                q = err * torch.exp(-self.layers[i + 1].prec(x).clamp(LOGVAR_MIN, LOGVAR_MAX))
+                q = err * torch.exp(-self.layers[i + 1].prec(F.layer_norm(x, (D,)) if self.head_norm else x).clamp(LOGVAR_MIN, LOGVAR_MAX))
         st["n"], st["f"] = n0 + T, fh[:, -state["f"].shape[1]:]
         return out, st
