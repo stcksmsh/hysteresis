@@ -14,6 +14,9 @@ Data and outputs stay outside git: `/secondary/hyst-data/brain/` (test sets in `
 | `synthetic_input_sweep.py`, `sd_reference.py`, `synthetic_exclusion.py` | the synthetic sweep that fixed the input gain; the SD reference of the z-score floor; exclusion rates of the gap verification on synthetic audio |
 | `core.py` | B2 core (BRAIN_SPEC 4.1, untrained): 4 LRU layers, heads, precision coupling, state carry, mode clamp; init rules in its docstring |
 | `b2.py` | B2 readouts (ridge on the frozen state), lanes (band power, surprisal, neuromod, grid phase) at 10 Hz, JSON export, static HTML traces; `b2.py fit`, `b2.py run`; fixed choices in its docstring |
+| `train.py` | B3 training loop (60 s chunks, state carried, AdamW, clamp, 3 x 10 h wall-clock cap, resumable checkpoints); choices in its docstring; CLI `train.py --manifest --stats --out --epochs [--no-phase]` |
+| `prep_corpus.py` | raw fast features and offline-grid beats per track, `manifest.json`, `stats.npz` (`corpus` or `mp3dir` mode) |
+| `check_b3.py`, `precheck_data.py` | all B3 checks (4.3 baselines and gate, 4.4 habituation, 4.5 splice, 4.6 reported) from a checkpoint, writes `results.json`; `--smoke` never writes to the results folder; choices in its docstring |
 | `test_*.py` | unittest, synthetic data only |
 
 PLL baseline: `crates/hyst-audio/examples/beat_pll.rs` (`cargo build --release -p hyst-audio --example beat_pll`).

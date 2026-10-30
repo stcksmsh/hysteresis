@@ -172,24 +172,31 @@ def slope(x, win=300, dt=0.1):
     return np.where(m > 1, (m * stx - st * sx) / np.where(den == 0, 1, den), 0.0)
 
 
-def lanes(run, z, readouts):
-    """run: run_core output; z: standardised features (T, 44); readouts: per layer. -> dict of lane arrays at 10 Hz."""
-    nb = run["nb"]
-    sur, var4 = {}, None
+def surprisal_lanes(means, logvars, z):
+    """Per-layer predictions at the 10 Hz bins (lists of (nb, 44)), standardised features z (T, 44) ->
+    ({L1..L4, total}: (nb,) surprisal stamped where the target window completes, NaN before), mean L4 variance (nb,)."""
+    nb = len(means[0])
+    sur = {}
     for i, (name, hz) in enumerate(zip(LAYERS, core.HORIZONS)):
-        mean, logvar = apply_layer(readouts[i], run["states"][i])
         y, ok = targets(z, hz)
-        e = np.where(ok, nll(y, mean, logvar), np.nan)
+        e = np.where(ok, nll(y, means[i], logvars[i]), np.nan)
         s = np.full(nb, np.nan)
         lag = 2 * hz // STRIDE
         s[lag:] = e[:nb - lag]
         sur[name] = s
-        if i == 3:
-            var4 = np.exp(logvar).mean(1)
-    total = np.nansum(np.stack([sur[n] for n in LAYERS]), 0)
-    return {"band_power": dict(zip(LAYERS, run["power"])),
-            "surprisal": {**sur, "total": total},
-            "neuromod": {"arousal": one_pole(total, 1.0, 8.0), "tension": one_pole(var4, 8.0, 8.0), "familiarity": -slope(total)}}
+    sur["total"] = np.nansum(np.stack([sur[n] for n in LAYERS]), 0)
+    return sur, np.exp(logvars[3]).mean(1)
+
+
+def neuromod(total, var4):
+    return {"arousal": one_pole(total, 1.0, 8.0), "tension": one_pole(var4, 8.0, 8.0), "familiarity": -slope(total)}
+
+
+def lanes(run, z, readouts):
+    """run: run_core output; z: standardised features (T, 44); readouts: per layer. -> dict of lane arrays at 10 Hz."""
+    preds = [apply_layer(r, s) for r, s in zip(readouts, run["states"])]
+    sur, var4 = surprisal_lanes([p[0] for p in preds], [p[1] for p in preds], z)
+    return {"band_power": dict(zip(LAYERS, run["power"])), "surprisal": sur, "neuromod": neuromod(sur["total"], var4)}
 
 
 # ---- audio and fit --------------------------------------------------------------------------------------------
@@ -222,7 +229,7 @@ def fit_grid(path):
 
 
 def fit(modes=("phase", "nophase")):
-    """Standardisation, readouts and diagnostics for each mode, from the FIT_DIR tracks. Writes OUT/stats.npz, OUT/readouts_*.npz."""
+    """(B2 as committed in 5fe01a2: head_norm=False.) Standardisation, readouts and diagnostics for each mode, from the FIT_DIR tracks. Writes OUT/stats.npz, OUT/readouts_*.npz."""
     tracks = sorted(FIT_DIR.glob("*.mp3"))
     feats, beats = [], []
     for p in tracks:
@@ -236,7 +243,7 @@ def fit(modes=("phase", "nophase")):
     zs = [x[:, :core.FEAT] for x in xs]
     report = {}
     for mode in modes:
-        model = core.Core(phase=(mode == "phase"))
+        model = core.Core(phase=(mode == "phase"), head_norm=False)
         runs = [run_core(model, x) for x in xs]
         readouts, diag = [], {}
         for i, name in enumerate(LAYERS):
@@ -246,7 +253,7 @@ def fit(modes=("phase", "nophase")):
             diag[name] = d
         np.savez(OUT / f"readouts_{mode}.npz", **{f"{k}_{i}": v for i, r in enumerate(readouts) for k, v in r.items()})
         report[mode] = diag
-    (OUT / "fit_report.json").write_text(json.dumps({"tracks": [p.stem for p in tracks], "params": core.Core().n_params(), "readouts": report}, indent=1))
+    (OUT / "fit_report.json").write_text(json.dumps({"tracks": [p.stem for p in tracks], "params": core.Core(head_norm=False).n_params(), "readouts": report}, indent=1))
     return report
 
 
@@ -268,7 +275,7 @@ def process_song(name, mode="phase"):
     mean, std, readouts = load_fit(mode)
     feats = fast_features(decode(SONGS / audio))
     x = build_inputs(feats, sc["beats"], mean, std)
-    model = core.Core(phase=(mode == "phase"))
+    model = core.Core(phase=(mode == "phase"), head_norm=False)
     t0 = time.perf_counter()
     run = run_core(model, x)
     dt = time.perf_counter() - t0
