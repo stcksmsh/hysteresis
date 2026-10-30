@@ -4714,3 +4714,33 @@ The prior removed the double-tempo readouts on most styles; it moved Quickstep t
 - The gap phase error rose by 22 to 24 ms at every length and kind, so the 4 s criterion moved from pass to fail; the amplitude ratio rose slightly. Gate 1 passes in both rounds.
 - Gate 3 with B1's own tempo went from AUC 0.720 to 0.447; with the annotated tempo it is 0.915. The meter information is in the bank; B1's own tempo, as read out, does not point at the right resonances.
 - B1 has failed twice by the rules. The pulse for the brain comes from the offline analysis grid, labelled "beat grid"; the B1 claims are dropped (BRAIN_SPEC 2.2). Nothing was tuned or changed after seeing a number.
+
+## B3 corpus built (2026-10-30), branch `b3-corpus`
+
+Task C of the overseer. Rule: BRAIN_SPEC 1.4 as ruled by the user on 2026-10-30 (option b): all electronic, pop and rock (recorded `genre_top`, 60-600 s, DEAM IDs out) plus the same hours of other tracks. BY-SA included. No training was run.
+
+**Result.** Training side 2,819 tracks, 174.73 h, 722 artists: E/P/R 87.38 h, other 87.34 h (N = 2 x E/P/R = 174.76 h; "other" is cut so it never passes E/P/R). Held-out side 357 tracks, 20.07 h, 73 artists (cap 20 h). Whole corpus 3,176 tracks, 195.18 h.
+Training hours by licence class: BY 115.73, BY-SA 45.99, CC0 5.67, PD 7.33. By genre_top: other 63.23 (no recorded genre_top), Electronic 47.93, Rock 34.62, Hip-Hop 6.05, Experimental 4.97, Pop 4.84, rest below 4.
+The 100 h E/P/R floor of the first draft could not be met: 89.1 h on the training side in the window (108.3 h with no window at all).
+
+**Steps and numbers.**
+- Licence filter: 11,582 open tracks, 781.8 h, 1,874 artists (the m2b mapping). Lists and licence strings: `scripts/brain/corpus/SOURCES.md`. FMA metadata has no per-track page URL; the URL column is the member of `fma_full.zip`.
+- Split: seed 20261030, 187 of 1,874 artists held out (113.8 h before window and cap), made before duration, genre or BY-SA were looked at.
+- BY-SA rule (200 h and E/P/R >= 100 h without BY-SA): BY+CC0+PD give 387.5 h but E/P/R only 66.1 h, so BY-SA stays in. Note it for the exhibition licence check.
+- Window 60-600 s: 10,105 of 11,582 tracks, 608.0 h. Both the window and the 20 h cap were accepted by the overseer.
+- Exclusion by ID: 138 DEAM-matched IDs in the open pool, 135 inside the window (`excluded_by_id.csv`).
+- Exclusion by fingerprint: 61 of the first 3,230 files, by BER < 0.35 (`excluded_by_fingerprint.csv`, BER and reference). 23 have BER < 0.1 (real duplicates), 3 have 0.2-0.3, 35 have 0.3-0.35 (chance level for a short reference slid over a long track; the fixed rule excludes them anyway). By reference set: DEAM 37, GTZAN 8, MERP 7, Emotify 5, Ballroom 4, the 3 danced songs 0. This cut E/P/R by 1.7 h; "other" was cut from the end of its seeded order. Seven top-up tracks were fetched and fingerprinted: no new match. One round was enough.
+- Selection order: seeded (SEED_B 20261032 for "other", held-out SEED_HELD 20261033). Code: `corpus_select.py`, `corpus_finalize.py`.
+- Choices where the spec was silent: window 60-600 s; held-out cap 20 h; split over all licence-passing artists; no per-artist cap (largest training artist 6.4 h); "other" = no recorded `genre_top`; the tracks excluded by fingerprint stay on disk but are not in the final list.
+
+**Fingerprint correction.** `measure/scripts/m5_fp.py` called Chromaprint with enum 2 (TEST3, 2.3 items per second), not fpcalc's default (enum 1, 8 items per second). `corpus_fingerprint.py` uses enum 1. Positive control: a DEAM clip re-encoded at 128 kbps inside a longer track matches at BER 0.016. The older M5 overlap numbers used the coarse algorithm. Reference set: 3,956 files (DEAM, MERP, Emotify, Ballroom, GTZAN, the 3 songs); one GTZAN file (jazz.00054) does not decode. SMC audio is not on disk and is not in the reference set.
+
+**Download.** FMA host, HTTP ranges, CRC checked. Aggregate rate: 6 threads 7.8 MB/s, 8 threads about 10, 16 threads about 10.5 (the same; the limit is about 10 MB/s). About 24 GB for 3,237 files, 0 errors in `downloads.log` (a progress-size crash at 00:29 killed one run; fixed, resumable). Wall time about 45 min of running plus the stop.
+
+**Features.** `corpus_features.py`: fast_features at 100 Hz, 44 columns, float32, 3,176 files, 70,264,920 frames, no NaN or wrong shape, 12.4 GB, 790 s with 16 workers. Standardisation on the training side only: 2,819 tracks, 63,053,480 frames, smallest SD 0.0539, `feature_stats.npz` sha256 29ddf65a07ba963d3d3d924300acd2eb8b0380e7bc7bccd08c192f69d0247473 (population SD, float64).
+
+**Paths and layout (outside git, `/secondary/hyst-data/brain/corpus/`).**
+- `audio/<id:06d>.mp3` the FMA files (includes the 61 excluded ones; use the list).
+- `features/<id:06d>.npy` float32, shape (frames, 44), 100 Hz.
+- `feature_stats.npz` keys `mean`, `sd` (44 each); `feature_stats.json` same plus column names and hash.
+- In git, `scripts/brain/corpus/`: `final_corpus.csv` (id, split train|heldout, genre, cls, hours, artist_id, sha256 of the mp3), `excluded_by_id.csv`, `excluded_by_fingerprint.csv`, `fp_matches.csv`, `selection_final_meta.csv` (artist and title), `selection_round1.csv`, `selection_report.txt` (first draft, superseded), `SOURCES.md`, `feature_stats.{npz,json}`.
