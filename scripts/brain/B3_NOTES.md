@@ -54,3 +54,20 @@ Training step, 8 threads, 60 s chunks, synthetic input: 22 s per audio hour at 4
 Real-data epoch of the 20-track smoke set (loading and padding included, 8 streams): 31 s per audio hour. For 178 h that is about
 1.2 h (compute only) to 1.6 h (smoke-set overhead) per epoch, plus held-out evaluation (forward only, about 5 s per audio hour).
 Before the `unbind` change the same step took 92 to 97 s per audio hour.
+
+## Launch (fixed before any real run)
+
+`launch_b3.sh` runs, in order: (1) `prep_corpus.py corpus` on the corpus builder's `final_corpus.csv` (3,176 tracks: 2,819 train, 357 held
+out; 174.7 h train, 20.1 h held out) with its features `corpus/features/<id:06d>.npy` and `corpus/feature_stats.npz` taken as they are,
+checking the audio against the list's own `sha256` column (and any extra `--hashes` file), the stats npz against
+`feature_stats.json`, and adding only the offline-grid beats (8 processes) and `manifest.json`; (2) the main model, with grid phase,
+8 threads, 8 streams, **8 epochs**, or the cap of 30 training hours, whichever comes first; (3) `check_b3.py` on the final checkpoint into
+`/secondary/hyst-data/brain/b3/results/` (`results.json`, then `precheck.json`; the pre-check is reported only and a failure of it does not
+stop the run); (4) the no-phase model, same settings, inside what is left of the 30 h; (5) `ablation.json` if that run finished all 8
+epochs, else `ablation_not_run.txt`.
+
+Why 8 epochs: measured 24 to 32 s per audio hour (load average 8 to 12), so 174.7 h takes 1.2 to 1.6 h per epoch plus held-out evaluation
+(about 0.03 h), at most about 1.7 h. Eight epochs are about 10 to 14 h, so the main run and the no-phase run together (at most about 27 h)
+fit the 30 h cap; the cap guard stops either one first if the machine is slower. Held-out evaluation and checks are not counted in the cap
+(training wall time only). The learning-rate cosine runs over the 8 epochs. Re-running the script resumes from `last.pt`.
+Statistics: the SD key in the builder's npz is `sd`; `train.load_stats` accepts `sd` or `std`.

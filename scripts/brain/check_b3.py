@@ -62,6 +62,22 @@ LN2 = math.log(2.0)
 LAYERS = b2.LAYERS
 
 
+class Lazy:
+    """A list that loads each item from disk when asked, so 178 h of inputs never sit in memory."""
+
+    def __init__(self, items, fn):
+        self.items, self.fn = items, fn
+
+    def __len__(self):
+        return len(self.items)
+
+    def __getitem__(self, i):
+        return self.fn(self.items[i])
+
+    def __iter__(self):
+        return (self.fn(t) for t in self.items)
+
+
 # ---- shared maths -------------------------------------------------------------------------------------------------
 
 def boot_ci(values, seed=SEED_BOOT, n=N_BOOT, stat=np.mean):
@@ -507,10 +523,39 @@ def load_manifest(path):
     return [train.Track(t["id"], t["feats"], t["beats"], t["split"]) for t in json.loads(Path(path).read_text())]
 
 
+def heldout_nll(model, ho, load):
+    """Per-layer NLL and MSE of a model's heads over the held-out tracks (bin-weighted)."""
+    sc = {"nll": [], "mse": [], "n": []}
+    for t in ho:
+        x = load(t)
+        for key, v in zip(("nll", "mse", "n"), song_scores(*head_bins(model, x), x[:, :core.FEAT])):
+            sc[key].append(v)
+    sc = {k: np.array(v) for k, v in sc.items()}
+    return [float(v) for v in np.average(sc["nll"], axis=0, weights=sc["n"] + 1e-9)], [float(v) for v in np.average(sc["mse"], axis=0, weights=sc["n"] + 1e-9)]
+
+
+def ablation(with_phase_nll, ckpt_nophase, ho, load):
+    model, meta = train.load_model(ckpt_nophase)
+    nll, mse = heldout_nll(model, ho, load)
+    return {"with_phase_nll_per_layer": with_phase_nll, "without_phase_nll_per_layer": nll, "without_phase_mse_per_layer": mse,
+            "without_phase_epoch": meta["epoch"], "without_phase_stopped_by_cap": meta["stopped_by_cap"]}
+
+
+def ablation_only(args):
+    """With and without grid phase on the held-out tracks, nothing else: for a no-phase run that finishes after the main checks."""
+    mean, std = train.load_stats(args.stats)
+    tracks = load_manifest(args.manifest)
+    ho = [t for t in tracks if t.split == "heldout"][:args.heldout_limit]
+    load = lambda t: train.load_inputs(t, mean, std)
+    main_model, meta = train.load_model(args.ckpt)
+    nll, mse = heldout_nll(main_model, ho, load)
+    return {"smoke": args.smoke, "checkpoint": str(args.ckpt), "n_heldout_tracks": len(ho), "with_phase_mse_per_layer": mse,
+            **ablation(nll, args.ckpt_nophase, ho, load)}
+
+
 def run_all(args, log=print):
     t0 = time.time()
-    stats_npz = np.load(args.stats)
-    mean, std = stats_npz["mean"], stats_npz["std"]
+    mean, std = train.load_stats(args.stats)
     raw = json.loads(Path(args.manifest).read_text())
     audio = {t["id"]: t["audio"] for t in raw}
     tracks = load_manifest(args.manifest)
@@ -524,8 +569,8 @@ def run_all(args, log=print):
            "n_train_tracks_for_baselines": len(tr), "n_heldout_tracks": len(ho), "seeds": {"boot": SEED_BOOT, "hab": SEED_HAB, "splice": SEED_SPLICE, "pac": SEED_PAC}}
 
     log("fitting baselines")
-    train_x = [load(t) for t in tr]
-    train_z = [x[:, :core.FEAT] for x in train_x]
+    train_x = Lazy(tr, load)
+    train_z = Lazy(tr, lambda t: load(t)[:, :core.FEAT])
     methods = {"persistence": Persistence().fit(train_z), "ar_ridge": ARRidge().fit(train_z)}
     res["ar_alpha"] = methods["ar_ridge"].alpha
     methods["b2"] = B2Method.fit(phase, train_x, head_norm=meta.get("head_norm", True))
@@ -578,17 +623,7 @@ def run_all(args, log=print):
 
     if args.ckpt_nophase:
         log("no-phase ablation")
-        m2, meta2 = train.load_model(args.ckpt_nophase)
-        sc = {"nll": [], "mse": [], "n": []}
-        for t in ho:
-            x = load(t)
-            nll, mse, n = song_scores(*head_bins(m2, x), x[:, :core.FEAT])
-            for key, v in (("nll", nll), ("mse", mse), ("n", n)):
-                sc[key].append(v)
-        sc = {k: np.array(v) for k, v in sc.items()}
-        res["with_vs_without_phase"] = {"with_phase_nll_per_layer": res["gate_4_3"]["nll_per_layer"]["b3"],
-                                        "without_phase_nll_per_layer": [float(v) for v in np.average(sc["nll"], axis=0, weights=sc["n"] + 1e-9)],
-                                        "without_phase_epoch": meta2["epoch"]}
+        res["with_vs_without_phase"] = ablation(res["gate_4_3"]["nll_per_layer"]["b3"], args.ckpt_nophase, ho, load)
 
     if args.precheck:
         res["precheck_arousal"] = args.precheck_fn(model, stats)
@@ -608,6 +643,8 @@ def main(argv=None):
     ap.add_argument("--heldout-limit", type=int)
     ap.add_argument("--pac-songs", type=int, default=40)
     ap.add_argument("--precheck", action="store_true", help="DEAM/MERP arousal pre-check (reads DEAM and MERP audio and labels)")
+    ap.add_argument("--ablation-only", action="store_true", help="only with/without grid phase (needs --ckpt-nophase); writes ablation.json")
+    ap.add_argument("--precheck-only", action="store_true", help="only the DEAM/MERP pre-check; writes precheck.json")
     ap.add_argument("--core2b", help="npz of core-2b arousal predictions per clip key, for the pre-check")
     args = ap.parse_args(argv)
     out = Path(args.out) if args.out else (SCRATCH_DIR / "smoke" if args.smoke else RESULTS_DIR)
@@ -616,6 +653,17 @@ def main(argv=None):
     if args.precheck:
         import precheck_data
         args.precheck_fn = lambda model, stats: precheck_data.run(model, stats, args.core2b, precheck)
+    if args.precheck_only:
+        import precheck_data
+        mean, std = train.load_stats(args.stats)
+        model, _ = train.load_model(args.ckpt)
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "precheck.json").write_text(json.dumps(precheck_data.run(model, (mean, std), args.core2b, precheck), indent=1, default=float))
+        return
+    if args.ablation_only:
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "ablation.json").write_text(json.dumps(ablation_only(args), indent=1, default=float))
+        return
     res = run_all(args)
     out.mkdir(parents=True, exist_ok=True)
     (out / "results.json").write_text(json.dumps(res, indent=1, default=float))

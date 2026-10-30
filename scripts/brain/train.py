@@ -49,6 +49,12 @@ class Track:
     split: str        # "train" or "heldout"
 
 
+def load_stats(path):
+    """(mean, std) from a stats npz; the corpus builder's file calls the SD `sd`, prep_corpus's smoke file `std`."""
+    z = np.load(path)
+    return z["mean"], z["std"] if "std" in z.files else z["sd"]
+
+
 def load_inputs(track, mean, std):
     """Track -> (T, 46) float32 core input (standardised, clipped features + grid phase)."""
     feats = np.load(track.feats).astype(np.float32)
@@ -248,12 +254,12 @@ def main(argv=None):
     ap.add_argument("--cap-hours", type=float, default=CAP_S / 3600, help="wall-clock cap in training hours (default 3 x 10)")
     ap.add_argument("--no-resume", action="store_true")
     args = ap.parse_args(argv)
-    st = np.load(args.stats)
+    mean, std = load_stats(args.stats)
     tracks = [Track(t["id"], t["feats"], t["beats"], t["split"]) for t in json.loads(Path(args.manifest).read_text())]
     trn, ho = [t for t in tracks if t.split == "train"], [t for t in tracks if t.split == "heldout"]
     torch.manual_seed(SEED)
     model = core.Core(phase=not args.no_phase)
-    meta = fit(model, trn, ho, lambda t: load_inputs(t, st["mean"], st["std"]), args.out, args.epochs, batch=args.batch,
+    meta = fit(model, trn, ho, lambda t: load_inputs(t, mean, std), args.out, args.epochs, batch=args.batch,
                cap_s=args.cap_hours * 3600, load_len=lambda t: len(np.load(t.feats, mmap_mode="r")), resume=not args.no_resume)
     print(json.dumps({k: meta[k] for k in ("epoch", "step", "wall_s", "stopped_by_cap", "params")}))
 
