@@ -1,4 +1,5 @@
 """Tests for train.py on synthetic data (CHUNK is shrunk so a few hundred frames make several chunks)."""
+import json
 import math
 import shutil
 import tempfile
@@ -130,6 +131,22 @@ class TestTrainingLoop(Base):
         for (k, x), (_, y) in zip(m.state_dict().items(), m2.state_dict().items()):
             self.assertTrue(torch.equal(x, y), k)
         self.assertEqual(meta["epoch"], 1)
+
+
+class TestLiveness(Base):
+    def test_heartbeat_lines_and_no_grid_count(self):
+        songs = [song(1300, 7)]
+        tracks, load = tracks_of(songs)
+        lines = []
+        train.run_epoch(core.Core(), tracks, load, 1, 0, 0, log=lines.append, heartbeat_s=0)
+        beats = [json.loads(s) for s in lines]
+        self.assertTrue(len(beats) >= 1 and all(b["heartbeat"] and b["epoch"] == 1 for b in beats))
+        self.assertTrue(all(np.isfinite(b["mean_loss_so_far"]) and b["wall_s"] >= 0 for b in beats))
+        with tempfile.TemporaryDirectory() as d:
+            for name, beat_list in (("a", []), ("b", [1.0]), ("c", [1.0, 2.0])):
+                (Path(d) / f"{name}.json").write_text(json.dumps({"beats": beat_list}))
+            ts = [train.Track(n, "", str(Path(d) / f"{n}.json"), "train") for n in "abc"]
+            self.assertEqual(train.count_no_grid(ts), ["a", "b"])
 
 
 class TestSchedule(unittest.TestCase):

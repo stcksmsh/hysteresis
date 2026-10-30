@@ -162,6 +162,11 @@ class TestLanes(unittest.TestCase):
         np.testing.assert_allclose(b2.slope(ramp)[299:], 2.0, rtol=1e-6)
         self.assertEqual(b2.slope(ramp)[0], 0.0)
 
+    def test_grid_phase_without_a_grid_is_zero(self):
+        for beats in ([], [3.0]):
+            np.testing.assert_array_equal(b2.grid_phase(beats, 50), np.zeros((50, 2), np.float32))
+        self.assertTrue(np.abs(b2.grid_phase([1.0, 2.0], 50)).max() > 0.5)        # two beats are enough: unchanged behaviour
+
     def test_grid_phase(self):
         ph = b2.grid_phase([1.0, 2.0, 3.0], 400)
         self.assertEqual(ph.shape, (400, 2))
