@@ -71,3 +71,5 @@ Why 8 epochs: measured 24 to 32 s per audio hour (load average 8 to 12), so 174.
 fit the 30 h cap; the cap guard stops either one first if the machine is slower. Held-out evaluation and checks are not counted in the cap
 (training wall time only). The learning-rate cosine runs over the 8 epochs. Re-running the script resumes from `last.pt`.
 Statistics: the SD key in the builder's npz is `sd`; `train.load_stats` accepts `sd` or `std`.
+
+Pre-check comparison with core-2b: `core2b_adapter.py` turns stage 2b's `predictions_heldout.npz` (out-of-fold, `<clip>/core_s`, arousal = column 1, 0.5 s steps, tau 8 s as 2b chose) into the `--core2b` npz; it covers all 1,744 DEAM clips and 43 MERP songs the pre-check uses. `launch_b3.sh` runs it and passes `--core2b`. Predictions are aligned to the labels by step; a shorter series is padded with NaN.

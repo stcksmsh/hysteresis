@@ -18,6 +18,7 @@ EPOCHS=${EPOCHS:-8}
 CAP_H=30
 mkdir -p "$R" "$K"
 M=(--manifest "$C/manifest.json" --stats "$C/feature_stats.npz")
+CORE2B=$B/core2b_arousal.npz
 
 echo "[1/5] prep: verify hashes and statistics, add offline-grid beats, write manifest"
 $PY prep_corpus.py corpus "$LIST" ${HASHES:+--hashes "$HASHES"} --out "$C"
@@ -27,7 +28,8 @@ $PY train.py "${M[@]}" --out "$K/phase" --epochs "$EPOCHS" --batch 8 --cap-hours
 
 echo "[3/5] checks on the final checkpoint"
 $PY check_b3.py --ckpt "$K/phase/last.pt" "${M[@]}" --out "$R" | tee -a "$B/check.log"
-$PY check_b3.py --ckpt "$K/phase/last.pt" "${M[@]}" --out "$R" --precheck-only | tee -a "$B/check.log" || echo "pre-check failed (reported only)" >> "$B/check.log"
+$PY core2b_adapter.py /secondary/hyst-data/emotion/check2b/predictions_heldout.npz "$CORE2B" | tee -a "$B/check.log" || echo "core-2b adapter failed (pre-check reported without it)" >> "$B/check.log"
+$PY check_b3.py --ckpt "$K/phase/last.pt" "${M[@]}" --out "$R" --precheck-only --core2b "$CORE2B" | tee -a "$B/check.log" || echo "pre-check failed (reported only)" >> "$B/check.log"
 
 echo "[4/5] no-phase ablation, inside the cap"
 LEFT=$($PY - "$K/phase/last.pt" "$CAP_H" <<'PYEOF'

@@ -504,7 +504,10 @@ def precheck(clips, folds, core2b=None, alpha=1.0):
             for c in te:
                 preds[name][c["key"]] = smoothing.smooth_delay(fit(np.nan_to_num(c[field])), best[1], best[2])
     if core2b:
-        preds["core2b"] = {c["key"]: np.asarray(core2b[c["key"]], dtype=np.float64) for c in clips if c["key"] in core2b}
+        def fit_len(p, n):
+            p = np.asarray(p, dtype=np.float64)[:n]
+            return np.concatenate([p, np.full(n - len(p), np.nan)])
+        preds["core2b"] = {c["key"]: fit_len(core2b[c["key"]], len(c["y"])) for c in clips if c["key"] in core2b}
     out = {}
     for ds in sorted({c["dataset"] for c in clips}):
         out[ds] = {}
