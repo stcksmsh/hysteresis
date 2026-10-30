@@ -262,6 +262,26 @@ class TestPrecheck(unittest.TestCase):
         self.assertLess(out["deam"]["smoothed_baseline"]["mean_r"], 0.6)
 
 
+class TestCore2bAdapter(unittest.TestCase):
+    def test_adapter_picks_arousal_of_core_s_and_precheck_aligns_lengths(self):
+        import tempfile
+        import core2b_adapter
+        with tempfile.TemporaryDirectory() as d:
+            core_s = np.stack([np.zeros(6), np.arange(6.0)], 1)
+            np.savez(f"{d}/p.npz", **{"deam_1/core_s": core_s, "deam_1/core": core_s + 9, "deam_1/y": core_s, "merp_a/core_s": core_s * 2})
+            self.assertEqual(core2b_adapter.adapt(f"{d}/p.npz", f"{d}/o.npz"), 2)
+            z = np.load(f"{d}/o.npz")
+            self.assertEqual(sorted(z.files), ["deam_1", "merp_a"])
+            np.testing.assert_array_equal(z["deam_1"], np.arange(6.0))
+            np.testing.assert_array_equal(z["merp_a"], np.arange(6.0) * 2)
+            rng = np.random.default_rng(0)
+            clips = [{"key": f"k{i}", "dataset": "deam", "brain": rng.standard_normal((8, 2)), "fast": rng.standard_normal((8, 2)),
+                      "y": np.arange(8.0) + i} for i in range(5)]
+            short = {c["key"]: np.arange(6.0) for c in clips}                 # shorter than y: padded with NaN, scored on the overlap
+            out = C.precheck(clips, {c["key"]: i % 5 for i, c in enumerate(clips)}, core2b=short)
+            self.assertAlmostEqual(out["deam"]["core2b"]["mean_r"], 1.0)
+
+
 class TestMain(unittest.TestCase):
     def test_smoke_results_never_go_to_the_results_folder(self):
         with self.assertRaises(SystemExit):
