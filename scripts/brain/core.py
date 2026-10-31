@@ -28,6 +28,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.utils.checkpoint import checkpoint
 
 SEED = 20261030
 DT = 0.01
@@ -135,6 +136,7 @@ class Core(nn.Module):
         super().__init__()
         g = torch.Generator().manual_seed(seed)
         self.phase, self.head_norm = phase, head_norm
+        self.grad_checkpoint = False        # memory option: recompute each layer in the backward pass; the maths is unchanged
         self.embed = _lin(g, N_IN, D)
         self.layers = nn.ModuleList(Layer(g, b, i > 0, head_norm) for i, b in enumerate(BANDS))
 
@@ -187,7 +189,10 @@ class Core(nn.Module):
                 st["q"].append(q[:, -1])
             else:
                 st["q"].append(state["q"][0])
-            x, h, hT, mean, logvar = L(x, state["h"][i], q_shift)
+            if self.grad_checkpoint and torch.is_grad_enabled():
+                x, h, hT, mean, logvar = checkpoint(L, x, state["h"][i], q_shift, use_reentrant=False)
+            else:
+                x, h, hT, mean, logvar = L(x, state["h"][i], q_shift)
             # err: the prediction made 2h-1 frames ago, scored against the window of the last h frames; 0 until 2h frames exist
             m_all = torch.cat([state["mean"][i], mean], 1)
             win = (cs[:, hf + idx + 1] - cs[:, hf + idx + 1 - hz]) / hz
