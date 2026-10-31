@@ -4799,3 +4799,14 @@ Branch `b3-pac`. `check_b3.py --pac-control-only` (code beside the round-1 coupl
 Verdict under 4.7: coupling may be claimed only if the interval lies above 0. Both intervals lie at or below 0 (L1 pair entirely below). Neither pair passes the PAC control, so no beat-band coupling claim is allowed for the round-1 model. Round 2's result supersedes this.
 
 Tests: 94 in `scripts/brain` pass (new: input max picks the coupled feature, coupled envelope above surrogates, uncoupled not, paired-interval rule).
+
+### B3 no-phase ablation, round-1 model (reported only, BRAIN_SPEC 4.6 and 4.7) — 2026-11-01
+
+Written by the overseer from `/secondary/hyst-data/brain/b3/results/ablation.json`. The no-phase twin (grid-phase inputs zeroed, otherwise as round 1) trained 8 epochs in its own memory-capped scope (`hyst-b3-nophase`, peak 13.9 GB of 20 GB), 36,790 s of training wall, not stopped by the cap. Labelled "round-1 model" (4.7); there is no round-2 twin and no claim depends on it.
+
+Held-out (357 tracks), per layer L1, L2, L3, L4:
+- NLL with grid phase 0.264, 0.141, 0.085, 0.093 (the same values as `results.json`); without 0.270, 0.142, 0.089, 0.090. Summed: 0.583 with, 0.590 without.
+- MSE with grid phase 0.165, 0.136, 0.148, 0.145; without 0.166, 0.137, 0.148, 0.146. Pooled: 0.1486 with, 0.1492 without (ridge AR 0.1307).
+- Held-out NLL of the two runs stayed within 0.01 per layer at every epoch.
+
+No interval was computed (reported only). In plain terms: the grid-phase input changes held-out NLL by about 1 % summed and MSE by about 0.4 %.
