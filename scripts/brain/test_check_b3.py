@@ -233,6 +233,40 @@ class TestPAC(unittest.TestCase):
         self.assertGreater(p2, 0.05)
         self.assertAlmostEqual(C.tort_mi(phase, np.ones(T)), 0.0, places=9)
 
+    def _phase_and_features(self, coupled_feature=None, F=5, T=6000):
+        fs = 100.0
+        t = np.arange(T) / fs
+        wander = np.convolve(np.random.default_rng(7).standard_normal(T), np.ones(300) / 300, "same")
+        phase = np.angle(np.exp(1j * 2 * np.pi * np.cumsum(0.5 + 8 * wander) / fs))
+        rng = np.random.default_rng(3)
+        x = rng.standard_normal((T, F))
+        if coupled_feature is not None:
+            x[:, coupled_feature] = (1.0 + 0.9 * np.cos(phase)) * np.sin(2 * np.pi * 12 * t) + 0.1 * x[:, coupled_feature]
+        return phase, x
+
+    def test_input_control_coupled_feature_found(self):
+        phase, x = self._phase_and_features(coupled_feature=3)
+        mi, arg, p, sur = C.pac_input_max(phase, x, (8.0, 20.0), 1)
+        self.assertEqual(arg, 3)
+        self.assertGreater(mi, 0.02)
+        self.assertLess(p, 0.05)
+        self.assertGreater(mi, 3 * sur)
+
+    def test_input_control_uncoupled_not_above_surrogates(self):
+        phase, x = self._phase_and_features()
+        mi, arg, p, sur = C.pac_input_max(phase, x, (8.0, 20.0), 1)
+        self.assertGreater(p, 0.05)
+
+    def test_pac_control_stats_pairs_and_interval(self):
+        names = list(C.PAC_CONTROL_PAIRS)
+        rows = [{n: {"net": (0.05 + 0.001 * i, 0.01, 0.001), "inp": (0.01, 0, 0.5, 0.01)} for n in names} for i in range(20)]
+        st = C.pac_control_stats(rows)
+        self.assertEqual(set(st), set(names))
+        self.assertTrue(st[names[0]]["coupling_claimable"])
+        self.assertAlmostEqual(st[names[0]]["median_input_max_mi"], 0.01)
+        rows = [{n: {"net": (0.01, 0.5, 0.01), "inp": (0.01 + 0.001 * (i % 2 - 0.5), 0, 0.5, 0.01)} for n in names} for i in range(20)]
+        self.assertFalse(C.pac_control_stats(rows)[names[0]]["coupling_claimable"])
+
     def test_layer_signal_band(self):
         fs, T = 100.0, 4000
         t = np.arange(T) / fs

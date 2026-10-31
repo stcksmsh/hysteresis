@@ -430,12 +430,16 @@ def tort_mi(phase, amp, bins=PAC_BINS):
     return float((math.log(bins) + (p * np.log(p + 1e-12)).sum()) / math.log(bins))
 
 
+def surrogate_shifts(seed, T, n_surr=PAC_SURROGATES, fs=100.0):
+    """The circular shifts (>= 10 s) of the surrogate test; shared by the network side and the input control."""
+    lo = int(10 * fs)
+    return np.random.default_rng(seed).integers(lo, max(lo + 1, T - lo), n_surr)
+
+
 def pac(phase, amp, seed, n_surr=PAC_SURROGATES, fs=100.0):
     """(MI, p) of phase vs amplitude with circular time-shift surrogates of the amplitude (shifts >= 10 s)."""
-    rng = np.random.default_rng(seed)
     obs = tort_mi(phase, amp)
-    lo = int(10 * fs)
-    shifts = rng.integers(lo, max(lo + 1, len(amp) - lo), n_surr)
+    shifts = surrogate_shifts(seed, len(amp), n_surr, fs)
     sur = np.array([tort_mi(phase, np.roll(amp, int(s))) for s in shifts])
     return obs, float((1 + (sur >= obs).sum()) / (1 + n_surr)), float(sur.mean())
 
@@ -556,6 +560,71 @@ def ablation_only(args):
             **ablation(nll, args.ckpt_nophase, ho, load)}
 
 
+# ---- 4.7 PAC control -------------------------------------------------------------------------------------------------
+
+PAC_CONTROL_PAIRS = {"L3 phase / L1 amp": (2, 0), "L3 phase / L2 amp": (2, 1)}
+
+
+def pac_input_max(phase, x, band, seed, n_surr=PAC_SURROGATES, fs=100.0):
+    """Input side of the control. x: (T, F) standardised features, each band-passed to `band` (same filter as layer_signal), Hilbert
+    envelope, Tort MI against `phase`. -> (max MI over features, argmax, p, mean surrogate max). Surrogates use the network side's shifts;
+    the surrogate statistic is the max over features per shift, so the max-selection is inside the test."""
+    sos = butter(2, [band[0], min(band[1], fs / 2 - 1)], btype="bandpass", fs=fs, output="sos")
+    env = np.abs(hilbert(sosfiltfilt(sos, x - x.mean(0), axis=0), axis=0))
+    obs = np.array([tort_mi(phase, env[:, f]) for f in range(env.shape[1])])
+    sur = np.array([max(tort_mi(phase, np.roll(env[:, f], int(s))) for f in range(env.shape[1]))
+                    for s in surrogate_shifts(seed, len(env), n_surr, fs)])
+    return float(obs.max()), int(obs.argmax()), float((1 + (sur >= obs.max()).sum()) / (1 + n_surr)), float(sur.mean())
+
+
+def pac_control_song(layer_x, x, seed):
+    """One song. layer_x: 4 arrays (T, 128) from head_bins(signals=True); x: model input (T, 46: 44 features, cos, sin of grid phase).
+    -> {pair: {"net": (MI, p, surrogate mean), "inp": (max MI, argmax, p, surrogate max mean)}}. Seeds as pac_pairs."""
+    sig = [layer_signal(layer_x[i], core.BANDS[i]) for i in range(3)]
+    gp = np.arctan2(x[:, core.FEAT + 1], x[:, core.FEAT])
+    out = {}
+    for name, (pi, ai) in PAC_CONTROL_PAIRS.items():
+        s = seed + 10 * pi + ai
+        out[name] = {"net": pac(np.angle(hilbert(sig[pi])), np.abs(hilbert(sig[ai])), s),
+                     "inp": pac_input_max(gp, x[:, :core.FEAT], core.BANDS[ai], s)}
+    return out
+
+
+def pac_control_stats(rows):
+    """rows: pac_control_song outputs. Per pair: medians, paired difference (network - input max) with a 95 % bootstrap interval."""
+    res = {}
+    for name in PAC_CONTROL_PAIRS:
+        net = np.array([r[name]["net"][0] for r in rows])
+        inp = np.array([r[name]["inp"][0] for r in rows])
+        lo, hi, pt = boot_ci(net - inp)
+        res[name] = {"n_songs": len(rows), "median_network_mi": float(np.median(net)), "median_input_max_mi": float(np.median(inp)),
+                     "median_network_surrogate_mi": float(np.median([r[name]["net"][2] for r in rows])),
+                     "median_input_surrogate_max_mi": float(np.median([r[name]["inp"][3] for r in rows])),
+                     "frac_network_p_below_0.05": float(np.mean([r[name]["net"][1] < 0.05 for r in rows])),
+                     "frac_input_p_below_0.05": float(np.mean([r[name]["inp"][2] < 0.05 for r in rows])),
+                     "diff_mean": pt, "diff_ci": [lo, hi], "diff_median": float(np.median(net - inp)),
+                     "frac_network_above_input": float(np.mean(net > inp)),
+                     "input_argmax_feature_counts": {str(k): int(v) for k, v in zip(*np.unique([r[name]["inp"][1] for r in rows], return_counts=True))},
+                     "coupling_claimable": bool(lo > 0), "network_mi": net.tolist(), "input_max_mi": inp.tolist()}
+    return res
+
+
+def pac_control(args, log=print):
+    mean, std = train.load_stats(args.stats)
+    ho = [t for t in load_manifest(args.manifest) if t.split == "heldout"][:args.heldout_limit][:args.pac_songs]   # round 1's slice
+    model, meta = train.load_model(args.ckpt)
+    rows, no_grid = [], []
+    for i, t in enumerate(ho):
+        x = train.load_inputs(t, mean, std)
+        no_grid.append(bool(np.all(x[:, core.FEAT:] == 0)))
+        _, _, xs = head_bins(model, x, signals=True)
+        rows.append(pac_control_song(xs, x, SEED_PAC))
+        log(f"{i + 1}/{len(ho)} {t.id}")
+    return {"smoke": args.smoke, "checkpoint": str(args.ckpt), "checkpoint_epoch": meta["epoch"], "song_ids": [t.id for t in ho],
+            "songs_without_grid_phase": int(sum(no_grid)), "seeds": {"pac": SEED_PAC, "boot": SEED_BOOT},
+            "n_surrogates": PAC_SURROGATES, "bins": PAC_BINS, "pairs": pac_control_stats(rows)}
+
+
 def run_all(args, log=print):
     t0 = time.time()
     mean, std = train.load_stats(args.stats)
@@ -646,6 +715,7 @@ def main(argv=None):
     ap.add_argument("--heldout-limit", type=int)
     ap.add_argument("--pac-songs", type=int, default=40)
     ap.add_argument("--precheck", action="store_true", help="DEAM/MERP arousal pre-check (reads DEAM and MERP audio and labels)")
+    ap.add_argument("--pac-control-only", action="store_true", help="only the 4.7 PAC control; writes pac_control.json")
     ap.add_argument("--ablation-only", action="store_true", help="only with/without grid phase (needs --ckpt-nophase); writes ablation.json")
     ap.add_argument("--precheck-only", action="store_true", help="only the DEAM/MERP pre-check; writes precheck.json")
     ap.add_argument("--core2b", help="npz of core-2b arousal predictions per clip key, for the pre-check")
@@ -662,6 +732,10 @@ def main(argv=None):
         model, _ = train.load_model(args.ckpt)
         out.mkdir(parents=True, exist_ok=True)
         (out / "precheck.json").write_text(json.dumps(precheck_data.run(model, (mean, std), args.core2b, precheck), indent=1, default=float))
+        return
+    if args.pac_control_only:
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "pac_control.json").write_text(json.dumps(pac_control(args), indent=1, default=float))
         return
     if args.ablation_only:
         out.mkdir(parents=True, exist_ok=True)
