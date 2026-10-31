@@ -371,6 +371,97 @@ tried).
   monitor, labelled "an untrained oscillatory network driven by the music", with no
   B3 claims.
 
+### 4.7 B3 round 2 (planning agent, passed on by the user, 2026-10-31, after round 1)
+
+Round 1 (`DANCE_HANDOFF.md`, "★ B3, after results … (round 1 of 2)") failed 4.3 on the
+MSE condition, 4.4 on both conditions and 4.5 on condition 1. Briefs:
+`PLANNER_BRIEF_B3_ROUND1.md`, `PLANNER_BRIEF_B3_ROUND2.md`. Fixed before any round-2
+code runs.
+
+**One retrain, three changes, each tied to a named cause.** Every gated check is rerun
+on it with its committed rule unchanged. A check that fails in round 2 drops its claim;
+there is no round 3.
+1. **Loss (4.3, mean accuracy).** The Gaussian NLL in training is replaced by β-NLL,
+   β = 0.5 (Seitzer et al., ICLR 2022, "On the Pitfalls of Heteroscedastic Uncertainty
+   Estimation"). The builder verifies the recommended β in the full text and records the
+   page. Cause: plain NLL lets the learned variance absorb error instead of improving
+   the mean. Surprisal stays the plain Gaussian NLL of 4.2; β only weights training.
+2. **Chunks (4.4, habituation).** 180 s instead of 60 s, state carried, gradient through
+   the whole chunk. Cause: 60 s chunks never span the 30–90 s gaps of real repeats. Peak
+   RAM is reported. The 1,600-frame target lookahead stays.
+3. **Length.** Up to 12 epochs, with early stopping on a validation split of 10 % of the
+   training artists (never the held-out ones), patience 2. Seed of the split fixed and
+   committed.
+
+Nothing else changes: architecture, heads, precision source, features and checks stay
+as committed. The 4.5 bar stays 80 % at z ≥ 3.
+
+**Memory and time, decided by one smoke run before training.**
+- Measure peak RAM and time per epoch at 8 streams × 180 s.
+- If the peak is ≤ 18 GB and 12 epochs project to ≤ 17 h: run as is.
+- Else (a), gradient checkpointing (maths unchanged): if it fits memory and projects to
+  ≤ 17 h, run with (a).
+- Else (b), 3 streams × 180 s (540 s of audio per step against round 1's 480 s). Add (a)
+  on top only if (b) alone exceeds 18 GB. The batch change is recorded as an
+  engineering change, not a rule change.
+- The 12-epoch cap is never lowered. Hard stop at 20 h of wall time: the best checkpoint
+  so far is checked, and the report says the run was cut.
+
+**Early stopping.**
+- The checked checkpoint is the best validation epoch; on a tie, the earlier one.
+- The selecting score is validation β-NLL summed over the 4 layers (the training loss).
+  Nothing gated selects the model. Validation NLL and MSE are logged per epoch and
+  reported, never used.
+
+**Same data for every model.** The baselines of 4.3 (persistence and AR variances, AR
+weights, B2's readouts) are refit on the same 90 % of training artists as B3. The
+standardisation statistics stay as committed (full training side): they are
+preprocessing, and the validation artists are not the test set.
+
+**Reported, not gated:** per-layer MSE; per-layer habituation drop; per-layer splice z;
+how fast the predicted σ rises after a cut.
+
+**Compute.** Round 2 exceeds the 3-night cap (about 30 h used). Raising it by one run
+is the user's decision; the planner recommends yes.
+
+**Ablation.** The no-phase run on the round-1 model is the reported ablation, labelled
+"round-1 model". There is no round-2 twin. No claim depends on it.
+
+**PAC control (before any coupling claim).**
+- L3 only. The input has no phase in L4's band, and L4 coupling was at chance, so no L4
+  claim is possible.
+- Input envelopes: each of the 44 input features, band-passed to 8–20 Hz and to 4–8 Hz
+  (the network bands' filters), Hilbert envelope. Per song, input MI = the maximum over
+  the 44 features of the Tort MI against grid phase. The maximum is deliberately
+  conservative.
+- Coupling is claimed only if network MI (L3 phase against L1 or L2 amplitude, as in
+  round 1) minus input max MI, paired over songs, has a 95 % bootstrap interval above
+  0. Same bins, lengths and windows on both sides. Each side's own surrogate result is
+  also reported.
+- Run now on the round-1 model; it decides the round-1 truth-table line. Round 2's
+  result supersedes it.
+
+**Sources of `mindState` lanes under the pivot (pre-check, 4.6).** `mood.energy` stays
+from core-2b (MERP r 0.644 against the brain's 0.399). From the brain: surprisal
+spikes, neuromod tension and familiarity, band power. The source of each lane is
+recorded in `mindState`. Arousal regression from the brain is not used.
+
+**Truth table as of round 1** (supersedes §6 for B3 until round 2 reports).
+- Allowed:
+  - "Its activity is organised in bands modelled on EEG rhythms." (by construction:
+    clamped frequencies);
+  - "Its surprisal rises more when the music cuts to a different song than when it cuts
+    within the same song (median z 4.8 vs 0.6)." (4.5 condition 2, committed in
+    advance);
+  - "Trained on 175 hours of Creative Commons music, it assigns higher probability to
+    unheard music than a linear model, simple persistence, or an untrained copy of
+    itself." (4.3 NLL condition). A partial result; it never becomes "learned to
+    predict music" unless 4.3 passes in full;
+  - beat-band coupling, only after the PAC control passes.
+- Forbidden: learned to predict music; habituates; surprisal rises at abrupt changes
+  (the full 4.5 claim); tracks arousal or feeling; entrains, keeps a pulse, meter;
+  surprised, expects, remembers, anticipates, feels, conscious.
+
 ## 5. `mindState` from the brain (after B3 passes)
 
 - `mood.energy` and `mood.power`: ridge readouts from the brain state (mode magnitudes
