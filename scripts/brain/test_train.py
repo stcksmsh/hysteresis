@@ -45,13 +45,115 @@ class TestLoss(Base):
             self.assertAlmostEqual(float(s), float((0.5 * (y ** 2 + math.log(2 * math.pi))).sum()), places=2)
 
 
+def leaves(seed, B=1, T=600):
+    """4 layers of random leaf (mean, logvar) tensors and an x whose features are constant in time, so every valid target is that constant."""
+    g = torch.Generator().manual_seed(seed)
+    c = torch.randn(core.FEAT, generator=g)
+    x = torch.zeros(B, T + train.LOOK, core.N_IN)
+    x[..., :core.FEAT] = c
+    out = [{"mean": torch.randn(B, T, core.FEAT, generator=g).requires_grad_(), "logvar": (torch.randn(B, T, core.FEAT, generator=g) - 1).requires_grad_()}
+           for _ in range(4)]
+    return out, x, c
+
+
+class TestBetaNLL(Base):
+    def test_round_two_constants(self):
+        self.assertEqual((self.old, train.LOOK, train.BETA, train.EPOCHS, train.PATIENCE, train.CAP_S), (18000, 1600, 0.5, 12, 2, 20 * 3600))
+
+    def test_beta_zero_is_the_plain_nll(self):
+        out, x, _ = leaves(0)
+        nv = torch.tensor([600])
+        b0, plain, _, _ = train.chunk_terms(out, x, nv, beta=0.0)
+        for a, b in zip(b0, plain):
+            self.assertEqual(float(a), float(b))
+        for a, (b, _) in zip(b0, zip(*train.chunk_nll(out, x, nv))):
+            self.assertEqual(float(a), float(b))
+
+    def test_beta_half_gradient_weighting(self):
+        out, x, c = leaves(1)
+        nv = torch.tensor([600])
+        sums, plain, _, counts = train.chunk_terms(out, x, nv, beta=0.5)
+        sums[0].backward()
+        o = out[0]
+        valid = torch.tensor([float(t + 2 * core.HORIZONS[0] <= 600) for t in range(600)])[None, :, None]
+        var = torch.exp(o["logvar"].detach())
+        w = var ** 0.5                                     # sigma ** (2 beta), beta 0.5
+        mean_grad = w * (o["mean"].detach() - c) / var / core.FEAT * valid
+        logvar_grad = w * 0.5 * (1 - (c - o["mean"].detach()) ** 2 / var) / core.FEAT * valid       # the weight itself carries no gradient
+        torch.testing.assert_close(o["mean"].grad, mean_grad, rtol=1e-4, atol=1e-6)
+        torch.testing.assert_close(o["logvar"].grad, logvar_grad, rtol=1e-4, atol=1e-6)
+        self.assertGreater(float(counts[0]), 0)
+        # the value is the weighted NLL, not the plain one
+        self.assertNotAlmostEqual(float(sums[0].detach()), float(plain[0].detach()), places=3)
+
+    def test_plain_nll_and_mse_terms_are_unweighted(self):
+        out, x, c = leaves(2)
+        nv = torch.tensor([600])
+        _, plain, mse, counts = train.chunk_terms(out, x, nv, beta=0.5)
+        o = out[1]
+        valid = torch.tensor([float(t + 2 * core.HORIZONS[1] <= 600) for t in range(600)])[None]
+        lv, m = o["logvar"].detach(), o["mean"].detach()
+        want_nll = ((0.5 * (lv + (c - m) ** 2 * torch.exp(-lv) + math.log(2 * math.pi))).mean(-1) * valid).sum()
+        want_mse = (((c - m) ** 2).mean(-1) * valid).sum()
+        self.assertAlmostEqual(float(plain[1]), float(want_nll), places=2)
+        self.assertAlmostEqual(float(mse[1]), float(want_mse), places=2)
+
+
+class TestGradCheckpoint(Base):
+    def test_same_loss_and_gradients(self):
+        torch.manual_seed(0)
+        x = torch.from_numpy(song(300 + train.LOOK, 9))[None]
+        res = []
+        for flag in (False, True):
+            m = core.Core()
+            m.grad_checkpoint = flag
+            out, _ = m(x[:, :300], m.init_state(1))
+            sums, _, _, counts = train.chunk_terms(out, x, torch.tensor([300 + train.LOOK]), chunk=300, beta=0.5)
+            loss = sum(a / max(float(c), 1.0) for a, c in zip(sums, counts))
+            loss.backward()
+            res.append((float(loss), {n: p.grad.clone() for n, p in m.named_parameters()}))
+        self.assertGreater(abs(res[0][0]), 0)
+        self.assertEqual(res[0][0], res[1][0])
+        self.assertEqual(res[0][1].keys(), res[1][1].keys())
+        for n in res[0][1]:
+            torch.testing.assert_close(res[0][1][n], res[1][1][n], rtol=1e-5, atol=1e-7, msg=n)
+
+
+class TestEarlyStop(unittest.TestCase):
+    def run_curve(self, curve, patience=2):
+        meta = {"best_score": None, "best_epoch": 0, "bad_epochs": 0}
+        for e, v in enumerate(curve, 1):
+            best, stop = train.early_stop_step(meta, e, v, patience)
+            if stop:
+                return meta, e
+        return meta, len(curve)
+
+    def test_picks_the_lowest_and_waits_patience(self):
+        meta, ended = self.run_curve([5.0, 4.0, 3.0, 3.5, 3.2, 2.0])
+        self.assertEqual((meta["best_epoch"], ended), (3, 5))        # two epochs without improvement end it; epoch 6 is never reached
+
+    def test_improvement_resets_patience(self):
+        meta, ended = self.run_curve([5.0, 6.0, 4.0, 4.5, 3.0, 3.1, 3.2])
+        self.assertEqual((meta["best_epoch"], ended), (5, 7))
+
+    def test_tie_keeps_the_earlier_epoch(self):
+        meta, ended = self.run_curve([5.0, 3.0, 3.0, 3.0, 2.9])
+        self.assertEqual((meta["best_epoch"], meta["best_score"], ended), (2, 3.0, 4))
+        meta, _ = self.run_curve([4.0, 3.0, 3.0, 2.5])
+        self.assertEqual(meta["best_epoch"], 4)
+
+    def test_full_curve_never_stops_while_improving(self):
+        meta, ended = self.run_curve([12 - e for e in range(12)])
+        self.assertEqual((meta["best_epoch"], ended), (12, 12))
+
+
 class TestChunking(Base):
     def test_chunked_epoch_equals_one_forward(self):
         T = 1700
         s = song(T, 0)
         tracks, load = tracks_of([s])
         model = core.Core(head_norm=True).eval()
-        chunked = train.run_epoch(model, tracks, load, 1, 0, 0)[0]
+        chunked = train.run_epoch(model, tracks, load, 1, 0, 0, beta=0.0)[0]["nll"]
         with torch.no_grad():
             out, _ = model(torch.from_numpy(s)[None], model.init_state())
         x = torch.zeros(1, T + train.LOOK, core.N_IN)
@@ -125,12 +227,84 @@ class TestTrainingLoop(Base):
         m2, meta2 = self.fit("cap", 3, cap_s=0.0)  # a resumed run stays stopped
         self.assertTrue(meta2["stopped_by_cap"])
 
+    def test_best_checkpoint_is_the_lowest_validation_epoch(self):
+        m, meta = self.fit("best", 3)
+        scores = [r["val_score"] for r in meta["log"]]
+        self.assertEqual(len(scores), meta["epoch"])
+        want = int(np.argmin(scores)) + 1                                      # np.argmin: the earlier epoch on a tie
+        self.assertEqual(meta["best_epoch"], want)
+        best, bmeta = train.load_model(Path(self.dir) / "best" / "best.pt")
+        ep, _ = train.load_model(Path(self.dir) / "best" / f"epoch_{want:03d}.pt")
+        for (k, x), (_, y) in zip(best.state_dict().items(), ep.state_dict().items()):
+            self.assertTrue(torch.equal(x, y), k)
+        self.assertEqual(bmeta["epoch"], want)
+        self.assertFalse(bmeta["cut"])
+        for r in meta["log"]:
+            for k in ("train_beta_nll", "train_nll", "train_mse", "val_beta_nll", "val_nll", "val_mse"):
+                self.assertEqual(len(r[k]), 4)
+            self.assertAlmostEqual(r["val_score"], sum(r["val_beta_nll"]), places=9)
+
+    def test_wall_cap_keeps_the_best_checkpoint_and_marks_it_cut(self):
+        _, first = self.fit("cutrun", 1)
+        self.assertFalse(train.load_model(Path(self.dir) / "cutrun" / "best.pt")[1]["cut"])
+        m = core.Core()
+        meta = train.fit(m, self.tracks, self.tracks[:1], self.load, Path(self.dir) / "cutrun", 3, batch=2, cap_s=first["wall_s"],
+                         load_len=lambda t: len(self.songs[int(t.id)]), log=lambda *_: None)
+        self.assertTrue(meta["stopped_by_cap"] and meta["cut"])
+        self.assertEqual(meta["epoch"], 1)                                     # the epoch cut in the middle does not count
+        best, bmeta = train.load_model(Path(self.dir) / "cutrun" / "best.pt")
+        self.assertTrue(bmeta["cut"] and bmeta["stopped_by_cap"])
+        self.assertEqual(bmeta["best_epoch"], 1)
+        ep1, _ = train.load_model(Path(self.dir) / "cutrun" / "epoch_001.pt")
+        for (k, x), (_, y) in zip(best.state_dict().items(), ep1.state_dict().items()):
+            self.assertTrue(torch.equal(x, y), k)
+
+    def test_fit_needs_validation_tracks(self):
+        with self.assertRaises(ValueError):
+            train.fit(core.Core(), self.tracks, [], self.load, Path(self.dir) / "noval", 1, batch=2, log=lambda *_: None)
+
     def test_checkpoint_loads_to_the_same_model(self):
         m, _ = self.fit("load", 1)
         m2, meta = train.load_model(Path(self.dir) / "load" / "epoch_001.pt")
         for (k, x), (_, y) in zip(m.state_dict().items(), m2.state_dict().items()):
             self.assertTrue(torch.equal(x, y), k)
         self.assertEqual(meta["epoch"], 1)
+
+
+class TestValSplit(unittest.TestCase):
+    ROWS = [(100 * a + i, "train" if a < 40 else "heldout", a) for a in range(50) for i in range(1 + a % 3)]
+
+    def test_artist_level_and_disjoint(self):
+        import val_split
+        arts = val_split.choose(self.ROWS)
+        self.assertEqual(len(arts), 4)                                          # round(0.1 * 40 training artists)
+        self.assertTrue(set(arts) <= set(range(40)))                            # never a held-out artist
+        self.assertEqual(arts, val_split.choose(self.ROWS))                     # fixed seed
+        self.assertNotEqual(arts, val_split.choose(self.ROWS, seed=val_split.SEED + 1))
+        ids = val_split.track_ids(self.ROWS, arts)
+        art_of = {t: a for t, _, a in self.ROWS}
+        self.assertEqual({art_of[t] for t in ids}, set(arts))
+        self.assertEqual(len(ids), sum(1 + a % 3 for a in arts))
+        tracks = [train.Track(str(t), "", "", s) for t, s, _ in self.ROWS]
+        fit, val = val_split.split_tracks([t for t in tracks if t.split == "train"], set(ids))
+        held = {art_of[int(t.id)] for t in tracks if t.split == "heldout"}
+        self.assertFalse({art_of[int(t.id)] for t in val} & {art_of[int(t.id)] for t in fit})
+        self.assertFalse({art_of[int(t.id)] for t in val + fit} & held)
+        self.assertEqual(len(fit) + len(val), sum(1 for _, s, _ in self.ROWS if s == "train"))
+
+    def test_committed_list_matches_the_corpus(self):
+        import val_split
+        if not val_split.CORPUS_CSV.exists():
+            self.skipTest("corpus list not on this machine")
+        rows = val_split.read_rows()
+        d = json.loads(val_split.ARTISTS_JSON.read_text())
+        held = {a for _, s, a in rows if s == "heldout"}
+        train_art = {a for _, s, a in rows if s == "train"}
+        self.assertEqual(d["artists"], val_split.choose(rows, d["seed"], d["frac"]))
+        self.assertFalse(set(d["artists"]) & held)
+        self.assertTrue(set(d["artists"]) <= train_art)
+        self.assertEqual(d["track_ids"], val_split.track_ids(rows, d["artists"]))
+        self.assertEqual(len(d["artists"]), round(0.1 * len(train_art)))
 
 
 class TestLiveness(Base):

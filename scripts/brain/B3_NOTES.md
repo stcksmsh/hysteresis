@@ -73,3 +73,57 @@ fit the 30 h cap; the cap guard stops either one first if the machine is slower.
 Statistics: the SD key in the builder's npz is `sd`; `train.load_stats` accepts `sd` or `std`.
 
 Pre-check comparison with core-2b: `core2b_adapter.py` turns stage 2b's `predictions_heldout.npz` (out-of-fold, `<clip>/core_s`, arousal = column 1, 0.5 s steps, tau 8 s as 2b chose) into the `--core2b` npz; it covers all 1,744 DEAM clips and 43 MERP songs the pre-check uses. `launch_b3.sh` runs it and passes `--core2b`. Predictions are aligned to the labels by step; a shorter series is padded with NaN.
+
+# Round 2 (BRAIN_SPEC 4.7): what changed in the code
+
+Status: code and tests only; the smoke run (memory and time) is reported to the overseer; no training until the overseer says go.
+
+## The loss: β-NLL, β = 0.5
+
+Source checked in the full text (arXiv 2203.09168v2, the ICLR 2022 paper, Seitzer, Tavakoli, Antić, Martius, "On the Pitfalls of
+Heteroscedastic Uncertainty Estimation with Probabilistic Neural Networks"):
+- **Eq. (7), Section 4.1, p. 5:** L_β-NLL := E[ ⌊σ̂^{2β}(X)⌋ · ( ½ log σ̂²(X) + (Y − μ̂(X))² / (2 σ̂²(X)) + const ) ], where ⌊·⌋ is the
+  stop-gradient. The weight is the variance to the power β, per data point (per output dimension in the code of Appendix D.5), and it
+  carries no gradient.
+- **Eqs. (8), (9), p. 5:** ∇_μ̂ L = E[(μ̂ − Y) / σ̂^{2−2β}]; ∇_σ̂² L = E[(σ̂² − (Y − μ̂)²) / (2 σ̂^{4−2β})]. β = 0 is the plain NLL; β = 1
+  gives the MSE gradient for the mean.
+- **Recommended β:** "we find that β = 0.5 generally achieves the best trade-off between accuracy and log-likelihood" (Section 4.1, p. 5);
+  "In most cases, β = 0.5 will be a good starting point" (Section 6, Conclusion, p. 9). β = 0.5 is what 4.7 fixes.
+- **Appendix D.5, p. 24 (PyTorch):** `loss = 0.5 * ((target - mean) ** 2 / variance + variance.log()); loss = loss * variance.detach() ** beta`,
+  then the sum over the last (feature) axis. `train.chunk_terms` does the same per feature, then takes the mean over the 44 features
+  (the factor 1/44 is the round-1 convention).
+- The paper also says (p. 5) the loss value "does not reflect the model's quality": monitor with the plain NLL (and RMSE). Here: the
+  validation plain NLL and MSE per layer are logged each epoch and never used; surprisal and every check use the plain Gaussian NLL.
+
+In `train.py`: `chunk_terms(out, x, nvalid, chunk, beta)` returns per-layer sums of β-NLL, plain NLL and MSE with the counts;
+`chunk_nll` is the plain case. `exp(beta * logvar).detach()` is σ^{2β}; the clamp of the log-variance to [-8, 4] is as before.
+
+## Chunks, validation, epochs, stop
+
+- `CHUNK = 18000` (180 s), state carried across chunks and detached at the chunk edge, gradient through the whole chunk; `LOOK = 1600` stays.
+- Validation: `val_split.py` draws 10 % of the training artists (72 of 722; seed 20261105, `numpy.random.default_rng(seed).choice` on the sorted artist
+  ids) from `final_corpus.csv`; the artist list and the 217 track ids are committed in `val_artists.json`. The held-out side is not read.
+  Artists differ in size, so the share of tracks is 7.7 %, not 10 %. The artist is the unit, as the ruling says.
+- Training: up to 12 epochs (`--epochs`, the cosine learning-rate schedule runs over 12), after each epoch one validation pass: score =
+  validation β-NLL summed over the 4 layers (same normalisation as the training loss). Patience 2: stop after 2 epochs without a strictly
+  lower score. Every epoch is saved (`epoch_NNN.pt`); the best is also `best.pt` (an equal score keeps the earlier epoch). The log per epoch has
+  train and validation β-NLL, plain NLL and MSE per layer.
+- Hard stop: `--cap-hours` (default 20) of wall time, counting training and validation and carried across resumes. The training step that
+  crosses it ends the run: the unfinished epoch is dropped, `last.pt` is saved, and `best.pt` gets `cut: true` (and `stopped_by_cap: true`)
+  in its meta. A run that ends early has `stopped_early: true`.
+- Memory options, both off by default: `--grad-checkpoint` (each layer is recomputed in the backward pass; `test_train.TestGradCheckpoint`
+  checks identical loss and gradients) and `--batch` (default 8).
+
+## Checks (`check_b3.py`)
+
+4.3, 4.4 and 4.5 are the committed code; run them on `best.pt`. Added: `--val-artists` removes the validation tracks from the baselines'
+training side (persistence and AR variances, AR weights and alpha, B2 readouts); the standardisation statistics are untouched. Evaluation
+chunks stay 6,000 frames (`EVAL_CHUNK`; the state is carried, so the numbers do not depend on it). Reported only (`results.json`): `gate_4_3.mse_per_layer`;
+`gate_4_4.b3.per_layer_drop`; `gate_4_5.per_layer_and_sigma_reported_only` with the per-layer splice z and the predicted-σ rise after a cut:
+mean over cuts of σ (mean over the 44 features of exp(logvar / 2) of the prediction made at that time) minus its mean in the 5 s before the
+cut, at 0 to 5 s in 0.1 s steps, per layer, with its peak, the time of the peak and the time to half the peak (cross-song and within-song cuts).
+
+## Launch
+
+`launch_b3r2.sh` (not run): train, then the checks on `best.pt`, then the pre-check. Outputs under `/secondary/hyst-data/brain/b3r2/`.
+Run it inside `systemd-run --user --scope -p MemoryMax=20G -p MemorySwapMax=0`.

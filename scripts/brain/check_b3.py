@@ -25,6 +25,9 @@ Written and committed before any real result. Pass rules are the spec's; everyth
               grid phase = 4.3's table for a second checkpoint. DEAM/MERP arousal pre-check: ridge from the layer mode magnitudes pooled to
               0.5 s, 5 folds by song (common.assign_folds), within-song r, against core-2b predictions (if a file is given) and a smoothed-baseline
               control (ridge on pooled features, smoother tau and lag chosen on the training folds).
+Round 2 (4.7): the checks above are unchanged and run on the best checkpoint; the baselines are fitted on the training artists without the
+validation artists (--val-artists); evaluation chunks stay 6,000 frames (EVAL_CHUNK; the state is carried, so chunking does not change the maths).
+Reported only, added: per-layer MSE, per-layer habituation drop, per-layer splice z, and how fast the predicted sigma rises after a cut.
 All numbers go to results.json in --out. With --smoke the run is marked smoke and may not write into RESULTS_DIR.
 """
 import argparse
@@ -42,6 +45,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "emotion"))
 import b2  # noqa: E402
 import core  # noqa: E402
 import train  # noqa: E402
+import val_split  # noqa: E402
 from fast_features import SR, fast_features  # noqa: E402
 
 RESULTS_DIR = Path("/secondary/hyst-data/brain/b3/results")
@@ -60,6 +64,8 @@ PAC_SURROGATES = 200
 PAC_BINS = 18
 LN2 = math.log(2.0)
 LAYERS = b2.LAYERS
+EVAL_CHUNK = 6000
+SIGMA_STEPS = 51     # predicted sigma against time from a cut: 0 to 5 s in 0.1 s steps
 
 
 class Lazy:
@@ -116,7 +122,7 @@ def song_inputs_from_audio(y, phase, mean, std):
 
 # ---- predictions: every method gives per-layer (mean, logvar) at the 10 Hz bins ------------------------------------------
 
-def head_bins(model, x, chunk=train.CHUNK, signals=False):
+def head_bins(model, x, chunk=EVAL_CHUNK, signals=False):
     """B3: heads of the whole song, state carried. -> means[4], logvars[4] (nb, 44) [, layer outputs [4] (T, 128)]."""
     import torch
     nb = len(x) // b2.STRIDE
@@ -276,6 +282,7 @@ def gate_43(scores, b3="b3", margin=0.05):
     res["mse_ratio_to_best"] = res["mse"][b3] / res["mse"][best]
     res["mse_margin_ok"] = res["mse"][b3] <= (1 - margin) * res["mse"][best]
     res["pass"] = bool(all(v["above_0"] for v in res["baselines"].values()) and res["mse_margin_ok"])
+    res["mse_per_layer"] = {m: [float(v) for v in (scores[m]["mse"] * scores[m]["n"]).sum(0) / scores[m]["n"].sum(0)] for m in scores}   # reported only
     res["nll_per_layer"] = {m: [float(v) for v in np.average(scores[m]["nll"], axis=0, weights=scores[m]["n"] + 1e-9)] for m in scores}
     res["bits_per_feature_frame"] = {m: [float(v) / LN2 for v in res["nll_per_layer"][m]] for m in scores}
     return res
@@ -311,7 +318,7 @@ def lane_mean(total, t_lo, t_hi):
     """Mean of a 10 Hz lane over the bins stamped in (t_lo, t_hi] (bin k is stamped 0.1 (k + 1))."""
     k = np.arange(len(total))
     sel = (0.1 * (k + 1) > t_lo + 1e-9) & (0.1 * (k + 1) <= t_hi + 1e-9)
-    return float(total[sel].mean())
+    return float(np.nanmean(total[sel]))       # per-layer lanes are NaN before their first target window completes; the total never is
 
 
 def window_sd(total, win=8.0):
@@ -328,8 +335,14 @@ def hab_stats(drops, sds, min_ratio=0.25):
             "pass": bool(lo > 0 and ratio >= min_ratio)}
 
 
-def habituation(songs, total_fn, audio_of, stats, full_total):
-    """songs: [(id, duration_s, phase (T, 2))]; total_fn(x) -> total lane; audio_of(id) -> audio. -> (drops, sds, skipped ids)."""
+def as_lanes(r):
+    """A lane function returns the total lane (array) or a dict {"total", "L1".."L4", "sigma" (nb, 4)}."""
+    return r if isinstance(r, dict) else {"total": r}
+
+
+def habituation(songs, total_fn, audio_of, stats, full_total, per_layer=None):
+    """songs: [(id, duration_s, phase (T, 2))]; total_fn(x) -> total lane (or lanes dict); audio_of(id) -> audio.
+    -> (drops, sds, skipped ids). With a dict `per_layer`, it is filled with {layer: [drop per song]} (reported only)."""
     drops, sds, skipped = [], [], []
     for n, (sid, dur, phase) in enumerate(songs):
         plan = hab_plan(dur, SEED_HAB + n)
@@ -344,8 +357,13 @@ def habituation(songs, total_fn, audio_of, stats, full_total):
         for name, first in (("H", S), ("N", Sp)):
             audio = xfade_concat([first[0], F[0], S[0]])
             ph = frames_concat([first[1], F[1], S[1]])
-            tot[name] = lane_mean(total_fn(song_inputs_from_audio(audio, ph, *stats)), t0, t1)
-        drops.append(tot["N"] - tot["H"])
+            lanes = as_lanes(total_fn(song_inputs_from_audio(audio, ph, *stats)))
+            tot[name] = {k: lane_mean(lanes[k], t0, t1) for k in ("total", *LAYERS) if k in lanes}
+        drops.append(tot["N"]["total"] - tot["H"]["total"])
+        if per_layer is not None:
+            for k in LAYERS:
+                if k in tot["N"]:
+                    per_layer.setdefault(k, []).append(tot["N"][k] - tot["H"][k])
         sds.append(window_sd(full_total[sid]))
     return drops, sds, skipped
 
@@ -369,7 +387,7 @@ def splice_z(total, t_cut):
     """z of 4.5: (mean in the 1 s after the cut - mean in the 5 s before) / SD of the 1 s window means over the 30 s before."""
     post, pre = lane_mean(total, t_cut, t_cut + 1.0), lane_mean(total, t_cut - 5.0, t_cut)
     wins = [lane_mean(total, t_cut - 30.0 + i, t_cut - 29.0 + i) for i in range(30)]
-    return (post - pre) / max(float(np.std(wins)), 1e-9)
+    return (post - pre) / max(float(np.nanstd(wins)), 1e-9)
 
 
 def phase_match(phase, t_cut, dur, tail=SPLICE_TAIL):
@@ -382,8 +400,30 @@ def phase_match(phase, t_cut, dur, tail=SPLICE_TAIL):
     return float(cand[int(np.argmin(d))]) / 100.0
 
 
+def sigma_rise(sigma, t_cut, steps=SIGMA_STEPS):
+    """sigma: (nb, 4) predicted SD per layer at the 10 Hz bins (bin k stamped 0.1 (k + 1)). -> (4, steps) rise of sigma over its mean in the 5 s
+    before t_cut, at 0, 0.1, ... s from t_cut."""
+    k0 = int(round(t_cut / 0.1)) - 1
+    base = sigma[k0 - 49:k0 + 1].mean(0)
+    return np.stack([sigma[k0 + j] - base for j in range(steps)], 1)
+
+
+def half_rise_time(curve, dt=0.1):
+    """Seconds from the cut until a rise curve first reaches half of its peak; None if the peak is not above 0."""
+    peak = float(np.max(curve))
+    return None if peak <= 0 else float(np.argmax(curve >= 0.5 * peak)) * dt
+
+
+def sigma_report(curves):
+    """curves: [(4, steps) rise per cut] -> per layer the mean curve, its peak and the time to half the peak (reported only)."""
+    m = np.mean(curves, 0)
+    return {L: {"mean_rise": [float(v) for v in m[i]], "peak": float(m[i].max()), "peak_time_s": float(np.argmax(m[i])) * 0.1,
+                "half_peak_time_s": half_rise_time(m[i])} for i, L in enumerate(LAYERS)}
+
+
 def splice(songs, total_fn, audio_of, stats, z_gate=3.0, frac_gate=0.8):
-    """songs: [(id, duration_s, phase)] held-out. -> per-song cross and within z lists and the gate."""
+    """songs: [(id, duration_s, phase)] held-out. -> per-song cross and within z lists and the gate.
+    When total_fn gives lanes dicts the rows also carry per-layer z ("cross_layers", "within_layers") and the sigma rise curves."""
     rows, skipped = [], []
     for n, (sid, dur, phase) in enumerate(songs):
         cuts = splice_plan(dur, SEED_SPLICE + n)
@@ -394,6 +434,8 @@ def splice(songs, total_fn, audio_of, stats, z_gate=3.0, frac_gate=0.8):
         rng = np.random.default_rng(SEED_SPLICE * 7 + n)
         y = audio_of(sid)
         zc, zw = [], []
+        zl = {"cross": {L: [] for L in LAYERS}, "within": {L: [] for L in LAYERS}}
+        sg = {"cross": [], "within": []}
         for c in cuts:
             j = int(rng.choice(others))
             oid, odur, ophase = songs[j]
@@ -403,11 +445,35 @@ def splice(songs, total_fn, audio_of, stats, z_gate=3.0, frac_gate=0.8):
             tail_x = (ty[int(b0 * SR):int((b0 + SPLICE_TAIL) * SR)], ophase[int(round(b0 * 100)):int(round((b0 + SPLICE_TAIL) * 100))])
             c2 = phase_match(phase, c, dur)
             tail_w = (y[int(c2 * SR):int((c2 + SPLICE_TAIL) * SR)], phase[int(round(c2 * 100)):int(round((c2 + SPLICE_TAIL) * 100))])
-            for tail, sink in ((tail_x, zc), (tail_w, zw)):
+            for kind, tail, sink in (("cross", tail_x, zc), ("within", tail_w, zw)):
                 x = song_inputs_from_audio(xfade_concat([head[0], tail[0]]), frames_concat([head[1], tail[1]]), *stats)
-                sink.append(splice_z(total_fn(x), c - XF))
-        rows.append({"id": sid, "cross": zc, "within": zw})
+                lanes = as_lanes(total_fn(x))
+                sink.append(splice_z(lanes["total"], c - XF))
+                for L in LAYERS:
+                    if L in lanes:
+                        zl[kind][L].append(splice_z(lanes[L], c - XF))
+                if "sigma" in lanes:
+                    sg[kind].append(sigma_rise(lanes["sigma"], c - XF))
+        rows.append({"id": sid, "cross": zc, "within": zw, "cross_layers": zl["cross"], "within_layers": zl["within"],
+                     "sigma_cross": sg["cross"], "sigma_within": sg["within"]})
     return rows, skipped
+
+
+def splice_layer_report(rows):
+    """Per layer: median z over all cross-song and within-song cuts, and the share of cross-song cuts with z >= 3 (reported only). Then the
+    sigma rise after a cut (mean over cuts), cross-song and within-song."""
+    out = {"z": {}, "sigma_rise": {}}
+    for L in LAYERS:
+        cz = np.array([z for r in rows for z in r["cross_layers"].get(L, [])], dtype=float)
+        wz = np.array([z for r in rows for z in r["within_layers"].get(L, [])], dtype=float)
+        if len(cz):
+            out["z"][L] = {"cross_median": float(np.nanmedian(cz)), "within_median": float(np.nanmedian(wz)),
+                           "frac_cross_ge_3": float(np.mean(cz[np.isfinite(cz)] >= 3.0)), "n_cross": int(np.isfinite(cz).sum())}
+    for kind in ("cross", "within"):
+        curves = [c for r in rows for c in r[f"sigma_{kind}"]]
+        if curves:
+            out["sigma_rise"][kind] = sigma_report(curves)
+    return out
 
 
 def splice_stats(rows, z_gate=3.0, frac_gate=0.8):
@@ -631,13 +697,17 @@ def run_all(args, log=print):
     raw = json.loads(Path(args.manifest).read_text())
     audio = {t["id"]: t["audio"] for t in raw}
     tracks = load_manifest(args.manifest)
-    tr = [t for t in tracks if t.split == "train"][:args.train_limit]
+    tr = [t for t in tracks if t.split == "train"]
+    if args.val_artists:             # round 2: the baselines see the same 90 % of the training artists as B3
+        tr = val_split.split_tracks(tr, val_split.load(args.val_artists))[0]
+    tr = tr[:args.train_limit]
     ho = [t for t in tracks if t.split == "heldout"][:args.heldout_limit]
     load = lambda t: train.load_inputs(t, mean, std)
     audio_of = lambda sid: b2.decode(audio[sid])
     model, meta = train.load_model(args.ckpt)
     phase = meta["phase"]
-    res = {"smoke": args.smoke, "checkpoint": str(args.ckpt), "checkpoint_meta": {k: meta[k] for k in ("epoch", "wall_s", "params", "stopped_by_cap", "phase")},
+    res = {"smoke": args.smoke, "checkpoint": str(args.ckpt), "checkpoint_meta": {k: meta.get(k) for k in ("epoch", "wall_s", "params", "stopped_by_cap", "phase", "best_epoch", "cut", "stopped_early", "beta", "chunk", "batch", "grad_checkpoint")},
+           "val_artists": args.val_artists,
            "n_train_tracks_for_baselines": len(tr), "n_heldout_tracks": len(ho), "seeds": {"boot": SEED_BOOT, "hab": SEED_HAB, "splice": SEED_SPLICE, "pac": SEED_PAC}}
 
     log("fitting baselines")
@@ -665,24 +735,32 @@ def run_all(args, log=print):
     scores = {m: {k: np.array(v) for k, v in s.items()} for m, s in scores.items()}
     res["gate_4_3"] = gate_43(scores)
 
-    total_b3 = lambda x: b2.surprisal_lanes(*head_bins(model, x), x[:, :core.FEAT])[0]["total"]
+    def total_b3(x):
+        means, logvars = head_bins(model, x)
+        lanes = b2.surprisal_lanes(means, logvars, x[:, :core.FEAT])[0]
+        lanes["sigma"] = np.stack([np.exp(0.5 * v).mean(1) for v in logvars], 1)     # predicted SD per layer at the time of the prediction
+        return lanes
+
     total_b2 = lambda x: b2.surprisal_lanes(*methods["b2"].bins(x), x[:, :core.FEAT])[0]["total"]
     stats = (mean, std)
     log("habituation")
     out = {}
     for name, fn in (("b3", total_b3), ("b2", total_b2)):
         full = full_total if name == "b3" else {t.id: total_b2(load(t)) for t in ho}
-        drops, sds, skipped = habituation(held, fn, audio_of, stats, full)
+        per_layer = {}
+        drops, sds, skipped = habituation(held, fn, audio_of, stats, full, per_layer if name == "b3" else None)
         out[name] = hab_stats(drops, sds) if drops else {"n_songs": 0, "pass": False}
         out[name]["skipped"] = skipped
         out[name]["drops"] = drops
+        if name == "b3" and drops:       # reported only
+            out[name]["per_layer_drop"] = {L: dict(zip(("mean", "ci_lo", "ci_hi"), (lambda r: (r[2], r[0], r[1]))(boot_ci(v)))) for L, v in per_layer.items()}
     if out["b3"]["n_songs"] and out["b3"]["n_songs"] == out["b2"]["n_songs"]:
         lo, hi, pt = boot_ci(np.array(out["b3"]["drops"]) - np.array(out["b2"]["drops"]))
         out["b3_minus_b2_drop"] = {"mean": pt, "ci": [lo, hi], "above_0": lo > 0}   # reported, not gated
     res["gate_4_4"] = out
     log("splice")
     rows, skipped = splice(held, total_b3, audio_of, stats)
-    res["gate_4_5"] = {**splice_stats(rows), "skipped": skipped} if rows else {"n_songs": 0, "pass": False, "skipped": skipped}
+    res["gate_4_5"] = {**splice_stats(rows), "per_layer_and_sigma_reported_only": splice_layer_report(rows), "skipped": skipped} if rows else {"n_songs": 0, "pass": False, "skipped": skipped}
 
     log("phase-amplitude coupling")
     pairs = {}
@@ -710,6 +788,7 @@ def main(argv=None):
     ap.add_argument("--manifest", required=True, help="JSON list of {id, audio, feats, beats, split}")
     ap.add_argument("--stats", required=True, help="npz with mean and std of the training-side fast features")
     ap.add_argument("--out", help="output directory (default: RESULTS_DIR, or SCRATCH_DIR/<name> with --smoke)")
+    ap.add_argument("--val-artists", help="JSON from val_split.py: its tracks are left out of the baselines' training side (round 2)")
     ap.add_argument("--smoke", action="store_true", help="smoke run: results are marked smoke and never go to RESULTS_DIR")
     ap.add_argument("--train-limit", type=int)
     ap.add_argument("--heldout-limit", type=int)

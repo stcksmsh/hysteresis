@@ -104,6 +104,14 @@ class TestGate43(unittest.TestCase):
         self.assertAlmostEqual(r["mse_ratio_to_best"], 0.8)
         self.assertTrue(all(v["above_0"] for v in r["baselines"].values()))
 
+    def test_mse_per_layer_is_pooled_by_bins(self):
+        sc = self.scores(4.0, 5.0, 0.80, 1.0, n_songs=2)
+        sc["b3"]["mse"] = np.array([[1.0, 2.0, 3.0, 4.0], [5.0, 6.0, 7.0, 8.0]])
+        sc["b3"]["n"] = np.array([[1.0, 1.0, 1.0, 1.0], [3.0, 3.0, 3.0, 3.0]])
+        r = C.gate_43(sc)
+        np.testing.assert_allclose(r["mse_per_layer"]["b3"], [4.0, 5.0, 6.0, 7.0])
+        self.assertEqual(r["mse_per_layer"]["persistence"], [1.0] * 4)
+
     def test_fails_on_the_mse_margin(self):
         r = C.gate_43(self.scores(4.0, 5.0, 0.97, 1.0))          # 3 % below, margin is 5 %
         self.assertFalse(r["mse_margin_ok"])
@@ -177,6 +185,67 @@ class TestHabituation(unittest.TestCase):
         self.assertTrue(all(d > 0 for d in drops), drops)
         self.assertGreater(np.median(np.array(drops) / np.array(sds)), 0.25)
         self.assertTrue(C.hab_stats(drops, sds)["pass"])
+
+
+def layered(fn):
+    """A lanes-dict version of a toy total: layer k gets (k + 1) / 10 of it, NaN for the first second like a real layer lane."""
+    def lanes(x):
+        t = fn(x)
+        d = {"total": t, "sigma": np.tile(np.array([1.0, 2.0, 3.0, 4.0]), (len(t), 1))}
+        for k, L in enumerate(C.LAYERS):
+            d[L] = t * (k + 1) / 10
+            d[L][:10] = np.nan
+        return d
+    return lanes
+
+
+class TestPerLayerReports(unittest.TestCase):
+    def test_habituation_per_layer_drops(self):
+        songs, audio, full = [], {}, {}
+        for n in range(3):
+            y = tone_audio(np.random.default_rng(10 + n).uniform(200, 3000, 95), seed=n)
+            audio[f"s{n}"] = y
+            T = len(fast_features(y))
+            songs.append((f"s{n}", len(y) / SR, np.tile([1.0, 0.0], (T, 1)).astype(np.float32)))
+            full[f"s{n}"] = novelty_total(C.song_inputs_from_audio(y, songs[-1][2], *STATS))
+        per = {}
+        drops, _, _ = C.habituation(songs, layered(novelty_total), lambda s: audio[s], STATS, full, per)
+        plain, _, _ = C.habituation(songs, novelty_total, lambda s: audio[s], STATS, full)
+        self.assertEqual(drops, plain)                                     # the total and the gate do not change
+        self.assertEqual(sorted(per), list(C.LAYERS))
+        for k, L in enumerate(C.LAYERS):
+            np.testing.assert_allclose(per[L], np.array(drops) * (k + 1) / 10, rtol=1e-9)
+
+    def test_sigma_rise_and_half_time(self):
+        k = np.arange(1200)
+        t = (k + 1) / 10
+        ramp = np.stack([1 + np.clip(t - 60, 0, 2), 1 + np.clip(t - 60, 0, 4), np.ones(len(t)), 1 - np.clip(t - 60, 0, 2)], 1)   # rise over 2 s, over 4 s, none, fall
+        curve = C.sigma_rise(ramp, 60.0)
+        self.assertEqual(curve.shape, (4, C.SIGMA_STEPS))
+        np.testing.assert_allclose(curve[0, :25], np.minimum(np.arange(25) / 10, 2.0), atol=1e-9)
+        self.assertAlmostEqual(C.half_rise_time(curve[0]), 1.0)
+        self.assertAlmostEqual(C.half_rise_time(curve[1]), 2.0)
+        self.assertIsNone(C.half_rise_time(curve[2]))
+        self.assertIsNone(C.half_rise_time(curve[3]))
+        rep = C.sigma_report([curve, curve])
+        self.assertAlmostEqual(rep["L1"]["peak"], 2.0)
+        self.assertAlmostEqual(rep["L1"]["half_peak_time_s"], 1.0)
+        self.assertAlmostEqual(rep["L1"]["peak_time_s"], 2.0)
+        self.assertIsNone(rep["L3"]["half_peak_time_s"])
+
+    def test_splice_per_layer_z_and_sigma(self):
+        audio = {"a": tone_audio([440] * 90, seed=1), "b": tone_audio([3000] * 90, seed=2, noise=0.05)}
+        songs = [(k, len(y) / SR, np.tile([1.0, 0.0], (len(fast_features(y)), 1)).astype(np.float32)) for k, y in audio.items()]
+        rows, _ = C.splice(songs, layered(change_total), lambda s: audio[s], STATS)
+        plain, _ = C.splice(songs, change_total, lambda s: audio[s], STATS)
+        self.assertEqual([r["cross"] for r in rows], [r["cross"] for r in plain])           # gate numbers unchanged
+        rep = C.splice_layer_report(rows)
+        for L in C.LAYERS:
+            self.assertGreater(rep["z"][L]["cross_median"], 3.0)
+            self.assertLess(rep["z"][L]["within_median"], 3.0)
+            self.assertEqual(rep["z"][L]["frac_cross_ge_3"], 1.0)
+        self.assertEqual(rep["sigma_rise"]["cross"]["L4"]["peak"], 0.0)                     # constant sigma: no rise
+        self.assertIsNone(rep["sigma_rise"]["cross"]["L4"]["half_peak_time_s"])
 
 
 class TestSplice(unittest.TestCase):
