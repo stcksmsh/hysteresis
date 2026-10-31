@@ -1211,3 +1211,3591 @@ bend −41°..90°, elbow 10°..110° (limit 110°), shoulder −109.5°..−21�
 eye this session.
 
 `docs/DANCE_RESTART_PROMPT.md` rewritten for a fresh agent. Next: keys-decide.
+
+### Version 27: instrument lanes, leading lane, pulsed travel on stabs — 2026-10-04
+
+Branch `keys-decide`. User intent stated this session: the note data is for the
+whole installation ("the machine behind it"), lives in the sidecar, and must
+work for other songs (e.g. twin guitars left and right). Target per instrument:
+timing, relative pitch, some loudness. The voice is not an instrument but a
+fluid up/down/stop/loudness.
+
+**Tracker.** `scripts/dance_notes.py INPUT_SIDECAR STEM_DIR OUTPUT_SIDECAR` adds
+`noteTrack.lanes`: one lane per WAV in `STEM_DIR` (any separation), each with
+onsets `[time, rough pitch, strength]`, phrases, and `levelPerBeat` (A-weighted
+dB). Onsets are spectral flux; pitch is a harmonic sum (often the chord root).
+The song's sidecar is now `$D/instant-crush.notes.sidecar.json`, built from
+six-stem Demucs stems (`/secondary/hyst-env/stems6/`). An older sidecar without
+`noteTrack` still compiles and gives version 26 byte for byte.
+
+**References found (validation only, never planner input).** A Songsterr tab
+(14 tracks, full length) aligned to the recording; a midifind MIDI that turned
+out to be derived from the same tab with a simplified chorus. Guitar and piano
+tab tracks have capo 1. Assets and scratch scripts: `$D/tracker-scratch/`, see
+the memory note `reference_dance_tracker_assets.md`.
+
+**Measured against the tab** (note start within 50 ms): flux onsets on the
+six-stem guitar stem 0.94; guitar and keys as one lane 0.92; keys via a stereo
+"wide" split of `other` 0.85; voice (basic-pitch, filtered) 0.73; bass 0.67.
+MuScriptor small (July 2026, CC BY-NC, gated): bass 0.95 and 0.93 right note;
+guitar and keys on the `other` stem 0.95 and 0.67 right note; voice 0.84 with an
+instrument hint; it gives no separate keys lane and constant velocity. Voice as
+a pYIN curve: up/down 0.90, singing or silent 0.88, phrase stops weak. Not
+solved: up/down of chord lines (0.3 to 0.6 by every method), the break solo's
+line (under half its notes found), separate keys lane. Lane discovery by stereo
+position separates simulated twin guitars at 35 % pan or more (0.91 to 0.97),
+fails at 15 %. None of the MuScriptor, pYIN or stereo work is in the repo.
+
+**Planner.** `compile_figures` ranks the instrument lanes per beat by level
+(voice and drums do not compete; a challenger needs 3 dB for four beats,
+backdated). On this song: guitar leads to 90.4 s, synths to 125.3, guitar to
+188.8, the lead line to 212.7, synths after. Blind tests:
+- Figures snapping to the leader's phrase starts, figures picked by its pitch
+  step, accents from the second lane: lost. User: they follow the stabs but
+  wobble up and down across the travel line. Deleted.
+- Pulsed travel while the leader plays stabs (empty beats between its hits):
+  user chose "surge just after each stab" over even travel and over "arrive on
+  the stab". Now constant: pace 0.3 to 2.2 times even, decay 0.35 beat, the
+  speed cap may be exceeded by half during a surge. Active only in the two
+  choruses and the end; verses and break are unchanged.
+`song-figures-27.html` is byte-identical to the chosen clip. Whole song: hand
+speed median 0.34, p95 1.03, max 1.88 m/s; acceleration outside moments p95 5.6
+m/s² (version 26: 1.4). That is a hardware and jitter risk the user has seen
+only at 3:32 to 4:12.
+
+**Open.** The `--flourish` knob (0 as before, 1 none, 2 soft) is still in the
+code: user said all three have a part, per moment; the cause of the flick at
+2:19 is a flourish placed on an arbitrary guitar note. Next agreed step: the
+fluid half, for when the leader is a single flowing line (the break): size and
+height follow its swell. User's unanswered point: the arm "over-focuses on
+centre"; measured that verses sway about one fixed direction and the hand stays
+0.31 to 0.55 m from the base axis. 131 CPU tests, clippy, fmt, `ensemble.cjs`,
+tracker test pass.
+
+### Versions 28–30: leader's swell, smoothed figure clock, voice lift — 2026-10-04
+
+Branch `keys-decide`. All three were settled by side-by-sides with the user.
+
+**Sidecar.** `scripts/dance_notes.py` now also writes `brightnessPerBeat` per
+lane: the A-weighted spectral centroid as a MIDI pitch, 0 for a silent beat.
+Old fields are unchanged; `$D/instant-crush.notes.sidecar.json` was regenerated.
+A sidecar without the field compiles, without the swell.
+
+**Version 28, swell of the leading lane (the "fluid half").** Measured on the
+break: the solo's loudness is nearly flat (−27 to −23.5 dB over 187–204 s, then
+fading to −38 dB by 212 s); its brightness carries the contour (89–98). Rule:
+per beat, the leader's level and brightness about their medians over the
+stretch that lane leads (3 dB and 4 semitones are full scale), faded out where
+it plays stabs, smoothed with a bell one beat wide. Level scales the figure by
+up to 35 %; brightness shifts hand elevation by up to 0.3. The user chose full
+strength over half and none, blind on the break (3:00–3:40) and open on a verse
+(2:05–2:45). There is no gate for "single flowing line": the rule runs wherever
+the leader plays no stabs, verses included.
+
+**Version 29, smoothed figure clock.** The user reported possible jitter or
+micro-stutter. Measured: clips are 30 fps with no dropped or duplicate frames.
+The motion did chatter: when the leader plays quick notes the surge retriggers
+every second knot, so the hand's step alternated about 26 and 35 mm per knot
+and the base and disc followed (163 knot-to-knot acceleration reversals of the
+base over the song, mostly in the choruses). The joint follower was not the
+cause; it reproduces its targets. Two first candidates (a run of quick notes
+surges once; eased surge) shifted figure timing by 35–65 cm of hand position,
+so the user could not compare them; deleted. Kept: a bell of two knots over the
+figure clock. Hand within 1 cm of version 28; base reversals 163 → 1; hand
+acceleration outside moments 5.8 → 1.7 m/s² p95. **The user saw no difference
+by eye**; it is kept for the hardware only, against the "no difference means
+delete" rule, and the user was told. So the jitter the user sees is something
+else: candidates are the disc roll (still 81 reversals; its spin target is
+faster than the roll limit, so it chases at full acceleration) and the 30 fps
+recording. Smoothing the roll's direction signal changed almost nothing and was
+deleted.
+
+**Version 30, voice lift.** The user, on 4:07: the vocals are high and
+important there, the arm should go a lot higher. Measured: the vocal lane's
+rough pitch jumps from about 65 to 73 at 247.5 s and stays until about 262 s,
+at the song's loudest vocal level; its brightness does not show it. Rule: per
+beat, the median pitch of the vocal lane's notes above the song's median note
+(2 semitones start it, 8 are full), smoothed with a bell two beats wide, adds
+up to 0.65 to both elevation and extension. The user put the strength between
+0.45 and 0.9 in a blind side-by-side on 3:52–4:32. Median hand height in
+247–262 s: 0.39 → 0.61 m. It also lifts other high vocal stretches (165–185 s:
+0.37 → 0.50 m), which the user has not reviewed.
+
+**State.** `song-figures-30.html`. Whole song: hand speed median 0.34, p95 0.97,
+max 2.25 m/s. 133 CPU tests, clippy, fmt, `ensemble.cjs`, tracker test pass.
+An old sidecar no longer reproduces version 26 (the clock smoothing applies to
+every sidecar). Still open: the `--flourish` knob, the roll chatter, the leader
+change found at 188.8 s (the user hears 185), "over-focuses on centre".
+
+### Version 31: flourishes soft where the leader plays a steady stream — 2026-10-04
+
+Measured cause of the flick at 2:19: a flourish is the strongest onset of the
+melodic stem per ~16 beats. In the choruses that is a stab of the leading
+synth, a hit that stands out (9 of 23). In the verses, the break and the end
+the leader plays a steady stream, every strum has the same strength, and the
+flourish lands on an arbitrary one (14 of 23). Rule: where the stab weight of
+the leading lane is under 0.5 at the flourish's beat, the flourish is slow and
+soft (half strength, twice the window); among stabs it is as before. Blind
+side-by-side on 2:05–2:45: the user called the sharp one "a bit too much" and
+the soft one "ok"; "none" was not chosen. Peak hand acceleration at 2:19 falls
+from 11.3 to 1.5 m/s². The `--flourish` knob and its config field are deleted.
+`song-figures-31.html`; the choruses are unchanged from version 30. No test
+covers the soft/sharp choice (the fixture has no flourish). Flourish poses are
+still two fixed shapes alternating high and low.
+
+### Version 32: sections travel round the base in alternating directions — 2026-10-04
+
+The user's "over-focuses on centre" means: the rotation goes mostly one way.
+Measured on version 31: the base netted 12.5 turns in one direction over the
+song (turning that way 56 % of the time, the other 42 %), and every long
+section turned the same way. Two candidates: the steady travel reverses each
+section (3.6 net turns, 51 % / 47 %), or the whole section is mirrored, figures
+included (1.0 net turn, 46 % / 50 %). On a blind 40 s clip (1:10–1:50) the user
+was "genuinely unsure", declined a longer clip and asked for a middle ground.
+Kept: the steady travel reverses each section, figures keep their own side.
+This is the user's instruction, not a blind-test win. The choruses still all
+turn the same way as each other (the sections between them reverse); that falls
+out of the alternation on this song, it is not a rule. The `--travel` knob is
+deleted. `song-figures-32.html`; 133 CPU tests, clippy, fmt, `ensemble.cjs`
+pass. No review knobs remain in the code.
+
+### Version 32 approved on a whole-song review — 2026-10-04
+
+The user watched the whole song at version 32 (60 fps, on-screen clock,
+`review-32-full-60fps.mp4`) and said: "I think it's all good". No jitter was
+reported. The single-arm motion is accepted for now. Agreed order from here:
+the hand object, then several arms with red zones. Open before the hand object
+can be built: what the object is in numbers, and what the mirror aims at.
+
+### Hand object, first step: where the disc throws the projector's light — 2026-10-04
+
+The user restated the whole-project concept: several arms with "something with
+mirrors" on the end, and a projector fires the visualizer (the Julia and
+Mandelbulb fractals) onto them and the wall. So the light is the projector's
+image. The object, the room layout and whether the mirrors aim are not decided.
+
+Measured on version 32 with an **assumed** room (projector 3 m in front of the
+arm at 1.2 m height, screen wall 1.5 m behind it, both mirror faces): the
+reflection lands on the screen wall 43 % of the song, the floor 36 %, the
+ceiling 12 %, side walls 8 %, back at the audience 1 %. The disc is nearly
+edge-on to the beam 25 % of the time. A spot on the wall moves at 2.1 m/s
+median, 14 m/s p95, and stays there 0.5 s median at a stretch. With the hand
+where the dance puts it, some roll angle would put a usable spot on the screen
+wall in 93 % of the song: the roll alone could steer it.
+
+The preview (`ensemble.html`) now draws that room: a screen wall, a projector
+mark, and the reflected patch on the wall or floor. Constants `PROJECTOR` and
+`WALL` are assumptions. The planner is unchanged (still version 32). Clip
+`mirror-light-32.mp4` (3:32–4:12) sent to the user. The disc rim is still not
+in the zone check.
+
+**Correction, same day: the projector is above the arm.** User: if the arm is
+on the floor the projector is on the ceiling; if the arm is on a wall the
+projector is perpendicular to that wall. So the projector faces the mounting
+surface head-on and that surface is also the screen. The front projector and
+back wall above were a wrong assumption and are gone from the preview.
+Re-measured on version 32, projector 2.5 m straight above the base (4 m gives
+the same shares): the disc faces the beam with 62 % of its area (median) and is
+nearly edge-on 17 % of the song; the reflection falls back on the mounting
+surface 60 % (within 1.5 m of the base 45 %), leaves sideways 18 %, upward
+23 %; the beam's direction turns at 54°/s median, 373°/s p95. The roll alone
+could always keep the disc facing the beam (never under 20 %, median 95 %).
+The preview now puts the projector overhead, casts the arm's shadow from it,
+and draws the reflection as a patch where it falls back on the surface and as a
+beam where it leaves for the room. Height 2.5 m is assumed. Clip
+`mirror-light-32b.mp4`. Not decided by the user: the object, the projector's
+distance, where the audience is, whether the mirrors aim.
+
+### Hand object "shards": a cluster of small mirrors — 2026-10-04
+
+User on the overhead-projector clip: "a ray from mirror to reflection sometimes
+appears"; after that is fixed "I think it's OK". Then asked for a new
+implement: "a strange shape with mirrors all over, scattered".
+
+- Ray: it was drawn only when the reflection left for the room. Now every lit
+  mirror always has one thin ray, to its patch or 1.2 m out into the room.
+- New hand object in the preview, the default: `SHARDS`, sixteen small round
+  mirrors (1.6–3 cm radius) at 3.5–7 cm from the hand point, each tilted off
+  the radial direction, one-sided. The layout is a fixed invented stand-in. It
+  turns with the wrist roll like the disc did. Each mirror that faces the
+  projector throws its own patch or ray. The disc remains as `?hand=disc` on
+  the preview URL.
+- Not modelled: one shard shading another, the arm blocking the beam, the
+  image content. The planner and the rig are unchanged (version 32): the rig's
+  last link still ends at a 6 cm disc radius and nothing of the hand object is
+  in the zone check. Clips `shards-32.mp4` and `disc-32.mp4` (3:32–4:12).
+
+**Shards, second form, same day.** User: "Shards is better, make it more like
+a discoball, but not quite, not spherical, irregular a tad", then "non-convex
+sort of". The preview's default hand is now a lumpy ball tiled with 84 small
+square mirrors (about 1.5 to 1.9 cm across, each a little crooked): two unequal
+lobes with a waist between them, one deep dent and one shallow, 3 to 7 cm from
+the hand point (`radius`, `DENTS`, `SHARDS` in `ensemble.html`). Tiles follow
+the surface, so the dents hold mirrors that face each other. About half the
+tiles face the overhead projector at any time; each throws a small square
+patch on the floor or a faint ray into the room. Not modelled: tiles shading
+each other inside the dents, reflections between tiles. Clip
+`mirrorball-32.mp4` (3:32–4:12). Planner and rig unchanged.
+
+### Version 33: the implement is rig data and is in the zone check — 2026-10-04
+
+User: the ball is good, make it lumpier; next "red-zones for the 3D shape of
+the implement"; "want differing implements to be possible, generalization is
+always good".
+
+- `ensemble.rs`: `Rig` has an `implement` (`Implement { name, radius_m,
+  mirrors }`, `Mirror { centre_m, normal, u, half_size_m, sides, both_faces }`,
+  all in the tool frame: axis 0 along the last link, axis 1 the tool's facing
+  at zero roll). Any set of flat mirrors is an implement; a `--rig` JSON file
+  can carry its own. Built in: `Implement::mirror_ball()` (default) and
+  `Implement::disc()`; the preview example takes `--implement ball|disc`. A rig
+  file without the field loads with the default. `validate` refuses mirrors
+  that are not unit, or that reach past `radius_m`.
+- Zone and floor checks (`figures.rs`, `link_samples`): the hand point keeps
+  the usual margin plus `radius_m` from every zone and the floor, in the
+  solver, the follower's braking and the hard check. It is a bounding sphere,
+  so it holds for any shape and any roll (the roll is driven outside the
+  solver); it wastes room for a flat implement. Marked `ponytail:`.
+- The ball is lumpier: 110 square tiles of 1.1 to 2 cm across, two lobes,
+  ripples, four dents; bounding radius 8.0 cm.
+- The preview draws whatever mirrors the rig carries (`data.rig.implement`);
+  the hard-coded shapes and the `?hand=disc` switch are gone from
+  `ensemble.html`.
+- Effect on the dance: the hand used to dip to 7.9 cm above the floor (the old
+  disc's rim would have been 1.9 cm off it). Now the lowest hand point is
+  15.2 cm with the ball. The hand differs from version 32 by more than 2 cm
+  for 0.8 s of the song, 7.3 cm at most; elsewhere it is the same.
+`song-figures-33.html`, clip `mirrorball-33.mp4` (3:32–4:12). 134 CPU tests,
+clippy, fmt, `ensemble.cjs` pass. Not done: implement against the arm's own
+links, and anything between two arms.
+
+### Version 34: several arms that keep clear of each other — 2026-10-04
+
+User: "we need crosscheck with arms, red zone is a zone around arms to avoid
+collision (tunable radius)"; six arms, concentric, symmetric, like a hexagon;
+and the synchronized dancing itself (together, inverses, one by one, drop-outs,
+pairs, complements) is "a different game", not this step.
+
+- `figures.rs`: `compile_ensemble(json, config, rig, zones, arms, clearance_m)`
+  with `ArmPlan { placement, mirrored }`; `compile_figures` is the one-arm case
+  and its output is unchanged from version 33 (preview data identical). Every
+  arm dances the same figures in its own frame (rotated by its yaw, optionally
+  left-right mirrored).
+- Cross-check (`Obstacles`): at each knot the arms are solved in order. Each
+  sees the others' current poses as points (`body_samples`: the checked link
+  points plus the base column) and keeps `clearance_m` plus the implements'
+  radii from them, in the solver (which aims 3 cm wider), in the follower's
+  braking (half the gap, since the other arm may be closing too) and in the
+  hard check. Earlier arms have right of way. Fixed zones work as before.
+- Preview example: `--ring N,R` (N arms on a circle of radius R, facing
+  outward), `--mirror-odd` (every second arm mirrored), `--clearance M`
+  (default 0.1). The camera backs off to hold the layout.
+- Measured, hexagon of radius 0.9 m, on dense points along the played curves:
+  unison never needs the check (closest implement surface 11.3 cm). With every
+  second arm mirrored and clearance 0.10 m the closest is 9.5 cm; with 0.25 m,
+  24.0 cm; with 0 m the implements overlap by 1.1 cm. So the played curve cuts
+  up to about 1 cm inside the checked knots. Six arms compile in 12 s.
+- Limits: a ring of 0.6 m (bases closer than one reach) fails with "cannot fit
+  tangents": a blocked arm is stopped within one knot and the quintic fit
+  cannot honour the rig limits (the known `fit_tangents` cascade). 0.7 m and up
+  work. The implement is not checked against its own arm. Priority by arm order
+  is arbitrary. A test covers two arms side by side.
+- Not done, by the user's decision: any ensemble choreography. `--mirror-odd`
+  exists only to make arms meet so the check can be seen.
+`song-figures-34.html` (one arm), `hexagon-34-unison.{html,mp4}` and
+`hexagon-34-mirrored.{html,mp4}` (3:32–4:12). 135 CPU tests, clippy, fmt,
+`ensemble.cjs` pass.
+
+### Version 35: the ensemble picks its own formations; forward is the centre — 2026-10-05
+
+User: the ensemble "should be able to do both mirrored and unison and all of
+the others, should decide itself (canon for instance)"; and in a ring "there is
+a rough forward for the arms, towards the center ... it should be 360 but
+center is the center".
+
+- Forward: `--ring N,R` now faces every arm toward the ring's centre (yaw =
+  its angle + 180°). Bearings are in the arm's frame, 0 = forward. Figures
+  still travel all the way round the base.
+- `Formation` (`figures.rs`): Unison, Mirrored (every second arm the mirror
+  image about its forward line), Canon (each arm one beat after the last),
+  Pairs (opposite arms pair up, pairs take turns of eight beats), OneByOne
+  (four beats each round the ring), DropOut (every second arm rests).
+  `Formation::part` gives each arm a side, a delay and dancing or resting.
+- Chosen per run from its class and how often that class has come round:
+  interlocked: Unison, Mirrored alternating; vocal-led: Canon, Mirrored, Pairs
+  in turn; percussive-open: OneByOne, Canon; bass-led: Mirrored; silence:
+  Unison; anything else: DropOut. A run under eight beats keeps the formation
+  before it. **This table is an agent's first guess, not reviewed.** The
+  choice is appended to each cue's reason (" · ensemble Canon").
+- Each arm's hand path is built from the single-arm path: sampled at its own
+  delayed time, bearing times its side, blended toward a rest pose (drawn in,
+  low, facing forward) when it sits out. Delay and rest weights are eased with
+  bells (16 and 6 knots) and the bearing with one of 5 knots, counted from the
+  last bearing so a change of side swings the nearer way. One arm alone skips
+  all of this and is identical to version 34.
+- Cells: at 1.1 m a mirrored chorus had neighbours reach for the same spot and
+  the cross-check stopped them (median hand speed 0.25 against 0.48 m/s when
+  they cannot meet). Now each hand stays within its own cell of floor: radius
+  = half the distance to the nearest arm, less the clearance and the implement
+  (0.42 m on a 1.1 m hexagon), easing into the edge. The mirrored chorus runs
+  at 0.41 m/s. A ring too tight for an arm to rest in its cell is refused
+  (0.9 m hexagon: 0.32 m cell, needs 0.37 m). The cross-check stays as the
+  safety net; closest approach on the song is 9.8 cm at 10 cm clearance.
+- `--mirror-odd` is gone (the Mirrored formation covers it); `ArmPlan.mirrored`
+  remains as a per-arm fixed flip.
+On this song (hexagon 1.1 m): intro OneByOne, verse 1 Canon, chorus 1 Unison,
+verse 2 Pairs, break OneByOne, vocal return Mirrored, chorus 2 Mirrored, then
+Unison, Canon, Mirrored, Mirrored (bass-led), DropOut, still. Weak points seen
+in the numbers: OneByOne and Pairs leave most arms resting for long (26 s in
+the intro, 40 s in verse 2); hand speed peaks at 2.7 m/s at some formation
+changes; arms still have right of way by index. `hexagon-35.html`,
+`hexagon-35-full.mp4`. 136 CPU tests, clippy, fmt, `ensemble.cjs` pass.
+
+### Version 36: arms share the floor; everyone dances — 2026-10-05
+
+User on the whole-song video of version 35: "Not synchronized enough, too low
+energy maybe? They are also too far apart, dynamic red zones overlapping is
+what makes it WOW level of technical difficulty."
+
+- Closer: the review hexagon is 0.8 m (was 1.1 m), so each arm reaches its
+  neighbours' bases. The per-arm floor cells of version 35 are deleted.
+  Measured on the song: a hand is inside a neighbour's reach 77 % of arm-time
+  and nearer a neighbour's base than its own 14 %; closest approach of an
+  implement to another arm or implement 10.0 cm at 10 cm clearance; every arm
+  at full speed, the six alike (nothing blocked).
+- Why it does not collide: formations that are the same for every arm, turned
+  by the ring's angle, let each arm move through the space its neighbour just
+  left. Two limits, the same for every arm so the picture stays symmetric
+  (`shared` in `compile_ensemble`): no hand enters a circle at the layout's
+  centre where all hands would meet (radius (clearance/2 + implement + 2 cm) /
+  sin(π/N), 30 cm for six); and while the formation is Mirrored each hand stays
+  on its own side of the line half way to its neighbours. The cross-check is
+  the safety net under both.
+- Arms no longer start at the rig's neutral pose in an ensemble (six neutral
+  hands meet in the middle of a tight ring): each starts at its first target,
+  solved on its own. One arm alone still starts at neutral, output unchanged.
+- More together: OneByOne is deleted. Table now: interlocked, bass-led,
+  silence: Unison; vocal-led: Canon, Mirrored alternating; percussive-open:
+  Canon, Unison alternating; sparse: DropOut; anything else: Pairs. Canon is
+  half a beat per arm (a ripple of three beats round six arms). **Still an
+  agent's table, not reviewed.**
+- On this song: intro Canon, verse 1 Canon, chorus 1 Unison, link Mirrored
+  then Unison, verse 2 Canon, pre-break Mirrored, break Canon, vocal return
+  Canon, chorus 2 Unison to the end section, fade DropOut.
+- Open: hexagon size is still the agent's choice; "complements" undefined;
+  right of way by arm index; canon breaks the symmetry, so its safety rests on
+  the cross-check (it held on this song).
+`hexagon-36.html`, `hexagon-36-full.mp4`. 136 CPU tests, clippy, fmt,
+`ensemble.cjs` pass; one arm alone is identical to version 34.
+
+### Version 37: canon by a fraction of the move; ripple out and back — 2026-10-05
+
+User: a different one-by-one, a canon where arms "just start delayed, not for
+the duration of the whole move, but a fraction of it" (a 3 s move delayed
+0.5–1 s); circular (1-2-3-4-5-6-1-2-3…) or both directions (one starts, then
+the two next to it, then the next two, then the last one, then backwards).
+
+- `Formation::part` now gets the current move (figure) index and its length.
+  Step = move length / max(6, arms): a sixth of the move, 0.5 s for a 3 s move.
+  - Canon: delay = arm index × step; the next move starts again on arm 1.
+  - Ripple (new): delay = (steps round the ring from arm 1, either way) ×
+    step; on every second move the order is reversed, so it starts on the
+    opposite arm and comes back.
+- Table: vocal-led: Canon, Ripple, Mirrored in turn; percussive-open: Ripple,
+  Canon; the rest as in version 36. On this song: intro Ripple, verse 1 Canon,
+  chorus 1 Unison, link Ripple then Canon, verse 2 Mirrored, pre-break Canon,
+  break Ripple, vocal return Ripple, chorus 2 Unison onward, fade DropOut.
+- Two defects the larger delays exposed, both fixed:
+  1. The follower's braking near another arm limited motion in every
+     direction, so two arms that had met could only creep apart. It now limits
+     only motion that shrinks the gap (`arm_room` before and after); zones are
+     as before, so one arm alone is unchanged.
+  2. Neighbours out of step reach for the same place at different times; the
+     cross-check then held them (four arms stood still for 8 s in one canon).
+     The "own side of the line half way to the neighbours" limit, which
+     version 36 applied only to Mirrored, now applies to every formation but
+     Unison, from two beats before to two after, with 5 cm of room beyond the
+     clearance so the solver is not leaning on the hard check.
+- Consequence, told to the user: reaches overlap in space only in Unison. A
+  hand is inside a neighbour's reach 77 % of arm-time as before, but nearer a
+  neighbour's base than its own 6 % (14 % in version 36). Overlap during
+  canon would need the timing planned so paths interleave.
+- Measured, hexagon 0.8 m: no section with still or uneven arms; closest
+  approach 10.0 cm at 10 cm clearance; hand speed p95 0.88 m/s per arm.
+`hexagon-37.html`, `hexagon-37-full.mp4`. 136 CPU tests, clippy, fmt,
+`ensemble.cjs` pass; one arm alone identical to version 34.
+
+### Version 38: the ripple's stall and dash; two more ensemble defects — 2026-10-05
+
+User on the version 37 video: at 3:08 to 3:16 the orange arm on the right
+"stutters/breaks formation", maybe a wrong canon or a jitter bug.
+
+Measured: that is the Ripple of the break (185–204 s). The orange arm is arm 0,
+where the ripple starts; its delay flipped between none and three steps at
+every move because the order reverses. Applied as a jump eased by a bell, that
+made it stand still about a second (hand speed 0.00 at 193–194.5 s) and then
+race (1.1 m/s at 190 s); the opposite arm did the reverse. No arm was within
+30 cm; it was not the cross-check.
+
+- Delays now run evenly from one move's value to the next across the move
+  (`part` in `compile_ensemble`): an arm starts each move on its turn and plays
+  it a little slower or faster. No stall.
+- Ripple's step is half the canon's (a twelfth of the move): reversing the
+  order then changes an end arm's pace by a quarter, not a half.
+- The "own side of the line" limit squeezed the whole sector with a tanh, which
+  bent hand paths over their own base, into the shoulder's limit and out with a
+  kick. It now leaves the inner 70 % of the sector untouched.
+- In the mirrored verse arms were stopped dead at the line (elbows reach past
+  the hand). The margin there is 12 cm beyond clearance and implement; the
+  centre circle keeps its 2 cm.
+Hexagon 0.8 m, whole song: arm 0 has no stall in 186–198 s; accelerations over
+9 m/s² across the six arms 74 → 57 (about five per arm are the single arm's
+own chorus accents); standstills over 0.3 s inside the song 3–5 → 1–4 per arm;
+closest approach 13.4 cm. Left: arm 0 still has one 11 m/s² kick at 187.9 s
+(shoulder at its limit as the hand passes over the base; the single arm has a
+4.9 m/s² version); arms 4 and 5 have three or four short standstills; cause
+not looked for. `hexagon-38.html`, `hexagon-38-full.mp4`. 136 CPU tests,
+clippy, fmt, `ensemble.cjs` pass; one arm alone identical to version 34.
+
+### Version 39: draw order across arms; canon delays on the beat — 2026-10-05
+
+User on the version 38 video: "the orange one is sometimes rendered below the
+one above it, layering issue"; and "doesn't follow music enough, it's like an
+abstraction, but it needs to be more on point to be better I think".
+
+- Preview: each arm used to be painted whole, in arm order, so a far arm could
+  cover a near one. Every arm's pieces (and its pedestal) now go into one list
+  drawn far to near. Planner data for one arm is unchanged from version 34
+  (the exported file differs only in the page's script).
+- Canon step is a whole number of beats (the move's length / 6, rounded, at
+  least 1); Ripple's is half a beat. A late arm now lands on the beat.
+- "On point" is **not answered**. Four readings were put to the user (accents
+  together; arms joining and leaving with how full the music is; one arm
+  leading the solo or the voice; the single-arm figures themselves being too
+  loose) with a request for two or three timestamps and what the six arms
+  should do there, as the 4:07 note did for the voice. Do not build ensemble
+  behaviour for this before the user answers.
+`hexagon-39.html`, `hexagon-39-full.mp4`. 136 CPU tests, clippy, fmt,
+`ensemble.cjs` pass.
+
+### Version 39 accepted — 2026-10-05
+
+The user watched the version 39 whole-song video and said: "It's good now".
+That followed the layering fix and the beat-aligned delays. They did not say
+which reading of "more on point" they had meant, so treat that question as
+closed by this verdict but not as answered: do not add ensemble behaviour for
+it unless they raise it again. The six-arm ensemble on a 0.8 m hexagon is
+accepted for now as it stands in version 39.
+
+### Handover — 2026-10-05
+
+Asked what comes next, the user chose overlap outside unison ("1. is most
+important, we want to be able to make red zones so that it doesn't hit
+equipment or whatever, it's supposed to be generalized right?") and asked for
+a handoff to a fresh session. `docs/DANCE_RESTART_PROMPT.md` is rewritten for
+the ensemble and states that task in two parts: arms inside each other's reach
+in every formation, and red zones as a general tool against equipment. Nothing
+of either is started. The measuring and recording scripts of this session are
+saved outside git in `$D/tracker-scratch/ensemble/`. A hexagon export from the
+current tree is byte-identical to `hexagon-39.html`. Tree clean, branch pushed.
+
+### Version 40: out-of-step arms share space — 2026-10-05
+
+Task 1 of the restart prompt (overlap outside unison). Not yet reviewed by the
+user; `hexagon-40-full.mp4` was sent.
+
+Measured first, on the 0.8 m hexagon. With the "own sector" limit switched off
+entirely, canon and ripple mostly work: hands go past half way to a neighbour
+14.6 % (canon) and 6.7 % (ripple) of arm-time, against 15.8 % in unison. The
+cost was local: arms stood still 9 % of the canon, and the mirrored verse
+jammed (34 % still, then all six stopped from 175 to 185 s). So out-of-step
+arms rarely want the same place; the version 37 limit was on all the time to
+cover a few seconds.
+
+- Rule (`apart` in `compile_ensemble`): before the real solve, each arm is
+  posed alone along its unlimited path at every second knot. Where two arms'
+  checked points come within the clearance (and the formation is not Unison),
+  every hand keeps to its own sector from half a beat before to half a beat
+  after, eased as before. Elsewhere no sector limit. The limit is still the
+  same for all arms at once, so the picture stays symmetric. The centre circle
+  is unchanged. `shared` now takes the limit's weight; the per-formation flag
+  is gone.
+- Margin and window were swept. Wider (10 cm, two beats): less shared space,
+  no fewer stalls. Narrower than the clearance: the cross-check stops arms
+  (1.1 % still in canon). Kept: the clearance itself, half a beat.
+- Limit active, share of each run: ripples 0 %; canons 12 %, 1 %, 1 %, 14 %;
+  mirrored 68 % and 97 %.
+
+| per formation | past half way, v39 | v40 | still, v39 | v40 |
+|---|---|---|---|---|
+| Unison | 15.5 % | 15.7 % | 1.4 % | 1.4 % |
+| Ripple | 0 % | 6.7 % | 0.1 % | 0.1 % |
+| Canon | 0 % | 9.0 % | 1.4 % | 0.1 % |
+| Mirrored | 0 % | 0 % | 0.2 % | 0.1 % |
+
+Whole song: hands nearer a neighbour's base than their own 6 % → 10 % of
+arm-time; kicks over 9 m/s² 59 → 44; standstills over 0.3 s per arm 1–2 → 0
+(arm 5: 1); closest implement surface to another arm 13.4 → 13.0 cm at 10 cm
+clearance; closest hand centres 34 → 29 cm. One arm alone is byte-identical to
+the tree before. Six arms compile in about 16 s (was 12 s): the lone posing is
+the extra.
+
+**Mirrored cannot share space as it is.** Mirror neighbours are images of each
+other in the plane between them, so two arms that cross it meet in it, at the
+same moment. Overlap there needs a different formation (a mirror with a delay,
+or one arm passing over the other); that is an artistic choice, put to the
+user, not built.
+
+**Not what the restart prompt asked for in one respect.** It said overlap
+"needs paths whose timing interleaves, not a clamp". Version 40 does not
+retime anything: it found that the existing canon and ripple timing already
+interleaves most of the time, and keeps the old clamp for the seconds where it
+does not. Canon is still limited 12–14 % of its two long runs. Retiming those
+moments (a different step for that move) is not tried.
+
+Tests: `arms_out_of_step_share_space_without_stopping` (a six-arm ripple:
+hands cross half way, no arm stands, implements stay apart; it fails with the
+limit always on) and `every_arm_of_an_ensemble_stays_out_of_a_red_zone` (two
+arms against a box; this closes the test gap of task 2). 138 CPU tests, clippy,
+fmt, `ensemble.cjs` pass.
+
+Task 2 (red zones against equipment) is otherwise not started: the user has
+not said what the equipment is. Question put to them: which things (projector
+stand, speakers, a wall, people's walkway), so shapes are not invented.
+
+New helpers in `$D/tracker-scratch/ensemble/`: `byform.py FILE` (per formation:
+past half way, speed, still, kicks, closest), `when.py FILE` (clock times where
+two or more out-of-step hands are past half way).
+
+### Version 41: a canon only for short runs — 2026-10-05
+
+User on version 40, after asking how long the canon sections are (61 s in
+verse 1): "too long at times, too unsynchronized if cannon or whatever stays
+too long, ripple is ok, I think its cuz it breaks symmetry?" They also asked
+whether "inverse pairs" exist (arms 1, 3, 5 do X, arms 2, 4, 6 the inverse
+positions). Answer given: Mirrored is that for left and right only (2:14 to
+2:57); no formation inverts high and low or in and out.
+
+- A run that would be a Canon and is longer than sixteen beats is a Ripple
+  (`compile_ensemble`, formation choice). The threshold is the agent's guess.
+  On this song: verse 1 (0:29–1:30) and 4:24–4:41 ripple; two canons remain,
+  2:09–2:14 and 2:57–3:05, one and two moves long. Ripple now runs 0:03–1:30
+  without a break (87 s), not reviewed.
+- Measured: ripple hands past half way to a neighbour 12.0 % of arm-time (the
+  limit of version 40 seldom fires in a ripple); whole song 11.4 %; kicks 44 →
+  40; no standstill over 0.3 s on any arm; closest implement surface 13.4 cm.
+  One arm alone identical.
+`hexagon-41.html`, `hexagon-41-full.mp4` (sent, not yet reviewed). 138 CPU
+tests, clippy, fmt, `ensemble.cjs` pass. Open with the user: whether an
+"inverse" formation in two groups of three is wanted and what inverse means
+(high/low, in/out, or a group one step late); Mirrored without overlap; red
+zone equipment.
+
+### Version 42: unison and mirror for sections; canon and ripple as flourishes — 2026-10-05
+
+Version 41 was never reviewed (its video was not sent). The user, before
+seeing it: "the best looking one is sync. I also like mirror, for me cannon
+was more of a flurish move, same with ripple"; then: "Cannon and ripple work
+well especially with 'linear' movements (where the joints are co-linear with
+the centerpoint), but thats just an idea".
+
+- Sections are Unison or Mirrored only. Table: interlocked, bass-led, silence:
+  Unison; vocal-led: Mirrored, Unison in turn; percussive-open: Unison,
+  Mirrored in turn; sparse: DropOut; else Pairs. Still an agent's table. The
+  sixteen-beat canon rule of version 41 is deleted.
+- Flourish (`accents` in `compile_ensemble`): the move that holds a melodic
+  flourish moment is passed round the ring, as a ripple and a canon in turn.
+  Only the delay changes; arms keep the run's sides. Conditions: the move is
+  six beats or longer and sweeps under 120° round the base.
+- Linear: while a move is passed round, each arm turns to face straight in or
+  straight out (the nearer at the middle of the move) and keeps only the
+  rise, fall, reach and draw-in. This is the agent's reading of the user's
+  "co-linear with the centerpoint". Without the 120° condition the wide
+  moves (circle, arc, eight) lurched: 64 kicks, arms 9.7 cm apart, so they
+  are never passed round.
+- The delay still runs evenly from one move's value to the next (version 38),
+  so arms drift out of step over the move before a flourish and close up
+  during it. Whether that reads as a flourish is for the user.
+- The "would meet" limit of version 40 now applies in every formation; the
+  Unison exemption is dropped (the choruses kept their kicks and closest
+  approach, so the limit seems not to fire there; not checked directly).
+- On this song: Unison 0:00–0:29, Mirrored 0:29–1:30, Unison 1:30–2:09,
+  Mirrored 2:09–2:57, Unison 2:57–3:23, Mirrored 3:23–3:32, Unison 3:32–4:24,
+  Mirrored 4:24–4:41, Unison 4:41–5:23, DropOut, still. Passed round: 0:20
+  (eight, canon), 0:37, 0:46, 0:55 (reach; ripple, canon, ripple), 1:17 (sway,
+  ripple), 2:27 and 3:09 (sway, canon), 4:33 (reach, ripple), 5:10 (rise,
+  canon), 5:23 (sway in the drop-out). None in the two choruses' circles.
+- Measured: kicks over 9 m/s² 47; closest implement surface 13.4 cm; hands
+  past half way to a neighbour 12.2 % of arm-time in Unison, 0 % in Mirrored
+  (now 135 s of the song), 7.0 % overall. Standstills: only 0:49–0:50, 0.3 to
+  0.4 s on five arms, where the linear reach turns round. One arm alone
+  identical.
+- Tests: the out-of-step test of version 40 became
+  `mirrored_arms_keep_apart_without_stopping`; the six-arm unison test now
+  also requires a hand past half way. **No test covers a flourish or the
+  linear turn** (the fixture has no flourish moment). 138 CPU tests, clippy,
+  fmt, `ensemble.cjs` pass.
+`hexagon-42.html`, `hexagon-42-full.mp4` (sent, not yet reviewed). New helpers
+in `$D/tracker-scratch/ensemble/`: `runs.py` (formation runs and their moves),
+`accents.py` (moves passed round), `still.py` (standstills by clock time).
+
+### Version 43 and a verse side-by-side pending — 2026-10-05
+
+User on version 42: "They have a lot of 'free time' now like 1:59-2:03, they
+just sortof hang around doing nothing. They also have moments where they just
+snap back to center, as if theyre 'resetting'. They follow music less now that
+this is all here. We could maybe increase what we did for it to follow the
+stabs?"
+
+Measured:
+- The choruses of version 42 are identical to version 39. At 1:59–2:03 the
+  chorus ends on gather and rise (hands 27–29 cm from their bases, 0.2 m/s),
+  as it did in version 39; then the verse followed as a ripple, now it is in
+  step.
+- The "linear" turn of version 42 (the agent's reading of the user's idea)
+  held arms on the line to the centre for a whole move, nearly still. Deleted.
+  Idle time (six-hand mean under 0.15 m/s for 1.5 s or more) 35 → 32 s only,
+  so it was a small part.
+- Likely main cause, not confirmed by the user: the verse vocabulary. "reach"
+  goes out and tucks back in every eight beats and "sway" is slow; six arms in
+  step or mirrored do that together, which reads as a reset and a wait. In
+  version 39 the canon and ripple delays hid it. Hands slow at the centre
+  circle: 2 s of the song, not the cause.
+- A stronger surge after stabs (1.7 and 2.5 times) changed the chorus hand
+  speed spread little (p90/p10 6.1 → 7.5; the speed cap and the clock's catch-up
+  bound it) and brought stalls (0.9 % → 4 % in Unison) and kicks (44 → 67).
+  Not adopted; knob removed.
+
+Version 43 = version 42 without the linear turn (`hexagon-43.html`; its video
+was recorded but not sent). Kicks 44, closest 13.1 cm, one pause of 0.3–0.7 s
+at 0:49.
+
+**Pending review, key unread:** `blind-verse-side-by-side.mp4` (0:29–1:09, A
+and B on top, C below, clock) with key `blind-verse-key.json`. The verse
+(vocal-led) as mirrored, ripple or unison; same single-arm dance in all three.
+Measured, whole song with every vocal-led run in that formation:
+
+| verse as | idle | hands past half way, verse formation | kicks |
+|---|---|---|---|
+| mirrored | 32 s | 0 % | 44 |
+| ripple | 19 s | 16.1 % | 38 |
+| unison | 21 s | 14.8 % | 43 |
+
+**A review knob is in the tree until the verdict:** environment variable
+`HYST_VERSE=mirrored|ripple|unison` in the formation table of
+`compile_ensemble`. Unset, the table is version 43's. On the verdict: make the
+winner the table's entry, delete the variable, re-export, and compare against
+`hexagon-43.html` only if mirrored wins. Not answered either way by this test:
+what "follow the music" should look like for six arms; the user was asked.
+138 CPU tests, clippy, fmt, `ensemble.cjs` pass. New helpers in
+`$D/tracker-scratch/ensemble/`: `idle.py`, `wall.py`, `turn.py`, `pulse.py`,
+`cmp.py`, `verse.sh`.
+
+### Version 44: verses in unison — 2026-10-05
+
+Verdict on the verse side-by-side: "Genuinely dont know, I think B is the worst
+maybe? Unsure." B was mirrored (key: A ripple, B mirrored, C unison); the user
+asked whether B had the most idle time, so the key was read and the test is
+over. It supports "mirrored is worst for verses" only weakly and does not
+separate ripple from unison. The user accepted the agent's recommendation of
+unison (numbers near equal; the user had said ripple is a flourish).
+
+Changes to the formation table of `compile_ensemble`:
+- vocal-led is Unison; the `HYST_VERSE` variable is deleted.
+- percussive-open alternates starting with Mirrored (was Unison first). The
+  agent's choice, not asked of the user: with unison verses the old order left
+  4.6 s of mirror in the whole song, and the user likes the mirror. One token
+  to revert.
+
+Measured, whole song (`hexagon-44.html`, `hexagon-44-full.mp4`):
+
+| | version 43 | version 44 |
+|---|---|---|
+| Unison / Mirrored | 196 s / 135 s | 286 s / 45 s (0:03–0:29, 3:05–3:23) |
+| idle | 32 s | 20 s |
+| hands past half way, all | 7.4 % | 13.3 % |
+| stalled | 1.7 % | 1.4 % |
+| kicks | 44 | 45 |
+| closest implement gap | 13.1 cm | 13.0 cm |
+
+The mirrored test's fixture is now drums without voice (`fixture(0.1, 0.2)`).
+138 CPU tests, clippy, fmt pass. Not reviewed by the user. Not answered: the
+"snap back to centre" (no clock times given) and whether the remaining 20 s of
+idle needs the verse moves changed. `tmp-verse-*.html` and `tmp-surge-*.html`
+in the output directory are spent and may be deleted.
+
+### Second song: "Five Years" (Bowie) — 2026-10-05
+
+The user accepted version 44 ("Its nice now") and asked for a totally
+different song. Source `~/Downloads/Five_Years_2012_Remaster.wav` (4:44,
+48 kHz). Nothing in the planner was changed for it. Not yet reviewed.
+
+What broke, in order:
+1. `dance_structure.py` crashed when the stem folder had no
+   `separation.json`. Fixed (committed).
+2. **The fixed beat grid does not hold for a live drummer.** The song is in a
+   triple feel (pulse about 1.16 s, three subdivisions of about 0.386 s) and
+   speeds up 6.5 % from start to end. `analyze.ts` reported 114 bpm;
+   `dance_memory.py`'s single period and phase put measured onsets a median
+   134 ms from the grid (chance level; Instant Crush 5 ms). A steady grid and
+   the real beats differ by up to 2.3 s.
+3. On that wrong grid the planner failed outright: "cannot fit tangents
+   segment 4280 channel 0 … accel 71110/8000". **Not investigated**; reproduce
+   with `five-years.notes.sidecar.json`.
+
+Workaround, all outside the repo (`$D/tracker-scratch/newsong/`):
+`beatmap.py` tracks the subdivisions on the drum stem with librosa (basic-pitch
+environment), smooths them and finds the pulse phase (drum strength by
+subdivision mod 3: 4.2 / 1.2 / 2.1, the same phase in every sixth of the song,
+so no slips; strong drum onsets a median 26 ms from a subdivision). `warp.py`
+resamples the mix and all stems so the subdivisions are steady (pitch moves
+with tempo, under half a semitone) and writes `five-years.tempomap.json`.
+`song2.sh` runs the usual pipeline on the warped audio (slug
+`five-years-steady`), with the sidecar's beats replaced by the steady grid.
+The dance beat is 1.5 subdivisions (0.58 s, 103.5 bpm): two beats per pulse, so
+an eight-beat move is one bar of four pulses and the pace matches what the
+planner was tuned on. The agent's choice. Mix onsets are then a median 42 ms
+from the grid and the structure pass calls the grid reliable.
+`record-ensemble.cjs` gained `HYST_TEMPO_MAP=file.json`: it draws the score at
+the mapped time, so the video is on the real beats. **The interactive HTML has
+no tempo map** and drifts up to 2.3 s against its audio; use the video.
+
+Result (`five-years-hexagon.html`, `five-years-hexagon-full.mp4`, 283.7 s):
+
+| formation | seconds | median hand speed | stalled |
+|---|---|---|---|
+| Unison | 193.5 | 0.18 m/s | 5.9 % |
+| DropOut | 57.5 | 0.02 m/s | 49.6 % |
+| Pairs | 22.2 | 0.04 m/s | 47.6 % |
+| Mirrored | 10.5 | 0.18 m/s | 1.0 % |
+
+Kicks 24, closest implement gap 13.9 cm. Runs: still to 0:09; sparse/textural
+(DropOut, Pairs) for most of 0:09–2:13 with bass-led unison between; unison
+2:13–4:19 (vocal-led, then interlocked); mirrored 4:19–4:29; drop-out and
+still to the end. So for the first two minutes most arms rest or barely move:
+the class thresholds were set on Instant Crush and read the quiet opening
+(voice, piano, drums) as "sparse", and sparse → DropOut, textural → Pairs are
+the two rest-heavy rows left in the table. Whether that reads as a build or as
+the idleness the user dislikes is for the user. Hand speed overall is half of
+Instant Crush's (0.15 against 0.29 m/s).
+
+If songs with a live tempo are to be supported properly: the tempo map belongs
+in the sidecar and in score playback (page, `ChoreographyOutput`), and the
+beat tracker in `scripts/`. Not built; waits for the user's verdict.
+
+### Version 45: the planner meets a quiet, dynamic song — 2026-10-05
+
+The user on the first "Five Years" video (version 44 planner):
+- "The arms only start moving at 0:15, then 3 of them flick, then they stop
+  again for a little while"
+- "0:45 is REALLY jerky, too too fast, as if it doesnt even know the
+  tempo/energy/emotion of the song, like its raving"
+- "1:31-1:34 is EXTREMELY jerky, especially the lowest arm at the end, the
+  spin afterwards is also WAAAY to fast"
+- "2:22 to 2:25 is almost no movement"
+- "most of the song says `bass-led` even though it isnt, at least it catches
+  `vocal led` well, but if its `vocal led` for long enough it seems to get a
+  bit 'boring'?"
+
+Measured causes (video clock; `look5.py`, `acts.py`, `classes.py` in
+`tracker-scratch/newsong/`):
+- 0:15, 0:45, 1:31: each a **flourish in its sharp form** (hand 0.7–1.1 m/s,
+  acceleration 15–18 m/s²). The planner chose sharp wherever the lead lane
+  plays separated notes, whatever the loudness. 0:15 was danced by three arms
+  (DropOut); the "spin" at 1:34 was three arms swinging to their rest pose at
+  187°/s as a DropOut run began.
+- 2:22–2:25: hands at 0.04–0.07 m/s; partly the stab surge idling between
+  sparse stabs. Now 0.09–0.23 m/s; still the slowest spot, cause not isolated.
+- Labels: `wholeTrackActivity` is each stem against its own loudest. The voice
+  goes from soft to screaming, so the verses read as voiceless and the steady
+  bass won, though the voice carried 40–55 % of the power and the bass under
+  20 %. The climax (2:36–4:18) was vocal-led (reach, sway for 107 s) because
+  its bass is buried.
+
+Changes (`figures.rs`, `director.rs`):
+1. `intensity(t)`: stem power summed, mean over ±4 beats, against half the
+   song's 90th percentile, capped at 1. Below 0.75 a flourish is soft; arrival
+   strength and the surge's depth are multiplied by it. Instant Crush is at 1
+   nearly throughout (verses 0.55–0.66 of the 90th percentile, choruses 0.8).
+2. `character` takes the voice's share of power and the loudness: sung =
+   activity over 0.3 or share over 0.14; sung and louder than 0.7 of the 90th
+   percentile is "interlocked". **Fragile by construction:** a song with flat
+   dynamics would make every sung passage interlocked; thresholds sit between
+   Instant Crush's verse (0.66) and chorus (0.73).
+3. `Formation::Pairs` and `DropOut` deleted; every class but percussive-open
+   is Unison. `part` still returns a dancing flag, now always 1; the resting
+   pose code behind it is unused and could go.
+4. A vocal-led or interlocked run plays the percussive-open or bass-led phrase
+   once after about 128 beats of its own, and again. At 64 beats it changed
+   Instant Crush's verses, and the different heading into the first chorus
+   brought whole-ensemble kicks (45 → 64), so 128, which leaves Instant Crush's
+   verses and all but its last chorus alone. On "Five Years" this gives one
+   contrast in the climax; the boredom fix there is mostly the class change.
+5. A run under 24 beats (was 8) keeps the formation before it: the ten-second
+   mirrored passage at 4:19 entered from a turning chorus, neighbours met,
+   braked at 20 m/s² and stood for two seconds. **A dodge, not a fix:** entering
+   Mirrored from a wide heading is still unsafe for longer runs.
+
+Measured:
+
+| | Five Years, 44 | Five Years, 45 | Instant Crush, 44 | Instant Crush, 45 |
+|---|---|---|---|---|
+| arms resting (DropOut, Pairs) | 80 s | 0 | 9 s | 0 |
+| kicks | 24 | 14 | 45 | 41 |
+| peak hand acceleration | 22.8 m/s² | 11.7 | 23.0 | 23.0 |
+| fastest base turn | 199°/s | 150 | 190 | 188 |
+| median hand speed | 0.15 m/s | 0.21 | 0.29 | 0.27 |
+| idle | n/a | n/a | 20 s | 19 s |
+| closest implement gap | 13.9 cm | 13.9 | 13.0 | 12.8 |
+
+"Five Years" classes now: sparse 0:09–0:30, bass-led to 0:40, vocal-led
+0:40–1:35, a patchwork of sparse, bass-led, vocal-led and textural 1:35–2:36
+(runs of 3–15 s, each with an arrival; **not fixed**), interlocked 2:36–4:18.
+Instant Crush's classes are the same but for one 3 s vocal-led blip inside the
+last chorus that merged.
+
+Files: `hexagon-45.html`, `hexagon-45-full.mp4`, `five-years-hexagon.html`,
+`five-years-hexagon-full.mp4` (the version 44 video kept as
+`five-years-hexagon-44-full.mp4`). 139 CPU tests (one new, for the class
+rule; the test fixture's stem levels now follow their activity), clippy, fmt.
+Not reviewed. Still open from before: the planner's "cannot fit tangents"
+failure on a wrong beat grid; the tempo map outside the repo.
+
+### Version 46: a third song, classes by share of the sound — 2026-10-05
+
+Version 45 was never shown to the user (its videos were recording when the
+third song arrived); 46 replaces it and its files were deleted.
+
+Third song: `~/Downloads/Justice_-_Presence_Official_Audio.wav` (4:31,
+instrumental, steady 130.0 bpm), slug `presence`, usual pipeline (`song.sh`).
+- **Grid 45 ms late.** `analyze.ts`'s causal beat tracker lags and
+  `dance_memory.py` fits its grid to those beats: strong drum onsets fell an
+  eighth of a beat before the grid through the whole song. `regrid.py` (scratch,
+  librosa) refits period and phase to strong drum onsets (0.46160 s, drum hits a
+  median 2 ms from a beat, 99 % within 30 ms) and replaces the sidecar's beats;
+  `songtail.sh` reruns the later steps. Mix onsets against the grid: median
+  46 → 9 ms. Instant Crush was not rechecked this way (its mix onsets sit 5 ms
+  from its grid). **Belongs in `dance_memory.py`**; not moved there.
+- **Phantom voice.** The voice stem holds under 2 % of the power but peaks
+  against itself, so two passages were vocal-led.
+- **Drum-led intro missed.** Drums carry 40–75 % of the power for 70 s at an
+  activity of 0.15–0.16, under the 0.17 mark: "textural", one slow sway.
+
+Changes to version 45:
+- `character` takes every stem's share of mean power (mean of squares; the
+  mean level squared under-counts drums). Sung = activity over 0.3 with a
+  share over 0.04, or a share over 0.14. Percussive-open = drum activity over
+  0.17 or drum share over 0.4, with no voice by activity or by share.
+- Contrast phrases for all four main classes (vocal-led ↔ percussive-open,
+  interlocked ↔ bass-led), still after about 128 beats.
+
+Classes now (video clock):
+- Instant Crush: as version 44 but 2:54–2:57 is percussive-open (was
+  textural) and the 3 s vocal-led blip in the last chorus merged.
+- Five Years: still to 0:09, percussive-open (drums alone) to 0:19, vocal-led
+  0:19–1:35 and 1:44–2:36 (sparse and bass-led for 9 s between), interlocked
+  2:36–4:18, percussive-open (drums alone) to 4:38. The patchwork of version
+  45 is gone.
+- Presence: percussive-open 0:00–1:10 (Mirrored), textural to 1:32, bass-led
+  1:32–2:16 and 2:31–3:15 with textural breaks, a 6 s "vocal-led" at 3:24 (share
+  0.09 in a drumless break; may be a voice-like synth), percussive-open
+  3:30–3:52, bass-led to 4:23.
+
+Measured (version 46):
+
+| | Instant Crush | Five Years | Presence |
+|---|---|---|---|
+| Unison / Mirrored | 314 s / 26 s | 284 s / 0 | 200 s / 70 s |
+| median hand speed | 0.28 m/s | 0.22 | 0.27 |
+| stalled | 2.7 % | 3.2 % | 1.0 % |
+| kicks (per arm) | 36 | 25 | 66 |
+| jolts (any arm over 9 m/s², `jolts.py`) | not counted | 5 | 13 |
+| closest implement gap | 11.2 cm | 14.1 | 13.2 |
+
+Five Years' largest jolt (22.7 m/s²) is the last frame of the song; the others
+are in the climax. Presence's are flourishes and arrivals. Instant Crush's
+mirror fell from 54 s to 26 s: the 18 s drum passage at 3:05 is the third
+percussive-open run now and alternates to Unison. Closest gap on Instant Crush
+fell from 12.8 to 11.2 cm (clearance 10).
+
+Files: `hexagon-46.html`, `hexagon-46-full.mp4`, `five-years-hexagon(.html,
+-full.mp4)`, `presence-hexagon(.html, -full.mp4)`; the version 44 "Five Years"
+video is `five-years-hexagon-44-full.mp4`. Scratch in
+`tracker-scratch/newsong/`: `song.sh`, `regrid.py`, `songtail.sh`, `phase.py`,
+`three.sh`, `jolts.py`, `acts.py`, `classes.py`, `look5.py`, and the tempo-map
+set (`beatmap.py`, `warp.py`, `song2.sh`, `songvideo.sh`). 139 CPU tests,
+clippy, fmt. Not reviewed.
+
+The user's four moments on "Five Years", version 44 → 46: 0:10–0:17 three
+arms flick and stop → all six at 0.1–0.7 m/s, peak acceleration 1.4; 0:45
+0.70 m/s at 15.5 m/s² → 0.04–0.23 at 1.0; 1:31–1:35 18.2 m/s² and a 187°/s
+turn → 1.6 and 66°/s; 2:22–2:25 0.04–0.07 m/s → 0.14–0.35.
+
+Open: the thresholds remain tuned on three
+songs; beat tracking (tempo map, grid refit) is outside the repo; "cannot fit
+tangents" on a wrong grid is uninvestigated; entering Mirrored from a wide
+heading is unsafe (dodged for short runs only).
+
+### Version 47: the user's review of three songs — 2026-10-06
+
+The user on version 46:
+- "Five years is generally OK, its a difficult song for this and for dancing
+  in general so its OK"
+- Instant Crush: "at 3:52 has a strange jerk also at 4:08-4:09, the 4:36
+  flourish is also sortof jerky"
+- Presence: "a really strange moment at ~0:24-0:26 and again at ~0:41 and
+  ~0:49 and ~1:00 (its also all labeled as percussive open, the only
+  percussive is kick drum on a simple slower pattern)"; "similar strange stuff"
+  at 1:13; after the "quasi drop/start" at 1:32 "really slow and low-energy"
+  until ~1:50, "label is bass-led now (the most prominent instrument there for
+  me is keys ...)"; "a jerk at 2:03/2:04"; "at 2:24 theyre too fast (but in the
+  like 10secs before/after it they actually look like theyre following the
+  flute being played)"; the next bass-led "low energy even though the main
+  instrument (some high keys/pluc/synth thing) is really nice and emotional
+  and has energy and could be followed"; at 2:55–3:00 "the spins fit it
+  nicely"; "3:06 is quite a rough stop/slowdown at once"; "3:17 is too fast,
+  most of the music dropped out so we should be slower right (and we know a
+  buildup and a drop is coming soon due to sidecar)"; "at ~3:29 it says vocal
+  led but no vocals exist"; "the buildup until ~3:52 is 'danced' well but it
+  doesnt pay off (they could RISE HIGH for it or smth, now they just continue
+  like nothing happened)"; after it "again `bass-led` even though an electric
+  guitar is the MAIN item"; "the ending is nice but at 4:26 they jitter into a
+  stop and then turn quickly again".
+
+Measured causes (`jolts.py`, `spans.py`, `look5.py`):
+- Instant Crush 3:52, 4:09, 4:36 and Presence 0:41, 0:49, 1:00, 1:13: sharp
+  flourishes; hand 1.5–2.3 m/s, 14–22 m/s². The 0.8 m/s cap is on the figure
+  clock; a moment's blend rode on top of it, and a surge under it added more.
+  The Instant Crush ones were in version 44 too.
+- Presence 0:24, 2:03, 2:24, 3:06, 3:17, low energy 1:32–1:50 and 2:31–2:55:
+  the stab surge. Its decay (0.35 beat) suits notes about a beat apart; with
+  sparse lead notes the pace sat at 0.3 for seconds, the clock fell behind,
+  then caught up at the cap (1.2 m/s, base at 160–185°/s).
+- 4:26: an arrival at a point where the music falls away, then catch-up.
+- 3:52: an arrival existed, with the same pose as any other.
+
+Changes:
+1. **Moment speed limit.** After the clock is built each moment's `span` is
+   widened so its blend adds at most 0.6 m/s (travel from the prepared pose to
+   the arrival, 1.5 × mean for a smooth blend). The arrival time stays exact;
+   the preparation starts earlier. No surge within two beats of a moment.
+2. **Surge stretched to the note spacing**: decay 0.35 beat × gap/0.9 for gaps
+   of 0.9 to 4 beats (average pace about 1 at any spacing), even pace where
+   the leader's notes are more than four beats apart. Because the clock never
+   runs ahead of the music, a stretched surge is partly clipped, so sparse
+   notes surge less than dense ones; letting the clock lead by half a beat
+   restored it but brought back 1.9 m/s flourishes on Instant Crush and was
+   reverted. The surge test now measures close either side of each hit with a
+   1.1 threshold (was 1.3 over windows a quarter second out, which fell where
+   the fixture's figure changes pace tenfold).
+3. **Arrivals have a direction**: level over the eight beats before against
+   the four after. Lift (rise of 50 % or more is full): pose elevation 0.72 →
+   1.0, hold 1.5 → 2.5 beats, strength at least the lift. Falling away:
+   strength × the ratio (floor 0.3). An entry from near silence is not a lift.
+4. **Calmer without drums**: the clock's rate × 0.65 where drum activity over
+   ±2 beats is nil (full from 0.08). The clock then lags and catches up at
+   15 % over the next section.
+5. **Class names** (same dances): `melody-led` = bass-led rule with the "other"
+   stem over 1.5 × the bass's power (motif BASS); `kick-led` = drums over 40 %
+   of the power but under the activity mark (motif PERC, formation as
+   percussive-open). The voice counts by activity only with 15 % of the "other"
+   stem's power beside it. **Not done:** the dance does not yet follow keys or
+   guitar any differently than before; the leader lane already drives surge
+   and swell in every class. The user's "could be followed" is open.
+6. **Abort fixed**: "cannot fit tangents" came from the tangent pass treating
+   a joint change under 0.05° between knots as a hold. The last knot sits at
+   the song's end, milliseconds after the grid's last, so a moving arm looked
+   held, its velocity was zeroed and no fit existed. Now 0.05° per regular
+   knot interval. It needed arms still moving at the last instant (Presence;
+   Five Years on its first, wrong grid). The error message now prints knot
+   times and velocities.
+
+Measured, version 46 → 47:
+
+| | Instant Crush | Five Years | Presence |
+|---|---|---|---|
+| jolts (any arm over 9 m/s²) | 7 → 5 | 5 → 2 | 13 → 15 |
+| kicks (per arm) | 36 → 26 | 25 → 10 | 66 → 76 |
+| top hand speed | 2.30 → 1.49 m/s | 1.26 → 1.22 | 2.60 → 1.73 |
+| peak hand acceleration | 20.0 → 19.1 m/s² | 22.7 → 10.4 | 21.7 → 21.4 |
+| closest implement gap | 11.2 → 13.0 cm | 14.1 → 17.5 | 13.2 → 12.9 |
+
+The user's moments (hand speed m/s, peak acceleration m/s², top base turn °/s):
+- Instant Crush 3:50–3:54: top 2.02, 20.0 → 1.2–1.5, 11; 4:07–4:11: top 2.30,
+  17.5 → 0.98, 4.4; 4:34–4:38: top 1.32, 14.3 → 1.04, 6.4.
+- Presence 0:23–0:27 turn 185 → 144, acceleration 8.5 → 4.2; 0:40–0:42 14.7 →
+  6.8; 1:00–1:02 21.7 → 7.8; 1:12–1:15 13.7 → 4.4; 1:32–1:50 mean speed 0.19
+  → 0.46, slow share 20 % → 6 %; 2:02–2:06 acceleration 6.2 → 2.9 (still
+  0.93 m/s mean: fast arcs); 2:22–2:26 top 1.73 → 0.65 (acceleration still 11);
+  2:31–2:55 mean 0.30 → 0.39, slow share 16 % → 6 %; 3:04–3:08 slow share 27 %
+  → 0; 3:15–3:20 mean 0.62 → 0.35, top 1.22 → 0.81; 4:24–4:29 top 1.68, 19.9,
+  turn 188 → 0.51, 1.7, 106.
+- Drops: hand height at 1:32 and 3:52 reaches 0.70 m (the top of the reach),
+  2:31 0.67 m. Instant Crush's chorus entries 0.61 → 0.66 m.
+
+Still jolting: Presence 0:48 (a flourish passed round as a ripple in the
+mirrored intro, 1.73 m/s), 1:56, 3:11 (flourishes passed round), and one
+four-arm event near 3:43 on Instant Crush (19 m/s², inter-arm braking). The
+jolt count moves by several with any change of heading: arms in unison brake
+for each other at geometry-dependent moments, and no change here addressed
+that mechanism.
+
+Presence classes now: kick-led 0:00–1:10 (Mirrored), textural to 1:32,
+melody-led and bass-led alternating 1:32–2:16 and 2:31–3:15 (the bass's share
+crosses the 1.5 mark; same dance), textural breaks, a 4 s vocal-led at 3:26
+(share 0.09 beside a lone synth: passes the 15 % test), kick-led 3:30–3:49,
+melody-led and bass-led to 4:23.
+
+Files: `hexagon-47.html`, `hexagon-47-full.mp4`, `five-years-hexagon(.html,
+-full.mp4)`, `presence-hexagon(.html, -full.mp4)`. New scratch: `jolts.py`,
+`spans.py`, `lv.py`. 139 CPU tests, clippy, fmt. Not reviewed.
+
+
+### B workspace, round 1 — 2026-10-12
+
+Round 1 of `docs/B_WORKSPACE.md` is built and measured. Mode `Off` is still the
+default and reproduces version 47 byte for byte. Nothing here is judged by eye:
+**Not verified on any song by eye.** Version 47 itself still has no verdict.
+
+#### What each commit did
+
+| Commit | What |
+|---|---|
+| `6c1caa8` | Golden digests of `compile_ensemble` before any workspace code (the `Off` ablation baseline). |
+| `f2075d7` | `Foresight`: arrivals, repeats, cuts and phrase ends lifted out of the moments code into `workspace.rs`. Golden unchanged. |
+| `b38916f` | The workspace itself, not wired: beat observations, levels L1/L2/L4 (leaky mean and variance), L3 (phrase rhythm against the best earlier phrase), surprise, the five-field `Field`, basins, `run()`. 9 tests. |
+| `7a06695` | Approach from the lift; timescales from the song's own phrase gap; build start and afterglow length per lift. 4 tests. |
+| `310c758` | Wired into figure size, figure clock, moments, voice height, contrast phrase and accents (Ripple/Canon) and the Unison basins. The four ensemble tests now run in all three modes. 5 tests added, 2 replaced. |
+| `e6949d0` | This step's code: `EnsembleScore.workspace` debug lane (`FieldSample` per beat; absent in `Off`; old score JSON loads), `ensemble_preview --workspace off|rehearsed|schematic`, stderr summary. `compile_ensemble_with_workspace` returns the `Workspace` beside the score so the example can print basins (the score lane has no basin list). 1 test. |
+
+Tests: 156 green before this step (CPU workspace, `hyst-render` excluded), 157
+after. Clippy, fmt, `ensemble.cjs` and the 15 Python tests green before and after.
+The three `Off` exports are byte-identical to `hexagon-47.html`,
+`five-years-hexagon.html` and `presence-hexagon.html`.
+
+#### Constants and where each came from
+
+Spec = `docs/B_WORKSPACE.md` gave the value. The rest are mine and unjudged.
+
+| Constant | Value | Origin |
+|---|---|---|
+| Gain attack / afterglow decay | 0.5 beats / per lift | attack: spec. Decay: spec said a fixed 16; `7a06695` replaced it with the lift's own loud stretch. |
+| Tension release | 1 beat | spec |
+| Precision recovery / approach decay / habituation decay | 8 / 8 / 64 beats | spec |
+| Gain from surprise, payoff, novelty and recognition kicks | 0.6·s, 0.5+0.5·T, 0.3·s, 0.2 | spec |
+| Level weights L1, L2, L3, L4 | 0.5, 0.3, 0.3, 0.2 | spec said "fixed constants" and gave none; `b38916f` chose them |
+| `Z_KNEE`, `Z_SPAN` | 1.5, 4.0 | `b38916f`. Not in spec. A steady loop has a z-score near 1, so raw z cannot be an error; below the knee is no error, knee + span is full error. |
+| `VAR_FLOOR` | 0.0025 (sd 0.05) | `b38916f`. Not in spec. A flat signal would make the first wiggle an infinite z. |
+| `PEAK_DECAY` | 256 beats | `b38916f`. Not in spec. The running peak that stands in for `intensity(t)` (see below). |
+| L3 spread time constant | 2 phrases | `b38916f`. Not in spec. |
+| Leader dimensions in the observation | lane/8, brightness/128 | `b38916f`. Scaling not in spec. |
+| Timescales L1, L2, L4 | phrase/4, phrase, 4·phrase | spec said 4, 16, 64 beats; `7a06695` derives them from the song's median phrase gap |
+| Measured sign (Schematic only) | level now vs mean of last 8 beats: >1.1 up, <0.9 down, none if before <0.15·peak | `b38916f`/`7a06695`. Not in spec. |
+| Figure size | ×(0.85+0.3·g)×(1−0.25·T), then min 1.0 | factors: spec. The cap at 1.0: `310c758`. |
+| Figure clock | ×(1−0.35·T); floor 1.0 while `since_lift` < afterglow, else 0.65 | spec |
+| Moment strength and hold | ×(0.7+0.6·T one beat before it); strength capped at 1.0 | factor: spec. The cap at 1.0: `310c758`, because strength is a 0..1 blend. |
+| Moment preparation | `lead` = max(2·span, T one beat before × beats since build start) | spec idea; formula is `310c758`'s |
+| Voice lift | +0.15·a, where a is the lift's sign smoothed over 4 beats (k = 1−e^−0.25) | factor: spec. The 4-beat smoothing: `310c758`, because a step in the lift carried the hand 0.2 to 0.5 m/s past the speed cap. |
+| Contrast phrase | after 128·(1−0.4·h) beats | spec |
+
+#### What the spec did not settle
+
+- **Gain loudness is causal.** `intensity(t)` looks ahead and behind. Gain uses
+  the beat's level against a running peak that decays over 256 beats.
+- **Timescales from the median phrase gap.** A bar is phrase/4. That is a guess:
+  the sidecar has no downbeats.
+- **Build start** is the quietest bar within 2 phrases before a lift (the
+  earliest on a tie). A build longer than that starts its held breath late.
+- **Afterglow** is the loud stretch after a lift (bars until a bar falls under
+  half the first), clamped to [bar, 4 phrases].
+- **Approach** is the lift's sign (up +1, falling away −1, entry 0). In
+  Schematic it is the measured sign when a surprise crosses 0.5.
+
+#### Measured (release builds, `--ring 6,0.8`)
+
+Guardrails from "Acceptance". Jolts = moments any arm passes 9 m/s². Gap =
+closest implement gap.
+
+| Song · mode | Jolts (limit) | Top hand speed (≤ 1.73) | Gap (≥ 10 cm) | Shown? |
+|---|---|---|---|---|
+| Instant Crush · off (v47) | 5 (≤ 8) | 1.49 | 13.0 | baseline |
+| Instant Crush · rehearsed | **9** (≤ 8) | **2.24** | 10.3 | **not shown** |
+| Instant Crush · schematic | 7 | 1.64 | 12.8 | ok |
+| Five Years · off (v47) | 2 (≤ 5) | 1.22 | 17.5 | baseline |
+| Five Years · rehearsed | **7** (≤ 5) | 1.17 | 12.4 | **not shown** |
+| Five Years · schematic | 2 | 1.59 | 13.0 | ok |
+| Presence · off (v47) | 15 (≤ 18) | 1.73 | 12.9 | baseline |
+| Presence · rehearsed | 16 | **2.06** | 12.2 | **not shown** |
+| Presence · schematic | 17 | **1.78** | 12.8 | **not shown** |
+
+`Rehearsed`, the mode that has to win, breaks a guardrail on all three songs.
+By the rule in "Acceptance" it goes to the tuning round, not to the user.
+`Schematic` breaks one (Presence top speed, 1.78 against 1.73).
+
+Jolts in a mode that are more than 0.5 s from every `Off` jolt (Five Years times
+are video clock). "No moment" means the jolt is inside a plain move.
+
+- Instant Crush, rehearsed: 8 new
+  - 0:15.4 · 6 arms · 10.5 m/s² · move eight (percussive-open) · flourish moment at 12.60s
+  - 1:34.8 · 6 arms · 10.4 m/s² · move rise (interlocked) · no moment
+  - 1:57.0 · 6 arms · 17.4 m/s² · move gather (interlocked) · no moment
+  - 2:03.0 · 6 arms · 12.8 m/s² · move reach (vocal-led) · no moment
+  - 3:45.7 · 5 arms · 21.5 m/s² · move circle (interlocked) · flourish moment at 221.35s
+  - 4:08.8 · 6 arms · 15.5 m/s² · move gather (interlocked) · flourish moment at 249.05s
+  - 4:18.0 · 2 arms · 9.0 m/s² · move gather (interlocked) · no moment
+  - 4:57.6 · 6 arms · 27.1 m/s² · move arc (bass-led) · no moment
+- Instant Crush, schematic: 7 new
+  - 0:15.4 · 6 arms · 10.5 m/s² · move eight (percussive-open) · flourish moment at 12.60s
+  - 1:42.3 · 6 arms · 24.6 m/s² · move circle (interlocked) · no moment
+  - 2:15.6 · 4 arms · 10.2 m/s² · move reach (vocal-led) · arrival moment at 134.25s
+  - 3:42.9 · 2 arms · 13.9 m/s² · move circle (interlocked) · flourish moment at 221.35s
+  - 4:08.8 · 4 arms · 20.2 m/s² · move circle (interlocked) · flourish moment at 249.05s
+  - 4:46.3 · 1 arms · 9.6 m/s² · move rise (interlocked) · no moment
+  - 4:55.3 · 6 arms · 21.7 m/s² · move gather (interlocked) · no moment
+- Five Years, rehearsed: 7 new
+  - 2:30.9 · 6 arms · 9.7 m/s² · move reach (vocal-led) · arrival moment at 149.60s
+  - 2:57.0 · 6 arms · 10.9 m/s² · move open (interlocked) · no moment
+  - 3:33.6 · 6 arms · 10.2 m/s² · move gather (interlocked) · arrival moment at 213.00s
+  - 3:43.5 · 6 arms · 27.1 m/s² · move circle (interlocked) · no moment
+  - 3:50.6 · 6 arms · 10.2 m/s² · move open (interlocked) · no moment
+  - 3:52.0 · 6 arms · 10.6 m/s² · move circle (interlocked) · arrival moment at 236.10s
+  - 3:59.0 · 6 arms · 11.0 m/s² · move arc (interlocked) · no moment
+- Five Years, schematic: 2 new
+  - 2:44.4 · 6 arms · 19.0 m/s² · move circle (interlocked) · flourish moment at 162.20s
+  - 4:17.3 · 3 arms · 9.3 m/s² · move gather (interlocked) · no moment
+- Presence, rehearsed: 12 new
+  - 0:14.2 · 1 arms · 9.9 m/s² · move sway (kick-led) · no moment
+  - 0:40.6 · 6 arms · 18.2 m/s² · move eight (kick-led) · no moment
+  - 0:46.8 · 2 arms · 10.1 m/s² · move eight (kick-led) · no moment
+  - 0:49.0 · 1 arms · 9.6 m/s² · move sway (kick-led) · flourish moment at 48.05s, passed round as Ripple
+  - 1:57.2 · 1 arms · 11.1 m/s² · move rise (melody-led) · flourish moment at 117.05s, passed round as Canon
+  - 2:18.1 · 2 arms · 11.8 m/s² · move sway (textural) · arrival moment at 136.57s, passed round as Canon
+  - 2:55.8 · 4 arms · 12.1 m/s² · move rise (melody-led) · passed round as Ripple
+  - 2:57.1 · 2 arms · 9.9 m/s² · move rise (melody-led) · passed round as Ripple
+  - 3:16.9 · 1 arms · 14.1 m/s² · move sway (textural) · arrival moment at 195.77s, passed round as Canon
+  - 3:21.8 · 1 arms · 15.2 m/s² · move sway (textural) · arrival moment at 195.77s, passed round as Canon
+  - 3:29.5 · 4 arms · 9.5 m/s² · move reach (vocal-led) · passed round as Canon
+  - 4:12.9 · 6 arms · 29.5 m/s² · move arc (melody-led) · no moment
+- Presence, schematic: 10 new
+  - 0:28.2 · 3 arms · 10.9 m/s² · move sway (kick-led) · no moment
+  - 0:54.0 · 6 arms · 10.6 m/s² · move eight (kick-led) · no moment
+  - 1:00.9 · 1 arms · 9.1 m/s² · move reach (kick-led) · flourish moment at 60.95s
+  - 1:20.7 · 1 arms · 10.8 m/s² · move sway (textural) · passed round as Canon
+  - 1:24.3 · 1 arms · 10.9 m/s² · move sway (textural) · passed round as Canon
+  - 1:55.8 · 1 arms · 10.1 m/s² · move rise (melody-led) · flourish moment at 117.05s, passed round as Canon
+  - 1:57.2 · 2 arms · 10.5 m/s² · move rise (melody-led) · flourish moment at 117.05s, passed round as Canon
+  - 2:18.0 · 2 arms · 15.1 m/s² · move sway (textural) · arrival moment at 136.57s, passed round as Canon
+  - 3:16.3 · 2 arms · 20.0 m/s² · move sway (textural) · arrival moment at 195.77s, passed round as Canon
+  - 4:16.5 · 6 arms · 15.6 m/s² · move arc (melody-led) · no moment
+
+Per the "Acceptance" rule, a jolt that also exists in `Off` belongs to the
+braking problem. These do not exist in `Off`. The list shows additions only;
+it does not show `Off` jolts that a mode removed.
+
+#### Presence 1:15–1:50, the build into the 1:32 drop (Rehearsed)
+
+There is **no held breath**. Tension is 0.00 on every beat from 1:15 to 1:50.
+Its three highest peaks in the whole song are 1:09.8 (0.92), 2:53.2 (0.92) and 3:52.2
+(0.94). Gain is already near its 1.5 clamp: the lift at 1:10.2 (gain 1.50) left a
+64-beat afterglow, so gain only decays from 1.38 at 1:15.8 to 1.20 at 1:30.5, and
+the lift at 1:32.4 pushes it from 1.20 to 1.50, a rise of 0.30 where the payoff
+rule asked for 0.5. Basins in the window: novelty 1:28.7 (0.95); lift 0.60 and
+novelty 0.95 together at 1:32.4; Schematic (no foresight) has novelty basins at
+1:36.1, 1:43.5 and 1:50.8 and no lift. Surprise 0.74 at 1:32.4 (the second
+largest in the song; the largest, 0.89, is at 3:24.5), so the drop does break
+the groove. Why the 1:32 build has no tension is not diagnosed. The cause is
+somewhere in the build start or the ramp for that lift; it was not traced.
+
+#### Instant Crush
+
+First Recognition basin: **0:46.2** (similarity 0.95), then 0:50.5 and 0:52.7.
+Recognition basins also fire nine times between 3:25 and 3:50 (every 2.2 s).
+
+#### What is not known
+
+Everything about how it looks. The measurements above are guardrails; they are
+not a verdict. `Off` is unchanged. No video was made.
+
+#### Next steps for the user
+
+1. Rehearsed breaks a guardrail on all three songs, so the rule says tune
+   before showing. Say if you would rather look at it anyway; that is your call
+   and it is outside the fixed acceptance rule.
+2. If you want the blind clips: they are three exports shuffled per clip as
+   A | B | C (left, middle, right), key in a file you leave unread until the
+   verdict. `hexreview.sh` cannot make them (whole song only, hard-coded to
+   Instant Crush's audio, and it reuses a cached `hexrev-all.mp4`), so this
+   script calls the recorder directly (`record-ensemble.cjs`, max 40 s per
+   call, honours `HYST_TEMPO_MAP`). Not run. Save and run with `bash`:
+
+```
+#!/bin/bash
+set -e
+D=/home/stcksmsh/Documents/Codex/2026-09-23-can-you-check-the-programming-github/output/music-arm
+O=$D/b1-blind; mkdir -p $O; : > $O/b1-blind-key.txt
+# name song-tag audio-stem start-seconds length-seconds
+clips=("presence-build pr presence 75 35" "presence-emotional pr presence 151 24" "crush-return ic instant-crush 38.2 32" "years-climb fy five-years 133 27")
+for c in "${clips[@]}"; do
+  read name s audio start secs <<< "$c"
+  perm=$(python3 -c "import random;m=['off','rehearsed','schematic'];random.shuffle(m);print(*m)")
+  echo "$name left-to-right: $perm" >> $O/b1-blind-key.txt
+  i=0
+  for m in $perm; do
+    if [ $s = fy ]; then export HYST_TEMPO_MAP=$D/five-years.tempomap.json; else unset HYST_TEMPO_MAP; fi
+    node $D/record-ensemble.cjs $D/b1-$m-$s.html $D/$audio.m4a $O/$name-$i.mp4 $start $secs > /dev/null
+    i=$((i+1))
+  done
+  ffmpeg -y -v error -i $O/$name-0.mp4 -i $O/$name-1.mp4 -i $O/$name-2.mp4 -ss $start -t $secs -i $D/$audio.m4a \
+    -filter_complex "[0:v]scale=640:-2[a];[1:v]scale=640:-2[b];[2:v]scale=640:-2[c];[a][b][c]hstack=inputs=3[v]" \
+    -map "[v]" -map 3:a -c:v libx264 -crf 28 -pix_fmt yuv420p -c:a aac -shortest $O/$name.mp4
+  rm $O/$name-0.mp4 $O/$name-1.mp4 $O/$name-2.mp4
+done
+echo "clips in $O; do not open b1-blind-key.txt until you have chosen"
+```
+
+3. The four clips (audio clock; the exports are `$D/b1-{off,rehearsed,schematic}-{ic,fy,pr}.html`):
+   "Presence" 1:15–1:50 and 2:31–2:55; "Instant Crush" 8 s before its first
+   Recognition basin to 24 s after (0:38.2–1:10.2); "Five Years" 2:13–2:40.
+4. What to look for: the held breath before 1:32 in Presence (this run shows
+   none, see above), and the arms gathering into one body at the Instant Crush
+   chorus return.
+5. The rule, fixed before any result: `Rehearsed` must beat `Off` in at least 3
+   of the 4 clips. A tie is a loss. `Schematic` cannot win alone. A mode over a
+   guardrail is not shown (all `Rehearsed` exports are over one).
+
+Files in `$D`: `b1-{off,rehearsed,schematic}-{ic,fy,pr}.{html,summary.txt,jolts.txt,look5.txt,gap.txt}`.
+Scratch: `/tmp/b1/` (export, measure and field scripts; not kept).
+
+### B workspace, round 2 — 2026-10-12
+
+The user's round-1 verdicts stand: `Rehearsed` won only Presence 2:31–2:55 (1 of
+4), so the rule sent it to round 2. The user allowed constants plus two
+definition fixes and nothing else. Commit `b20e7f6`. `Off` is still byte-
+identical to version 47 (the three exports compared with `cmp`), golden digests
+unchanged, 159 CPU tests, clippy, fmt, `ensemble.cjs` and the Python tests green.
+**Not verified on any song by eye.**
+
+#### What the user measured on round 1 (Presence, Rehearsed), confirmed
+
+Gain above 1.0 on 93 % of beats (median 1.28), so figure size was ×1.15–1.3
+nearly all the time and clamped at 1.0. Tension built before the 1:10 lift but
+started at 1:31.9 for the 1:32 drop. Instant Crush fired Recognition every 2.2 s
+at 3:25–3:50.
+
+#### Changes
+
+Two definition fixes (`workspace.rs`):
+
+1. **`build_start` skips the last two bars before the arrival** when it looks
+   for the quietest bar (bars 3 to 8 back instead of 1 to 8). Test: a riser from
+   beat 52 to 76, a quiet bar at 76–80, the drop at 80: build start 52, tension
+   starts within 4 beats of it.
+2. **At most one Recognition basin per phrase**: a minimum gap of the phrase
+   length (`taus[1]` beats) between recognitions. It gates the whole basin (the
+   precision reset, habituation, gain kick and the Unison). Test: repeats every
+   4 beats in a 16-beat-phrase song give gaps of at least 16 beats.
+
+Constants:
+
+| Constant | Round 1 | Round 2 | Why |
+|---|---|---|---|
+| `GAIN_STEADY` (new): gain target = this × level/peak | 1 (implicit) | 0.5 | a steady passage sits near 0.5; the spec's surprise term, lifts and recognitions push above |
+| Figure size gain factor, `figures.rs` | 0.85 + 0.3·g | 0.9 + 0.2·g | still ×1.0 at g = 0.5; a smaller swing |
+| Figure clock tension factor | 1 − 0.35·T | 1 − 0.17·T | |
+| Everything else | | unchanged | size ×(1−0.25·T), moment ×(0.7+0.6·T), voice +0.15·a, all `workspace.rs` time constants |
+
+**How the last two were chosen: a search, not a derivation.** With only the gain
+centre and the two fixes (rehearsed: Instant Crush 11 jolts, Five Years 9; both
+over), I swept 48 combinations of the five wiring factors (size gain 0 / 0.1 /
+0.2, size tension 0.12 / 0.25, clock tension 0.17 / 0.35, moment 0.3 / 0.6, voice
+0.075 / 0.15) against the three songs' guardrails. Two passed all nine checks;
+I took the one that moves the fewest constants. The other: size gain 0.1 and
+clock 0.35, which sits at exactly 18 jolts on Presence. Jolt counts move by
+several with any change (the known braking mechanism), so the margin is thin:
+Five Years sits at its limit of 5. These constants are tuned against these three
+songs and the guardrail numbers, not against how it looks.
+
+#### Gain distribution (Rehearsed, per beat)
+
+| Song | Median | p10 | p90 | Share above 1 |
+|---|---|---|---|---|
+| Instant Crush before → after | 1.23 → 0.98 | 0.99 → 0.61 | 1.47 → 1.38 | 88 % → 48 % |
+| Five Years before → after | 1.33 → 1.22 | 0.93 → 0.56 | 1.47 → 1.45 | 86 % → 76 % |
+| Presence before → after | 1.28 → 1.02 | 1.03 → 0.73 | 1.47 → 1.36 | 93 % → 54 % |
+
+Steady passages now sit near 0.6 (p10). The medians stay near or above 1 because
+a lift's afterglow keeps gain above 1 for 40 or more beats (decay 16 to 64 beats
+from 1.5) and these songs lift often; Five Years stays loud for minutes. Not
+reduced further: the afterglow clamp is a definition, not a constant.
+
+#### Guardrails, Rehearsed now passes on all three songs
+
+| Song · mode | Jolts (limit) | Top hand speed (≤ 1.73) | Gap (≥ 10 cm) |
+|---|---|---|---|
+| Instant Crush · off (v47) | 5 (≤ 8) | 1.49 | 13.0 |
+| Instant Crush · rehearsed | 7 | 1.56 | 13.7 |
+| Instant Crush · schematic | 4 | 1.56 | 15.1 |
+| Five Years · off (v47) | 2 (≤ 5) | 1.22 | 17.5 |
+| Five Years · rehearsed | 5 | 1.26 | 15.5 |
+| Five Years · schematic | 2 | 1.28 | 16.9 |
+| Presence · off (v47) | 15 (≤ 18) | 1.73 | 12.9 |
+| Presence · rehearsed | 17 | 1.57 | 12.8 |
+| Presence · schematic | 15 | 1.55 | 11.5 |
+
+New jolts (more than 0.5 s from every `Off` jolt; Five Years in video clock):
+
+- Instant Crush, rehearsed: 6 new
+  - 1:57.2 · 1 arms · 12.4 m/s² · move gather (interlocked) · no moment
+  - 4:08.8 · 4 arms · 20.7 m/s² · move circle (interlocked) · flourish moment at 249.05s
+  - 4:47.4 · 6 arms · 10.6 m/s² · move open (interlocked) · no moment
+  - 4:56.7 · 5 arms · 18.2 m/s² · move gather (interlocked) · no moment
+  - 5:09.1 · 1 arms · 9.3 m/s² · move gather (bass-led) · no moment
+  - 5:10.7 · 1 arms · 10.7 m/s² · move rise (bass-led) · flourish moment at 312.75s, passed round as Canon
+- Instant Crush, schematic: 4 new
+  - 1:42.3 · 3 arms · 15.1 m/s² · move circle (interlocked) · no moment
+  - 2:15.6 · 4 arms · 11.5 m/s² · move reach (vocal-led) · arrival moment at 134.25s
+  - 3:34.5 · 6 arms · 15.2 m/s² · move gather (interlocked) · arrival moment at 212.65s
+  - 3:59.6 · 5 arms · 12.0 m/s² · move gather (interlocked) · flourish moment at 240.30s
+- Five Years, rehearsed: 5 new
+  - 2:54.7 · 6 arms · 9.7 m/s² · move rise (interlocked) · no moment
+  - 3:31.9 · 2 arms · 9.2 m/s² · move gather (interlocked) · arrival moment at 213.00s
+  - 3:50.6 · 6 arms · 11.1 m/s² · move open (interlocked) · no moment
+  - 4:02.5 · 6 arms · 9.4 m/s² · move arc (interlocked) · no moment
+  - 4:43.7 · 3 arms · 12.9 m/s² · move still (silence) · passed round as Ripple
+- Five Years, schematic: 2 new
+  - 3:10.9 · 6 arms · 9.7 m/s² · move circle (interlocked) · arrival moment at 189.80s
+  - 3:38.0 · 2 arms · 9.1 m/s² · move circle (interlocked) · no moment
+- Presence, rehearsed: 9 new
+  - 0:40.7 · 6 arms · 12.8 m/s² · move sway (kick-led) · flourish moment at 40.65s
+  - 1:11.5 · 6 arms · 12.1 m/s² · move sway (textural) · arrival moment at 70.35s, flourish moment at 77.35s, passed round as Ripple
+  - 1:57.6 · 2 arms · 10.7 m/s² · move rise (melody-led) · flourish moment at 117.05s, passed round as Canon
+  - 3:13.0 · 1 arms · 11.3 m/s² · move arc (melody-led) · no moment
+  - 3:16.4 · 3 arms · 19.0 m/s² · move sway (textural) · arrival moment at 195.77s, passed round as Canon
+  - 3:19.8 · 2 arms · 11.7 m/s² · move sway (textural) · arrival moment at 195.77s, passed round as Canon
+  - 3:29.9 · 3 arms · 10.7 m/s² · move reach (vocal-led) · passed round as Canon
+  - 3:40.9 · 4 arms · 11.6 m/s² · move eight (kick-led) · flourish moment at 220.45s, passed round as Canon
+  - 4:13.6 · 4 arms · 10.2 m/s² · move arc (melody-led) · no moment
+- Presence, schematic: 9 new
+  - 1:20.2 · 1 arms · 10.5 m/s² · move sway (textural) · passed round as Canon
+  - 1:24.3 · 1 arms · 13.5 m/s² · move sway (textural) · passed round as Canon
+  - 1:57.2 · 3 arms · 10.5 m/s² · move rise (melody-led) · flourish moment at 117.05s, passed round as Canon
+  - 2:19.4 · 3 arms · 11.5 m/s² · move sway (textural) · arrival moment at 136.57s, passed round as Canon
+  - 2:59.8 · 6 arms · 10.7 m/s² · move arc (melody-led) · no moment
+  - 3:14.3 · 1 arms · 11.6 m/s² · move arc (melody-led) · no moment
+  - 3:16.1 · 2 arms · 17.9 m/s² · move sway (textural) · arrival moment at 195.77s, passed round as Canon
+  - 3:19.5 · 1 arms · 12.2 m/s² · move sway (textural) · arrival moment at 195.77s, passed round as Canon
+  - 3:21.6 · 1 arms · 9.3 m/s² · move sway (textural) · arrival moment at 195.77s, passed round as Canon
+
+#### Presence 1:15–1:50 and Instant Crush, Rehearsed
+
+- Tension now starts at 1:23.6, not 1:31.9: 0.12 at 1:24.5, 0.42 at 1:27.3, 0.72
+  at 1:30.1, 0.87 at 1:31.5, then 0 at the 1:32.4 lift. Gain falls from 1.19 to
+  0.97 over the build, then jumps to 1.48 at the drop and decays to 1.01 by 1:50.8.
+  Surprise at the drop is 0.74 as before.
+- Presence has 6 Recognition basins (12 before); Instant Crush has 4 (12 before).
+  Instant Crush's first is still 0:46.2; at 3:25–3:50 they are 3:25.5, 3:36.4
+  and 3:47.3, one per phrase.
+
+#### The blind test, round 2
+
+Same four clips as round 1, fresh shuffle, key in
+`$D/b1-blind-r2/b1-blind-key.txt`, which I did not open. Clips:
+`presence-build.mp4`, `presence-emotional.mp4`, `crush-return.mp4`,
+`years-climb.mp4` in `$D/b1-blind-r2/`, left to right A, B, C. The round-1 clips
+and key stay in `$D/b1-blind/`. Same rule: `Rehearsed` must beat `Off` in at
+least 3 of 4, a tie is a loss, `Schematic` cannot win alone. A loss here is
+"Remove": delete `workspace.rs` and its wiring (`Foresight` stays only if the
+moments code reads cleaner with it). There is no round 3.
+
+To remake them: `/tmp/b1/blind2.sh` is the round-1 script with the output
+directory changed to `b1-blind-r2`; the script text is in the round-1 entry.
+
+### Emotion stage 1: encoder — 2026-10-12
+
+Spec: `docs/EMOTION.md`. No planner behaviour changed (version 47 and the `Off`
+golden digests untouched). All code is in `scripts/emotion/`; data, caches and
+models are outside git. **The final check 1 uses the stems baseline** (Demucs on all
+2,144 clips); an earlier run against mix-only features came first and is kept below
+for comparison. **Not judged by ear or eye; the report page is for you to read and
+mark wrong.**
+
+#### Datasets and licences (`/secondary/hyst-data/emotion/SOURCES.md` has URLs, hashes, text)
+
+| Data | Used | Licence |
+|---|---|---|
+| DEAM, 2013/2014 label release, songs 1..2000 (1,744 clips; the 58 full songs of the 2015 release are left out so one release is used) | timing | manual §3: Non-Commercial Creative Commons (BY-NC), non-profit work |
+| Emotify, 400 one-minute clips, 8,407 rater rows | feelings | no licence stated; "cite the paper" |
+| PMEmo | **not used** | data licence unstated (the repo's MIT covers code), audio only on Google Drive |
+
+Emotify track ids 1..400 are assumed to run classical, rock, electronic, pop
+with file `n` in each genre folder numbered 1..100. The package does not say so.
+Models: MERT-v1-95M (cc-by-nc-4.0), `laion/larger_clap_music` (apache-2.0),
+Essentia Discogs-EffNet and the mtg_jamendo_moodtheme head (CC BY-NC-SA 4.0). The
+DEAM- and emoMusic-trained Essentia heads were not used: they were trained on the
+labels this check scores. All of these are non-commercial: check before exhibition.
+
+#### Candidates
+
+Windows 4 s, step 0.5 s, cached as `.npy` with a manifest per candidate.
+- Baseline: the sidecar's mix signals (energy, five bands, centroid, flatness, flux,
+  onset density, periodicity: mean, std, max over the window; 29 numbers) from audio
+  with the sidecar's constants, plus the stems (Demucs htdemucs 4.1.0, per-stem level,
+  flux, power share, leader: 20 more, 49 in all). The stems baseline is **the** baseline;
+  the 29-number mix-only version is the earlier reference.
+- B expectation signals: **not computed.** They need beat grids, phrase memory and
+  Foresight events; a 45 s clip has none worth the name. Said here, not faked.
+- MERT-v1-95M: run over the whole clip, hidden states pooled per window. All 13 layers
+  kept; "average" = mean of layers, "best" = layer chosen by inner CV on training songs.
+- CLAP: `larger_clap_music`, 4 s windows hop 2 s (a 0.5 s hop would have taken about 8 h).
+- Essentia: Discogs-EffNet embedding (1,280) and the mood/theme head (56).
+- Combined: baseline + each model, and baseline + all.
+
+#### Final check 1: stems baseline (rules as written in `check1.py`, committed before any result)
+
+Same folds, seeds, rows and rules as the earlier run below. Output: `/secondary/hyst-data/emotion/check1_stems/`.
+
+| candidate | dims | timing R² | rank corr ρ | NN agreement | geometry | gates timing/ρ/NN | result |
+|---|---|---|---|---|---|---|---|
+| baseline (stems + mix) | 49 | 0.449 [0.423, 0.473] | 0.524 [0.490, 0.558] | 0.215 [0.175, 0.255] | 1.082 [1.035, 1.143] | – | reference |
+| mert_avg | 768 | 0.603 [0.582, 0.622] | 0.597 [0.569, 0.626] | 0.260 [0.217, 0.302] | 1.041 [1.025, 1.061] | y/y/n | fail |
+| mert_best | 768 | 0.605 [0.584, 0.622] | 0.616 [0.588, 0.644] | 0.273 [0.230, 0.318] | 1.050 [1.032, 1.072] | y/y/n | fail |
+| clap | 512 | 0.229 [0.206, 0.251] | 0.366 [0.329, 0.400] | 0.177 [0.140, 0.215] | 1.065 [1.028, 1.115] | n/n/n | fail |
+| essentia | 1,336 | 0.531 [0.508, 0.550] | 0.614 [0.586, 0.641] | 0.295 [0.253, 0.340] | 1.042 [1.028, 1.060] | y/y/n | fail |
+| baseline+mert_avg | 817 | 0.610 [0.590, 0.629] | 0.596 [0.568, 0.626] | 0.260 [0.217, 0.303] | 1.044 [1.026, 1.065] | y/y/n | fail |
+| baseline+clap | 561 | 0.454 [0.429, 0.477] | 0.467 [0.430, 0.503] | 0.215 [0.175, 0.255] | 1.067 [1.031, 1.114] | n/n/n | fail |
+| baseline+essentia | 1,385 | 0.559 [0.537, 0.578] | 0.616 [0.588, 0.643] | 0.295 [0.253, 0.340] | 1.043 [1.029, 1.062] | y/y/n | fail |
+| baseline+all | 2,665 | 0.617 [0.596, 0.635] | 0.616 [0.588, 0.643] | 0.318 [0.273, 0.362] | 1.043 [1.027, 1.063] | y/y/y | **pass, pick** |
+
+**Pick: baseline+all** (stems + mix baseline, MERT average, CLAP, Essentia embedding,
+Essentia mood). It is the only passer. Against the stems baseline, Essentia and
+baseline+Essentia no longer pass: their NN-agreement intervals now overlap the
+baseline's (0.253 vs 0.255). Valence R² 0.54 / arousal 0.70 for the pick (baseline 0.33 / 0.57).
+Within-song R² is still negative for every candidate (baseline -1.37, pick -0.96).
+Everything said under "What the numbers do and do not say" below still holds.
+
+#### Earlier run: mix-only baseline (rules as written in `check1.py`, committed before any result)
+
+Seeds: folds 20261012, bootstrap 20261013 (2,000 resamples over songs), inner CV
+20261014. Five folds by song, same folds for every candidate (Emotify balanced by genre).
+Ridge penalty by inner 3-fold on training songs only. Scored on the same rows: 4 s
+windows on a 2 s grid (DEAM labels at 15, 17, … s: 26,155 rows from 1,744 songs;
+Emotify clip means). Intervals are 95 % bootstrap over songs.
+
+| candidate | dims | timing R² | rank corr ρ | NN agreement | geometry | gates timing/ρ/NN | result |
+|---|---|---|---|---|---|---|---|
+| baseline (mix only) | 29 | 0.426 [0.402, 0.449] | 0.509 [0.474, 0.543] | 0.190 [0.152, 0.230] | 1.082 [1.031, 1.151] | – | reference |
+| mert_avg | 768 | 0.603 [0.582, 0.622] | 0.597 [0.569, 0.626] | 0.260 [0.217, 0.302] | 1.041 [1.025, 1.061] | y/y/n | fail |
+| mert_best | 768 | 0.605 [0.584, 0.622] | 0.616 [0.588, 0.644] | 0.273 [0.230, 0.318] | 1.050 [1.032, 1.072] | y/y/n | fail |
+| clap | 512 | 0.229 [0.206, 0.251] | 0.366 [0.329, 0.400] | 0.177 [0.140, 0.215] | 1.065 [1.028, 1.115] | n/n/n | fail |
+| essentia | 1,336 | 0.531 [0.508, 0.550] | 0.614 [0.586, 0.641] | 0.295 [0.253, 0.340] | 1.042 [1.028, 1.060] | y/y/y | **pass** |
+| baseline+mert_avg | 797 | 0.609 [0.589, 0.628] | 0.595 [0.566, 0.625] | 0.255 [0.212, 0.300] | 1.043 [1.026, 1.064] | y/y/n | fail |
+| baseline+clap | 541 | 0.432 [0.407, 0.456] | 0.430 [0.393, 0.464] | 0.193 [0.155, 0.230] | 1.066 [1.030, 1.114] | n/n/n | fail |
+| baseline+essentia | 1,365 | 0.553 [0.530, 0.572] | 0.612 [0.584, 0.639] | 0.295 [0.253, 0.340] | 1.043 [1.028, 1.061] | y/y/y | **pass** |
+| baseline+all | 2,645 | 0.614 [0.593, 0.632] | 0.614 [0.586, 0.641] | 0.310 [0.265, 0.355] | 1.043 [1.027, 1.062] | y/y/y | **pass, pick** |
+
+**Pick: baseline+all** (mix baseline + MERT average + CLAP + Essentia embedding + Essentia
+mood), best mean rank among the three passers (mean ranks 1.50, baseline+essentia 1.92,
+essentia 2.58; the three differ by under 0.002 on geometry and by 0.003 on ρ).
+Pass rule: beats the baseline's point value on timing, rank correlation and nearest-
+neighbour agreement, each with an interval that does not overlap the baseline's;
+geometry is ranked, not a gate. Pick = best mean rank over timing, feelings (mean of
+ρ rank and agreement rank) and geometry among passers.
+
+What the numbers do and do not say:
+- **Within-song timing is not captured.** The diagnostic R² with song means removed
+  is negative for every candidate (baseline -1.31, MERT -0.37…-0.41, Essentia -1.90,
+  baseline+all -0.96). The pooled timing score is mostly between-song mood.
+  The spec's measure is the pooled one and that is what gates. Nothing here shows the
+  encoding follows change inside a song.
+- **Geometry is weak** for everything (1.04–1.08), and the baseline is highest.
+- MERT misses only on nearest-neighbour agreement; its interval touches the baseline's.
+- CLAP (music checkpoint, 4 s windows padded to its 10 s input) is below the baseline.
+- Rank correlation includes the common mode (every clip has high tenderness and
+  low tension); the centred variant is in `results.json` and the table: baseline
+  0.46, baseline+all 0.59.
+- DEAM valence is the weaker label (its manual says so): R² 0.31 vs arousal 0.54 for
+  the baseline, 0.53 vs 0.69 for baseline+all.
+
+#### Deviations from the spec, and why
+
+1. **Stems baseline took a long run.** Demucs on 2,144 clips was ~13-20 s per clip here
+   (8.5 s in a quiet machine; three parallel shards were slower, not faster), roughly
+   11 h with interruptions. I first ran check 1 against the mix-only baseline (the table
+   below), then reran when stems finished (the table above, which is final). Demucs is
+   4.1.0, the songs' own stems were made with 4.0.1 (same htdemucs weights).
+2. **Evaluation grid 2 s**, not 0.5 s, for every candidate (CLAP cost). Caches for the
+   other candidates are at 0.5 s.
+3. B expectation signals not computed (above).
+4. MERT is pooled from whole-clip hidden states, not run per window: windows see context.
+5. Nearest-neighbour is among the other held-out clips of the same fold (pools of 80);
+   cosine distance on training-standardised vectors. The spec said "closest held-out
+   neighbour"; the pool choice is mine. NN bootstrap resamples clips, not pools.
+6. DEAM: 2013/2014 labels only, chosen to use one release.
+
+#### Output and report
+
+- `scripts/emotion/encode.py IN AUDIO OUT --components …` writes a new sidecar with
+  `emotionEncoding` (`model`, `version`, `dims`, `hopSeconds`, `windowSeconds`,
+  per-step `steps`, per-beat `perBeat`, `components`, `provenance`). Refuses to
+  overwrite the input, refuses audio more than 100 ms off the sidecar duration.
+- Run on the three danced songs, outputs next to the inputs, with the final pick's components:
+  `instant-crush.emotion.sidecar.json` (680 steps), `five-years-steady.emotion.sidecar.json` (568),
+  `presence.emotion.sidecar.json` (542), 2,665 dims each, 62–77 MB each. The songs' stems are
+  the existing Demucs outputs. Five Years uses its steady-grid analysis WAV, as the sidecar does.
+- Report: `$D/emotion-report.html` (D = music-arm directory): the check-1 table, and for
+  each song every 10 s the predicted GEMS profile and the nearest 3 Emotify and 3 DEAM clips.
+  **I have not read it for sense.** Library clips are 45–60 s means; a 10 s query is noisier.
+
+#### Cost
+
+Run times (this machine, 20 threads): mix features under 15 min; Essentia 1.2 s/clip (~45 min);
+MERT 4.5 s/clip (~2.7 h); CLAP 3.3–4.6 s/clip (~2.2 h incl. a restart); Demucs 13 s/clip;
+check 1 for all nine candidates ~6 min (~4 min in the final run). Disk: data and caches 7.8 GB, env 2.1 GB, HF cache
+1.6 GB, uv cache 2.2 GB (~14 GB of the 30 GB; encoded sidecars 195 MB outside the repo).
+
+#### Tests and checks
+
+`scripts/emotion/test_*.py`: 19 tests. Splits never share a song; ridge recovers a known
+linear signal and scores noise near zero; the inner choice does not see the test fold
+(wrecked test labels change nothing); layer selection finds the informative layer; pass
+rule needs clear intervals; `encode.py` leaves the input byte-identical and adds only
+`emotionEncoding`. Run: `cd scripts/emotion && /secondary/hyst-env/emotion/bin/python -m unittest`.
+The five repository checks passed before the first edit and again after the last.
+
+#### To rerun
+
+Caches are complete, so: `python extract.py baseline && python check1.py` (stems baseline is the
+default; `--baseline mix` for the mix-only one), then `encode.py` / `report.py` with the pick's
+components (`/secondary/hyst-env/encode_songs.sh`, `make_report.sh`). A pick containing
+`baseline_stems` needs `--stems-dir` for each song.
+Nothing here says the arm will look emotional: stage 4 is the only test of that.
+
+### B workspace parked — verdict of 2026-10-12 (written 2026-10-13)
+
+Round 2's blind test did not separate the modes: the user could not tell
+`Off`, `Rehearsed` and `Schematic` apart ("all 3 are mostly good"). Under the
+round-2 rule a tie is a loss, but the user chose to **park** B rather than
+delete it: `workspace.rs` and its wiring stay in the tree, `Off` stays the
+default and still reproduces version 47 byte for byte.
+
+Measured cause, from the user's own look at the exports (Presence, Rehearsed):
+
+- **The hand shell caps elevation at 79°.** Presence's median hand elevation
+  is 49°, and the hand sits pinned at the lid 8–10 % of the time. Every "rise"
+  B asks for (lift, gain, voice) saturates against that lid, so the fields
+  move little that can be seen. Stage 2 of `docs/EMOTION.md` (open shell)
+  removes the lid.
+- **The held breath reads as low energy.** Tension shrinks figures and slows
+  the figure clock before a drop; on screen that is a smaller, slower dance,
+  not suspense.
+
+B is not part of the emotion pipeline. Its expectation signals were not
+computed for check 1 (no beat grids or phrase memory on 45 s clips). Revisit
+only if a later stage needs expectation as an input.
+
+### Body study, step 1: generator and 2a sweep (stop 1) — 2026-10-13
+
+Rules: `docs/BODY_STUDY.md`, unchanged. Code: `crates/hyst-compile/src/body.rs`
+(generator, check 2a, 37 descriptors), `crates/hyst-previz/examples/body_study.rs`
+(`sweep`, `fill`, `html`), `scripts/body_study/regions.py`. Planner, `ensemble_preview.rs`
+and `figures.rs` untouched: `three.sh` exports compared with `cmp` against
+`hexagon-47.html`, `five-years-hexagon.html`, `presence-hexagon.html`, identical before and
+after. Data in `/secondary/hyst-data/bodystudy/` (outside git). **Not verified by eye.**
+
+Generator: phrase of moves in joint space; the ranges and why are in the doc comments.
+Constants the builder chose: knots every 0.05 s, moves 1.0–1.8 s apart, depth 0.3–1.0,
+arrival skew 0.75–1.4, bursts 1–3, follow-through 0–15 % at 0.8–1.4 Hz, wander yaw ±15°
+and roll ±30° (capped to 0.35 of the speed limit per move), breath 8°/12°, period
+3.3–12 s. Each move's size is capped by the acceleration and speed budget of its duration.
+
+Sweep (seed 20261013): first draft (no cap) passed 2000 of 48,939 (4 %), nearly all
+sustained, light, bound, direct. Cap added, then wander cap: 2000 of 3,457 (58 %).
+Remaining rejections: floor 1357, joint range 5, kinematic 95. Low height and deep curl
+fail the floor (pass rate 7 % at height decile 0, 97 % at decile 9). Stretch used,
+1.1^0..1.1^7: 162, 41, 98, 337, 581, 459, 256, 66; median 1.46.
+
+Regions (37 descriptors, z-score, farthest-point): r = 4.52, centre distance min 12.56,
+mean 17.50. Seven of 8 centres are single outlier clips (z up to 8.6 on shoulder, elbow or
+wrist speed and acceleration, heavy right tails). After `fill`: region 4 has 24 members,
+regions 0, 2, 6 reach 9 (clones of one body vector, new seeds), regions 1, 3, 5, 7 stay at
+2, 2, 1, 1. By the study's rule, the study stops here. Triplets not built.
+
+### Body study, step 1 rerun under the addendum (stop 1 again) — 2026-10-13
+
+Rules: `docs/BODY_STUDY.md` with its 2026-10-13 addendum (unchanged). Data in
+`/secondary/hyst-data/bodystudy/r2/` (`sweep.json`, `regions.json`, `fill.json`,
+`first/{a,b,c}.{html,mp4}`), outside git. `scripts/body_study/report.py` prints the sweep
+numbers below. **Not verified by eye.** The study stops at the region rule (below): no
+triplets, no `answer.html`.
+
+Code (`hyst-compile` and `hyst-previz` only):
+- `body.rs`: `LIMITS` (one table: yaw 120/600, shoulder 90/300, elbow 150/1000, wrist bend
+  200/2000, roll 250/3000 deg/s, deg/s2). `violations()` samples the score's own quintic
+  curve at 1 kHz (speed by first difference, acceleration by second difference), runs
+  `validate` on the rig's own envelope (240 deg/s, 8000 deg/s2, unchanged), then hand speed,
+  jolt and floor at 60 fps; every broken rule is named. `check_2a` returns the first.
+  `feasible_traced` also returns the rules broken at stretch 1.
+- **Score format, additive**: `JointKnot.acceleration_degrees_per_second2` (serde default,
+  omitted when empty, so every older score and export is unchanged). Reason: with zero
+  acceleration at every knot the quintic renders 1.3-1.5x the acceleration of the curve it
+  samples, at any knot spacing (tested 0.05, 0.02, 0.01 s: 1.32, -, 1.48). The generator now
+  writes the true acceleration; `channel_bounds` (the `validate` proof) uses it too. Motion
+  before the change: the move itself peaked at 299.97 of 300 deg/s2 on a probe, the rendered
+  curve at 1.3-1.5x.
+- Move-size cap per joint from that joint's own limits, no factor on them. Exact numeric peaks
+  of the skewed burst profile (`profile_peaks`) and of the follow-through ring with its 0.15 s
+  ramp (`ring_peaks`) replace the old 5.77, 1.875, 1.5 and 0.45/0.8 constants. Taken off the
+  limit before the move gets it: breath on shoulder and elbow (exact peak), wander on yaw and
+  roll. The ring starts after the move ends, so it is a separate bound, not a sum.
+  Remaining factors: **0.5 on wander** (it shares yaw/roll with the move and the two can
+  peak together; the move gets the other half). Wander shape bounds 2 pi w/dur and
+  6 pi^2 w/dur^2 are upper bounds from the shape's components. Nothing else.
+- Knots every 0.05 s as before. Tests: 7 body tests (rendered-curve check names joint and
+  limit; wrist range > shoulder range for a sudden strong clip); workspace CPU tests (165,
+  `hyst-render` excluded) pass; clippy -D warnings clean on compile/previz/output/cli.
+
+Sweep (seed 20261013): **3,516 attempts, 2,000 passed.** Rejected 1,516: at the top of the
+ladder (1.95) the first rule broken is floor 1,510, joint range 6, nothing else. Rules broken
+at stretch 1 over all rejected clips (a clip can break several): floor 1,514, shoulder accel
+841, elbow accel 465, hand jolt 149, wrist bend accel 127, hand speed 75, roll `validate`
+72, base yaw accel 59, roll speed 11, yaw speed 2, roll accel 17, joint range 7. Rejection by
+decile is in `report.py` output: height decile 0 rejects 322/338, decile 9 rejects 3/342;
+curl_extension decile 0 250/345, decile 9 57/370; every other parameter 120-190 per ~350 in
+every decile (no other parameter matters). Stretch histogram (1.1^0..7): 501, 1308, 78, 27,
+15, 20, 30, 21. Clips clean at stretch 1: 501 of 2,000. Rules broken at stretch 1 among the
+2,000 that pass: shoulder accel 1,256, elbow accel 762, hand jolt 240, wrist bend accel 174,
+floor 138, base yaw accel 84, roll `validate` 65, roll accel 30, hand speed 29, roll speed 8,
+shoulder/elbow/yaw speed 1-2. These are mostly about 10 % over (probe: rendered 1.14 at worst
+on the shoulder, caused by consecutive moves overlapping through joint delays and the
+previous move's ring); the ladder's first step (1.1) takes them. Roll `validate` failures:
+the roll's limit (250 deg/s) is above the rig's envelope (240).
+
+Low (<0.2) against high (>0.8) medians; p90 joint speed deg/s (yaw / shoulder / elbow / wrist
+bend / roll) and total joint motion deg (same order; sum), motion of the rendered 8 s:
+- time: n 358 / 436. p90 low 44.0 / 17.0 / 26.7 / 13.5 / 93.4; high 15.9 / 8.8 / 22.7 / 18.2 /
+  68.5. Total low 143 / 62 / 93 / 42 / 319 (683); high 39 / 29 / 63 / 42 / 171 (351).
+- weight: n 411 / 403. p90 low 27.4 / 11.8 / 19.6 / 10.4 / 73.2; high 28.1 / 14.7 / 31.7 /
+  22.8 / 93.3. Total low 85 / 40 / 66 / 27 / 206 (425); high 80 / 47 / 92 / 56 / 271 (579).
+- flow: n 389 / 375. p90 low 30.4 / 14.7 / 28.3 / 16.8 / 85.0; high 26.9 / 12.7 / 26.4 / 16.2 /
+  82.5. Total low 85 / 45 / 82 / 40 / 234 (514); high 86 / 44 / 81 / 47 / 246 (522).
+- space: n 390 / 412. p90 low 31.3 / 13.9 / 27.3 / 16.2 / 52.9; high 30.3 / 14.6 / 26.5 /
+  16.6 / 109.3. Total low 88 / 45 / 82 / 45 / 136 (414); high 93 / 46 / 80 / 42 / 340 (621).
+Sudden clips (time > 0.8) still move less than sustained ones at yaw, shoulder, roll (total
+351 against 683). It is the acceleration budget: a burst of 0.1 s at 600 deg/s2 is about 1
+degree on yaw. The wrist moves the same total and faster in sudden clips. "Weight" now
+differs at the elbow, wrist and roll (p90 22.8 against 10.4 on the wrist). Flow differs by
+under 10 % in either measure (follow-through is small: 0.15 of the move at most).
+
+Regions (rank-normalised descriptors, 1,000 candidate centres with d9 at or under the median
+1.091; centres clips 785, 1627, 497, 815, 1383, 897, 1972, 1506): **r = 0.691**.
+Centre-to-centre distance min 2.228, mean 2.991 (a quarter: 0.748). Mean within-region
+pairwise distance 0.679 / 0 / 0.678 / 0.676 / 0 / 0 / 0 / 0 (regions with one member have 0).
+Members before fill: 2, 1, 2, 3, 1, 1, 1, 1. After fill (clones of members' body vectors,
+fresh seeds, kept inside the ball, 200 tries): **9, 9, 9, 6, 9, 7, 9, 9**. Regions 3 and 5
+stay short (200 tries each). **The rule stops the study here.** The 9th-nearest neighbour of
+a median clip is 1.09 away, farther than r, so the 2,000 clips alone never fill a ball: the
+filled members are clones of one or two body vectors with other content seeds. Whether that
+counts as a region is a decision for you; I did not change r, the fill or the rule.
+Stretch (median / max) of region members before fill: 1.0/1.0, 1.1/1.1, 1.1/1.1, 1.61/1.77,
+1.0/1.0, 1.1/1.1, 1.1/1.1, 1.0/1.0.
+
+Single clips for a first look (not test clips, silent, 8 s) in `r2/first/`: a (body 1238:
+time 0.00, weight 0.13, flow 0.08, stretch 1.0), b (1071: time 0.90, weight 0.87, flow 0.94,
+stretch 1.1), c (1792: space 0.98, extension 0.88, time 0.04, stretch 1.1). `SendUserFile`
+could not deliver (not a project thread); paths above. Body vectors and seeds are in
+`sweep.json`.
+
+Unchanged: `three.sh` exports compared with `cmp` against `hexagon-47.html`,
+`five-years-hexagon.html`, `presence-hexagon.html`: all three identical. The three tmp files
+it made were deleted; older `tmp-45-*`, `tmp-46-*` files from earlier sessions were not mine
+and are left. Frozen `src/` and `tools/`, no hardware.
+
+### Body study, step 1 under addendum 2: new generator, sweep, regions (stop 1) — 2026-10-13
+
+Rules: `docs/BODY_STUDY.md` with both addenda (unchanged). Data in
+`/secondary/hyst-data/bodystudy/r3/` (`sweep.json`, `report.txt`, `regions.json`,
+`fill.json`, `first/{a,b,c}.{html,mp4}`, `first/silence.m4a`), outside git. **Not verified
+by eye.** Stopped at ★ 1: no triplets, no `answer.html`.
+
+Why: the user saw three 8 s first-look clips as hardly moving, and the sudden/strong/free one
+as jittery. The old generator sized every move from body weight ("depth") and the
+acceleration budget of a short slot, and its sudden and free settings made several bursts
+and a ring on every joint.
+
+Generator changes (`crates/hyst-compile/src/body.rs`, `Motion` rewritten; ranges in its doc
+comment):
+1. Travel. Each move goes to a new posture. Base yaw alternates sides of a span drawn per
+   clip from 220 to 320 degrees, with each target in the outer 35 % of its side. The shoulder
+   alternates between the lowest and highest 35 % of its draw. Shape parameters set 0.25 of
+   the posture draw, so they bias where the targets fall, never whether they spread. Weight no
+   longer sets move size. Reason: the brief's item 1 and the floors below.
+2. Time. Velocity ramps cover 100 % of the move (sustained, a bell) to 45 % (sudden, quick
+   cruise). Duration is the shortest legal one times 1.7 (sustained, no hold) to 1.0
+   (sudden), then a hold of time x 0.6..1.4 s. Breath runs through the hold. The multi-burst
+   profile is deleted. Reason: item 2.
+3. Weight sets the deceleration ramp's share of the ramps: 65 % (light, floats in) to 30 %
+   (strong, firm stop).
+4. Flow. Elbow and wrist bend overshoot by 25 % x flow of their move, then settle once over
+   0.4 x sqrt(flow) of the move's duration. Other joints get no overshoot. The ring and its
+   frequency/decay are deleted. Reason: item 3.
+5. Limits. Each move's duration comes from one sampled pass of the move at unit duration.
+   Joint speed scales as 1/T and acceleration and jolt as 1/T^2, so this gives the exact
+   shortest T for each joint's own `LIMITS`, hand speed 1.2 m/s and jolt 9 m/s^2. The roll's
+   speed is capped at the rig's 240 deg/s envelope so `validate` can pass. Breath's exact peak
+   is taken off the shoulder and elbow limits. The 0.5 wander factor and the per-joint
+   move-size caps are deleted. The one common duration is set by whichever joint or hand rule
+   binds, usually yaw at 120 deg/s or hand speed. Joint delays and breath are left out of
+   this pass, and the stretch ladder covers them. Reason: item 4. **Open question for you:**
+   the elbow and wrist share that duration, so they move far under their own limits. If
+   "uses its own limits" means each joint at its own pace, say so.
+6. A target whose path or pose breaks the floor (breath at either extreme) is drawn again,
+   up to 30 times.
+
+Check 2a (addendum 2): 16 s clips, stretch about 8 s. Floors use `movement()`: hand path
+3.67 m, box side 0.74 m, base turn 161 deg. Tests (8 body tests): 321 knots, centre at knot
+160, sudden has a hold of at least 0.6 s and overshoot only on elbow/wrist, sustained/bound
+has no hold or overshoot, the profile is monotone from 0 to 1, and a mid body passes the
+floors. Workspace CPU tests (hyst-render excluded) pass. Clippy -D warnings is clean on
+compile/previz/output/cli, and fmt is clean.
+
+Sweep (seed 20261013): **2,082 attempts, 2,000 passed.** First rule broken among the 82
+rejected at stretch 1.95: floor 69, hand path 13. Rules broken at stretch 1 by the rejected
+clips: floor 75, hand path 7, hand speed 6. Rejections by decile, of about 200 per decile:
+height 31, 26, 12, 5, 0, 1, 4, 1, 1, 1; curl_extension 19, 17, 8, 12, 9, 3, 8, 3, 2, 1;
+breath_depth 2, 4, 3, 2, 3, 4, 9, 14, 14, 27; every other parameter 1-15 per decile. Stretch
+histogram (1.1^0..7): 1904, 73, 4, 7, 5, 3, 1, 3. Rules broken at stretch 1 among the 2,000
+that passed: hand speed 69, floor 27; 1,904 were clean at stretch 1.
+
+Low (<0.2) against high (>0.8) medians. p90 joint speed is deg/s and total joint motion is
+degrees, both in the order yaw / shoulder / elbow / wrist bend / roll. Movement is hand path
+m / box m / base turn deg:
+- time (n 380 / 411): p90 low 69.5 / 13.6 / 12.3 / 6.2 / 23.7, high 103.0 / 20.1 / 17.9 /
+  10.6 / 40.4. Total low 468 / 98 / 93 / 34 / 144 (sum 842), high 751 / 148 / 126 / 56 /
+  212 (1301). Movement low 4.84 / 1.12 / 230, high 7.56 / 1.14 / 239.
+- weight (373 / 416): p90 low 85.9 / 17.0 / 15.5 / 8.1 / 29.6, high 80.3 / 16.2 / 14.4 / 7.7
+  / 29.7. Total low 630 / 127 / 115 / 45 / 165 (1111), high 575 / 120 / 106 / 43 / 167
+  (1028). Movement low 6.43 / 1.13 / 235, high 5.94 / 1.13 / 236.
+- flow (419 / 380): p90 low 83.6 / 16.7 / 14.1 / 7.9 / 32.1, high 84.3 / 16.9 / 16.0 / 8.3 /
+  28.2. Total low 664 / 130 / 106 / 44 / 191 (1158), high 573 / 121 / 118 / 46 / 160 (1034).
+  Movement low 6.67 / 1.14 / 235, high 5.97 / 1.13 / 234.
+- space (423 / 389): p90 low 85.8 / 16.9 / 15.3 / 8.5 / 15.7, high 80.0 / 15.4 / 14.8 / 7.1 /
+  46.8. Total low 637 / 128 / 111 / 50 / 91 (1020), high 563 / 115 / 111 / 41 / 260 (1117).
+  Movement low 6.49 / 1.14 / 236, high 5.86 / 1.13 / 234.
+Weight and flow move these medians by under 10 %, so their effect is in profile shape, which
+these measures do not separate. Yaw carries most of the motion, and the wrist bend totals
+34-56 degrees over 16 s.
+
+Histograms over all 2,000 clips, as range:count:
+- Hand path, m: 3.69-4.37:83 4.37-5.04:312 5.04-5.72:349 5.72-6.40:400 6.40-7.08:350
+  7.08-7.75:278 7.75-8.43:164 8.43-9.11:47 9.11-9.78:14 9.78-10.46:3.
+- Box, m: 0.81-0.85:1 0.85-0.90:4 0.90-0.95:14 0.95-0.99:64 0.99-1.04:138 1.04-1.09:271
+  1.09-1.13:507 1.13-1.18:547 1.18-1.23:394 1.23-1.27:60.
+- Base turn, deg: 164-179:25 179-194:111 194-209:270 209-224:360 224-239:326 239-253:339
+  253-268:281 268-283:186 283-298:72 298-313:30.
+
+Regions (rank space; candidate centres are the 1,000 clips with d9 at or under the median,
+0.999): **r = 0.794**. Centre-to-centre distance min 2.205, mean 3.099 (a quarter: 0.775).
+Initial centres 1739, 926, 194, 1663, 935, 386, 1267, 1048. Within-region mean distances
+0.703, 0.689, 0.768, 0, 0.729, 0.677, 0, 0. Members before fill: 12, 4, 2, 1, 4, 2, 1, 1.
+Replacement (`body_study fill`, which now holds r, recomputes every region's membership after
+each replacement, and never reuses a dropped centre; `regions.py` now writes `candidates`).
+Each step is old > new, with the members after the failed fill:
+- region 3: 1663>1491 (5), 1491>320 (3), 320>136 (2), 136>1715 (4), 1715>1694 (4),
+  1694>675 (7), 675>1464 (4), 1464>1336 (3), 1336>1740 (5), 1740>118 (1), 118>97 (5);
+- region 5: 386>829 (8), 829>277 (5), 277>192 (6), 192>797 (8), 797>1210 (7), 1210>193 (7),
+  193>1695 (3), 1695>1815 (5), 1815>219 (3), 219>936 (6), 936>1977 (6), 1977>1478 (7),
+  1478>1055 (2), 1055>772 (8);
+- region 6: 1267>334 (4).
+26 replacements. Final centres 1739, 926, 194, 97, 935, 772, 334, 1048. Members after fill:
+12, 9, 9, 9, 9, 9, 9, 9. Of these, 12, 4, 2, 4, 4, 4, 2, 1 are sweep clips and 0, 5, 7, 5,
+5, 5, 7, 8 are made (clones of members' body vectors with new seeds). Within-region
+distances after replacement were not recomputed.
+
+Single first-look clips (16 s, silent, stretch 1.0, not test clips) in `r3/first/`.
+Reversals count frames where the hand's velocity points against its velocity at the
+previous frame faster than 0.05 m/s:
+- a: sweep clip 491, time 0.03, weight 0.09, flow 0.06. Hand path 4.98 m, box 1.07 m, base
+  turn 210 deg, top hand speed 0.69 m/s, 1 reversal.
+- b: clip 665, time 0.99, weight 0.96, flow 0.94. 7.14 m, 1.11 m, 212 deg, 1.19 m/s, 3
+  reversals. At 10 s the disc rises out of the top of the frame (camera unchanged).
+- c: clip 994, space 0.98, curl_extension 0.99. 5.92 m, 1.24 m, 257 deg, 0.87 m/s, 3
+  reversals.
+Body vectors and seeds are in `sweep.json`.
+
+Unchanged: `three.sh` exports compared with `cmp` against `hexagon-47.html`,
+`five-years-hexagon.html` and `presence-hexagon.html`: all three are identical. Its three tmp
+files were deleted; older `tmp-*` files from earlier sessions are left. Frozen `src/` and
+`tools/` were not touched. No hardware was driven.
+
+### Body study, step 1 under addendum 3: per-joint generator, sweep, regions (stopped at the region rule) — 2026-10-13
+
+Rules: `docs/BODY_STUDY.md` with all three addenda (unchanged). Data in
+`/secondary/hyst-data/bodystudy/r4/` (`sweep.json`, `sweep.log`, `report.txt`, `regions.json`,
+`regions.txt`, `fill.json`, `fill.txt`, `first/{a,b,c}.{html,mp4}`, `first/silence.m4a`),
+outside git. **Not verified by eye.** The final region check fails (below), so the study
+stops at ★ 1: no triplets, no `answer.html`.
+
+Why: the user on the three r3 clips: a "almost all is base moving, the elbow joint not at
+all and almost no disc spin"; b "spin, stop, reposition ... mechanical looking, like an
+assembly line machine"; c "somewhere in between". Cause in the generator: one move duration
+for all joints, set by the slowest (usually the base); all joints starting and stopping
+together; "sudden" as move then dead stop.
+
+Generator changes (`crates/hyst-compile/src/body.rs`, `Motion` rewritten; ranges and reasons
+in its doc comment):
+1. Own pace per joint. Each joint has its own list of moves, with lengths drawn from its own
+   range: base 1.8-3.0 s, shoulder 1.5-2.6, elbow 0.8-1.3, wrist bend 0.6-1.1, roll 0.7-1.3.
+   Initiation picks the leading joint (base, shoulder, elbow or wrist bend), which runs its own
+   moves. Every other joint starts a move at one of the leader's move starts plus its
+   succession delay (0.12 s, plus 0-0.3 s along the chain, its direction set by succession
+   direction). It picks the leader starts nearest its own pace and splits a long gap into its
+   own shorter moves (each 0.75-1.25 of an equal split). If a joint's own limits need longer
+   than the gap, the move takes the following gaps too, so it still reaches its target.
+   Reason: item 1, no shared duration.
+2. No dead stops. Each move lasts its gap times 1 + overlap (0.3 sustained to 0.12 sudden), so
+   the next move of the same joint starts before the previous ends and the two add up. Only
+   base and shoulder hold, and only when sudden (their moves last the gap times 1.3 down to
+   0.8). Elbow, wrist and roll never hold. Breath runs throughout. Time sets the accelerating
+   ramp, 50 % (a bell) down to 12 % (a sharp start) of every move. Weight sets how much of the
+   rest decelerates. On base and shoulder that is 100 % down to 35 % (cruise, then a firm
+   arrival). On elbow, wrist and roll it is 100 % down to 75 %, so they keep settling when the
+   heavy joints arrive. Reason: item 2.
+3. Flow. Elbow, wrist bend and roll pass their target by 25 % x flow of the move and settle
+   back once, monotonically, over 0.4 x sqrt(flow) of its duration. Base and shoulder never
+   overshoot. Reason: item 3.
+4. Every joint travels. Base yaw alternates sides of a 240-330 degree span, with targets in
+   the outer 25 % of each side, so two targets are at least 180 degrees apart; the r3 span
+   allowed 143, under the 161 turn floor. The shoulder alternates between its lowest and
+   highest 35 % of 10 + breath .. 95 degrees of elevation. The elbow alternates between the
+   most curled and most straight 35 % of -30 (bent up, new) .. 95 degrees. The wrist bend
+   alternates sides by 20-70 degrees about the arch's centre. The roll turns 30-110 x 0.6-1
+   degrees per move (space). Shape parameters set 0.25 of each draw. Sizes were chosen on a
+   200-clip probe so that the joints' shares come near version 47's. Reason: item 4, every
+   joint clears its floor.
+5. Floor during generation. Joints are drawn shoulder, elbow, wrist, then base, then roll.
+   While a joint is drawn, the points placed by the joints drawn so far must stay above the
+   floor, and the last of them above the floor plus the disc radius, with breath at either
+   extreme; the wrist checks the whole floor rule. Elbow and wrist bends are also capped so
+   their link end stays 5 mm over floor plus disc. A draw is rejected if it fails these
+   checks or lands under 15 degrees from the current angle. After 30 rejected draws the joint
+   lifts 25 degrees (shoulder 15); if that fails too, it stays put for that move.
+6. Limits. Each move lasts at least what its joint's own `LIMITS` need. The roll's speed is
+   capped at the rig's 240 deg/s envelope, and breath's peak is taken off the shoulder and
+   elbow limits. Elbow, wrist and roll moves are sized against 0.6 of their speed limit,
+   because overlapping moves add up (first probe: wrist at 1.1-1.55x its limit). The base's
+   speed is capped so the hand's largest horizontal radius over the move gives at most 0.75
+   of the hand speed rule (first probe: hand at 1.1-1.6x). Then the whole motion, but not
+   breath, is slowed by one factor, if needed, to keep every joint under 0.98 of its limits
+   and the hand under 0.95 of its speed and jolt rules over the clip. The 0.98 covers the
+   gap between this pass's 240 Hz sampling and the 1 kHz check.
+7. Clips open mid-motion: moves start at -3 s.
+
+Check 2a, addendum 3 (`violations`):
+- Per-joint motion floors: `MIN_JOINT_DEG` = 386 / 148 / 299 / 454 / 370 degrees per 16 s,
+  measured with `joint_motion` at 60 fps.
+- In frame: `frame_margin` projects every world point exactly as `ensemble.html`'s `project`
+  does, plus the disc's radius around the hand point; it must stay ≥ 20 px inside the
+  1280 x 720 frame.
+- Study camera: the template's solo camera with the same yaw (-0.6), pitch (0.35) and focal
+  length, moved from 2.1 m to 3.05 m and aimed at z 0.35 instead of 0.3. That is the smallest
+  distance, in 0.05 m steps, at which every point within the arm's reach plus the disc stays
+  20 px inside the frame (sampled sphere).
+- `body_study html` writes these two numbers into its own copy of the template and fails if
+  the template's camera strings change. `ensemble.html` is unchanged.
+- `body_study fill` now rechecks the quarter rule and r on the final centres and members.
+
+Tests (12 body tests):
+- the camera matches the template's centre, and a point out of frame is caught;
+- a typical clip clears every floor and stays in frame;
+- elbow and wrist move more often and on shorter moves than base and shoulder, starting at
+  other times;
+- sudden and sustained clips: no 60 fps frame where every joint is under 2 deg/s, and elbow,
+  wrist and roll never still for 0.5 s or more;
+- free overshoots elbow, wrist and roll only, settling once and monotonically; bound never
+  overshoots;
+- sudden plus strong gives a sharp start, a firm heavy arrival and a long light settle.
+
+Other checks: workspace CPU tests (171, `hyst-render` excluded) pass; clippy -D warnings is
+clean on compile/previz/output/cli; fmt is clean.
+
+Sweep (seed 20261013): **2,068 attempts, 2,000 passed.** Rejected 68.
+- First rule broken at stretch 1.95: joint range (`validate`, joint not named) 26, base yaw
+  motion 20, hand path 19, floor 2, shoulder motion 1.
+- Rules broken at stretch 1 by the rejected clips: joint range 34, base yaw motion 23, hand
+  speed 8, shoulder motion 4, floor 2.
+- Rejections by decile (about 200 attempts per decile):
+  - time 3, 5, 5, 4, 2, 4, 6, 12, 13, 14;
+  - weight 12, 19, 6, 9, 8, 2, 6, 3, 1, 2;
+  - flow 4, 3, 3, 3, 7, 6, 12, 7, 9, 14;
+  - arch 14, 12, 9, 1, 3, 2, 5, 10, 4, 8;
+  - curl_extension 10, 11, 2, 9, 7, 6, 5, 6, 5, 7;
+  - every other parameter 2-11 per decile.
+  Full table in `report.txt`.
+- Stretch histogram (1.1^0..7): 1773, 195, 26, 2, 2, 2, 0, 0.
+- Rules broken at stretch 1 among the 2,000 that passed: hand speed 213, joint range 15;
+  1,773 were clean at stretch 1.
+
+Per joint over the 2,000 clips, total motion histogram (degrees, range:count) and share of
+the summed motion (median, p10, p90):
+- base yaw: 387-443:80 443-499:264 499-555:445 555-611:447 611-666:307 666-722:211
+  722-778:145 778-834:60 834-890:36 890-946:5. Share 0.196 (0.170, 0.231).
+- shoulder: 151-182:51 182-213:151 213-244:312 244-275:452 275-307:478 307-338:341
+  338-369:153 369-400:49 400-431:10 431-462:3. Share 0.094 (0.074, 0.114).
+- elbow: 309-361:7 361-413:24 413-465:78 465-517:209 517-569:405 569-621:529 621-673:397
+  673-725:235 725-777:83 777-829:33. Share 0.201 (0.172, 0.230).
+- wrist bend: 464-544:9 544-623:37 623-703:107 703-782:304 782-862:504 862-941:530
+  941-1021:336 1021-1100:130 1100-1179:38 1179-1259:5. Share 0.292 (0.257, 0.322).
+- roll: 390-453:19 453-516:92 516-580:307 580-643:602 643-707:573 707-770:269 770-834:99
+  834-897:30 897-961:7 961-1024:2. Share 0.216 (0.191, 0.244).
+
+For comparison, from the brief: v47's shares are base 26 %, wrist bend 24, roll 24, elbow 17;
+the r3 sweep's were base about 60 %.
+
+Low (< 0.2) against high (> 0.8) medians. Joint values are given as yaw / shoulder / elbow /
+wrist bend / roll. Movement is hand path m / box m / base turn deg.
+- time (n 388 / 403): p90 speed low 65.9 / 30.4 / 68.6 / 98.8 / 82.4, high 69.6 / 30.5 /
+  70.3 / 101.3 / 84.2. Total low 653 / 282 / 618 / 892 / 655 (sum 3115), high 527 / 233 /
+  583 / 852 / 643 (2844). Movement low 7.96 / 1.14 / 252, high 7.27 / 1.13 / 255.
+- weight (355 / 425): p90 low 67.6 / 34.3 / 68.1 / 97.7 / 83.3, high 66.5 / 30.3 / 70.1 /
+  99.4 / 82.9. Total low 532 / 273 / 578 / 827 / 632 (2849), high 645 / 278 / 618 / 902 /
+  647 (3110). Movement low 7.32 / 1.13 / 256, high 8.00 / 1.14 / 253.
+- flow (428 / 370): p90 low 67.6 / 32.8 / 63.0 / 92.7 / 80.7, high 67.4 / 31.5 / 74.9 /
+  104.7 / 86.3. Total low 588 / 280 / 559 / 834 / 625 (2900), high 569 / 267 / 640 / 892 /
+  659 (3054). Movement low 7.67 / 1.15 / 252, high 7.78 / 1.11 / 256.
+- space (423 / 386): p90 low 71.8 / 31.7 / 68.6 / 98.1 / 85.8, high 62.9 / 32.2 / 68.7 /
+  99.3 / 86.6. Total low 623 / 274 / 594 / 850 / 704 (3080), high 544 / 279 / 603 / 878 /
+  642 (2940). Movement low 7.88 / 1.14 / 253, high 7.37 / 1.13 / 255.
+These medians move by under 20 % across any of the four parameters. The parameters now
+change profile shape, holds, overshoot and wander; p90 speed and total motion do not
+separate these.
+
+Histograms over the 2,000 clips:
+- Hand path, m: 4.49-5.11:4 5.11-5.72:19 5.72-6.34:88 6.34-6.95:309 6.95-7.57:494
+  7.57-8.18:523 8.18-8.80:353 8.80-9.41:169 9.41-10.03:34 10.03-10.64:7.
+- Box, m: 0.83-0.88:3 0.88-0.93:19 0.93-0.98:68 0.98-1.03:168 1.03-1.08:308 1.08-1.13:430
+  1.13-1.18:480 1.18-1.23:349 1.23-1.28:148 1.28-1.33:27.
+- Base turn, deg: 186-200:11 200-214:76 214-228:260 228-242:355 242-256:358 256-270:370
+  270-284:292 284-298:187 298-312:81 312-326:10.
+
+Regions (rank space; candidate centres are the 1,000 clips with d9 at or under the median,
+1.374):
+- **r = 0.903.** Initial centre-to-centre distance min 2.287, mean 2.977 (a quarter: 0.744).
+- Initial centres 1706, 1966, 357, 1016, 1582, 365, 1434, 1017. Members before fill: 1 in
+  every region (only the centre; its within-region distance is 0).
+- Fill and replacement: **814 replacements**, each with the reason "under 9 members after
+  fill". Per region: 7, 29, 2, 108, 145, 260, 212, 51. Every replacement (old > new, members
+  after the failed fill) is in `r4/fill.txt` and `fill.json`.
+- Final centres 1919, 644, 1264, 1074, 1102, 1457, 1277, 1025. Members after fill: 11, 9, 9,
+  9, 9, 9, 9, 9. Of these, 9, 1, 1, 1, 2, 1, 1, 1 are sweep clips; the rest are made from
+  members' body vectors with fresh seeds.
+- **Final check (addendum 3): broken.** Final centre-to-centre min 1.484, mean 2.531, a
+  quarter 0.633. Mean within-region distances 0.996, 0.935, 0.848, 1.006, 1.012, 0.901,
+  0.944, 1.018: all eight are over the quarter. r = 0.903 is under the final minimum centre
+  distance 1.484. **The study stops here.**
+- What the numbers say: the new clips spread more evenly in descriptor space (d9 median 1.374
+  against r3's 0.999). No clip but the centre falls inside r of any initial centre. Clones of
+  one body vector with fresh seeds sit about 0.85-1.0 apart. So a ball holding 9 clips cannot
+  have a within-distance under a quarter of the centre spacing. Changing r, the fill or the
+  rule is your decision; I did not.
+
+Single first-look clips (16 s, silent, stretch 1.0, not test clips) in `r4/first/`, recorded
+with `record-ensemble.cjs` from the study-camera pages. Units: hand path m, box m, base turn
+deg, top hand speed m/s. Per joint, in the order yaw / shoulder / elbow / wrist bend / roll:
+total motion in degrees, then the longest time under 2 deg/s in seconds.
+- a, sustained/light/bound: sweep clip 494 (time 0.03, weight 0.09, flow 0.06). Movement 6.60
+  / 1.05 / 213 / 0.90. Motion 637 / 197 / 583 / 981 / 650. Still 0.13 / 1.17 / 0.07 / 0.03 /
+  0.03. Frame margin 53 px.
+- b, sudden/strong/free: clip 670 (time 0.99, weight 0.96, flow 0.94). Movement 8.25 / 1.10 /
+  304 / 1.14. Motion 613 / 227 / 695 / 770 / 597. Still 1.93 / 1.15 / 0.08 / 0.05 / 0.05.
+  Frame margin 39 px.
+- c, indirect/extended: clip 53 (space 0.97, curl_extension 0.98). Movement 6.04 / 1.06 /
+  252 / 1.13. Motion 561 / 208 / 652 / 943 / 609. Still 0.80 / 0.13 / 0.05 / 0.05 / 0.13.
+  Frame margin 35 px.
+The longest still time over any joint is base 1.93 s (b, its sudden hold) and shoulder 1.17
+s (a, where breath alone moves it between moves).
+Body vectors and seeds are in `sweep.json`.
+
+Unchanged: `three.sh` exports compared with `cmp` against `hexagon-47.html`,
+`five-years-hexagon.html` and `presence-hexagon.html`: all three are identical. Its three
+tmp files were deleted. Frozen `src/` and `tools/` were not touched. No hardware was driven.
+
+### Body study, step 1 under addendum 4: regions as one body vector (stopped at the separation rule) — 2026-10-13
+
+Rules: `docs/BODY_STUDY.md` with all four addenda (unchanged). Data in
+`/secondary/hyst-data/bodystudy/r5/` (`regions.json`, `regions.log`, `report.txt`), outside
+git. Reused, not regenerated: `r4/sweep.json` and `r4/regions.json` (sorted columns,
+candidates). Generator (`body.rs`) and check 2a untouched. **Not verified by eye.** The
+separation rule fails with the candidates exhausted, so the study stops before ★ 2: no
+triplets, no clips rendered, no answer page in the repo.
+
+Built:
+- `crates/hyst-compile/src/body_regions.rs` (new): rank against the sweep's sorted columns
+  ((values below + 0.5) / 2,000), seed spread w (mean pairwise distance of a region's 9
+  rank vectors), position m (their mean), all pairs and their ratio |m_i - m_j| / max(w_i,
+  w_j), the worst pair, farthest-point order, and `select`, the addendum-4 loop: build the 8
+  initial centres; a region short of 9 clips is replaced; while a pair has a ratio under
+  1.5, the later-chosen centre of the pair with the smallest ratio is replaced by the
+  candidate farthest from the 7 kept centres (never a centre used before); stop when the
+  rule holds or no candidate is left. On a stop the last full set of 8 is kept for the
+  report. 7 tests on small synthetic sets: the rule takes the larger spread, ranks, spread
+  and position, farthest-point order, replacement of the later-chosen centre of the worst
+  pair until the rule holds, a short region replaced, exhaustion stops.
+- `body_study regions SWEEP REGIONS OUT` (`crates/hyst-previz/examples/body_study.rs`):
+  recomputes the 8 initial centres and fails unless they equal `r4/regions.json`'s (they
+  do: 1706, 1966, 357, 1016, 1582, 365, 1434, 1017). A region = the centre sweep clip + the
+  first 8 seeds that pass check 2a (`body::feasible`, the stretch ladder, floors, frame).
+  A failing seed is counted by the first rule it breaks at stretch 1.95.
+- `scripts/body_study/report4.py REGIONS.json REGIONS.log`: the step-6 report.
+
+Constants and origin:
+- factor 1.5, 9 clips per region, 200 seeds per region, seed 20261015: addendum 4.
+- Seed order (mine): a splitmix64 stream started at 20261015 + (centre + 1) x
+  0x2545F4914F6CDD1D, 53-bit seeds as `body::draw` gives. It depends only on the centre, so
+  a region is the same whenever it is built. Seeds run in batches of the thread count; the
+  first 8 passing in seed order are kept, and "tried" counts up to the 8th pass.
+- Mean for the first centre: the mean of the 2,000 sweep rank vectors.
+
+Run (twice; the second run only added w to the log; the event lists are identical):
+- **992 replacements, candidates exhausted (all 1,000 used). Rule broken.**
+- Replacements by reason: 992 separation rule, 0 short regions (every region reached 9
+  clips). By slot: 0, 0, 26, 189, 0, 0, 666, 111.
+- Worst-pair ratio at each replacement: max 0.860, median 0.581, p90 0.704. None reached
+  1.0.
+- Seed spread w over all 1,000 regions built: min 1.327, p10 1.674, median 1.925, p90
+  2.199, max 2.721. Addendum 4 quoted 0.85-1.0 for clones of one body vector. Those were
+  the r4 fill's clips, kept only if they fell inside r = 0.90 of the centre, so that number
+  was biased low.
+- For scale: two random sweep clips are a median 2.416 apart (p10 1.856, p90 3.066; 20,000
+  random pairs). Per descriptor, the variance inside a final region is a median 0.52 of the
+  sweep's variance (min 0.13, max 1.08). The seed accounts for about half of what the
+  descriptors show.
+- Seeds over all builds: 8,252 tried, 252 skipped: joint range (`validate`) 101, hand path
+  75, base yaw motion 66, floor 3, base turn 3, hand box 2, shoulder motion 1, wrist bend
+  motion 1.
+
+Final set (the last full set of 8 before exhaustion), centres 1706, 1966, 529, 786, 1582,
+365, 1919, 183:
+- w: 2.225, 1.667, 1.553, 1.679, 1.386, 1.984, 1.944, 1.519.
+- Seeds tried (skipped): 8; 8; 8; 10 (hand path 2); 13 (base yaw motion 2, joint range 3);
+  8; 8; 8.
+- Pairs, i j |m_i - m_j| ratio, smallest ratio first: 0 6 1.376 0.618; 6 7 1.512 0.778;
+  5 6 1.607 0.810; 2 5 1.733 0.874; 2 3 1.510 0.899; 5 7 1.786 0.900; 0 7 2.011 0.904;
+  0 2 2.029 0.912; 0 5 2.045 0.919; 0 3 2.152 0.967; 1 3 1.656 0.986; 4 5 2.044 1.030;
+  1 5 2.062 1.039; 2 6 2.029 1.044; 0 4 2.376 1.068; 3 5 2.183 1.100; 2 4 1.764 1.136;
+  1 2 1.908 1.144; 3 6 2.339 1.203; 4 6 2.433 1.252; 0 1 2.856 1.284; 2 7 2.094 1.349;
+  1 4 2.302 1.381; 1 6 2.797 1.439; 4 7 2.270 1.494; 1 7 2.503 1.502; 3 4 2.550 1.518;
+  3 7 2.567 1.529.
+- **Smallest ratio 0.618. 25 of 28 pairs under 1.5.** |m_i - m_j| ranges 1.376-2.856;
+  1.5 x the largest w needs 3.337.
+- Stretches of the 72 clips (centre first per region):
+  - 0: 1.331, then 1.000 x 8;
+  - 1: 1.000 x 7, 1.100, 1.000;
+  - 2: 1.000 x 9;
+  - 3: 1.000 x 9;
+  - 4: 1.000 x 9;
+  - 5: 1.000 x 4, 1.100, 1.000 x 4;
+  - 6: 1.100, 1.000 x 4, 1.100, 1.100, 1.000 x 2;
+  - 7: 1.000 x 9.
+  Histogram 1.1^0..7: 66, 5, 0, 1, 0, 0, 0, 0.
+
+What the numbers say: a region's position is a mean of 9 clips, so positions sit nearer
+the middle of rank space than single clips do. The rule asks for about 1.5 x 1.9 = 2.9
+between positions. No pair of positions in any set reached that, and no worst pair got
+over 0.86. Changing the factor, the descriptors or the region definition is your decision;
+I did not.
+
+Drafts written for ★ 2 but not run, not tested and not committed (rule broken):
+`r5/drafts/{triplets.py,render.sh,answer.html,score.py}` (triplet assignment, shuffle with
+`random.Random(20261014)`, 72 clip recordings and A | B | C stacks at 3840 x 720, the
+answer page, the 2b scorer).
+
+Checks: `cargo test -p hyst-compile -p hyst-output -p hyst-previz -p hyst-cli` passes
+(hyst-compile 53, with the 7 new); clippy -D warnings on the same crates with
+--all-targets is clean; fmt is clean. `three.sh` exports compared with `cmp` against
+`hexagon-47.html`, `five-years-hexagon.html` and `presence-hexagon.html`: all three are
+identical; the tmp files were deleted. Frozen `src/` and `tools/` untouched. No hardware
+driven.
+
+### Body study, step 1 under addendum 5: triplets, clips and the answer page (★ 2) — 2026-10-13
+
+Rules: `docs/BODY_STUDY.md` with all five addenda (unchanged). Regions: the final set of
+`r5/regions.json` of `90cbec8` as stored (centres 1706, 1966, 529, 786, 1582, 365, 1919, 183;
+9 clips each; smallest ratio 0.618 against addendum 5's factor 0.6). Nothing rebuilt. Data
+in `/secondary/hyst-data/bodystudy/r5/`, outside git. **Not verified by eye.** The study
+waits at ★ 2: the user takes the test.
+
+Built:
+- `scripts/body_study/triplets.py REGIONS.json R5DIR`: checks the centres and the 0.6
+  factor, then builds the 24 triplets. Triplet i: pair from p = i mod 8, odd from
+  (p + k) mod 8, k = 1, 3, 5 for i in 0-7, 8-15, 16-23. Each region gives its 9 clips in
+  stored order (centre first): clips 0-5 to its 3 pairs in triplet order, clips 6-8 to its
+  3 odd appearances (my choice; the documents do not order clips within a region). Order
+  and odd position shuffled with Python's `random.Random(20261014)` (shuffle, then
+  `randrange(3)` per triplet). Writes `key.json` (per shown triplet: odd position, pair
+  and odd region, k, and region, centre, sweep index, body vector, seed, stretch of A, B,
+  C; plus m, w, centres), `clips.tsv` and `triplets.tsv`. Checked: 72 distinct clips, each
+  region odd 3 times and pair 3 times, every triplet's regions match its key.
+- `body_study ladder b SEED S` (new subcommand): fails unless S is the first passing
+  stretch on the ladder.
+- `scripts/body_study/render.sh R5DIR`: per clip, `body_study ladder`, then `body_study
+  html` (study camera, check 2a with the frame rule), then `record-ensemble.cjs` (start 0,
+  16 s, `r5/silence.m4a`, which is r4's 16 s of silence). Any failure is listed and nothing
+  is stacked. Stacks: ffmpeg `hstack` of the three 1280 x 720 clips at full size, 3840 x
+  720, libx264 crf 20, yuv420p, faststart, no audio track, `-map_metadata -1`, named
+  `test/t01.mp4`..`t24.mp4` by shown order.
+- `scripts/body_study/answer.html`: one triplet at a time, progress "n / 24". Play plays
+  once: there are no controls, no pointer events on the video, no context menu or
+  picture-in-picture, and any later play or seek is undone. A / B / C and the optional
+  text box ("What did the odd one look like?") unlock when the video ends. At the end,
+  "Save answers" downloads `answers.json`: `{finished, answers: [{shown, choice, text,
+  time}]}`. Videos come from `test/` next to the page, or from `?dir=`. The page has no
+  reference to `key.json`. A copy of the page is in `r5/answer.html`.
+- `scripts/body_study/test_answer.sh` (+ `test_answer.cjs`): the page in headless Chrome
+  at 1366 x 768 on 24 gray dummy videos. Checked: page width 1366 = viewport (no
+  horizontal scroll), video 250 px tall, buttons locked until the end, no replay, progress
+  text, 24 answers saved with shown/choice/text/time, no request outside `test/`. Passes
+  from `file://` and from `python3 -m http.server`.
+- `scripts/body_study/score.py ANSWERS KEY`: correct of 24, pass at >= 16, per region found
+  as the odd one (of 3) and as the pair of a correct triplet, per k, and the 8 descriptors
+  with the largest found-minus-missed difference (the odd region's position m, and |m_odd
+  - m_pair|), then the free text. `test_score.py` runs it on a synthetic key and answers:
+  16 correct gives PASS, 15 FAIL, 24 "all found". Not run on real answers.
+- `r5/HOWTO.txt`: the server command, the URL, and where `answers.json` goes.
+
+Clips (automated checks only):
+- All 72 match their stored stretch on the ladder and pass check 2a. The smallest frame
+  margin is 27 px (rule 20). Stretches: 66 at 1.0, 5 at 1.1, 1 at 1.331. No clip problems.
+- Each clip: 1280 x 720, 480 frames. Each stack: 3840 x 720, 480 frames, 16.000 s, video
+  only.
+- Stack tags: encoder strings only. The only id-like byte string in the files is "key"
+  from x264's `keyint` option, the same in every file.
+- Sizes: `test/` 77,341,453 bytes (2,980,505-3,515,610 per stack); `clips/` 112 MB,
+  intermediates the page never loads.
+- First stacking attempt: ffmpeg read the loop's stdin and skipped lines. It was fixed
+  with `-nostdin` and the stacks were remade. The clips were not re-recorded.
+- Disclosure: one run of `triplets.py` printed the 24 odd positions to my terminal before I
+  removed that print. I have not watched any test clip.
+
+Checks: `cargo test -p hyst-compile -p hyst-output -p hyst-previz -p hyst-cli` passes; clippy
+-D warnings with --all-targets is clean on the same crates; fmt is clean. `three.sh` exports
+compared with `cmp` against `hexagon-47.html`, `five-years-hexagon.html` and
+`presence-hexagon.html`: all three are identical; the tmp files were deleted. Frozen `src/`
+and `tools/` untouched. No hardware driven.
+
+### Body study, step 1 under addendum 7: one clip at a time, the counted answer (★ 2) — 2026-10-13
+
+Rules: `docs/BODY_STUDY.md` with all seven addenda (unchanged). Addendum 6 was never built.
+The 72 clips, the 24 triplets, the shuffle and `r5/key.json` of `9337b00` are unchanged.
+Data in `/secondary/hyst-data/bodystudy/r5/`, outside git. **Not verified by eye.** The study
+waits at ★ 2: the user takes the test as `r5/HOWTO.txt` says.
+
+Why: the user, on the A | B | C stack: "This sort of comparison doesnt work without
+seek/pause etc, there are 3 videos running simultaneously, I cant keep up with all 3 and
+compare all of them". The overseer then wrote addenda 6 and 7; 7 replaces 6.
+
+Built:
+- `scripts/body_study/crops.sh R5DIR`: cuts A, B and C out of each stack `test/tNN.mp4`
+  into `test/tNN-{a,b,c}.mp4`. Settings: `crop=1280:720:{0,1280,2560}:0`, libx264 `-qp 0`
+  (lossless; the profile is High 4:4:4 Predictive), yuv420p, faststart, no audio,
+  `-map_metadata -1`. Then every crop's decoded frames (`framemd5`) are compared with its
+  third of the stack: **72 crops, 0 mismatches.** Each is 1280 x 720, 480 frames, 16.0 s,
+  with encoder tags only. Sizes 8,205,478-10,896,646 bytes, 657 MB in all. Headless Chrome
+  plays them (one test crop: 50 frames, 0 dropped in 1.5 s). The stacks are no longer shown
+  and stay on disk.
+- `scripts/body_study/answer.html` (rewritten to addendum 7):
+  - First pass: Start, then A, B, C alone at 1280 x 720 (scaled to fit), with 1 s of black
+    between. The letter is beside the video, left. A Pause/Resume button; no controls, no
+    pointer events, no context menu. A seek is undone (snaps back to the last played time).
+    One video element only, so two clips never play at once.
+  - After C: the counted answer A / B / C, final, saved at once.
+  - Then replays of any clip one at a time, with native controls (seek), an optional second
+    answer (toggle) and the free text. Next triplet; no way back.
+  - State is in `localStorage` (`hyst-bodystudy-answers-v1`), saved at Start, at every
+    pause, at the counted answer, on every replay, second answer and text change, and at
+    Next. A reload during the first pass restarts that triplet from A and keeps its counts.
+    A reload after the counted answer returns to the replays with the answer locked.
+  - "Download answers so far" (any time) and "Download answers" (end) save `answers.json`.
+    "Load a saved file" resumes from it; a file with fewer answers than the browser has is
+    refused.
+  - Per triplet it records: shown, counted, second, text, timeToCountedS (Start to counted
+    answer, across reloads), totalS (Start to Next), pausesFirstPass, replays {A, B, C}
+    (each open and each play after a clip ended), firstPassStarts, started, countedAt,
+    finishedAt.
+  - Videos come from `test/` next to the page or `?dir=`. The page has no reference to
+    `key.json`.
+- `scripts/body_study/serve.cjs [DIR] [PORT]`: a loopback server with byte ranges (Python's
+  `http.server` has none, and replay seeking needs them). Defaults: its own folder, port
+  8777. It serves only `answer.html` and `test/tNN-{a,b,c}.mp4`. `key.json`, `clips.tsv`,
+  the stacks and `../` paths answer 404 (checked with curl on r5). A copy of it and of the
+  page are in `r5/`.
+- `scripts/body_study/test_answer.sh` (+ `test_answer.cjs`): headless Chrome at 1366 x 768
+  on gray 3 s lossless dummy clips. It runs once from `file://` and once over `serve.cjs`,
+  31 checks each, all passing:
+  - no horizontal scroll; the controls fit in 768 px (the video is 956 px wide);
+  - A, black, B, black, C in order; no controls in the first pass; seeks back and forward
+    refused; pause holds the clip;
+  - replays locked until the counted answer; the counted answer is saved and cannot change,
+    also after a reload; no way back to the first pass;
+  - replays have controls and seek;
+  - the records' fields, replay counts and times;
+  - a reload mid first pass restarts it (2 starts recorded);
+  - download mid test; cleared storage, then resume from the file;
+  - 24 / 24 ends the test with a final download;
+  - no request for the key; only the page and the single clips are requested (Chrome's
+    built-in `data:` icons and favicon excepted); `serve.cjs` refuses `key.json` and
+    serves byte ranges.
+- `scripts/body_study/score.py`: scores only `counted`. Second answers (given, correct,
+  changed), times, pauses and replays are printed as data only. `test_score.py`
+  (synthetic key and answers, where the second answer is always right): 16 gives PASS, 15
+  and 0 give FAIL, 24 all found, and the data lines are checked. Not run on real answers.
+- `r5/HOWTO.txt`: the server command `node /secondary/hyst-data/bodystudy/r5/serve.cjs`,
+  the URL `http://127.0.0.1:8777/answer.html`, Chrome required, how to resume, where
+  `answers.json` goes.
+
+Checks: `cargo test -p hyst-compile -p hyst-output -p hyst-previz -p hyst-cli` passes;
+clippy -D warnings with --all-targets is clean on the same crates; fmt is clean. `three.sh`
+exports compared with `cmp` against `hexagon-47.html`, `five-years-hexagon.html` and
+`presence-hexagon.html`: all three are identical; the tmp files were deleted. Nothing was
+watched or answered. Frozen `src/` and `tools/` untouched. No hardware driven.
+
+### Body study, check 2b scored (★ 3) — 2026-10-13
+
+The user's answers: `answers.json` (24 of 24, finished, no pending triplet), copied to
+`/secondary/hyst-data/bodystudy/r5/answers.json`; the score output is in `r5/score.txt`.
+Scored with `scripts/body_study/score.py` against `r5/key.json`: counted answers only, as
+addendum 7 says.
+
+- **13 of 24 correct. Check 2b fails** (pass at ≥ 16; chance 8).
+- Under guessing, 13 or more has p = 0.028 (binomial, 1/3 per triplet); 16 or more 0.00086.
+  Wilson 95 % interval for the hit rate: 0.35-0.72 (chance 0.33).
+- Per region, found as the odd one (of 3) / as the pair of a correct triplet (of 3):
+  0 (centre 1706) 2/2, 1 (1966) 1/0, 2 (529) 2/1, 3 (786) 2/2, 4 (1582) 1/2,
+  5 (365) 2/3, 6 (1919) 1/2, 7 (183) 2/1.
+- Per k (odd region = pair + k mod 8): k 1: 3/8, k 3: 5/8, k 5: 5/8.
+- Descriptors with the largest found-minus-missed difference, rank units:
+  - odd region's position: wrist roll jerk p90 -0.101, roll jerk mean -0.092, roll accel
+    p90 -0.081, lag elbow>wrist +0.078, wrist bend speed p90 -0.074, extension +0.067;
+  - |m_odd - m_pair|: shoulder accel p90 -0.140, shoulder speed mean -0.133, roll jerk
+    mean +0.125, shoulder accel mean -0.109, roll jerk p90 +0.105, shoulder jerk p90 -0.100.
+  With 13 hits and 11 misses, each difference rests on a few triplets.
+- Data, not scored: no second answers, no replays, no free text. Time to the counted
+  answer: median 51.1 s (min 50.6, max 55.7). The first pass alone takes 50 s, so every
+  answer came right after C. One pause in the first pass at most.
+
+Per `NEXT_BODY_THEN_MIND.md` step 1, "If it fails": round 2, once, widens what the misses
+point at. Addendum 5 says a failing 2b points at the generator (how much the seed decides
+against the body vector). Round 2 is not started. That decision, and its addendum, belong to
+the user and the overseer. Answers file also left where the user put it:
+`/secondary/Programming/Github/Hysteresis/answers.json` (untracked, main checkout).
+
+### Body study, round 2 under addendum 8: generator and sweep (★ 1) — 2026-10-14
+
+Rules: `docs/BODY_STUDY.md` with all eight addenda (unchanged). Data in
+`/secondary/hyst-data/bodystudy/r6/` (`sweep.json`, `sweep.log`, `report.txt`, `first.tsv`,
+`first/{calm,middle,energetic}.{html,mp4,txt}`, `first/silence.m4a`), outside git. **Not
+verified by eye.** The study waits at ★ 1: the user judges the range from the three clips.
+Nothing of round 1's clips is reused.
+
+Generator (`crates/hyst-compile/src/body.rs`, `Motion::new` rewritten; every range and its
+reason in its doc comment):
+- **15 body dimensions** (was 12): round 1's twelve plus `size`, `energy` and `rhythm`.
+- **The body decides.** Pattern: every joint alternates between two poles, one move each
+  way (base yaw ±span/2 about straight ahead, roll back and forth, shoulder and elbow about
+  centres set by height and curl_extension, wrist about the arch's centre). Pace: energy sets
+  the leader's move length. Rhythm sets how many moves elbow (1 + round(rhythm)), wrist bend
+  and roll (1 + round(2 rhythm)) make per base and shoulder move. Initiation, succession,
+  time, weight, flow, space and breath act as in round 1.
+- **The seed only varies:** the start phase (anywhere in one leader cycle of two moves),
+  ±8 % on each gap, ±10 % of the joint's travel on each target, breath's phase. Round 1's
+  random target draws, random side flips, random paces and the 15-degree minimum move are
+  gone.
+- **Floor:** a target that breaks the floor rule is lifted in steps (shoulder 8, elbow and
+  wrist 10 degrees) up to 6 times, then the joint stays for that move (round 1: 30 random
+  redraws).
+- Limits, the base's hand-speed cap, overlap, holds, overshoot and the final slow-down
+  factor are round 1's.
+
+Constants and origin:
+- `PACE_FAST` 0.7 s per leader move (energy 1): under round 1's shortest wrist move, so the
+  fast end meets the joint limits and hand rules, not a cap of its own. Geometric between.
+- `PACE_SLOW` 5.0 s (energy 0) and `SIZE_MIN` 0.06 (size 0, scale 1 at size 1, geometric):
+  the slowest and smallest point of a probe ladder (size scale / pace 0.12 / 3.2, 0.06 / 4.0,
+  0.06 / 5.0, 0.04 / 6.0, 0.03 / 8.0) at which at least 90 % of the calmest bodies (size and
+  energy ≤ 0.05, 60 draws) pass the stillness cap: 56 of 60 here, 53 at 0.04 / 6.0, 47 at
+  0.03 / 8.0. 200-clip sweeps on the same ladder gave mean joint speed p90/p10 2.28, 4.01,
+  4.53, 5.97, 7.66.
+- `AMP`, full-size travel per move: base 330 and roll 110 degrees (round 1's upper ranges),
+  shoulder 85 and elbow 125 (their whole ranges, 10..95 and -30..95), wrist bend 140 (twice
+  round 1's 70 per side). Wander (base 15, roll 30 degrees x space) is scaled by size too.
+- `TIME_JITTER` 0.08, `TARGET_JITTER` 0.1: mine, small next to pace (7.1x) and size (16.7x).
+- `BEGIN` -12 s (minus the start phase): two slowest moves plus overlap, so the clip opens
+  inside the pattern. `END` 12 s.
+- Stillness cap (addendum 8): `STILL_DEG_S` 2, `STILL_RUN_S` 2, `STILL_SHARE` 0.25. A frame
+  step is still when all five joints move under 2 deg/s.
+- Clip 8 s, stretch about 4 s (addendum 8). Sample seed 20261016.
+- Removed: the movement floors (`MIN_PATH_M`, `MIN_BOX_M`, `MIN_TURN_DEG`) and per-joint
+  floors (`MIN_JOINT_DEG`). `body_study fill` (addendum 3's region fill) was deleted.
+
+Tests (13 body tests): same inputs give the same clip; stretching keeps the centre pose and
+slows the clip; one body over 6 seeds stays within 1.35x in mean joint speed (three bodies);
+size and energy at 0 and 1 give mean joint speed calm < big-slow / 3, < small-fast / 2,
+< both-high / 4; hardware limits and `validate` hold on feasible clips from calm to sudden,
+big and fast; the rendered-curve check names the joint; a 2.5 s freeze fails "still run",
+alternating 1 s still / 1 s moving fails the share; rhythm 1 gives the wrist at least twice
+rhythm 0's moves; overshoot only on distal joints and only with free flow; the study
+camera; descriptors finite.
+
+Sweep (seed 20261016): **2,002 attempts, 2,000 passed**, 2 rejected (floor at stretch 1.95;
+one also out of frame at stretch 1). No parameter decile has more than 2 rejections; the
+full table is in `report.txt`. Stretch histogram 1.1^0..7: 1913, 79, 8, 0, 0, 0, 0, 0.
+
+Reports (addendum 8, never gates). Mean joint speed = mean over the five joints of each
+joint's mean speed on the shown 8 s, deg/s:
+- **min 2.8, p10 8.5, median 28.3, p90 45.6, max 63.7; p90/p10 5.35.** Round 1's 72 test
+  clips: 24-45.
+- Histogram: 2.8-7.9:178 7.9-13.0:217 13.0-18.0:204 18.0-23.1:212 23.1-28.2:182
+  28.2-33.2:223 33.2-38.3:249 38.3-43.4:255 43.4-48.5:160 48.5-53.5:90 53.5-58.6:27
+  58.6-63.7:3.
+- Per joint, mean speed p10 / median / p90: yaw 10.9 / 29.8 / 47.7, shoulder 3.9 / 11.1 /
+  26.2, elbow 8.1 / 24.2 / 43.7, wrist bend 8.4 / 37.3 / 64.8, roll 7.5 / 31.4 / 58.0.
+- Spearman rho of each parameter with mean joint speed: size +0.78, energy +0.46, rhythm
+  +0.21, flow +0.13, every other |rho| ≤ 0.06. Median by size decile 8.0 to 41.9; by
+  energy decile 15.3 to 37.5. Energy flattens above its 7th decile: big, fast bodies meet
+  the hand-speed rule and are slowed as a whole.
+- Share of total joint motion, median (p10, p90): yaw 0.216 (0.162, 0.342), shoulder 0.091
+  (0.058, 0.145), elbow 0.186 (0.124, 0.251), wrist bend 0.270 (0.166, 0.327), roll 0.223
+  (0.155, 0.284).
+- Still time (all joints under 2 deg/s): 145 of 2,000 clips have any still frame; longest
+  run max 1.05 s; share median 0, p90 0, max 0.242.
+- Hand path p10 / median / p90 1.09 / 2.97 / 4.50 m; box 0.26 / 0.66 / 1.06 m; base turn
+  28 / 90 / 228 degrees.
+- Seed against body (probe, not a rule): 100 sweep bodies, 6 seeds each. Coefficient of
+  variation of mean joint speed within one body: median 0.046, p90 0.083; max/min over the
+  6 seeds median 1.14, p90 1.30, max 2.01. Ranks and regions are not built yet.
+
+First-look clips (8 s, silent, study camera, `record-ensemble.cjs`, 1280 x 720, not test
+clips): the sweep clip nearest the 5th, 50th and 95th percentile of mean joint speed.
+Per joint in the order yaw / shoulder / elbow / wrist bend / roll, mean speed deg/s.
+- calm, sweep clip 1982 (size 0.14, energy 0.15, stretch 1.0): mean joint speed 6.2;
+  per joint 7.7 / 4.2 / 6.9 / 6.6 / 5.8. Hand path 0.99 m, box 0.25 m, base turn 29
+  degrees, top hand speed 0.18 m/s. All joints still: 0 s. Frame margin 218 px.
+- middle, clip 561 (size 0.59, energy 0.11, stretch 1.0): 28.3; per joint 24.9 / 8.8 /
+  24.7 / 42.5 / 40.7. Hand path 2.82 m, box 0.76 m, base turn 95 degrees, top hand speed
+  0.67 m/s. Still 0 s. Frame margin 86 px.
+- energetic, clip 1466 (size 0.76, energy 0.76, stretch 1.0): 49.3; per joint 45.1 / 38.5
+  / 28.1 / 72.9 / 61.6. Hand path 3.48 m, box 0.77 m, base turn 168 degrees, top hand
+  speed 0.70 m/s. Still 0 s. Frame margin 46 px.
+Body vectors and seeds: `r6/first.tsv`; per-clip printout in `first/*.txt`.
+
+Report script: `scripts/body_study/report6.py SWEEP.json`.
+
+Not done (after the go-ahead): ranks with half-ties, regions of 12 with the gate, practice
+and scored triplets, the page with capped replays and practice feedback, scorer, HOWTO,
+page tests.
+
+Checks: `cargo test -p hyst-compile -p hyst-output -p hyst-previz -p hyst-cli` passes
+(hyst-compile 54); clippy -D warnings on the same crates with --all-targets is clean; fmt is
+clean. `three.sh` exports compared with `cmp` against `hexagon-47.html`,
+`five-years-hexagon.html` and `presence-hexagon.html`: all three identical; tmp files
+deleted. Frozen `src/` and `tools/` untouched. No hardware driven.
+
+### Body study, round 2 under addendum 8: regions, triplets, clips and the page (★ 2) — 2026-10-14
+
+Rules: `docs/BODY_STUDY.md` with all eight addenda (unchanged). The generator and the sweep
+of `fc73fa5` are unchanged (`r6/sweep.json`). Data in `/secondary/hyst-data/bodystudy/r6/`,
+outside git: `regions.json`, `regions.log`, `regions.txt`, `key.json`, `clips.tsv`,
+`triplets.tsv`, `clips/` (108 recordings with their html, 2a printout and ladder check),
+`test/` (the 108 shown clips and `practice.js`), `render.log`, `silence.m4a`, copies of
+`answer.html` and `serve.cjs`, `HOWTO.txt`. **Not verified by eye.** I did not watch any
+clip or answer anything. The study waits at ★ 2: the user takes the test as
+`r6/HOWTO.txt` says.
+
+Built:
+- `body_regions.rs`: `rank` is now the midrank of addendum 8, (values below + half the
+  values equal) / 2,000; for a sweep value with no tie it equals round 1's (below + 0.5) /
+  2,000. `candidates` (new): the points whose 9th-nearest distance is at or under the median
+  (the mean of the 1,000th and 1,001st for 2,000). `CLIPS_PER_REGION` 12. 8 tests (1 new:
+  candidates; the rank test now covers ties).
+- `body_study regions SWEEP OUT` (`hyst-previz/examples/body_study.rs`): now computes the
+  sorted columns, midranks and candidates from the sweep itself (round 1 read them from
+  `regions.py`'s output). Regions as addendum 4 with 12 clips. Then the practice bodies: the
+  next 8 candidates in farthest-point order after the final centres (each next one farthest
+  from the final centres and the practice bodies already taken; never a centre used before),
+  2 clips each with fresh seeds passing check 2a.
+- `triplets.py REGIONS.json R6DIR`: 32 scored triplets as addendum 8 sets them; 4 practice
+  triplets; `key.json`, `clips.tsv`, `triplets.tsv`, `test/practice.js`.
+- `render.sh R6DIR`: per clip `body_study ladder`, `body_study html` (study camera, check 2a
+  with the frame rule), `record-ensemble.cjs` (start 0, 8 s, `r6/silence.m4a`, which is
+  `r6/first/silence.m4a`); then each shown file is the clip's video stream copied (`-c:v
+  copy -an -map_metadata -1 -movflags +faststart`) to `test/{tNN,pN}-{a,b,c}.mp4`. Any
+  failure stops before the copy.
+- `answer.html` (addendum 8): practice 1-4 first, then 1-32. First pass A, B, C alone, 1 s
+  black between, Pause only, seek undone. After C: replay buttons (at most 2 per triplet,
+  each clip at most once, alone, from the start, no controls, seek undone, no pause) and the
+  counted answer (final, can be given during a replay, which then stops). Practice: right or
+  wrong; if wrong, the odd clip and the first pair clip in A, B, C order side by side, muted,
+  "Play both" restarts both together, as often as wanted. Scored: replays with seek, second
+  answer, text, no feedback. No way back. Saved in `localStorage`
+  (`hyst-bodystudy-r6-v1`) at Start, every pause, the end of the first pass, every replay
+  before and after the counted answer, the counted answer, second answer, text, joint plays
+  and Next. Reload mid first pass restarts it from A; reload after it returns to the counted
+  answer with the replays used kept. Download any time and at the end; load resumes.
+  Records per triplet: addendum 7's fields plus `replaysBeforeCounted` {A, B, C},
+  `firstPassDone`; practice records add `correct` and `pairPlays`. The practice odd
+  positions come from `test/practice.js` (a script, so the page also works from `file://`);
+  it holds only the 4 practice positions. The page never reads `key.json`.
+- `serve.cjs`: whitelist now `answer.html`, `test/{tNN,pN}-{a,b,c}.mp4`, `test/practice.js`.
+  On r6: those answer 200; `key.json`, `clips.tsv`, `regions.json`, `triplets.tsv`,
+  `clips/r0c00.mp4` and `test/../key.json` answer 404.
+- `score.py ANSWERS KEY`: counted answers of the 32 scored only; pass at ≥ 20 with the
+  binomial P under guessing; per region (odd of 4, pair of a correct triplet of 4), per k,
+  odd-position confusion table, first against second half of the shown order, hits on the
+  16 triplets with the largest |mean joint speed of the odd region − of the pair region|
+  (stable sort, ties by shown order) against the other 16, separating descriptors as round
+  1; practice, second answers, times, pauses, replays before and after as data. Region mean
+  joint speed is stored in `key.json` (`speed`).
+- `report4.py` reads `clipsPerRegion` and lists the practice bodies.
+
+Constants and origin:
+- 8 regions, 12 clips, factor 1.5, 200 seeds, 32 triplets, k = 1, 3, 5, 7, positions 11 /
+  11 / 10, seed 20261017, 4 practice triplets from the next 8 candidates, at most 2
+  replays: addendum 8.
+- Seed order of made clips: `SEED_ORDER` 20261015 and the splitmix64 stream per centre of
+  addendum 4 (addendum 8 sets no new one).
+- Mine (the documents do not set them): within a region, clips 0-7 (centre first) go to its
+  4 pair appearances in triplet order, clips 8-11 to its 4 odd appearances (round 1's
+  convention). Shuffle with Python `random.Random(20261017)`: triplet order shuffled, then the
+  position list (A 11, B 11, C 10) shuffled and assigned in shown order. Practice triplet q:
+  pair from practice body 2q (its 2 clips), odd from body 2q + 1 (its first clip; its second
+  clip is made but unused); odd position `randrange(3)` from the same generator after the
+  scored ones. Practice feedback shows the first pair clip. Pre-answer replays have no
+  pause.
+
+Run (2 s):
+- 1,000 candidates. Initial centres 1849, 1479, 50, 1789, 1583, 965, 1047, 1064.
+  **The separation rule holds with 0 replacements.**
+- w: 0.326, 0.761, 0.552, 0.624, 0.263, 0.668, 1.134, 0.617.
+- Smallest ratio 1.519 (pair 2-6, |m| 1.723), next 1.530 (1-6); 0 of 28 pairs under 1.5;
+  |m_i − m_j| min 1.723, median 2.662, max 4.888; largest ratio 9.292 (0-4). Full list in
+  `regions.txt`.
+- Seeds: 11 tried per region, 0 skipped; practice 2 tried per body, 0 skipped.
+- Practice bodies 1733, 1438, 690, 1424, 1623, 1040, 1259, 1852.
+- Independent numpy check (sort, searchsorted midrank, d9, farthest point, w, m, ratio):
+  same 1,000 candidates, same centres, same w, smallest ratio 1.518 (rounding).
+- Lag descriptors 33-35 have 61 distinct values over 2,000 (ties, now midranked); the other
+  34 have 2,000.
+- Region mean joint speed (mean over 12 clips, deg/s; clip range) and size / energy /
+  rhythm of the body: 0: 2.9 (2.5-3.2), 0.01 / 0.14 / 0.24; 1: 42.3 (31.5-46.7), 0.40 /
+  0.88 / 0.93; 2: 35.5 (31.4-38.2), 0.94 / 0.32 / 0.05; 3: 17.5 (16.8-18.3), 0.22 / 0.50 /
+  0.85; 4: 12.8 (12.2-13.5), 0.14 / 0.77 / 0.21; 5: 8.7 (8.2-8.9), 0.10 / 0.37 / 0.39; 6: 49.3
+  (41.4-55.2), 0.88 / 0.78 / 0.74; 7: 16.5 (14.1-18.0), 0.69 / 0.09 / 0.18. Region 0 is the
+  sweep's slowest kind (sweep min 2.8); it passes the stillness cap.
+- Stretches of the 96 scored clips: 94 at 1.0, region 0 has one at 1.1 and one at 1.21. All
+  12 practice clips 1.0.
+
+Clips (automated checks only):
+- 108 recorded (96 scored, 12 practice); all 108 match their stored stretch on the ladder
+  and pass check 2a; smallest frame margin 32 px (rule 20). None failed.
+- Every shown file: video only, 1280 x 720, 240 frames, 8.000 s, tags only language,
+  handler name, vendor id, brand and encoder strings, the same in every file. Decoded frames
+  equal the recorded clip's (`framemd5`), 108 of 108.
+- Sizes: `test/` 58,471,379 bytes (250,319-885,000 per file); `clips/` 70,115,876 bytes.
+- 11 / 11 / 10 odd positions checked by count; key positions not printed.
+
+Page and scorer tests:
+- `test_answer.sh`: headless Chrome at 1366 x 768 on gray 3 s dummy clips, once from
+  `file://`, once over `serve.cjs`; all checks pass in both (78 `ok` lines in all). Covered:
+  no horizontal scroll; practice first; first pass in order, no controls, seek back and
+  forward refused, pause holds; replays offered only after the first pass; a pre-answer
+  replay alone, from the start, no controls, seek refused, no second replay while it plays;
+  a repeat of one clip refused; a third replay refused; replay counts saved and kept over a
+  reload; practice wrong shows odd and a pair clip, both play together twice; practice right
+  shows no pair; practice has no second answer or text; scored shows no right or wrong;
+  counted answer cannot change, also after reload; no way back; replays with seek after it;
+  record fields; reload mid first pass restarts it; download mid test, clear, resume from
+  file; 32 / 32 ends with a final download; `key.json` never requested; only the page,
+  `practice.js` and clips requested; `serve.cjs` refuses `key.json`, serves ranges, practice
+  clips and `practice.js`.
+- Real page over `serve.cjs` on r6, headless (not watched): "Practice 1 / 4", first clip
+  8 s, 1280 wide, practice positions loaded.
+- `test_score.py`: synthetic key and answers; 20 PASS with P 0.0007, 19 and 0 FAIL, 32 all
+  found; halves, confusion table, speed split (checked against a hand count), practice never
+  counted, replay lines.
+
+Checks: `cargo test -p hyst-compile -p hyst-output -p hyst-previz -p hyst-cli` passes
+(hyst-compile 55); clippy -D warnings on the same crates with --all-targets is clean; fmt is
+clean. `three.sh` exports compared with `cmp` against `hexagon-47.html`,
+`five-years-hexagon.html` and `presence-hexagon.html`: all three identical; tmp files
+deleted. Frozen `src/` and `tools/` untouched. No hardware driven.
+
+### Body study round 2: check 2b scored (pass) — 2026-10-14
+
+The user's answers: `/secondary/hyst-data/bodystudy/r6/answers.json`. Scored with
+`scripts/body_study/score.py r6/answers.json r6/key.json` (counted answers of the 32 scored
+triplets only, as addendum 8 says); the output is saved in `r6/score.txt`.
+
+- **30 of 32 correct. Check 2b passes** (pass at ≥ 20; chance 10.7).
+- Under guessing, 30 or more has P = 1.1e-12 (binomial, 1/3 per triplet; the scorer prints
+  0.0000). Wilson 95 % interval for the hit rate: 0.80-0.98 (chance 0.33).
+- Per region, found as the odd one (of 4) / pair region of a correct triplet (of 4):
+  0 (centre 1849, 2.9 deg/s) 4/4, 4/4; 1 (1479, 42.3) 4/4, 4/4; 2 (50, 35.5) 3/4, 3/4;
+  3 (1789, 17.5) 4/4, 4/4; 4 (1583, 12.8) 4/4, 4/4; 5 (965, 8.7) 4/4, 4/4; 6 (1047, 49.3)
+  4/4, 4/4; 7 (1064, 16.5) 3/4, 3/4.
+- Per k (odd region = pair region + k mod 8): k 1: 8/8, k 3: 7/8, k 5: 7/8, k 7: 8/8.
+- Odd position (rows) against counted answer (columns A, B, C): odd A 10 / 0 / 1; odd B
+  0 / 10 / 1; odd C 0 / 0 / 10. Both misses answered C.
+- Halves of the shown order: 1-16: 16/16; 17-32: 14/16.
+- Speed split: the 16 triplets with the largest gap in region mean joint speed (18.0-40.7
+  deg/s) 14/16; the other 16 (gap 3.7-14.6 deg/s) 16/16.
+- Separating descriptors (found minus missed, rank units; two misses, so each rests on
+  two triplets):
+  - odd region's position m: periodicity -0.415, base yaw speed p90 -0.359, shoulder speed
+    p90 -0.289, base yaw speed mean -0.285, elbow jerk p90 +0.261, elbow jerk mean +0.256,
+    wrist roll jerk mean +0.243, shoulder speed mean -0.241;
+  - |m_odd - m_pair|: periodicity +0.540, base yaw accel mean +0.293, base yaw accel p90
+    +0.292, curl +0.268, elbow accel mean +0.259, elbow speed p90 +0.238, elbow jerk mean
+    +0.233, base yaw jerk mean +0.228.
+- Data, not scored: practice 3 of 4 right. Second answers on 2 of 32 (1 correct, both
+  changed from the counted answer). Time to the counted answer: median 30.0 s (26.6-46.3);
+  total per triplet median 41.5 s (27.6-71.0). Pauses in the first pass: median 0, max 1.
+  Replays before the counted answer per triplet: none on 16, one on 9, two on 7; found 14 of
+  16 with any replay, 16 of 16 without. Replays after the counted answer: 1 in all.
+
+The user's notes, verbatim:
+
+- t01 (found, odd region 0): A and B were both small, slow and near the top, thats why I chose C
+- t09 (found, odd region 5): A and B were obviously the same, repetitive/locked groove sortof, and C was high/extended/slow
+- t11 (found, odd region 6): A and C are basically figure eights
+- t16 (found, odd region 7): A and C are obviously the same, sortof locked groove, lateral move, hold, vertical move, hold, inverse lateral move hold, ...
+- t17 (found, odd region 0): C is massively slower than A/B
+- t18 (found, odd region 3): Again, A and B are the "locked groove, hold between lateral/vertical move" ones
+- t19 (missed, odd region 7): First one where I'm unsure
+- t21 (found, odd region 2): B and C are more figure eights/easy/fluid, A has some quick up-to-down moves, inverting its trajectory sortof?
+- t22 (found, odd region 6): Both A and B have sort of "holds" sortof? Idk
+- t23 (found, odd region 4): B is the "locked groove/holds" one (Im not just remembering the different classes here, but that description is why its obviously different from the other 2 who are similar)
+- t24 (found, odd region 7): C is a lot bigger and free-er and A/B is very similar
+- t25 (found, odd region 5): Main difference is position/how the arm holds, B is straight up, A and C are in similar heights
+- t27 (found, odd region 4): A is `locked groove/holds` thing
+- t28 (found, odd region 2): A and C are again `almost straight up and slow` sortof
+- t29 (found, odd region 6): A and B are the "almost straight up slow thing"
+- t31 (found, odd region 1): A and C are both sortof "slow/sad hanging/drooping"
+- t32 (found, odd region 6): A is more "wild and unstructured" than the other two
+
+Step 1 passes. Per `NEXT_BODY_THEN_MIND.md`, the user decides step 3 later (after step 2).
+Nothing in the generator or the planner changed.
+
+### Whole-song dial page (step 2, "Before it starts") — 2026-10-14
+
+The page on which the user records their own feeling for the three danced songs, audio only
+(`NEXT_BODY_THEN_MIND.md` step 2 dial format; `EMOTION.md` stage 4.3). The recordings are
+held-out truth for step 2's gate 5: **the builder never opens `dial.json`.** Tested on
+synthetic audio only. Not used by the user yet. Not verified by eye.
+
+Built (`scripts/emotion/`):
+- `dial.html`: one page, no libraries. Songs in fixed order `song1.m4a` (Instant Crush),
+  `song2.m4a` (Five Years), `song3.m4a` (Presence); the title shows "Song k of 3: title
+  (artist)". A 520 px square canvas pad: valence horizontal, arousal vertical, both -1..+1,
+  centre 0,0. Edge labels "valence −1 unpleasant", "valence +1 pleasant", "arousal +1",
+  "arousal −1"; corner words excited (top right), tense, sad, calm. White marker, a trail of
+  the last 3 s fading linearly, numbers "valence +0.42 / arousal -0.17" in 34 px monospace
+  beside the pad. Pad tint `hsl(angle, 65 % × min(1, r), 38 %)`, angle = atan2(arousal,
+  valence) in degrees, r the distance from the centre; grey at the centre. A 6 px progress
+  bar under the pad, not clickable.
+- Input: the marker follows `pointermove` over the pad (no button), stays where it was when
+  the pointer leaves; arrow keys move it 0.05 (clamped, rounded to 0.01). Every song and the
+  practice start at the centre.
+- Flow: optional 30 s practice before song 1 (pad only, no audio, "End practice" allowed,
+  never recorded, not offered again). Each song: Start, Pause / Resume, plays once, no
+  controls on the audio element; any seek further than 0.25 s from the last played time is
+  undone and logged as `seekRefused`. At the end: saved, "Next song". After song 3 the page
+  says where to put `dial.json`.
+- Recording: a 20 ms timer (and `timeupdate`) samples up to the audio clock: sample k has
+  t = k / 10 s of `audio.currentTime` and the position then, so a song of d seconds gives
+  floor(10 d) + 1 samples whatever the pauses. Nothing is sampled while paused. Events
+  `start`, `pause`, `resume`, `seekRefused`, `end` with audio time and wall time.
+  `localStorage` key `hyst-emotion-dial-v1`, written every second while playing, at every
+  pause, resume and song end. A reload (or a loaded file) with a song in progress drops that
+  song's samples and logs `{at, reachedT, samplesDropped}` in its `restarts`; finished songs
+  stay. "Download dial.json" any time; "Load a saved file" resumes from a download.
+- File format: `{format: "hyst-emotion-dial", version: 1, rate: 10, axes, practiceDone,
+  songs: [{file, title, artist, status, duration, startedAt, endedAt, samples: [[t, valence,
+  arousal], ...], events, restarts}]}`.
+- `dial_serve.cjs [DIR] [PORT]`: the body-study server with a new whitelist, `dial.html` and
+  `song1.m4a`-`song3.m4a` only; 127.0.0.1, byte ranges, port 8778, DIR defaults to its own
+  folder. `dial.json` answers 404.
+- `test_dial.sh` + `test_dial.cjs`: three synthetic 4 s sine songs, headless Chrome at
+  1366 x 768 over the server. 62 checks, all pass, 3 runs of 3: whitelist (dial.json,
+  other files, traversal, POST refused; ranges serve the right bytes; loopback only), 520 px
+  pad, no horizontal scroll, titles, centre start, grey centre tint, hue per direction and
+  saturation with distance, trail, practice not recorded, 41 samples for 4.000 s at t = k/10,
+  samples carry pointer and key positions at the right audio times, pause stops recording
+  and logs at the audio time, seek back and forward undone, pointer leaving keeps the
+  marker, saved mid-song, reload mid-song restarts it and keeps song 1, download equals the
+  stored state, load resumes after clearing storage, final download, only the page and the
+  three songs requested.
+
+Constants and origin: 10 Hz, -1..+1, 520 px, 3 s trail, 0.05 step, 30 s practice, port
+8778, every second save: the brief. Mine (not set by the documents): hue = angle directly
+(pleasant red, excited yellow-green, unpleasant cyan, calm violet), saturation 65 % and
+lightness 38 % at full distance, 0.25 s seek tolerance, start at the centre for every song,
+edge labels as above.
+
+Installed in `/secondary/hyst-data/emotion/dial/` (outside git): `song1.m4a`-`song3.m4a`
+(copies of `$D/instant-crush.m4a`, `five-years.m4a`, `presence.m4a`; durations 339.824,
+283.753, 270.733 s), `dial.html`, `dial_serve.cjs`, `HOWTO.txt`. Smoke check over the real
+folder (headless, nothing recorded): title "Song 1 of 3: Instant Crush (Daft Punk)", the
+three durations above load, `HOWTO.txt` 404.
+
+Checks: `cargo test -p hyst-compile -p hyst-output -p hyst-previz -p hyst-cli` passes
+(hyst-compile 55); clippy -D warnings on the same crates with --all-targets is clean; fmt is
+clean. `three.sh` exports compared with `cmp` against `hexagon-47.html`,
+`five-years-hexagon.html` and `presence-hexagon.html`: all three identical; tmp files
+deleted. Frozen `src/` and `tools/` untouched. No hardware driven. Step 2 (MERP, the mind)
+not started.
+
+### Whole-song dial, format 2: pass A energy, pass B two feelings, song picker — 2026-10-14
+
+`dial.html` reworked to the revised dial format of `NEXT_BODY_THEN_MIND.md` step 2 (commit
+`0fa877d`). The user's recordings are held-out truth: **I did not open any file the user
+recorded** (`dial-ic-try1.json`, any `dial*.json`); tests use synthetic audio and synthetic
+answers only. Not used by the user yet. Not verified by eye.
+
+Built (`scripts/emotion/`):
+- Start screen: a table of 2 passes x 3 songs (Instant Crush, Five Years, Presence), each
+  cell "done" or "not recorded", and "Done: n of 6". Any pair, any order. A done pair
+  offers "Discard and redo": the first click only asks ("Really discard? Click again"),
+  the second marks the take `discarded` (kept with its samples and taps, `discardedAt`)
+  and opens the pair. Optional 30 s practice per pass (no audio, not recorded,
+  `practiceDone.A` / `.B`).
+- Pass A, energy: a 120 x 520 px vertical slider, 0 calm (bottom) to 1 energetic (top).
+  Pointer over it sets the value (no button), the value stays when the pointer leaves;
+  Up / Down 0.05 (Left / Right do nothing). "energy 0.62" in 34 px monospace. Tint: grey
+  rgb(110,110,110) at 0, linear to rgb(235,95,40) at 1. Space bar during the song: a tap
+  at the audio time (`taps`, s, 3 decimals), a 0.4 s white flash on the slider and a tick
+  on the progress bar; in practice a flash only; while paused or idle nothing. Space
+  never presses a focused button.
+- Pass B, two feelings: a 520 px square pad, light / bright horizontal (left 0, right
+  1), heavy / dark vertical (bottom 0, top 1). Line under the title: "How the music
+  sounds, not whether you like it. Both can be high at once." Labels "↑ heavy / dark",
+  "light / bright →", "0" at the origin; no corner words. "light 0.62 / heavy 0.40" in
+  34 px monospace. Tint: grey + light x (LIGHT - grey) + heavy x (HEAVY - grey), LIGHT
+  rgb(245,205,110), HEAVY rgb(40,30,95), clamped: 0,0 grey 110,110,110; 1,0 245,205,110;
+  0,1 40,30,95; 1,1 175,125,95. White marker, 3 s fading trail, arrow keys 0.05.
+- Both passes: Start, audio once, Pause / Resume, no seek (a jump over 0.25 s is undone and
+  logged `seekRefused`), progress bar, 10 Hz samples on the audio clock (`[t, energy]` or
+  `[t, light, heavy]`, t = k / 10 s, floor(10 d) + 1 per song), events `start`, `pause`,
+  `resume`, `seekRefused`, `end`. `localStorage` key `hyst-emotion-dial-v2` (the first
+  page's `-v1` key is left alone), written every second while playing, at pause, resume,
+  each tap and song end. A reload during a song keeps that take as `interrupted`
+  (`reachedT`, `interruptedAt`, samples kept); the pair is not done and starts again.
+  "Download dial2.json" any time; "Load a saved file" resumes.
+- File: `{format: "hyst-emotion-dial", version: 2, rate: 10, passes: {A: {name, axes:
+  {energy}, taps, wording}, B: {name, axes: {light, heavy}, wording}}, songs,
+  practiceDone, takes: [{pass, song, title, status, duration, startedAt, endedAt, samples,
+  taps, events, ...}]}`. A pair is done when it has a take with status `done`.
+- `dial_serve.cjs` unchanged (whitelist `dial.html`, `song1-3.m4a`, port 8778).
+- Found while testing: a rounded canvas corner (border-radius 6 px) is not hit by the
+  pointer, so the pad's corners could not be reached. The canvases are now square. The
+  first page (`e9f0fad`) had the same 6 px radius, so on try 1 the old pad's extreme
+  corners (both |valence| and |arousal| above about 0.99) were reachable by keys only.
+- `test_dial.sh` / `test_dial.cjs`: 87 checks, all pass, 3 runs of 3. Server: `dial.json`,
+  `dial2.json`, `dial-ic-try1.json`, `HOWTO.txt`, other files, traversal, POST refused;
+  ranges serve the right bytes; loopback only. Page: picker with 6 cells and done count,
+  song 3 recorded first, practice not recorded and Space flashes in it, slider by pointer
+  and keys (clamped at 1, Left ignored), slider tint neutral at 0 and following the value,
+  tap flash, tick and saved time, no tap while paused, Space does not press the Pause
+  button, 41 samples at t = k / 10 for 4.000 s carrying pointer and key values, pause
+  stops recording, seeks undone, pad wording and labels, pad tints at the four corners
+  above, numbers and arrow keys on both axes, trail, no taps in pass B, reload keeps an
+  interrupted take, download equals the stored state and states version and axes, load
+  after clearing storage, pass B take `[t, light, heavy]`, redo asks first and keeps the
+  discarded take, final file `A3:discarded B1:interrupted B1:done A3:done`, only the page
+  and songs requested.
+
+Constants and origin: 0..1 axes, 10 Hz, 0.05 step, 30 s practice, 3 s trail, axis words,
+the pass B wording, `dial2.json`: the brief and the revised format. Mine (not set by the
+documents): the tint colours above, 0.4 s flash, two-click redo, 0.25 s seek tolerance,
+slider 120 px wide, every take starts at 0 (0,0 for the pad).
+
+Installed in `/secondary/hyst-data/emotion/dial/`: `dial.html` (new), `HOWTO.txt`
+(rewritten: serve command, URL, Chrome, the two passes, Instant Crush pass A already
+recorded and needs no pass A but stays selectable, file to
+`/secondary/hyst-data/emotion/dial/dial2.json`, tell the overseer). `dial_serve.cjs` and
+the songs unchanged. Smoke check over the real folder (headless, nothing recorded): picker
+with 6 "not recorded" cells, durations 339.824, 283.753, 270.733 s load; `dial-ic-try1.json`,
+`dial2.json` and `HOWTO.txt` answer 404 (status codes only).
+
+Checks: `cargo test -p hyst-compile -p hyst-output -p hyst-previz -p hyst-cli` 73 passed,
+0 failed; clippy -D warnings on the same crates with --all-targets clean; fmt clean.
+`three.sh` exports identical to `hexagon-47.html`, `five-years-hexagon.html`,
+`presence-hexagon.html`; tmp files deleted. Frozen `src/` and `tools/` untouched. No
+hardware driven. Step 2 (MERP, the mind) not started.
+
+### Step 2: the mind spike built, `check1b.py` written (★ 2) — 2026-10-24
+
+Rules: `docs/NEXT_BODY_THEN_MIND.md` step 2 with the notes of b1775f8 and 72ba7bc; `docs/MIND.md` 3.4–3.6, 5. Code in
+`scripts/emotion/`: `mind.py` (core, rehearsal, `mindState` field), `check1b.py` (the five gates), `lifts.py` (lift rule),
+`merp_labels.py` (MERP labels), `merp_features.py` (MERP ear features), `beats.py` (beat grids). **No check was run on real data.**
+`check1b.py` was run only on a synthetic world with fake dial files. Not built: pulse, `audioic`, the core's own expectation
+readout, any trained core. The `mindState` field is a function (`mind.mind_state_field`); it is not written for any song.
+
+**Constants and their origin.** From the rules: 512 units, density 0.1, time constants log-uniform 0.5–60 s, radius grid
+0.7 / 0.8 / 0.9 / 0.95 / 0.99 (start 0.9), ear PCA 64, state PCA 64, rehearsal PCA 8, lags 1 / 4 / 16 bars, 4 beats a bar, 5 folds,
+2,000 bootstrap resamples, 1,000 permutation draws, 8-beat windows, stage 1's bounds (timing 0.617 [0.596, 0.635], rank corr 0.616
+[0.588, 0.643]), Five Years 0–30 s and 156–258 s, Presence 120–190 s, Instant Crush masks 135–171 s and after 329.0 s, seeds of
+`check1.py`. Mine: leak a = 1 − exp(−0.5 / τ), input weights N(0, 1/d_in) with scale 1, tanh, `SEED_CORE` 20261016,
+`SEED_SHUFFLE` 20261017, `SEED_PERM` 20261018, PCA inputs scaled to unit variance, inner folds for the radius = 3 (as
+`common.choose_alpha`), the ridge penalty grid of `common.py`.
+
+**MERP labels.** The 3,482 kept trials taken from the raw series (24 duplicate (rater, song) pairs resolved by best match).
+Variants tested against the filtered file on the overlap (mean RMSE over trials, both axes; share of trials under 0.01):
+rescale none / smooth first 0.0079 (77.7 %); none / smooth after 0.0396 (28.7 %); per rater / first 0.0655 (20.4 %);
+per rater / after 0.0902 (5.3 %); per trial / first 0.2764 (3.7 %); per trial / after 0.2797 (3.6 %). **The data chose "no
+rescale, Savitzky-Golay (15, 2) at 10 Hz, then every 5th sample"**, which is outside the two options the note named; the
+released filtered values are the smoothed raw values with no further rescale (a per-rater rescale over all of a rater's raw
+trials gave 0.063). Alignment found per trial: the filtered series is the end of the raw series, 150–173 raw samples skipped.
+Per song: mean of the trials at 10 Hz, then 0.5 s step means. Raw trials per song 29–64 (279 for the DEAM anchors,
+not used). `pyarrow` was installed into `/secondary/hyst-env/emotion` to read the parquet files.
+
+**MERP ear features.** 43 songs (> 50 s), 2,665 per 0.5 s step, same component functions as `encode.py` (whole-song Demucs
+stems, MERT in 30 s chunks with 5 s context, CLAP at every step, Essentia); stems deleted per song. Run time 11,072 s of
+song time summed (3.1 h, part of it while the beat tracker shared the CPU), cache `/secondary/hyst-data/emotion/cache/mind/merp`
+85 MB, beats 9 MB, nothing on the root disk apart from a throwaway pyarrow venv in a job temp directory. The first run
+stopped at `00_839` (112.01 s): the grid has floor(2 × 112.01) + 1 = 225 steps, MERT's 75 Hz frame count is a few frames under
+75 × duration so its 0.5 s bins number 224. `encode.py` raises on this; `merp_features.py` repeats the last row when exactly one
+step is missing. Any other song that ends within about 0.02 s after a multiple of 0.5 s is treated the same way.
+**Beat tracker** for DEAM, Emotify and MERP: Essentia RhythmExtractor2013, method "multifeature". 2,187 grids, 0 fallbacks,
+median 118.4 bpm.
+
+**Load check on real data (no fit, no score).** `load_real()` gave DEAM 1,744 clips with 26,155 scored rows (stage 1: 26,155),
+Emotify 400 clips with 11,542 rows, MERP 43 songs with 4,100 rows, the three songs 542–680 steps, all 2,665 wide and finite,
+folds 438 / 438 / 438 / 437 / 436. The dial files were not read.
+
+**Tests.** `test_mind.py` 21, `test_check1b.py` 18, `test_check1.py` and `test_encode.py` 19: 58 in all, passing
+(`cd scripts/emotion && /secondary/hyst-env/emotion/bin/python -m unittest`). Same seed gives identical output; shuffling changes
+it; ρ = 0 drops the rehearsal input exactly and ρ scales it; the lift rule on jitter, an end flick, masks, the 16-beat rule; the
+MERP label pipeline on a synthetic trial (variant recovered, duplicate resolved, step means); each gate on crafted inputs; an
+end-to-end run on a synthetic world with fake dial files in both formats. Mutations of the gate comparisons, thresholds,
+p-value formula, lag, rise threshold and step window each broke a test.
+
+**Points the rules leave open, fixed in code as listed, to be ruled on** (also in `check1b.py` `POINTS_LEFT_OPEN`):
+1. Library clips have CLAP only every 2 s in the stage-1 cache; I interpolate it linearly between centres (held at the ends).
+   MERP and the songs have CLAP at every step; MERT of the library was run whole, of MERP and the songs in chunks.
+2. Rows scored: the 2 s grid of `check1.py` for DEAM, MERP and Emotify, for both methods.
+3. One valence/arousal readout per method, fitted on pooled DEAM + MERP training rows; gate 2's DEAM timing R² is therefore not
+   from a DEAM-only fit as in stage 1.
+4. A step's label is the mean over [0.5 k − 0.25, 0.5 k + 0.25) s, sample i at t = i / 10; the same for the dial.
+5. The ρ = 0 reading refits the readout on the ρ = 0 states of the training clips.
+6. State PCA fitted on pass-1 states; one rehearsal PCA 8 for the three lags; nothing remembered past the end of a song (zeros).
+7. Radius chosen per outer fold by 3 inner folds on the DEAM + MERP training songs, score the mean of the DEAM and MERP mean
+   within-song arousal r; the PCAs are fitted once on the whole training fold.
+8. Gate 3 moves labels with their steps (only the history is scrambled).
+9. Gate 4 windows: steps whose centres fall in the 8 beats before the lift; distance Euclidean in the PCA-64 mind state; MERP
+   lifts from the mean-rater arousal at 10 Hz.
+10. Gate 5: Instant Crush pass A is always try 1 as (a + 1) / 2, also if `dial2.json` holds a pass A for it.
+11. Lift rule: median and mean centred and shrinking at the ends, the 2 s mean is 20 samples; "touching" = adjacent samples;
+    the first 2 s and last 5 s are treated as masks against the whole rise span [onset, last rise + 4 s] (reading them as limits
+    on the placed lift would let an end flick through); the 16-beat rule compares against the last lift kept.
+12. Gate 1 drops songs whose r is undefined and counts them. Gate 3 needs the original r above 0.
+
+Checks: `cargo fmt --all --check`, `cargo test -p hyst-compile -p hyst-output -p hyst-previz -p hyst-cli` and clippy -D warnings
+on those crates: 73 passed, 0 failed; clippy clean; fmt clean. Frozen `src/` and `tools/` untouched; no hardware driven.
+
+### Python port of the offline analyzer (branch py-analyze) — 2026-10-23
+
+Status: port written, equivalence check defined below BEFORE any real output was compared.
+Results are appended in a later section of this entry.
+
+Ported: `scripts/analyze.ts` CLI path to `scripts/analyze.py` + package `scripts/analyze/`
+(`wav`, `fftjs`, `dsp`, `brain`, `structure`, `demucs`, `jsjson`). Sources: `scripts/wav.ts`,
+`structure.ts` (`analyzeMix`, `analyzeMixDetailed`, `computeStemPresence`, `labelSections`),
+`demucs.ts`, and from `src/`: `audio/worklet/{fft,bands,spectral,onset,envelope}`,
+`brain/{beat-tracker,build-detector,drop-detector,break-detector,activity,novelty}`,
+`shared/constants`, `SIDECAR_SCHEMA_VERSION`. Not ported: `ssm.ts`, `repetition.ts`,
+`render-video.ts`, relays. No TypeScript deleted or changed.
+
+Method: line-for-line, same constants. `fft.js` `realTransform` is ported butterfly for
+butterfly (float64, same operation order, batched over frames with numpy) instead of using
+numpy FFT, so the magnitudes match bit for bit before they are rounded to float32 as in
+`Float32Array`. Every JS `sum +=` loop uses `np.cumsum` (sequential). Float32 storage points
+(samples, window, windowed frame, magnitudes, novelty buffer, bar slot strengths, per-hop raw
+arrays) are kept as float32. `Math.round` is `floor(x+0.5)`. JSON is written by a
+`JSON.stringify`-compatible writer (integer-valued floats as `1`, JS exponent format).
+Known non-bit-exact points: `cos`, `sin`, `log`, `exp`, `log2` come from glibc, TS uses V8
+(fdlibm); they can differ by 1 ulp.
+
+Equivalence rule (fixed before comparing):
+- Reference: `npx tsx scripts/analyze.ts` of this tree, run now, same WAV.
+- Python: `scripts/analyze.py`, same WAV, same arguments.
+- Identical top-level keys and key order, identical array lengths and object keys.
+- Identical discrete values: counts, event `type`, section `kind`/`label`, beat count, schema,
+  envelopeRate, strings.
+- Every number within 1e-6 absolute or 1e-9 relative of the TS value (either bound).
+- Any difference beyond that is reported with its cause. The rule is not loosened afterwards.
+- Inputs: synthetic WAVs from `scripts/analyze/equiv/gen_synthetic.py` (clicks at 120 and
+  93 BPM, silence, 440 Hz tone, a drop-like build in 16-bit stereo and float32 stereo,
+  24-bit stereo clicks, a 1000-sample file, a 1 s noise file), and the three base WAVs
+  `{instant-crush,five-years,presence}-stereo-analysis.wav` that `song.sh` uses.
+  `--stems` on one song: compare `stemPresence`; if Demucs output differs between runs,
+  feed both ports the same stem WAVs.
+- Tools: `scripts/analyze/equiv/run_equiv.sh` (runs both, times, compares) and
+  `scripts/analyze/equiv/compare.py` (the rule above, per top-level field).
+
+### Results (same entry, written after the comparisons)
+
+Commits: 58b6e4f (port, tools and the rule, before any comparison), f23d4b5 (two more
+synthetics), aed1166 (unit tests, README), then the stems runner and this section. Frozen
+`src/`, `tools/` and all TypeScript untouched. `song.sh` and `$D` untouched.
+
+Rule outcome: no field of any input breaks the rule. Keys, key order, array lengths, event
+types, section kinds and labels, beat counts and all integers are identical in every run. The
+only nonzero differences are in two fields, listed below. Max abs / max rel over all numbers
+of the field; every other field of every input has abs 0 and rel 0 (exactly equal).
+
+| input | numbers compared | onsets abs / rel | events abs / rel |
+|---|---|---|---|
+| tiny (1000 samples) | 12 | 0 / 0 | 0 / 0 |
+| silence | 1753 | 0 / 0 | 0 / 0 |
+| short (1 s noise) | 177 | 0 / 0 | 0 / 0 |
+| tone440 | 1758 | 0 / 0 | 0 / 0 |
+| clicks120 | 5495 | 5.6e-17 / 1.2e-16 | 0 / 0 |
+| clicks93 | 5431 | 5.6e-17 / 1.3e-16 | 0 / 0 |
+| dropbuild (16-bit stereo) | 8024 | 5.6e-17 / 1.2e-16 | 0 / 0 |
+| dropbuild_f32 (float32 stereo) | 8023 | 5.6e-17 / 1.2e-16 | 0 / 0 |
+| clicks120_24bit | 2201 | 5.6e-17 / 1.2e-16 | 0 / 0 |
+| structure (breaks) | 12951 | 1.1e-16 / 2.6e-16 | 0 / 0 |
+| dropstep (one drop, build, break) | 7031 | 0 / 0 | 2.2e-16 / 3.8e-16 |
+| instant-crush base WAV | 62990 | 3.3e-16 / 7.3e-16 | 0 / 0 |
+| five-years base WAV | 54537 | 4.1e-15 / 9.2e-15 | 0 / 0 |
+| presence base WAV | 52319 | 6.7e-15 / 1.6e-14 | 5.6e-17 / 1.4e-16 |
+| presence `--stems`, same stem WAVs | 81468 | 6.7e-15 / 1.6e-14 | 5.6e-17 / 1.4e-16 |
+
+`stemPresence` (vocals, drums, bass, other, leadPresence, 29149 numbers): abs 0, rel 0.
+`tiny`, `silence`, `short`, `tone440` and `clicks*` outputs were byte-identical files. The
+others differ as bytes only through the last-digit values above.
+
+Cause of the nonzero values: libm (Python) against V8 on 1 ulp. `onsets.pan` is
+`sin(t*37.13)*0.6`: `sin` differs on 665 of 20000 test arguments (checked against node);
+the `onsets.strength` and `events.strength` differences come from `exp` envelope
+coefficients: `exp(-hop/ms)` differs on 1 of 25 constants (checked against node) and the
+difference propagates as 1 ulp. These are not thresholds: no discrete value changed in any
+input. Not fixed: matching V8's fdlibm `sin`/`exp` would mean porting those too.
+
+Mismatch during development, fixed before the comparisons above: first run of the port crashed
+on every input with `ValueError: negative shift count` in the `fft.js` bit-reversal table
+(JS wraps shift counts mod 32, width 11 gives -1 at the last step; fix: same wrap and int32).
+The first four inputs were then re-run; the table above is from the re-run. The `dropstep`
+and `structure` inputs were added after the first set because `dropbuild` did not fire the
+drop detector (also none of the three songs has a `drop` event, only `dropstep` does), so
+the drop, build-window and build-section code paths are compared on `dropstep` only.
+
+`--stems`: Demucs differs from run to run (htdemucs default `shifts=1` draws
+`random.randint` offsets in `demucs/apply.py`). Measured on `presence`: two real Demucs runs
+give stemPresence max abs differences 0.91 vocals, 0.46 bass, 0.12 other, 0.12 lead, 0.04
+drums (mean 0.11, 0.022, 0.0035, 0.0033, 0.0012). So the comparison above feeds both
+analyzers the same stem WAVs (copied by `equiv/fake_demucs.sh` into the layout `demucs.ts`
+expects). The Python `--stems` path with real Demucs also ran end to end once (160 s on a
+loaded CPU, temp dir removed afterwards; separate `run_demucs_separation` call 286 s).
+
+Run times (wall clock, `nice -n 19`, includes interpreter start and, for TS, `tsx`
+compile; agent 1 was using the CPU, so these are not benchmarks): instant-crush TS 13.1 s /
+Python 38.4 s; five-years 8.1 / 27.4; presence 12.6 / 16.4; presence `--stems` with
+pre-made stems 30.9 / 56.3; synthetic 10-44 s files 1.2-7.2 s TS, 1.1-9.0 s Python.
+
+Tests: `python -m pytest scripts/analyze` 14 passed (synthetic only); `npm test` 44 files,
+351 tests passed (not modified); `cargo test -p hyst-compile -p hyst-output -p hyst-previz
+-p hyst-cli`: 55 + 18 passed, 0 failed (previz and cli have 0 tests in this tree).
+
+Environment: uv venv `/secondary/hyst-env/analyze-py` (numpy 2.4.6, pytest 9.1.1). Inputs
+and outputs of this check: `/secondary/hyst-env/equiv-synth3`, `equiv-out*`, `equiv-songs`,
+`equiv-stems`, `equiv-stems-out` (not in git). Reproduce:
+`scripts/analyze/equiv/gen_synthetic.py DIR`, then `scripts/analyze/equiv/run_equiv.sh OUT NAME=WAV ...`;
+stems: `scripts/analyze/equiv/run_stems_equiv.sh OUT WAV STEM_DIR`.
+
+To switch `song.sh`: replace the line
+`npx tsx scripts/analyze.ts "$wav" "$D/$slug.sidecar.json"` with
+`/secondary/hyst-env/analyze-py/bin/python scripts/analyze.py "$wav" "$D/$slug.sidecar.json"`.
+Not done: deleting any TypeScript; `analyze.ts` stays until the overseer decides.
+
+### Step 2: check 1b run on real data (★ 3) — 2026-10-24
+
+Run once, as committed (4d61000, which includes the gate 2 ruling of 57baad0: pooled timing R² from DEAM-only readouts for the core
+and the reference). It did not crash; no code or rule was changed after the result. Log `/secondary/hyst-data/emotion/check1b_run.log`,
+results `/secondary/hyst-data/emotion/check1b/` (`results.json`, `folds.json`, `lifts.json`). Run time 2,735 s. The dial files were read
+by this run only. **Not verified by eye.** Seeds: folds 20261012, bootstrap 20261013, inner 20261014, core 20261016, shuffle 20261017,
+permutation 20261018. Held-out sets: DEAM 1,744 clips (26,155 scored rows), MERP 43 songs (4,100 rows), Emotify 400 clips, five folds by song;
+the three songs are scored with the model fitted on all DEAM and MERP. Intervals: 95 %, 2,000 bootstrap resamples over songs.
+
+**Overall: FAIL. Gates 1, 2 and 4 failed; gates 3 and 5 passed.**
+
+Spectral radius chosen per fold (inner folds, grid 0.7 / 0.8 / 0.9 / 0.95 / 0.99): fold 0 0.9, fold 1 0.8, fold 2 0.9, fold 3 0.8, fold 4 0.8;
+final model (three songs) 0.7.
+
+| Gate | Result | Numbers |
+|---|---|---|
+| 1 within-song arousal r, DEAM (1,744 songs) | PASS | core ρ=1 0.204 [0.182, 0.226]; reference 0.101 [0.081, 0.120]; core ρ=0 0.221 [0.197, 0.243]. Valence (not gated): core 0.113 [0.090, 0.136], reference 0.038 [0.018, 0.056] |
+| 1 within-song arousal r, MERP (43 songs) | FAIL | core ρ=1 0.471 [0.380, 0.554]; reference 0.316 [0.236, 0.397]; core ρ=0 0.566 [0.497, 0.629]. The core's lower bound 0.380 is below the reference's upper bound 0.397. Valence: core 0.301 [0.202, 0.399], reference 0.121 [0.041, 0.204] |
+| 1 overall | FAIL | |
+| 2 pooled DEAM timing R² | FAIL | core 0.559 [0.537, 0.579] (valence 0.472, arousal 0.647) against stage 1's lower bound 0.596 (stage 1: 0.617 [0.596, 0.635]); reference here 0.617 |
+| 2 Emotify rank correlation | FAIL | core 0.582 [0.552, 0.610] against stage 1's lower bound 0.588 (stage 1: 0.616 [0.588, 0.643]); reference here 0.616 |
+| 3 shuffled steps, DEAM | PASS | r 0.204 → 0.026 [0.012, 0.040] |
+| 3 shuffled steps, MERP | PASS | r 0.471 [0.380, 0.554] → 0.066 [0.011, 0.124] |
+| 4 rehearsal, MERP | FAIL | 0 lifts in 43 songs, no windows, no test possible |
+| 4 rehearsal, three songs pooled | FAIL | 6 windows; statistic 5.089, null mean 5.071 [4.545, 5.513], p = 0.4835 |
+| 5 Five Years opening vs climax | PASS | arousal readout 0–30 s −0.066, 156–258 s 0.159 (reference 0.039, 0.343) |
+| 5 Presence 120–190 s sad | PASS | sadness rank 3 of 9, span mean 0.252, rest of song 0.250 |
+| 5 dial r, core against reference | PASS, 2 of 3 | Instant Crush 585 steps core 0.177, reference 0.111; Five Years 568 steps core 0.817, reference 0.869; Presence 542 steps core 0.767, reference 0.620 |
+
+Lift counts (rule of b1775f8): MERP 0 in all 43 songs; the three songs 6 in total (Instant Crush 1, Five Years 2, Presence 3). Read-only
+afterwards, on the MERP mean-rater curves after the same clean-up: the largest 4 s rise per song has median 0.052, range 0.017 to 0.168;
+only 3 of 43 songs reach the 0.15 threshold at all, and none of those three produced a lift (head, tail or the 16-beat rule). So the zero
+comes from the rule's threshold on averaged curves, not from a crash.
+
+Pass B (reported, not gated; core readouts against the user's light and heavy tracks): Instant Crush light−heavy vs valence 0.173,
+light vs joyful activation 0.528, heavy vs sadness 0.062 / tension −0.382 / nostalgia 0.288; Five Years 0.107, −0.215, 0.448, −0.576, 0.493;
+Presence 0.475, 0.537, 0.029, −0.616, 0.328.
+
+ρ = 0 beside ρ = 1: within-song arousal r is higher with ρ = 0 on both DEAM (0.221 against 0.204) and MERP (0.566 against 0.471). Gate 4
+(the rehearsal test) did not pass, on MERP for want of lifts and on the three songs at p = 0.48. Round 2 not started.
+
+### Step 2b: the core without rehearsal, `check2b.py` written (★) — 2026-10-24
+
+Rule: `docs/NEXT_BODY_THEN_MIND.md`, "Round 1 result and step 2b" (5a8297c). **check2b was not run.** Nothing was fitted or scored on real
+data for this step, and the dial files were not read. Code in `scripts/emotion/`:
+- `smoothing.py`: `smooth_delay(pred, tau, lag)`, a causal exponential smoother (y[t] = a y[t−1] + (1 − a) p[t], a = exp(−0.5 / tau),
+  started at the first prediction; tau = 0 is none) followed by a delay of lag / 0.5 steps (the first steps repeat y[0]). Grids as the
+  note: tau in {0, 0.5, 1, 2, 4, 8, 16, 32} s, L in {0, 0.5, …, 4} s.
+- `mind.py`, added only: `MindModel.fit_state` (state PCA only, no rehearsal projector) and `run_plain` (one pass from rest on the ear
+  input, no rehearsal pass, no rehearsal input). Round 1's `run` is unchanged. `check1b.py`: `Ridge` takes an optional fixed penalty;
+  behaviour unchanged.
+- `check2b.py`: ridge readouts on state PCA 64 + ear PCA 64 (128 inputs); ear PCA, 512 units, time constants 0.5–60 s, 10 % sparsity,
+  radius grid, folds, seeds (folds 20261012, bootstrap 20261013, inner 20261014, core 20261016, shuffle 20261017), 2,000 resamples,
+  the MERP labels and 43 songs, the DEAM-only gate-2 readouts: all as round 1. tau and L chosen per outer fold, separately for the core and
+  the reference, by inner-fold (3) within-song arousal r on the training songs (mean of the DEAM and MERP means, the criterion round 1
+  used for the radius). Gates: A1 (core smoothed against reference smoothed, DEAM and MERP each, lower bound above upper bound), A2
+  (round-1 gate 2, DEAM-only readouts), A3 (round-1 gate 3 on the core), B (the three songs against pass A: round 1's gate-5 handling,
+  readouts on all DEAM and the 43 MERP songs, tau and L chosen over those songs, core ahead on 2 of 3). Reported beside B: reference
+  plain, core unsmoothed, round 1's core and reference (read from `check1b/results.json`), round 1's two fixed tests for the new core,
+  pass B. Outcome text follows the note. Per-song predictions (core, core smoothed, reference, reference smoothed; arousal and valence;
+  held-out folds, labels and scored rows; the three songs with their dial step means) go to `/secondary/hyst-data/emotion/check2b/`
+  (`predictions_heldout.npz`, `predictions_songs.npz`) with `results.json` and `folds.json`.
+
+Tests: `test_smoothing.py` 6, `test_check2b.py` 15, with the existing suite 80 in all, passing
+(`cd scripts/emotion && /secondary/hyst-env/emotion/bin/python -m unittest`). The smoother is causal (a changed future leaves the past
+unchanged), tau = 0 and L = 0 is the identity, L shifts by exactly L / 0.5 steps; the step-2b core has no rehearsal projector, ignores the
+beats and equals round 1's ρ = 0 state; the readouts receive state and ear; tau and L are recovered when the labels were made with them;
+wrecking the held-out fold's labels leaves that fold's radius, tau, L and scores unchanged; each gate's direction, both-datasets rule and
+the 2-of-3 rule, the outcome logic, A2 reading the DEAM-only predictions; an end-to-end run on a synthetic world with fake dial files, whose
+saved predictions reproduce gate A1 and the dial correlation. Mutations of these comparisons each broke a test. `cargo test` on the four
+crates 73 passed, 0 failed; clippy -D warnings clean; fmt clean. Frozen `src/` and `tools/` untouched; no hardware.
+
+**Points the note leaves open, fixed in code, to be ruled on** (also in the `check2b.py` docstring):
+1. The smoother starts at the first prediction and the delayed series repeats its first value; it runs over the whole step series of a song and
+   is read at the scored rows.
+2. Order of choices in a fold: radius first (inner-fold criterion, core without smoothing), then tau and L for the core and for the reference.
+   Inner-fold ridges reuse the penalty chosen on the whole training fold, not a new inner search.
+3. A2 and A3 use the core's unsmoothed predictions. A3 shuffles ear input and labels together, so the readout still receives the step's own ear
+   scores; the history is what is scrambled.
+4. A1's "core" and "reference" are the smoothed series; the unsmoothed core and the plain reference are reported beside them.
+5. Gate B's tau and L come from inner folds over all DEAM and 43 MERP songs, as the final readout fit; the same tau and L apply to valence in
+   A1 and in pass B.
+6. Round 1's numbers beside B come from `/secondary/hyst-data/emotion/check1b/results.json`; they are left out if that file is missing.
+7. The inner-fold criterion for tau and L pools DEAM and MERP as in item 2, so one setting serves both datasets.
+
+### Step 2b: check 2b run on real data (★) — 2026-10-24
+
+Run once, as committed (9104989). No crash, no code or rule changed after the result. Log `/secondary/hyst-data/emotion/check2b_run.log`; results and
+per-song predictions in `/secondary/hyst-data/emotion/check2b/` (`results.json`, `folds.json`, `predictions_heldout.npz`, `predictions_songs.npz`). Run time
+1,845 s. **Not verified by eye.** Held-out sets: DEAM 1,744 clips (26,155 scored rows), MERP 43 songs (4,100 rows), Emotify 400 clips, five folds by
+song; the three songs are scored with the model fitted on all DEAM and MERP. Intervals: 95 %, 2,000 bootstrap resamples over songs.
+
+**Outcome (per the note): A1 passes and B fails: report, the user decides.** A1 PASS, A2 FAIL, A3 PASS, B FAIL (core ahead on 0 of 3).
+
+Chosen per fold (radius; tau / L in seconds, core and reference): fold 0: 0.99; core 8 / 0, reference 8 / 0. Fold 1: 0.7; 8 / 0, 8 / 0.
+Fold 2: 0.8; 8 / 0, 16 / 0. Fold 3: 0.7; 8 / 0, 8 / 0. Fold 4: 0.9; 8 / 0, 8 / 0. Final model (three songs): 0.7; core 8 / 0, reference 8 / 0.
+
+| Gate | Result | Numbers |
+|---|---|---|
+| A1 within-song arousal r, DEAM (1,744 songs) | PASS | core smoothed 0.277 [0.251, 0.303] against reference smoothed 0.150 [0.124, 0.177]; core unsmoothed 0.200 [0.177, 0.222]; reference plain 0.101 [0.081, 0.120]. Valence: core smoothed 0.197 [0.172, 0.223], reference smoothed 0.073 [0.047, 0.098] |
+| A1 within-song arousal r, MERP (43 songs) | PASS | core smoothed 0.626 [0.556, 0.690] against reference smoothed 0.428 [0.330, 0.519]; core unsmoothed 0.533 [0.460, 0.597]; reference plain 0.316 [0.236, 0.397]. Valence: core smoothed 0.407 [0.300, 0.508], reference smoothed 0.207 [0.098, 0.317] |
+| A2 pooled DEAM timing R² | FAIL | core 0.588 [0.566, 0.607] against stage 1's lower bound 0.596; reference here 0.617 |
+| A2 Emotify rank correlation | PASS | core 0.607 [0.579, 0.633] against 0.588; reference here 0.616 |
+| A3 shuffled steps, DEAM | PASS | r 0.200 [0.177, 0.222] → 0.018 [0.001, 0.035] |
+| A3 shuffled steps, MERP | PASS | r 0.533 [0.460, 0.597] → 0.255 [0.170, 0.344] |
+| B dial r, Instant Crush (585 steps) | core behind | core smoothed 0.252, reference smoothed 0.389; core unsmoothed 0.010, reference plain 0.111; round 1 core 0.177, reference 0.111 |
+| B dial r, Five Years (568 steps) | core behind | core smoothed 0.887, reference smoothed 0.922; core unsmoothed 0.896, reference plain 0.869; round 1 core 0.817, reference 0.869 |
+| B dial r, Presence (542 steps) | core behind | core smoothed 0.628, reference smoothed 0.664; core unsmoothed 0.720, reference plain 0.620; round 1 core 0.767, reference 0.620 |
+| B overall | FAIL | core ahead on 0 of 3 |
+
+Round 1's two fixed tests for the new core (reported, not gated): Five Years opening 0.053 against climax 0.283; Presence sadness rank 4 of 9
+(span mean 0.260, rest of song 0.242). Pass B (reported): Instant Crush light−heavy vs valence 0.366, light vs joyful activation 0.309,
+heavy vs sadness 0.380 / tension −0.163 / nostalgia 0.226; Five Years 0.089, 0.030, 0.349, −0.491, 0.401; Presence 0.635, 0.625, 0.404, −0.589, 0.386.
+No second run and no round 2.
+
+### Step D1 and D2: the `mindState` field, the decoder, check 3 run on real data (★ D2-2) — 2026-10-28
+
+Built in `bd32d84` (D1) and `fd3fbfe` (D2). `check3.py` was run once as committed (`fd3fbfe`), after the overseer's go. No crash, no code or rule changed
+after the result. **Not verified by eye.** Log `/secondary/hyst-data/emotion/check3_run.log`; results, the final mood model and every held-out segment's mood,
+body vector, descriptors and stretches in `/secondary/hyst-data/emotion/check3/` (`results.json`, `mood_model_stage1.npz`, `segments_0..5.npz`). Run time
+3,220 s after the corpus was loaded (about 435 s more to load). Held-out sets: five folds by song of `check1b.py`, 12,528 segments (DEAM, Emotify, MERP);
+the user's 3 songs (110 segments) are a sixth set, never trained on and not in the fold means. Intervals: 95 %, 2,000 bootstrap resamples over 2,187
+held-out songs.
+
+**Outcome: check 3 FAIL.** Gate 1 PASS, gate 2 FAIL, gate 3 PASS.
+
+| Gate | Result | Numbers |
+|---|---|---|
+| 1 shuffle (decoder, stage-1 mood) | PASS | mean rho 0.6243 over five folds (0.6414, 0.6879, 0.7158, 0.5612, 0.5149); beats 1000 of 1000 permuted means (permuted mean 0.0000, max 0.0117) |
+| 2 decoder against the 49-dim baseline map | FAIL | baseline map mean rho 0.7808 (0.8022, 0.7770, 0.7534, 0.8133, 0.7580); decoder minus baseline −0.1551, interval [−0.1730, −0.1374] |
+| 3 energy sign, mood.energy against pass A | PASS | Instant Crush r 0.389 (585 steps), Five Years 0.922 (568), Presence 0.664 (542): positive on 3 of 3 |
+
+Reported, not gated (all four maps scored on the same segments; failed segments 0 of 12,528 for every map):
+
+| Map | Mean rho, five folds | Per fold | Beats of 1000 | Sixth set rho (110 segments) |
+|---|---|---|---|---|
+| decoder | 0.6243 | 0.6414, 0.6879, 0.7158, 0.5612, 0.5149 | 1000 | 0.7544 |
+| baseline-49 map | 0.7808 | 0.8022, 0.7770, 0.7534, 0.8133, 0.7580 | 1000 | 0.6378 |
+| library lookup | 0.6058 | 0.5615, 0.6262, 0.6149, 0.6020, 0.6244 | 1000 | 0.5758 |
+| core-2b as source | 0.7097 | 0.7574, 0.7063, 0.7194, 0.6800, 0.6856 | 1000 | 0.7478 |
+
+The sixth set also beat 1000 of 1000 permutations for every map. The number of rest lanes k chosen by the inner folds was 2 on every fold and for every map.
+
+Power anchor against pass B, r of mood.power with heavy: Instant Crush 0.090 (agrees), Five Years 0.539 (agrees), Presence −0.052 (disagrees). Agrees on 2,
+disagrees on 1, so the anchor is kept (the drop rule needs 2 of 3).
+
+Anchor strength on held-out folds (mean over five folds; the per-fold values are in `results.json`):
+
+| Map | mood.energy against arousal labels | mood.power against Emotify power | mood.energy against body energy / size / time | mood.power against body weight |
+|---|---|---|---|---|
+| decoder | 0.861 | 0.692 | 0.787 / −0.214 / 0.882 | 0.913 |
+| baseline-49 map | 0.777 | 0.541 | −0.678 / 0.902 / 0.876 | 0.886 |
+| core-2b | 0.845 | 0.659 | 0.200 / 0.634 / 0.750 | 0.879 |
+
+Observations, stated as numbers only. The decoder's mood.energy against decoded body size is negative on four of five folds (−0.19 to −0.40) although the map's
+weight from mood.energy to size is constrained to be non-negative. The baseline-49 map's mood.energy against decoded body energy is −0.678. The gate 2
+difference is negative on its whole interval. Round 2 is not started and needs the overseer's word.
+
+Constants and origins: segments 8 s (16 steps), seeds 20261028-30 for rendering, folds 20261012, inner 20261014, bootstrap 20261013, permutations 20261035,
+standardiser draw 20261034, map 20261032, k-means 20261033, surrogate 20261031. The surrogate (15→256→256→37, 16,000 training bodies, held out 3,956:
+R² mean 0.816, median 0.872, min 0.099) is in `/secondary/hyst-data/emotion/check3/surrogate_report.json`. Anchors: mood.energy to body energy, size, time and
+mood.power to weight, entries constrained to be non-negative; height not anchored. The seven points left open are listed in the `check3.py` docstring and were
+accepted by the overseer. The library lookup assignment and the render of its 8 regions are in `results.json` and `segments_*.npz`.
+
+Not done: nothing reads `mindState` in the planner (D3); `events` and `authored` are empty; the writer was run only on synthetic data (the final model file
+exists, the writer has not been run on the three songs' sidecars); `three.sh` was run by the overseer, not by this step.
+
+### Step D2 round 2: check 3 against human ratings, size bound (built, not run) — 2026-10-28
+
+Built per the user's rule note (`NEXT_DECODER_THEN_BRAIN.md` §4 D2, `940fcae`). **Not run on real data; not verified by eye.** Round 1 (`check3.py` at `fd3fbfe`, results
+`ac08509`) stays as run, a fail on gate 2; its results files are untouched. Round 2 writes to `/secondary/hyst-data/emotion/check3r2/` (log `check3r2_run.log`).
+
+What changed, in `scripts/emotion/check3r2.py` (reuses `check3.py`; round 1's code path is the default and its tests still run):
+- Gate 2 reference: human ratings per held-out segment, one yardstick for every map. DEAM and MERP valence-arousal (mean over the window's labelled steps, a window with none is left
+  out); Emotify's nine GEMS as a separate reported score; the user's 3 songs against the dial (pass A energy, pass B light, heavy), reported. Gate 1 and gate 2 are scored against it:
+  decoder against 1,000 shuffles, decoder minus baseline49 by a 2,000-resample bootstrap over held-out songs. Gate 3 unchanged.
+- Fairness: baseline49 and core-2b use the same `Map` class, the same two anchors, the same folds and the same fitting as the decoder.
+- Size: `decoder.fit_map_bounded`. Fit as in round 1; for each anchored link (mood.energy to energy, size, time; mood.power to weight) whose Pearson r between lane and decoded body
+  dimension on the training segments is below 0.5 + 0.05, raise that link's lower bound on its weight one step of (0.5, 1, 2, 4, 8, 16) and refit, until all hold or the grid ends.
+  Training segments only. Held-out r, train r, the bounds and the attempts are reported per link, map and fold. k is chosen as in round 1 (unbounded fit), so the lanes are round 1's.
+
+Points fixed where the note is silent (to be ruled on): the 0.05 margin; a rating needs one labelled step in the window; DEAM and MERP pooled in one score per fold, ratings not
+standardised; the sixth set's dial score pools the three songs and leaves out windows missing any of the three numbers; a failed segment leaves that map's matrices (round 1: 0).
+
+Tests: 163 Python unittests (144 before), `cargo test` 83, clippy and fmt clean on the four crates; no Rust or planner code changed in round 2.
+
+### Step D2 round 2: check 3 against human ratings, run on real data (★ D2-3) — 2026-10-29
+
+`check3r2.py` was run once as committed (`c2afe21`), after the overseer's go. No crash, no code or rule changed after the result. **Not verified by eye.** Log
+`/secondary/hyst-data/emotion/check3r2_run.log`; results, ratings used, and every held-out segment's mood, body vector, descriptors and stretches in
+`/secondary/hyst-data/emotion/check3r2/` (`results.json`, `ratings_0..5.npz`, `segments_0..5.npz`, `mood_model_stage1.npz`). Run time 3,114 s after about 435 s of loading.
+Held-out sets: five folds by song; DEAM/MERP rated segments 7,997 (1,606, 1,611, 1,630, 1,591, 1,559 per fold; segments with no labelled step left out); Emotify 2,787 segments
+(GEMS); the user's songs 106 segments with a complete dial rating (4 left out), a sixth set never trained on. Intervals: 95 %, 2,000 bootstrap resamples over 1,787 held-out songs.
+
+**Outcome: check 3 round 2 FAIL.** Gate 1 PASS, gate 2 FAIL, gate 3 PASS.
+
+| Gate | Round 2 (ratings) | Round 1 (own encoding), for comparison |
+|---|---|---|
+| 1 shuffle, decoder | PASS: mean rho 0.2379 (0.1509, 0.2334, 0.2903, 0.2797, 0.2351); beats 1000 of 1000, permuted max 0.0145 | PASS: 0.6243, beats 1000 of 1000 |
+| 2 decoder minus baseline49 | FAIL: mean −0.0766, interval [−0.1055, −0.0477]; baseline49 rho 0.3143 (0.3587, 0.2814, 0.3228, 0.3280, 0.2805) | FAIL: −0.1551 [−0.1730, −0.1374]; baseline49 0.7808 |
+| 3 energy sign, pass A | PASS: r 0.389 (585 steps), 0.922 (568), 0.664 (542), unchanged | PASS, same numbers |
+
+Reported against the same DEAM/MERP ratings (all four maps beat 1000 of 1000 permuted means):
+
+| Map | DEAM/MERP rho | Per fold | Failed segments (rated) | GEMS rho (Emotify) | Sixth set vs dial, rho (106 segments) |
+|---|---|---|---|---|---|
+| decoder | 0.2379 | 0.1509, 0.2334, 0.2903, 0.2797, 0.2351 | 0 | 0.0759 (0.0812, 0.0426, 0.0447, 0.1634, 0.0476) | 0.3468 |
+| baseline-49 map | 0.3143 | 0.3587, 0.2814, 0.3228, 0.3280, 0.2805 | 36 (23 in fold 2, 13 in fold 4) | 0.1109 (0.1313, 0.0788, 0.0677, 0.2268, 0.0500) | 0.3611 |
+| library lookup | 0.2663 | 0.2307, 0.2764, 0.3153, 0.1913, 0.3180 | 0 | 0.1899 (0.0875, 0.2596, 0.2182, 0.2867, 0.0976) | 0.2591 |
+| core-2b as source | 0.2695 | 0.1248, 0.2982, 0.2320, 0.3498, 0.3425 | 6 (2 in fold 0, 4 in fold 3) | 0.1516 (0.0591, 0.2333, 0.0356, 0.2940, 0.1363) | 0.4348 |
+
+GEMS and sixth-set scores also beat 1000 of 1000 permutations for every map; they are not gated. Failed segments leave that map's distance matrices (3 and 2 of them were Emotify
+segments of baseline-49 in folds 2 and 4).
+
+Power anchor against pass B heavy, unchanged: Instant Crush r 0.090 (agrees), Five Years 0.539 (agrees), Presence −0.052 (disagrees); agrees on 2, disagrees on 1, anchor kept.
+
+**Size bound.** The grid did not run out for any map or fold (met True on all 18 map and fold fits); lower bounds were 0 to 2. Held-out r per link (mood.energy to energy / size / time, mood.power to weight):
+
+| Map | fold 0 | fold 1 | fold 2 | fold 3 | fold 4 | sixth set |
+|---|---|---|---|---|---|---|
+| decoder | 0.615 / 0.953 / 0.697 / 0.753 | 0.955 / 0.954 / 0.581 / 0.796 | 0.973 / 0.957 / 0.726 / 0.788 | 0.926 / 0.962 / 0.907 / 0.794 | 0.946 / 0.965 / 0.923 / 0.770 | 0.877 / 0.946 / 0.912 / 0.699 |
+| baseline-49 | 0.872 / 0.885 / 0.851 / 0.763 | 0.585 / 0.885 / 0.830 / 0.681 | 0.953 / 0.795 / 0.754 / 0.707 | 0.932 / 0.917 / 0.804 / 0.811 | 0.958 / 0.832 / 0.717 / 0.719 | 0.675 / 0.828 / **−0.266** / **−0.161** |
+| core-2b | 0.951 / 0.978 / 0.878 / 0.839 | 0.964 / 0.806 / 0.615 / 0.627 | 0.787 / 0.957 / 0.972 / 0.850 | 0.730 / 0.863 / 0.746 / 0.676 | 0.964 / **0.487** / 0.797 / 0.617 | 0.768 / 0.785 / **0.378** / 0.636 |
+
+**Links that miss held-out r 0.5 (not meeting the spec):** core-2b fold 4 energy to size 0.487; core-2b sixth set energy to time 0.378; baseline-49 sixth set energy to time −0.266 and
+power to weight −0.161. All other 68 links reach 0.5; the decoder reaches it on all 24. The training r of the four misses was 0.555, 0.575, 0.714 and 0.721, so the margin did
+not carry over to those held-out sets. Training r for every link is in `results.json`.
+
+Anchor fairness: baseline-49 and core-2b use the same two anchors, the same `Map` class, folds and fitting as the decoder. Round 2 changed only the reference and the size bound; k
+was chosen as in round 1 (k = 2). Per the rule note, the decoder failed the new gate 2, so the user decides the encoding (option 3); baseline-49 has the higher DEAM/MERP rho and no
+non-commercial model licence. No round 3 without the overseer's word.
+
+### Step D3: body vectors layered on version 47 (★ D3) — 2026-10-29
+
+Branch `d3-layered` (from `c20b2da` on `keys-decide`), one arm only. **Not verified by eye.** Nothing is scored; the only checks are the safety and byte-identity ones below.
+The encoding is the user's to decide (D2 round 2 failed gate 2), so D3 reads a per-phrase body vector and does not care which map made it.
+
+**Interface.** Sidecar field `bodyTrack` (additive, version 1): `source`, `map`, `dims` (must equal `body::PARAMS`), `phrases` = the planner's own `musicalMemory.phrases` with one
+15-value body (0..1) each, `authored` (must be empty). Written by `scripts/emotion/bodytrack.py NOTES MINDSTATE MAP.npz OUT` from a `mindState` (`mindstate.py`) and a saved decoder map
+(sigmoid of W times the phrase's mean lanes, as the maps were fitted on 8 s mean lanes). Read by `crates/hyst-compile/src/body_track.rs`; a missing field is `None`. The body at a time is
+the phrase's own vector, moving to the next phrase's over the last beat before that phrase starts (smoothstep); nothing changes inside a phrase.
+**Mode.** `CompileConfig.body: BodyMode::Off | Layered` (`--body off|layered` in `ensemble_preview`). Layered with no `bodyTrack` compiles exactly as Off (tested). Layered with more than one arm is an error.
+
+**Limits in Layered.** The rig envelope becomes `body::LIMITS` (speed, acceleration per joint), so `validate` and the tangent fit prove them; hand speed 1.2 m/s, jolt 9 m/s2 and the floor rule
+of `body::measure` are checked on the export. The follower keeps 0.75 of each joint's speed and 0.3 of its acceleration limit (version 47: 0.75 and 0.1 of 8,000); the end stop shapes the wanted speed and the
+acceleration limit has the last word. The curve through the knots is the natural cubic spline (its velocity and acceleration at each knot); version 47's central differences with a forced stop at held knots
+made the quintic 2 to 4 times stiffer than the follower. The compile then repeats (at most 10 passes): after each, the largest ratio of joint speed, root of joint acceleration (1 kHz), hand speed, root of hand jolt (60 fps)
+and the continuous bounds to their limits is found per knot; where over, the figure clock runs slower there (target 0.95, spread over about 0.5 s each way, floor 0.15 of the music's rate; catch-up stays 15 %), and a moment
+whose window is over gets a 1.3 times longer approach and release. A global stretch would break sync; this keeps arrival times and costs clock lag (open point 1).
+
+**Knob table.** Body dimension, planner knob, range, and what it must not double-count. 0.5 is the planner's own value for size, energy (spin and surge), time, weight, flow, height, curl_extension; "geo" = geometric about 0.5.
+
+| Dimension | Knob (`figures.rs`) | Range | Not counted twice |
+|---|---|---|---|
+| size | figure scale in `sized()`, times the planner's class size and swell, then the planner's cap of 1 | x0.55 .. x1.25 (geo) | the planner's class size and leader swell stay; intensity does not touch figure size |
+| energy | roll spin per metre of hand travel; depth of the stab surge | spin x0.35 .. x1.8, surge weight x0.5 .. x1.5 (geo, surge weight still capped at 1) | surge is still `stabs x intensity`: the planner's intensity sets how much, energy scales within it; hand path, figure timing and the clock are untouched (a clock slower than the music only grows lag) |
+| time | beat kick of the clock (above 0.5): smooth bump on the beat, mean 1 over a beat; surge depth below 0.5 | kick up to +-1.2 x (2t-1) of the bump, peak speed up to x1.8; surge x(2t) below 0.5 | surge is shared with energy (product); the hand cap 0.8 m/s still limits the kick as it does a pulse |
+| weight | approach and release length of every non-cut moment, and the hold of arrivals | span x1.5 (light) .. x0.7 (strong), hold x0.7 .. x1.4 (geo) | the planner's speed rule (a moment adds at most 0.6 m/s) is applied after, so it still wins |
+| flow | wrist trail (`wrist_drag`), and overshoot of the arrival blend | trail x0.4 .. x1.5 (geo); overshoot up to 0.25 of the travel above 0.5 only | overshoot is clipped where the pose is at the reach limit, which arrival poses mostly are: the visible effect is an earlier rise (open point 5) |
+| height | hand elevation offset in `waited()` | +-0.25 shell units (about +-17 degrees of elevation) | the planner's voice lift and brightness lift are added, not replaced |
+| curl_extension | hand extension offset | +-0.25 shell units | none |
+| succession_direction, succession_delay, initiation | each joint's command trails the solved pose; the checks see the pose commanded | joint lag = 0.15 s x delay x rank/4 (rank from the base below 0.5, from the roll above), plus 0.06 s for every joint but the initiating one (base, shoulder, elbow, wrist bend from initiation 0..1); half of body.rs's numbers | arrival times of moments are for the hand's target: lagged joints reach it up to 0.21 s late |
+| breath_depth, breath_rate | slow swell of hand elevation and extension, phase = integral of the rate | elevation 0.10, extension 0.06 shell units at depth 1, none at depth 0.5 and below; 0.08 .. 0.3 Hz | none; the planner has no breath |
+| arch, space, rhythm | **unmapped** | | arch: the planner's wrist posture is a soft preference and its sign against body.rs's is unchecked; space: the figures carry their own indirectness; rhythm: the planner has no moves-per-move structure. Raising any alone changes nothing (tested) |
+
+**Done and checked.** `cargo test -p hyst-compile -p hyst-output -p hyst-previz -p hyst-cli`: hyst-compile 85 passed + 1 ignored (the real-song test), hyst-output 18, previz and cli 0 Rust tests in this tree; clippy `-D warnings` on those four crates and `cargo fmt --check` clean; 169 Python unittests in
+`scripts/emotion` (6 new, `test_bodytrack.py`). Golden digests of `compile_ensemble` unchanged; the three six-arm Off exports are byte-identical to `hexagon-47.html`, `five-years-hexagon.html`, `presence-hexagon.html` (`cmp`, tmp files deleted).
+New tests: reader (schema, transitions, writer fixture), missing field = Off and Off ignores a field, one-arm requirement, unmapped dimensions change nothing, Layered limits on the drop song for neutral, all-0, all-1 and three drawn bodies, one test per knob (size: hand box and mean joint speed; energy: mean joint speed x1.2;
+time: 90th-percentile acceleration x1.2; weight: still time from 15 to 20 s +0.5 s; flow: height at 15.5 s +0.05 m and same pose at 17 s; height and curl_extension: mean hand height +0.08 m, reach +0.05 m; succession and initiation: per-joint shift against delay 0 by cross-correlation; breath: amplitude of the shoulder at the breath rate),
+and the ignored `real_songs_keep_the_hardware_limits` (release, `HYST_D3_DIR`), which passed on all six sidecars.
+
+**Bodies and reproduction.** `scripts/emotion/final_maps.py` fits the sixth-set model and map of each encoding exactly as `check3r2.py` does (all five folds' clips, bounded map, k = 2 for both) and compares with the saved `segments_5.npz`:
+110 segments, keys equal, **largest absolute difference 0.0** for lanes and for bodies, both encodings. Lanes read back from the three emotion sidecars match the saved segment lanes to 2.3e-6 (the 5-decimal rounding of `mindState`).
+The bodies vary little: over the 40, 32 and 38 phrases of the three songs, the range of each dimension is at most 0.2 (stage1: time 0.98..0.99, size 0.98..0.99, energy 0.18..0.21, flow 0.39..0.57, weight 0.35..0.46; baseline49: energy 0.93..0.99, time 0.83..0.96, arch 0.93..0.94, breath depth 0.07, size 0.42..0.60), and the three songs get nearly the same vector. That is the maps' output, not changed here.
+
+**Exports (outside git), `$D/d3/`.** For each song (`ic`, `fy`, `pr`): `S.off.html` (one arm, Off), `S.stage1.html` (Layered, bodies from the stage1-smooth8 map), `S.baseline49.html` (Layered, baseline49 map), each with `.score.json` and `.txt` (the exporter's limits and clock-lag report),
+`S.off.jolts.txt`, `S.stage1.jolts.txt`, `S.baseline49.jolts.txt`, `S.spans-off-vs-stage1.txt`, `S.spans-off-vs-baseline49.txt` (60 s windows), and the two sidecars with `bodyTrack` (`S.stage1.sidecar.json`, `S.baseline49.sidecar.json`). Audio links are `../S.m4a`. Scripts: `d3_bodies.sh`, `d3_export.sh` in `scripts/emotion/`.
+
+| Song | Mode | Passes | Limit breaches (body.rs) | Hand max m/s, jolt max m/s2 | `jolts.py` jolts | Clock lag max s (at), lost in all s |
+|---|---|---|---|---|---|---|
+| Instant Crush | Off | 1 | base, shoulder, elbow speed and acceleration, wrist acceleration over; hand 1.617, jolt 12.45 | 1.617, 12.45 | 2 | 3.67 (286.8 s), 28.67 |
+| | stage1 | 4 | none; `validate` passes | 1.127, 5.68 | 0 | 6.66 (290.0 s), 38.62 |
+| | baseline49 | 8 | none | 1.177, 5.50 | 0 | 26.36 (339.8 s), 57.45 |
+| Five Years | Off | 1 | base, shoulder, elbow over; hand 1.492, jolt 9.33 | 1.492, 9.33 | 0 | 2.88 (214.8 s), 33.25 |
+| | stage1 | 4 | none | 1.059, 4.72 | 1 (at 283.7 s, the song's last partial frame; `measure` says 4.72) | 14.04 (283.7 s), 42.36 |
+| | baseline49 | 6 | none | 1.093, 6.49 | 0 | 19.13 (248.8 s), 48.86 |
+| Presence | Off | 1 | base, shoulder, elbow, wrist acceleration over; hand 1.395, jolt 17.26 | 1.395, 17.26 | 8 | 9.83 (211.9 s), 29.14 |
+| | stage1 | 8 | none | 1.136, 4.23 | 0 | 24.13 (270.7 s), 44.96 |
+| | baseline49 | 9 | none | 1.159, 6.37 | 0 | 24.78 (270.7 s), 47.05 |
+
+Floor margin (body.rs rule) was at least 0.018 m in all nine. Largest gains of lag within ten seconds (start s, seconds gained), stage1: Instant Crush 113 +4.59, 280 +4.40, 234 +2.70; Five Years 216 +4.95, 167 +3.44, 149 +2.62; Presence 196 +7.40, 125 +6.04, 261 +4.59.
+baseline49: Instant Crush 213 +7.02, 246 +6.49, 114 +5.23; Five Years 220 +5.36, 182 +4.33, 150 +4.18; Presence 198 +6.68, 143 +4.18, 188 +3.98. Off lag is the clock holding at moments plus the 0.65 drumless pace; "lost" is the seconds the clock ran slower than the music, made up at 15 % extra pace.
+
+**Open points for the user.**
+1. **Clock lag.** To hold body.rs's slower limits without a global stretch, Layered lets the figure clock fall behind the music: up to 6.7 to 26.4 s behind (Off: 2.9 to 9.8 s), with 38 to 57 s run slow in all. Figures and the hand's arrival times then drift from the bar grid where the clock is far behind (moments still land on their measured times, because they are timed by the music, not the clock). Decide: accept, stretch less (looser limits), or let a figure skip ahead.
+2. The follower's 0.3 of the acceleration limit, the knot ranges above, the loop target 0.95 and floor 0.15, the 1.3 span growth and 10 passes are guesses, untuned by eye.
+3. The bodies hardly vary across phrases or songs (above), so the three songs get almost the same quality; the knob table is exercised by the synthetic tests rather than by these exports.
+4. Half-range knobs: time below 0.5 only flattens the surge; flow overshoot, breath and the kick exist only above 0.5; space, arch and rhythm are unmapped.
+5. Flow's overshoot is clipped at the reach limit for most arrivals.
+6. Succession delays joints up to 0.21 s, so a lagged joint arrives late at a moment's pose; the hand is off its figure while moving.
+7. `fit_tangents` has a non-strict mode (no last-resort rest-to-rest tangents, which were O(n^2) and took minutes on the first Layered tries); Off still uses the strict one.
+8. Layered with more than one arm is refused; the ensemble, braking and collision checks between arms are out of scope here.
+
+### Step H, the builder's part: joint-angle CSV and limit checker (★ H) — 2026-10-29
+
+Branch `d3-layered`. **Not verified by eye; nothing is sent to hardware** (no serial, no network). Off is unchanged (three six-arm exports `cmp` identical).
+
+**Export.** `hyst score-csv SCORE_JSON OUT.csv [--hz 50] [--mode off|layered] [--body-source NAME]` (extends `hyst-cli`; logic in `hyst_compile::score_csv`). Rows are `EnsembleScore::sample` (the previz sampler, no new interpolation)
+at 50 Hz from 0 while within the score, columns `time_s,base_yaw,shoulder,elbow,wrist_bend,wrist_roll`, degrees, six decimals. The header comments carry source score, mode (inferred from the rig envelope: body.rs LIMITS means layered),
+body source, hz, the limits used, the rig and the placement as JSON (so the checker needs no other file).
+
+**Checker.** `hyst check-csv FILE.csv`: exit 0 accepted, exit 1 refused (names the first 10 breaches and their count: time, what, value, limit), exit 2 a malformed file. The same method for every file, no filtering:
+joint speed = |next row - row| x hz, acceleration = |second difference| x hz^2, against `body::LIMITS`; each row inside the rig's joint position limits (the base and roll turn without end in this rig, ±1e6); the hand point by forward kinematics of the header's rig, hand speed per row interval
+against 1.2 m/s and jolt = |change of speed| x hz against 9 m/s2; floor by body.rs's rule (points 1 to 4 clear by 0.05 m, the hand by 0.05 + 0.06 m). Also refused: a non-finite or unparsable cell, a row of the wrong width, a wrong column header, a missing hz, rig or placement line,
+a first time other than 0, a time step other than 1/hz (a gap, a repeat, or going back).
+
+**Tests** (`score_csv.rs`, `figures.rs`): a feasible clip and two Layered scores (neutral and all-1 body) go score -> CSV -> checker and pass; the rows equal the sampler; an Off score of the drop song is refused; one injected over-speed sample ("base_yaw speed"), one over-acceleration
+sample with no speed breach ("wrist_roll acceleration"), a NaN, a deleted row (time step), a repeated time, a joint beyond its position limit and a header error each fail with the right message. cargo: hyst-compile 92 passed + 1 ignored, hyst-output 18; clippy `-D warnings` and fmt clean.
+
+**The nine scores in `$D/d3/`** to `$D/d3/csv/<song>.<off|stage1|baseline49>.csv`; verdicts in `$D/d3/csv/verdicts.txt`.
+
+| Song | Mode | Verdict | First breach |
+|---|---|---|---|
+| Instant Crush | Off | refused, 1,399 | 2.160 s shoulder acceleration 720 against 300 |
+| | stage1 | accepted | |
+| | baseline49 | accepted | |
+| Five Years | Off | refused, 1,089 | 55.660 s shoulder acceleration 315 against 300 |
+| | stage1 | accepted | |
+| | baseline49 | accepted | |
+| Presence | Off | refused, 2,007 | 0.020 s base_yaw acceleration 2,164 against 600 (also elbow 1,256, wrist_bend 2,249, hand jolt 15.4 at that sample) |
+| | stage1 | accepted | |
+| | baseline49 | accepted | |
+
+Off was made for 240 deg/s and 8,000 deg/s2, so the refusal is expected. The checker at 50 Hz sees less peak than the 1 kHz measure used for Layered, so a file it accepts is not a proof of the continuous curve; `validate` on the score is (it passed for all six Layered scores).
+Open: the player on the servo side must reproduce 50 Hz rows by its own interpolation, which the checker does not model; the 0.06 m hand disc in the floor rule is body.rs's, whatever implement the score was compiled with.
+
+### Step B: music clock, amplitude fit and phrase-edge re-sync (★ B) — 2026-10-29
+
+Branch `b-clock` (from `9c691c9` on `keys-decide`), one arm only. **Not verified by eye.** Nothing is sent to hardware. Binding text: `docs/NEXT_DECODER_THEN_BRAIN.md` §2, note of 2026-10-29, part B.
+
+**Built.** `ClockMode::V47 | Music` (`figures.rs`, `CompileConfig.clock`, `--clock v47|music` in `ensemble_preview`, default V47), orthogonal to `BodyMode`.
+V47 is unchanged: golden digests unchanged; the three six-arm Off exports are `cmp` identical to `hexagon-47.html`, `five-years-hexagon.html`, `presence-hexagon.html`; the six D3 Layered + V47 scores (stage1, baseline49) have the same SHA256 before and after.
+Music, in both body modes, with `body::LIMITS` as the rig envelope and the follower of Layered (acceleration share 0.3, natural-spline curve):
+1. The figure clock is version 47's (holds, 0.8 m/s cap, calm pace, pulses, catch-up). D3's `rate_scale` slow-down is not used, so figure timing is the music's.
+2. Amplitude fit loop (at most 24 passes, aim 0.95, floor 0.1 kept): the same measure as D3's (`layered::demand`: joint speed, root of joint acceleration at 1 kHz, hand speed, root of hand jolt at 60 fps, continuous bounds). A knot over a limit shrinks the moment whose window holds it, else the figure the clock is in at that knot, by the share it is over. Figures (one per planner figure instance: 86, 67, 67 on the three songs) are scaled about `CENTRE`, the planner's own figure centre, in shell units; a moment's strength (its pose offset from the path) is scaled instead, its time and span untouched. The shrink per figure and per moment is reported.
+3. Phrase edges are the starts of `musicalMemory.phrases` after the first. At the grid knot nearest the edge (knot step = beat/8) the clock is set to the music's time; the stretch before is smoothed on its own so the jump stays a jump. The cut: the hand's target keeps its old place and settles onto the figure over max(2 beats, 3 s per metre of jump) (peak about 0.5 m/s); the follower and the solver take the rest; the fit loop then measures the final score, so a cut that breaks a limit shrinks its figure.
+4. Moments keep their measured times (arrival = hand target within 1 % of its pose).
+Layered + Music reads `bodyTrack` as D3 does (no `bodyTrack` = Music with body Off, tested). Music with more than one arm is an error, for both body modes.
+
+**Checks.** `cargo test -p hyst-compile -p hyst-output -p hyst-previz -p hyst-cli`: hyst-compile 96 passed + 1 ignored (4 new), hyst-output 18, previz and cli 0. Clippy `-D warnings` on the four crates with `--all-targets`, `cargo fmt --all --check`, and 169 Python unittests in `scripts/emotion` pass.
+New tests: Music passes `validate` for body Off and for neutral, all-0, all-1 and one drawn body, and refuses two arms; the clock is back on the bar at each of the 3 phrase edges of the drop song (lag within half a beat) and equals version 47's clock up to the first edge; a figure forced over a limit (beat 0.2 s, all-1 body) is shrunk (kept < 1, floor held) and the clock is not slowed; moments arrive 0 to 1.5 s before their measured time (target); shrink, cut and lag are in `Traced.music`.
+
+**Pass: lag <= half a beat at every phrase edge** (clock position at the edge's knot minus the edge, after the re-sync; the clock is smoothed, so it is not exactly 0). All six: PASS.
+
+| Song | Body | Edges | Max lag after re-sync, s (beats) | Largest lag inside a phrase before re-sync, s (beats) | Seconds cut per edge: max / mean / total | Edges where a figure starts |
+|---|---|---|---|---|---|---|
+| Instant Crush | Off + Music | 39 | 0.0705 (0.129) | 2.11 (3.86) | 1.42 / 0.26 / 10.1 | 8 |
+| | Layered + Music | 39 | 0.0683 (0.125) | 2.35 (4.30) | 1.86 / 0.32 / 12.5 | 8 |
+| Five Years | Off + Music | 31 | 0.0771 (0.133) | 2.67 (4.60) | 2.67 / 0.51 / 15.9 | 17 |
+| | Layered + Music | 31 | 0.0756 (0.130) | 2.72 (4.69) | 2.72 / 0.62 / 19.1 | 17 |
+| Presence | Off + Music | 37 | 0.0487 (0.106) | 2.07 (4.49) | 2.07 / 0.51 / 19.0 | 30 |
+| | Layered + Music | 37 | 0.0487 (0.106) | 2.01 (4.36) | 2.01 / 0.54 / 20.1 | 30 |
+
+References (no re-sync; lag = clock minus music at each edge, from the same exporter): version 47 Off, max |lag| at an edge 3.32 s (6.09 beats) on Instant Crush, 2.61 s (4.51) on Five Years, 9.40 s (20.37) on Presence; edges within half a beat 27/39, 13/31, 14/37.
+D3 Layered + V47 (stage1 bodies), max |lag| 5.72 s (10.49), 13.41 s (23.15), 21.59 s (46.77); edges within half a beat 17/39, 10/31, 10/37. Largest lag inside a phrase: V47 Off 3.67, 2.88, 9.83 s; Layered + V47 6.66, 14.04, 24.13 s.
+
+**Shrink** (figures shrunk by any amount / over 50 %, largest shrink, moments with less strength, fit passes). No song has more than 50 % shrink on more than 20 % of its figures (largest share 4.7 %).
+
+| Song | Body | Figures | Shrunk | Over 50 % | Largest shrink | Moments shrunk | Passes |
+|---|---|---|---|---|---|---|---|
+| Instant Crush | Off | 86 | 4 | 4 | 0.775 | 1 | 3 |
+| | Layered | 86 | 4 | 4 | 0.755 | 3 | 3 |
+| Five Years | Off | 67 | 0 | 0 | 0 | 1 | 2 |
+| | Layered | 67 | 0 | 0 | 0 | 1 | 6 |
+| Presence | Off | 67 | 2 | 2 | 0.755 | 3 | 4 |
+| | Layered | 67 | 4 | 2 | 0.787 | 6 | 3 |
+
+**Moments, hand-target arrival minus measured time** (s, negative = early; mean of |d| in brackets): Music Off: Instant Crush -0.096 .. -0.036 (0.073), Five Years -0.102 .. -0.045 (0.065), Presence -0.087 .. -0.041 (0.061). Music Layered: -0.104 .. -0.039 (0.078), -0.134 .. -0.045 (0.069), -0.114 .. -0.044 (0.066). References: V47 Off -0.096 .. -0.039 (0.074), -0.102 .. -0.051 (0.065), -0.087 .. -0.041 (0.061); Layered + V47 -0.123 .. -0.052 (0.084), -0.134 .. -0.053 (0.072), -0.139 .. -0.049 (0.075). These are the hand target's, not the joints': a lagged joint (Layered succession, up to 0.21 s) arrives later.
+
+**Limits on the Music exports** (`body::measure` on the final score): `validate` passes in all six; hand max 1.124 to 1.197 m/s (limit 1.2), jolt max 5.31 to 7.41 m/s2 (limit 9), floor margin at least 0.0187 m; `jolts.py` finds 0 jolts in all six; `hyst check-csv` accepts all six (V47 Off CSVs of D3 are refused, as before).
+
+**Exports (outside git), `$D/b/`.** Per song `S` in `ic`, `fy`, `pr`: `S.off.music.*` (body Off + Music, sidecar of the song) and `S.layered.music-d3stage1.*` (Layered + Music, bodies from D3's `$D/d3/S.stage1.sidecar.json`; the final Layered export waits for core-2b bodies from task A), each with `.html`, `.score.json`, `.txt` (the exporter's limits, lag, per-edge and per-figure shrink, per-moment arrival), `.jolts.txt`; `S.spans-d3off-vs-off.music.txt` and `S.spans-d3stage1-vs-layered.music-d3stage1.txt` (60 s windows, A = D3 export, B = Music); `csv/S.off.music.csv`, `csv/S.layered.music-d3stage1.csv`, `csv/verdicts.txt`; references in `ref/` (`S.off.v47.*`, `S.layered.v47-d3stage1.*`). Audio links are `../S.m4a`.
+
+**Where the note was silent and I chose.**
+1. Amplitude is scaled about `CENTRE` (shell space) per figure instance; a moment is scaled in strength. Everything else (height and extension offsets of the body, breath, voice lift) is not scaled; if one of those alone breaks a limit the loop cannot fix it (it did not happen here).
+2. An over-limit knot is blamed on the moment whose window holds it, else the figure the clock is in (not the figure at the music's time).
+3. The clock keeps all of version 47's own rate rules, so lag still builds inside a phrase (up to 2.7 s here); the re-sync removes it at the edge.
+4. The re-sync is on the grid knot nearest the edge; the lag after is measured on the smoothed clock (two-knot bell), so it is up to 0.13 beat, not 0.
+5. "The next figure starts on the bar" holds for the clock only. The figure schedule is fixed in music time and was not moved, so a figure begins at the edge in 8 of 39, 17 of 31 and 30 of 37 edges; elsewhere the figure in progress continues from its place in music time.
+6. The cut is carried by a decaying offset of the hand's target (span above) plus the follower, then proven by the fit loop on the final score; the shrink is not the only cover.
+7. Music takes one arm only, also with body Off.
+8. The last phrase has no edge after it, so it is not in the lag table.
+9. Moment arrival is the hand target's (blend 0.99); the loop does not move a moment's time or lengthen its span.
+10. `three.sh` points at the `dance-figures` worktree; I ran a copy that points at `b-clock` (same commands, same files). The D3 check wrote to a scratch directory, not to `$D/d3`. Spans windows end at 338, 282, 269 s as D3's did. `score-csv --mode` is a label: `off` for Off + Music, `layered` for Layered + Music.
+
+Open: figure starts that miss the bar (point 5) may read as cut mid-figure by eye; the 0.95 aim, floor 0.1, 24 passes and the 2-beat, 3 s per metre cut span are guesses.
+
+### Task A: core-2b anchors, body-spread fix, spread check (A1, A2, A3) — 2026-10-29
+
+Branch `a-spread` (from `e06324a` on `keys-decide`). **Not verified by eye.** Code at `74c3033` plus the fix to `a2.py` committed with this entry. Run once as committed, after the overseer's go; no rule or threshold changed after the result. Outputs, outside git: `/secondary/hyst-data/emotion/a2/` (`a1.json`, `a2.json`, `a3.json`, `links_recomputed.json`, `segments_*.npz`, `a3/{before,after}/` sidecars, logs). Body generator: `body_render` built in this worktree from the `hyst-previz` sources of `9c691c9` (e06324a changed docs only). Tests: 193 Python unittests passed in the full run (169 before this task, 24 new in `test_spread.py`); one more test (link table) was added after that run and passes alone; no Rust touched.
+
+**A1.** Round 2's core-2b links: 22 of 24 reach held-out r 0.5. Misses: fold 4 energy to size 0.487, sixth set energy to time 0.378. The sixth-set core-2b was refitted with check3r2's functions; its saved segment lanes match `segments_5.npz` with largest absolute difference 0.0. Energy against pass A on the 3 songs: 0.252 (585 steps), 0.887 (568), 0.628 (542), all positive. Power against pass B heavy: −0.098, −0.260, −0.227; light: −0.445, −0.134, 0.138. The sign disagrees on 3 of 3 songs, so the power anchor is dropped for core-2b (rule of 2026-10-28), by the overseer's ruling. Weight is free; mood.power stays as a lane.
+
+**A2.** Core-2b refitted without the power anchor (energy anchor and its three bounded links kept; k = 2 on all six sets), same folds, seeds and code path as check3r2. "Before" is that map. "After" is the same map with the quantile map on the pre-sigmoid values (5th to 0.05, 95th to 0.95, linear in rank, clipped), fitted on each set's training segments. Round 2's saved core-2b numbers (power anchor kept) are the reference. Run time 5,954 s for the six sets (fit about 100 to 130 s each; render under 40 s each).
+
+| | Round 2 (reference) | Before | After |
+|---|---|---|---|
+| DEAM/MERP rho | 0.2695 | 0.2554 | 0.3370 |
+| per fold | 0.1248, 0.2982, 0.2320, 0.3498, 0.3425 | 0.1407, 0.3441, 0.0627, 0.3389, 0.3904 | 0.3708, 0.3597, 0.3853, 0.2817, 0.2874 |
+| gate-1 shuffle (1,000) | | beats 1000 of 1000, permuted max 0.0112 | beats 1000 of 1000, permuted max 0.0102 |
+| GEMS rho | 0.1516 | 0.1736 | 0.1605 |
+| sixth set against the dial (106 segments) | 0.4348 | 0.3668 | 0.3850 |
+| failed rated segments | 6 | 41 (fold 4) | 39 (folds 0 to 4) |
+| energy links reaching 0.5 (18) | | 17 | 17 |
+
+The only energy link under 0.5 in both is the sixth set energy to time (0.365 before, 0.352 after). Held-out r of the 18 energy links, before / after, per set (energy, size, time): fold 0 0.981, 0.887, 0.952 / 0.973, 0.873, 0.945; fold 1 0.730, 0.822, 0.955 / 0.715, 0.861, 0.954; fold 2 0.794, 0.972, 0.985 / 0.783, 0.965, 0.975; fold 3 0.729, 0.915, 0.579 / 0.715, 0.918, 0.588; fold 4 0.594, 0.966, 0.655 / 0.542, 0.953, 0.646; sixth set 0.749, 0.731, 0.365 / 0.754, 0.726, 0.352. Power to weight, not an anchor and not gated, before / after: 0.433 / 0.413, 0.727 / 0.714, 0.105 / 0.103, 0.592 / 0.584, 0.407 / 0.401, 0.465 / 0.502.
+Known defect: the `after` links inside `a2.json` repeat the `before` ones (the quantile was reset before they were read). The numbers above come from `links_recomputed.json`, computed from the saved lanes and rendered bodies; the `before` values equal the saved ones exactly. `a2.py` is fixed for a rerun. Share of sixth-set segments within 0.05 of 0 or 1 before: arch, succession direction, succession delay, breath rate and energy 1.00; after: time 0.22, energy 0.11, rhythm 0.12, space 0.08, others 0. DEAM/MERP failed segments are not comparable between columns by count alone.
+
+**A3, spread check on the 3 songs (core-2b without the power anchor, phrases of `bodyTrack`).** Rules fixed in the note of 2026-10-29 and `e06324a`. **After the fix: FAIL.** Rule 1 passes on all three songs. Rule 2 fails (Five Years and Presence share region 1). Rule 3 fails on Instant Crush (time 0.40 within 0.05 of 0 or 1) and Five Years (space 0.28, energy 0.31, rhythm 0.38); Presence passes.
+
+| Song | Variant | Phrases | Region counts (regions 0 to 7) | Visited | Most visited | Mean distance to region (max) | Dimensions over 20 % |
+|---|---|---|---|---|---|---|---|
+| Instant Crush | before | 40 | 0, 40, 0, 0, 0, 0, 0, 0 | 1 | 1 | 1.400 (1.549) | arch, succession direction, succession delay, breath rate, energy (all 1.00) |
+| | after | 40 | 0, 17, 0, 18, 3, 0, 0, 2 | 4 | 3 | 1.369 (1.772) | time 0.40 |
+| Five Years | before | 32 | 0, 32, 0, 0, 0, 0, 0, 0 | 1 | 1 | 1.355 (1.547) | same five (1.00) |
+| | after | 32 | 2, 18, 2, 0, 0, 0, 6, 4 | 5 | 1 | 1.075 (1.821) | space 0.28, energy 0.31, rhythm 0.38 |
+| Presence | before | 38 | 0, 38, 0, 0, 0, 0, 0, 0 | 1 | 1 | 1.419 (1.574) | same five (1.00) |
+| | after | 38 | 0, 26, 1, 8, 0, 0, 1, 2 | 5 | 1 | 1.325 (1.930) | none |
+
+No render failed (0 failed phrases in all six cases). "Before" is reported, not gated. Per rule, the run stopped here; the one allowed adjustment (symmetric move of the quantile anchors) was not made and is the overseer's to call. Distances to the nearest region are about 1.1 to 1.4 on a 37-dimension midrank space, so most phrases sit far from every region mean; the region labels are the nearest of eight, not a claim that a phrase belongs to it.
+
+**Points fixed where the note was silent** (all ruled on 2026-10-29): ties for most visited count as sharing when the tied sets meet; a failed phrase has no region and is left out of the region counts only; within 0.05 means ≤ 0.05 or ≥ 0.95 and over 20 % means strictly above; phrase-mean lanes go through the map, then the quantile.
+
+**Not done:** the Rust reader was not run on the new sidecars (`bodyTrack` is the D3 format, the quantile is applied in Python); no export or CSV was made; no figure or clock work; the quantile range was not adjusted; no check against how the bodies look.
+
+### Task A, round 2: quantile 5th/95th to 0.10/0.90, diagnostics, paired bootstraps — 2026-10-29
+
+Branch `a-spread`, code at `4c24579` (rebased onto `700f5e8`). **Not verified by eye.** **The setting 0.10/0.90 was chosen after round 1's results and is judged on the same 3 songs.** One round, as ruled; nothing else changed (same map, power anchor dropped, k = 2, seeds, folds). Body generator: `body_render` built in this worktree from the `hyst-previz` sources of `9c691c9`. Outputs, outside git: `/secondary/hyst-data/emotion/a2b/` (A2 rerun with three variants, `a2.json`, `stats.json`, `links_recomputed.json`, `segments_*.npz`), `/secondary/hyst-data/emotion/a2/a3r2.json` and `a3r2/{before,after}/`.
+
+**A mistake that cost a run.** The first round-2 run set the percentiles to 0.10/0.90 as well as the outputs. Mapping the 10th and 90th percentile to 0.10 and 0.90 is the same rank map as round 1, so that run repeated round 1 (identical region counts). I found it from the identical counts, corrected the setting (the 5th and 95th percentiles go to 0.10 and 0.90) and reran both scripts. The void outputs are kept as `a2b_void_setting`, `a2/a3r2_void_setting*`; none of their numbers is used. The corrected map is body = 0.10 + (rank − 0.05) × 0.8/0.9, so the values lie between 0.056 and 0.956. Round 1's numbers were reproduced exactly by the rerun (DEAM/MERP 0.3370, sixth set against the dial 0.3850).
+
+**A3 round 2: FAIL (rule 2).** Rule 1 passes on all three songs, rule 3 passes on all three (no dimension within 0.05 of 0 or 1 for any phrase), rule 2 fails: all three songs have region 1 as most visited.
+
+| Song | Round | Region counts (regions 0 to 7) | Visited | Most visited | Mean distance (max) |
+|---|---|---|---|---|---|
+| Instant Crush | 1 | 0, 17, 0, 18, 3, 0, 0, 2 | 4 | 3 | 1.369 (1.772) |
+| | 2 | 0, 31, 0, 4, 3, 0, 0, 2 | 4 | 1 | 1.332 (1.779) |
+| Five Years | 1 | 2, 18, 2, 0, 0, 0, 6, 4 | 5 | 1 | 1.075 (1.821) |
+| | 2 | 2, 18, 2, 0, 0, 0, 6, 4 | 5 | 1 | 1.031 (1.804) |
+| Presence | 1 | 0, 26, 1, 8, 0, 0, 1, 2 | 5 | 1 | 1.325 (1.930) |
+| | 2 | 0, 26, 1, 8, 1, 0, 1, 1 | 6 | 1 | 1.272 (1.888) |
+
+Rule 3 in round 1 failed on Instant Crush (time 0.40) and Five Years (space 0.28, energy 0.31, rhythm 0.38). In round 2 the compressed range removes those. The region counts barely move: Instant Crush goes from regions 1 and 3 almost evenly to 31 of 40 phrases in region 1. D4 stays blocked on `core-2b` by the ruling.
+
+**A2 (power dropped), three variants from one fit per set.** Round 2 reference is check3r2's saved core-2b with the power anchor kept.
+
+| | Round 2 reference | Before (power dropped) | Fix 0.05/0.95 (round 1) | Fix 0.10/0.90 (round 2) |
+|---|---|---|---|---|
+| DEAM/MERP rho | 0.2695 | 0.2554 | 0.3370 | 0.3503 |
+| per fold | 0.1248, 0.2982, 0.2320, 0.3498, 0.3425 | 0.1407, 0.3441, 0.0627, 0.3389, 0.3904 | 0.3708, 0.3597, 0.3853, 0.2817, 0.2874 | 0.3818, 0.3625, 0.3967, 0.2873, 0.3233 |
+| gate-1 shuffle (1,000) | | beats 1000 | beats 1000 | beats 1000 |
+| GEMS rho | 0.1516 | 0.1736 | 0.1605 | 0.1652 |
+| sixth set against the dial (106 segments) | 0.4348 | 0.3668 | 0.3850 | 0.3729 |
+| failed rated segments | 6 | 41 | 39 | 27 |
+| energy links reaching 0.5 (of 18) | | 17 | 17 | 17 |
+
+The one link under 0.5 is the sixth set energy to time (0.365, 0.352, 0.352). Links are unchanged by the second fix because it is an affine change of the first. Power to weight (not an anchor, not gated), sets 0 to 4 and sixth: before 0.433, 0.727, 0.105, 0.592, 0.407, 0.465; fixed 0.413, 0.714, 0.103, 0.584, 0.401, 0.502.
+
+**Paired bootstrap, 95 % intervals, 2,000 resamples, fixed seed (20261013); later minus earlier.** Sixth set: segments resampled within each song (blocked by song), same draw for both variants, ranks of the full set. DEAM/MERP: over held-out songs (1,787), as check3r2.
+
+| Comparison | Sixth set against the dial | DEAM/MERP |
+|---|---|---|
+| power dropped − round 2 reference | −0.0683 [−0.1376, −0.0092] | −0.0137 [−0.0344, +0.0074] |
+| fix 0.05/0.95 − power dropped | +0.0193 [−0.0730, +0.1134] | +0.0822 [+0.0566, +0.1084] |
+| fix 0.10/0.90 − power dropped | +0.0072 [−0.0877, +0.1111] | +0.0954 [+0.0707, +0.1220] |
+| fix 0.10/0.90 − fix 0.05/0.95 | −0.0121 [−0.0580, +0.0363] | +0.0132 [+0.0082, +0.0180] |
+| fix 0.10/0.90 − round 2 reference | −0.0611 [−0.1501, +0.0296] | +0.0818 [+0.0541, +0.1104] |
+
+The dial fall from 0.4348 to 0.3668 comes with the power drop (interval excludes 0); the fix changes the dial rho by amounts whose intervals include 0. The DEAM/MERP rise comes with the fix (intervals above 0).
+
+**Diagnostics (not gated), on the round-2 map.**
+- Corpus-median mood vector (per-lane median of the sixth-set map's 12,528 public training segments; lanes energy, power, rest 1, rest 2 = 0.514, 0.420, 0.533, 0.487): its body lands in region 1, distance 1.405. Region histogram of all 12,528 segments through the same map (bodies rendered here, 3 seeds; 15 failed): regions 0 to 7 = 465, 2554, 405, 1107, 291, 2562, 3808, 1321. Region 1 holds 20 % of the corpus, regions 5 and 6 hold 20 % and 30 %.
+- Mood vectors before the map, in corpus SD per lane (SDs 0.217, 0.204, 0.210, 0.200), all four lanes. Distance between song means: Instant Crush to Five Years 1.47, Instant Crush to Presence 0.82, Five Years to Presence 1.10. Per phrase pair between songs (median, quartiles): 2.30 (1.78 to 2.74), 1.35 (0.98 to 1.83), 2.06 (1.64 to 2.59). Within a song, between phrases: Instant Crush 1.00 (0.67 to 1.43), Five Years 1.80 (0.90 to 2.91), Presence 1.31 (0.94 to 1.69); to the song mean: 0.71, 1.60, 0.90. For scale, two random public segments: 2.56 (1.88 to 3.31).
+- The user's words (from `score.txt` of the body study `r6`, which quotes the user's notes; line numbers there; which clips a note describes is read from `key.json`, and the reading is mine). Mean joint speed per region: 0 2.9, 1 42.3, 2 35.5, 3 17.5, 4 12.8, 5 8.7, 6 49.3, 7 16.5 deg/s (`score.txt` lines 4 to 11).
+  - Region 1: no note describes its clips directly. t31 (`score.txt:61`) had region 1 as the odd one against two region-0 clips described as "slow/sad hanging/drooping"; t17 (`:50`) pair of region 1, odd region 0 "massively slower than A/B"; t32 (`:62`) pair of region 1, odd region 6 "wild and unstructured".
+  - Region 3: pair in t11 (`:48`) "basically figure eights", and in t21 (`:53`) "figure eights/easy/fluid".
+  - Region 4: t09 (`:47`) and t16 (`:49`) and t18 (`:51`) pairs "locked groove" with "hold between lateral/vertical move"; odd in t23 (`:55`) and t27 (`:58`) "locked groove/holds".
+  - Region 7: pair in t22 (`:54`) "sort of 'holds'"; odd in t24 (`:56`) "a lot bigger and free-er".
+  - Region 2: odd in t21 (`:53`) "some quick up-to-down moves, inverting its trajectory sortof".
+  - Region 0: pair in t31 (`:61`) "slow/sad hanging/drooping"; odd in t01 (`:46`) and t17 (`:50`), "small, slow and near the top" for the other two clips of t01, and "massively slower" in t17.
+  - Region 6: odd in t32 (`:62`) "wild and unstructured"; t11 (`:48`) odd, t22 (`:54`) and t29 (`:60`) have it as the odd one without a direct description.
+
+**Sidecars for the exports.** `/secondary/hyst-data/emotion/a2/a3r2/after/<song>.sidecar.json` for `instant-crush`, `five-years`, `presence`: notes sidecar plus `bodyTrack` (D3 format, version 1) from the round-2 map, with `mind-<song>.json`, `core2b.map.npz` and `core2b.map.quantile.npz` beside them. The Rust reader was not run on them.
+
+**Not done:** no export, CSV or figure work; no look at the bodies; the quantile range was not adjusted further; no spread term in the fit (the note keeps that for a later round).
+
+
+### ★ B1, after results: the pulse layer checked on Ballroom and GTZAN (round 1) — 2026-10-29
+
+Branch `b1-pulse`, code as committed at `1e29968` (clean tree, hash lists verified before the run, one run, 8 workers, 1,868.9 s). **Not verified by eye.**
+`scripts/brain/check_b1.py` ran once on 698 Ballroom clips and 985 GTZAN clips (1,000 minus 14 exact duplicates minus `jazz.00054`); nothing was skipped by the script.
+SMC: not obtained. Output: `/secondary/hyst-data/brain/b1/{results.json,check_b1.log}` (outside git); the commit hash was added to `results.json` after the run, code unchanged.
+**Verdict by the committed rules: gate 1 pass, gate 2 pass (4 s, both kinds), gate 3 fail.** Overall: B1 does not pass; this is round 1 of at most 2.
+
+**Gate 1, non-inferiority (lower bound of the 95 % bootstrap interval of B1 − PLL must be at least −0.05).** The PLL baseline is the centred variant for all four rows (it scored higher).
+
+| Set | Metric | B1 | PLL (centred) | B1 − PLL | 95 % interval | Pass |
+|---|---|---|---|---|---|---|
+| Ballroom | F-measure | 0.5309 | 0.3148 | +0.2160 | 0.1949 .. 0.2379 | yes |
+| Ballroom | AMLt | 0.5256 | 0.2690 | +0.2566 | 0.2314 .. 0.2830 | yes |
+| GTZAN | F-measure | 0.5119 | 0.3545 | +0.1574 | 0.1406 .. 0.1739 | yes |
+| GTZAN | AMLt | 0.5215 | 0.3021 | +0.2194 | 0.1974 .. 0.2421 | yes |
+
+Reported (means over clips): CMLt B1 0.2972 / 0.2392 (Ballroom / GTZAN); PLL raw F 0.2592 / 0.3253, AMLt 0.2348 / 0.2929, CMLt 0.1672 / 0.2156; PLL centred CMLt 0.1889 / 0.2164.
+Offline references, analyze.py beats: F 0.3511 / 0.3637, CMLt 0.1983 / 0.2105, AMLt 0.2869 / 0.3042; regularised dance_memory grid (697 and 982 clips): F 0.3745 / 0.3719, CMLt 0.2423 / 0.2773, AMLt 0.3361 / 0.3737.
+Tempo error (median of the per-clip relative error): B1 0.254 / 0.574, PLL raw 0.248 / 0.175, PLL centred 0.246 / 0.173. Median phase error (ms): B1 52.0 / 54.5, PLL raw 134.7 / 120.6, PLL centred 132.0 / 117.9.
+B1's tempo error is large because its readout often sits at twice the annotated tempo (below); AMLt and F still count that.
+
+**Gate 2, holding through gaps (4 s is gated; 2 s and 8 s are reported).** Clips used are those that passed the permutation verification. B1 / PLL are medians of the phase error at the gap end (ms); the interval is of (median B1 − median PLL), ms; amp ratio = the amplitude of the oscillator that was the readout before the gap, at the gap's end, over its value before the gap, median over clips. Criteria: B1 ≤ 70 ms, upper bound ≤ +10 ms, ratio ≥ 0.5.
+
+| Gap | Kind | Clips | B1 | PLL (variant) | 95 % interval of B1 − PLL | Amp ratio | Result |
+|---|---|---|---|---|---|---|---|
+| 2 s | silence | 1,681 | 54.6 | 116.2 (centred) | −66.3 .. −57.6 | 0.931 | (reported) |
+| 2 s | noise | 1,594 | 52.9 | 606.2 (raw) | −595.1 .. −512.3 | 0.929 | (reported) |
+| **4 s** | **silence** | 1,678 | 60.1 | 114.3 (centred) | −58.2 .. −49.7 | 0.877 | **pass** (all three) |
+| **4 s** | **noise** | 1,585 | 63.2 | 1000.0 (raw) | −941.9 .. −932.9 | 0.869 | **pass** (all three) |
+| 8 s | silence | 1,675 | 77.0 | 108.4 (centred) | −36.9 .. −26.7 | 0.801 | (reported) phase 77.0 ms is above 70 |
+| 8 s | noise | 1,552 | 77.1 | 1000.0 (raw) | −927.8 .. −919.7 | 0.790 | (reported) phase 77.1 ms is above 70 |
+
+The PLL reads 606 ms and 1000 ms (the cap) on noise gaps. Cause, checked on 8 Ballroom clips with 4 s noise gaps (diagnosis only, no change): the PLL emits 0 to 4 beats inside a noise gap against 7 to 9 inside a silence gap of the same clip, so in those clips no PLL beat lies near the gap end and the error is capped. The comparison with the PLL on the noise kind therefore does not measure phase keeping of the PLL; it measures that the PLL stops emitting beats under noise.
+Verification exclusions (gaps failing the permutation test, of 1,683 clips): silence 0 / 3 / 7 (2 / 4 / 8 s) = 0.0 %, 0.2 %, 0.4 %; noise 88 / 96 / 130 = 5.2 %, 5.7 %, 7.7 %. The noise rates at 4 s and 8 s are above the 5 % that white noise would give.
+Readout switches inside the gap (mean per gap; share of gaps with at least one): silence 0.099, 0.122, 0.137; noise 0.069, 0.079, 0.106 for 2 / 4 / 8 s (the share equals the mean to three digits, so almost every switching gap switched once).
+With alpha = 0 (critical) the amplitude decays without input; with alpha > 0 the bank would sustain itself and criterion 3 would pass trivially, so the amplitude result reflects the published alpha. The ratios above are the critical bank's.
+
+**Gate 3, meter (Ballroom, 698 clips, 175 triple).** Ratio of the mean amplitude at beat/3 to that at beat/2, beat = B1's own tempo: **AUC 0.7201, permutation p = 0.0001 (10,000 permutations), needs AUC at least 0.75: fail.** Mean ratio triple 1.637, duple 0.857.
+Reported beside it: with the annotated tempo AUC 0.9147, p = 0.0001 (it would pass). B1's tempo against the annotated one: half 4.4 %, double 30.1 %, either 34.5 % of clips.
+
+**Missing-pulse stimulus (Large 2015, reported only; 11 patterns, tempo 2 Hz, seeded placement of the moved events).** Bank amplitude at 2 Hz / the strongest oscillator in 0.5-4 Hz (Hz, amplitude) / stimulus amplitude at 2 Hz: level 0 0.414 / 2 Hz 0.414 / 0.547; level 1 0.381 / 2 Hz 0.381 / 0.410 (both patterns); level 2 0.336 and 0.338 / 4 Hz 0.373 / 0.273; level 3 0.269 and 0.276 / 4 Hz 0.373 / 0.137; level 4 0.093, 0.075, 0.133, 0.022 / 4 Hz 0.373 / 0.000. At level 4 the stimulus has no energy at 2 Hz and the bank amplitude there is 0.02 to 0.13, against 0.37 at 4 Hz.
+
+**What this says, in plain terms.**
+- B1 is above the PLL on both tracking metrics on both sets by 0.16 to 0.26; gate 1 passes by a wide margin. The offline references score below B1 on F and AMLt.
+- B1 holds its phase through 2 s and 4 s gaps of both kinds (about 55-63 ms median, amplitude kept at 0.87-0.93 of its value), and loses it at 8 s (77 ms, amplitude 0.79-0.80). The amplitude criterion passes because the readout oscillator decays slowly; this is the critical bank's decay, not self-sustaining.
+- The meter ratio separates triple from duple at AUC 0.72 with B1's own tempo and at 0.91 with the annotated tempo. In 30 % of the clips B1's readout is at twice the annotated tempo, which moves beat/3 and beat/2 to the wrong resonances. That is a measured property of the readout rule, not changed.
+- Under the rule "two rounds at most", this is round 1. Nothing was tuned after the numbers were seen.
+
+
+### ★ B1 round 2, after results: the pulse-salience readout, same sets and rules (final) — 2026-10-29
+
+Branch `b1-pulse`, code as committed at `1cdef1f` (clean tree, hash lists verified, one run, 8 workers, 1,911.1 s, no crash). **Not verified by eye.**
+Round-2 rules: docs/BRAIN_SPEC.md 2.2 "B1 round 2" (keys-decide `190c273`). Readout score S = A · P(f), P(f) = exp(−2 (log2(f / 2 Hz))²), argmax S in 0.5-4 Hz,
+hysteresis (20 % for 2 s) on S; bank, input, gain and cap unchanged; sources in `GRFNN_PARAMS.md` (Frieler 2004 section 4.3.1 p. 4 read for t_s = 500 ms; the equation text, Parncutt 1994 and van Noorden & Moelants 1999 not read, no page or equation reached).
+Same 698 Ballroom and 985 GTZAN clips; output `/secondary/hyst-data/brain/b1r2/{results.json,check_b1.log}` (outside git; the commit is in `results.json`).
+Round 1 stays in `/secondary/hyst-data/brain/b1/`. **Round-2 verdict by the committed rules: gate 1 pass, gate 2 fail, gate 3 fail. This is the last round: B1 failed twice.**
+Per BRAIN_SPEC 2.2 "If B1 fails twice", the pulse comes from the offline analysis grid, labelled "beat grid", and the B1 claims are dropped. Nothing was changed after seeing any number.
+
+**Gate 1 (lower bound of B1 − PLL ≥ −0.05; the PLL is the centred variant, the better of the two, on every row).** Round 1 beside round 2.
+
+| Set | Metric | R1 B1 | R2 B1 | PLL | R1 diff, interval | R2 diff, interval | R2 pass |
+|---|---|---|---|---|---|---|---|
+| Ballroom | F | 0.5309 | 0.4609 | 0.3148 | +0.2160, 0.1949..0.2379 | +0.1461, 0.1281..0.1638 | yes |
+| Ballroom | AMLt | 0.5256 | 0.4305 | 0.2690 | +0.2566, 0.2314..0.2830 | +0.1616, 0.1399..0.1848 | yes |
+| GTZAN | F | 0.5119 | 0.5082 | 0.3545 | +0.1574, 0.1406..0.1739 | +0.1537, 0.1374..0.1705 | yes |
+| GTZAN | AMLt | 0.5215 | 0.5241 | 0.3021 | +0.2194, 0.1974..0.2421 | +0.2220, 0.2010..0.2438 | yes |
+
+Absolute scores printed for claim 1 (round 2): Ballroom F 0.461, AMLt 0.431; GTZAN F 0.508, AMLt 0.524. Reported: CMLt B1 R2 0.3086 / 0.3767 (R1 0.2972 / 0.2392). Tempo error median R2 0.220 / 0.021 (R1 0.254 / 0.574); mean R2 0.260 / 0.296 (R1 0.437 / 0.586). Median phase error (ms) R2 96.6 / 69.4 (R1 52.0 / 54.5).
+PLL, both variants, and both offline references are unchanged from round 1 (same clips, same code): PLL raw F 0.2592 / 0.3253, centred 0.3148 / 0.3545; analyze.py F 0.3511 / 0.3637; regularised grid F 0.3745 / 0.3719 (Ballroom / GTZAN). B1 stays above both offline references on F and AMLt on GTZAN; on Ballroom it is above them on F and AMLt too (0.4609 and 0.4305 against 0.3745 and 0.3361).
+
+**Gate 2 (4 s gated, 2 s and 8 s reported).** Median phase error at the gap end (ms) and the amplitude ratio of the oscillator that was the readout before the gap, round 2 (round 1 in brackets). Criteria: error ≤ 70 ms; upper bound of (B1 − PLL) ≤ +10 ms; ratio ≥ 0.5.
+
+| Gap | Kind | Clips | B1 error | PLL (variant) | Interval of B1 − PLL | Amp ratio | Criteria 1 / 2 / 3 |
+|---|---|---|---|---|---|---|---|
+| 2 s | silence | 1,681 | 77.3 (54.6) | 116.2 (centred) | −44.7..−34.3 | 0.948 (0.931) | fail / pass / pass |
+| 2 s | noise | 1,594 | 76.2 (52.9) | 606.2 (raw) | −571.8..−488.1 | 0.946 (0.929) | fail / not informative / pass |
+| **4 s** | **silence** | 1,678 | **84.3** (60.1) | 114.3 (centred) | −34.6..−23.3 | 0.911 (0.877) | **fail** / pass / pass |
+| **4 s** | **noise** | 1,585 | **86.2** (63.2) | 1000.0 (raw) | −918.0..−910.5 | 0.901 (0.869) | **fail** / not informative / pass |
+| 8 s | silence | 1,675 | 98.8 (77.0) | 108.4 (centred) | −13.6..−5.9 | 0.851 (0.801) | fail / pass / pass |
+| 8 s | noise | 1,552 | 101.2 (77.1) | 1000.0 (raw) | −902.5..−895.8 | 0.842 (0.790) | fail / not informative / pass |
+
+Criterion 2 on noise: not informative, because the PLL stops emitting beats in noise (round 1 diagnosis). The noise claim rests on criteria 1 and 3.
+**Gate 2 fails on criterion 1 for both kinds at 4 s: B1's median phase error is 84.3 ms (silence) and 86.2 ms (noise), above 70 ms.** The amplitude ratio rose to 0.90-0.91 and criterion 2 against the PLL on silence still passes (upper bound −23.3 ms).
+Claim 2 as worded in round 2, "It keeps the pulse through 4-second gaps of silence or beatless noise": absolute phase error 84.3 ms (silence) and 86.2 ms (noise), amplitude ratio 0.911 and 0.901. The phase-error criterion for it is not met.
+Verification exclusions (permutation test) are the same as round 1: silence 0 / 3 / 7, noise 88 / 96 / 130 of 1,683 for 2 / 4 / 8 s (0.0 %, 0.2 %, 0.4 % and 5.2 %, 5.7 %, 7.7 %). Recomputed after linear detrending of the gap signal (reported only, the gated test is unchanged): silence 0 / 0 / 0, noise 90 / 94 / 104 = 5.3 %, 5.6 %, 6.2 %. The 8 s noise rate falls from 7.7 % to 6.2 %.
+Readout switches inside the gap, mean per gap (round 1 in brackets): silence 0.125 / 0.140 / 0.156 (0.099 / 0.122 / 0.137); noise 0.095 / 0.111 / 0.151 (0.069 / 0.079 / 0.106) for 2 / 4 / 8 s.
+With alpha = 0 (critical) the amplitude decays without input; with alpha > 0 the bank would sustain itself and criterion 3 would pass trivially, so the amplitude result reflects the published alpha.
+
+**Gate 3 (Ballroom, 698 clips, 175 triple): AUC 0.4470, permutation p 0.9834, needs AUC ≥ 0.75 and p < 0.01: fail.** Round 1: AUC 0.7201, p 0.0001. Mean ratio triple 1.071, duple 1.046 (round 1: 1.637 and 0.857).
+Reported: with the annotated tempo AUC 0.9147, p 0.0001 (same as round 1, it does not use the readout). B1's tempo against the annotated one: half 7.6 %, double 7.6 %, either 15.2 % (round 1: half 4.4 %, double 30.1 %, either 34.5 %).
+Half/double per style (clips; half; double): ChaChaCha 111; 0; 0. Jive 60; 0; 0. Quickstep 82; 64.6 %; 0. Rumba-American 7; 0; 0. Rumba-International 51; 0; 13.7 %. Rumba-Misc 40; 0; 35.0 %. Samba 86; 0; 0. Tango 86; 0; 0. VienneseWaltz 65; 0; 0. Waltz 110; 0; 29.1 %.
+The prior removed the double-tempo readouts on most styles; it moved Quickstep to half tempo on 64.6 % of its clips and left Waltz at double on 29.1 %. The meter ratio then no longer separates the two meters.
+
+**Missing-pulse stimulus (reported only), readout frequency per level (the strongest bank oscillator in 0.5-4 Hz is the same as round 1: 2 Hz for levels 0-1, 4 Hz for levels 2-4):** levels 0, 1, 2, 3: readout 2.00 Hz for all seven patterns; level 4: 2.75, 2.48, 2.75, 2.75 Hz (the stimulus has no energy at 2 Hz there; the bank amplitude at 2 Hz is 0.02-0.13).
+
+**What this says, in plain terms.**
+- The pulse-salience prior removed most double-tempo readouts, and GTZAN's median tempo error fell from 0.574 to 0.021. It cost accuracy on Ballroom (F 0.531 to 0.461, AMLt 0.526 to 0.431) and phase accuracy on both sets (median phase error 52 to 97 ms and 55 to 69 ms).
+- The gap phase error rose by 22 to 24 ms at every length and kind, so the 4 s criterion moved from pass to fail; the amplitude ratio rose slightly. Gate 1 passes in both rounds.
+- Gate 3 with B1's own tempo went from AUC 0.720 to 0.447; with the annotated tempo it is 0.915. The meter information is in the bank; B1's own tempo, as read out, does not point at the right resonances.
+- B1 has failed twice by the rules. The pulse for the brain comes from the offline analysis grid, labelled "beat grid"; the B1 claims are dropped (BRAIN_SPEC 2.2). Nothing was tuned or changed after seeing a number.
+
+## B3 corpus built (2026-10-30), branch `b3-corpus`
+
+Task C of the overseer. Rule: BRAIN_SPEC 1.4 as ruled by the user on 2026-10-30 (option b): all electronic, pop and rock (recorded `genre_top`, 60-600 s, DEAM IDs out) plus the same hours of other tracks. BY-SA included. No training was run.
+
+**Result.** Training side 2,819 tracks, 174.73 h, 722 artists: E/P/R 87.38 h, other 87.34 h (N = 2 x E/P/R = 174.76 h; "other" is cut so it never passes E/P/R). Held-out side 357 tracks, 20.07 h, 73 artists (cap 20 h). Whole corpus 3,176 tracks, 195.18 h.
+Training hours by licence class: BY 115.73, BY-SA 45.99, CC0 5.67, PD 7.33. By genre_top: other 63.23 (no recorded genre_top), Electronic 47.93, Rock 34.62, Hip-Hop 6.05, Experimental 4.97, Pop 4.84, rest below 4.
+The 100 h E/P/R floor of the first draft could not be met: 89.1 h on the training side in the window (108.3 h with no window at all).
+
+**Steps and numbers.**
+- Licence filter: 11,582 open tracks, 781.8 h, 1,874 artists (the m2b mapping). Lists and licence strings: `scripts/brain/corpus/SOURCES.md`. FMA metadata has no per-track page URL; the URL column is the member of `fma_full.zip`.
+- Split: seed 20261030, 187 of 1,874 artists held out (113.8 h before window and cap), made before duration, genre or BY-SA were looked at.
+- BY-SA rule (200 h and E/P/R >= 100 h without BY-SA): BY+CC0+PD give 387.5 h but E/P/R only 66.1 h, so BY-SA stays in. Note it for the exhibition licence check.
+- Window 60-600 s: 10,105 of 11,582 tracks, 608.0 h. Both the window and the 20 h cap were accepted by the overseer.
+- Exclusion by ID: 138 DEAM-matched IDs in the open pool, 135 inside the window (`excluded_by_id.csv`).
+- Exclusion by fingerprint: 61 of the first 3,230 files, by BER < 0.35 (`excluded_by_fingerprint.csv`, BER and reference). 23 have BER < 0.1 (real duplicates), 3 have 0.2-0.3, 35 have 0.3-0.35 (chance level for a short reference slid over a long track; the fixed rule excludes them anyway). By reference set: DEAM 37, GTZAN 8, MERP 7, Emotify 5, Ballroom 4, the 3 danced songs 0. This cut E/P/R by 1.7 h; "other" was cut from the end of its seeded order. Seven top-up tracks were fetched and fingerprinted: no new match. One round was enough.
+- Selection order: seeded (SEED_B 20261032 for "other", held-out SEED_HELD 20261033). Code: `corpus_select.py`, `corpus_finalize.py`.
+- Choices where the spec was silent: window 60-600 s; held-out cap 20 h; split over all licence-passing artists; no per-artist cap (largest training artist 6.4 h); "other" = no recorded `genre_top`; the tracks excluded by fingerprint stay on disk but are not in the final list.
+
+**Fingerprint correction.** `measure/scripts/m5_fp.py` called Chromaprint with enum 2 (TEST3, 2.3 items per second), not fpcalc's default (enum 1, 8 items per second). `corpus_fingerprint.py` uses enum 1. Positive control: a DEAM clip re-encoded at 128 kbps inside a longer track matches at BER 0.016. The older M5 overlap numbers used the coarse algorithm. Reference set: 3,956 files (DEAM, MERP, Emotify, Ballroom, GTZAN, the 3 songs); one GTZAN file (jazz.00054) does not decode. SMC audio is not on disk and is not in the reference set.
+
+**Download.** FMA host, HTTP ranges, CRC checked. Aggregate rate: 6 threads 7.8 MB/s, 8 threads about 10, 16 threads about 10.5 (the same; the limit is about 10 MB/s). About 24 GB for 3,237 files, 0 errors in `downloads.log` (a progress-size crash at 00:29 killed one run; fixed, resumable). Wall time about 45 min of running plus the stop.
+
+**Features.** `corpus_features.py`: fast_features at 100 Hz, 44 columns, float32, 3,176 files, 70,264,920 frames, no NaN or wrong shape, 12.4 GB, 790 s with 16 workers. Standardisation on the training side only: 2,819 tracks, 63,053,480 frames, smallest SD 0.0539, `feature_stats.npz` sha256 29ddf65a07ba963d3d3d924300acd2eb8b0380e7bc7bccd08c192f69d0247473 (population SD, float64).
+
+**Paths and layout (outside git, `/secondary/hyst-data/brain/corpus/`).**
+- `audio/<id:06d>.mp3` the FMA files (includes the 61 excluded ones; use the list).
+- `features/<id:06d>.npy` float32, shape (frames, 44), 100 Hz.
+- `feature_stats.npz` keys `mean`, `sd` (44 each); `feature_stats.json` same plus column names and hash.
+- In git, `scripts/brain/corpus/`: `final_corpus.csv` (id, split train|heldout, genre, cls, hours, artist_id, sha256 of the mp3), `excluded_by_id.csv`, `excluded_by_fingerprint.csv`, `fp_matches.csv`, `selection_final_meta.csv` (artist and title), `selection_round1.csv`, `selection_report.txt` (first draft, superseded), `SOURCES.md`, `feature_stats.{npz,json}`.
+
+### ★ B3, after results: the trained core checked on held-out artists (round 1 of 2) — 2026-10-31
+
+Branch `b3-train` (code at `3307186`). **Not verified by eye.** Round 1 of 2; round 2 waits for the user and the planner. The rules are those of `docs/BRAIN_SPEC.md` 4.3 to 4.6, committed before any result (`check_b3.py` docstring); nothing was changed after the run started except the two crash fixes below. Outputs are outside git in `/secondary/hyst-data/brain/b3/` (`results/results.json`, `results/precheck.json`, `ckpt/phase/`, logs). The no-phase ablation is pending; a short follow-up entry will carry it.
+
+**What ran.** Corpus (agent 2's `final_corpus.csv`): 3,176 tracks; training 2,819 tracks, 174.73 h; held-out 357 tracks, 20.07 h; no artist on both sides. Features and statistics as the corpus builder made them (stats npz sha256 begins `29ddf65a07ba963d`); audio hashes checked against the list. Model: the B2 architecture with `head_norm=True`, 1,010,020 parameters, with grid phase (cos, sin). Training: 8 threads, 8 streams, 60 s chunks, 8 epochs, 12,004 steps, training wall 39,535 s (10.98 h of the 30 h cap), not stopped by the cap, no NaN. The B2 control in 4.3 is the untrained `head_norm=True` core with ridge readouts fitted on the training tracks.
+
+| Epoch | Train NLL per layer | Held-out NLL per layer | Wall s |
+|---|---|---|---|
+| 1 | 0.508, 0.350, 0.313, 0.375 | 0.487, 0.563, 0.618, 0.339 | 5647 |
+| 2 | 0.387, 0.212, 0.181, 0.275 | 0.386, 0.241, 0.208, 0.262 | 4699 |
+| 3 | 0.351, 0.169, 0.142, 0.243 | 0.419, 0.236, 0.197, 0.236 | 5842 |
+| 4 | 0.326, 0.143, 0.114, 0.218 | 0.330, 0.232, 0.184, 0.174 | 4380 |
+| 5 | 0.305, 0.119, 0.090, 0.197 | 0.316, 0.188, 0.134, 0.160 | 5121 |
+| 6 | 0.287, 0.096, 0.067, 0.168 | 0.294, 0.150, 0.107, 0.122 | 5192 |
+| 7 | 0.271, 0.077, 0.050, 0.148 | 0.269, 0.159, 0.093, 0.119 | 4338 |
+| 8 | 0.261, 0.064, 0.035, 0.135 | 0.263, 0.140, 0.085, 0.093 | 4315 |
+
+**Gate 4.3 (predicts music): fail, on the MSE margin.**
+- Per baseline, the 95 % interval of (baseline NLL minus B3 NLL), per held-out song, in nats summed over the 4 layers: persistence +3.069 [2.889, 3.229]; ridge AR +0.568 [0.447, 0.678]; B2 +1.113 [0.977, 1.230]. All three are above 0.
+- MSE of the predicted mean, pooled over held-out songs: B3 0.1486; persistence 0.4521; ridge AR 0.1307; B2 0.1966. The lowest baseline MSE is ridge AR's; B3's is 13.7 % above it (ratio 1.137). The gate needs B3 at least 5 % below. Condition 2 fails, so the gate fails.
+- NLL per layer (nats per feature): B3 0.264, 0.141, 0.085, 0.093; ridge AR 0.384, 0.217, 0.279, 0.267; B2 0.629, 0.365, 0.358, 0.348; persistence 0.827, 0.872, 0.970, 1.044. Bits per feature-frame: B3 0.381, 0.203, 0.123, 0.135; ridge AR 0.554, 0.313, 0.402, 0.384; B2 0.907, 0.527, 0.516, 0.502; persistence 1.193, 1.258, 1.399, 1.507. Ridge AR alpha 0.1.
+
+**Gate 4.4 (habituation): fail.** 329 held-out songs used, 28 skipped (shorter than 82 s). Surprisal on the second passage, version N minus version H:
+- B3: mean drop 0.0003 nats, 95 % interval [-0.115, 0.070]; median of drop / SD of the song's 8 s window means 0.0096 (needs 0.25). Both conditions fail.
+- B2 (control): mean drop 0.087, interval [0.020, 0.182]; median drop / SD 0.0056. The interval is above 0; the 0.25 rule fails.
+- B3 minus B2 paired drop: -0.087, interval [-0.286, 0.029], not above 0. Reported only.
+
+**Gate 4.5 (splice): fail.** 353 songs, 1,412 cross-song cuts, 4 songs skipped (too short). z at least 3 on 59.8 % of cross-song cuts (needs 80 %); median cross-song z 4.76, median within-song z 0.59. Cross-song minus within-song, mean per song 12.49, interval [7.46, 18.69]: above 0, so that condition holds. The gate fails on the first condition.
+
+**4.6 reported (40 held-out songs for coupling).** Tort modulation index against 200 circular time-shift surrogates of the amplitude, median MI (median surrogate MI; share of songs with p below 0.05): L3 phase with L1 amplitude 0.0048 (0.0008; 85 %); L3 with L2 0.0071 (0.0014; 82.5 %); L4 with L1 0.0047 (0.0054; 20 %); L4 with L2 0.0076 (0.0071; 22.5 %). Coupling is above the surrogates for the L3 phase pairs and not for the L4 phase pairs.
+DEAM / MERP within-song arousal r, mean over clips with 95 % bootstrap over clips (ridge on the 1,024 layer-mode magnitudes pooled to 0.5 s, 5 folds by song):
+- DEAM, 1,744 clips: brain 0.201 [0.184, 0.218]; smoothed pooled-feature baseline 0.323 [0.298, 0.347]; core-2b 0.276 [0.251, 0.302].
+- MERP, 43 songs: brain 0.399 [0.326, 0.472]; smoothed baseline 0.480 [0.371, 0.584]; core-2b 0.644 [0.575, 0.703].
+core-2b is its out-of-fold smoothed (tau 8 s) arousal from `check2b/predictions_heldout.npz`. With and without grid phase: pending (the no-phase model trains in its own memory-capped scope, 8 epochs, inside the remaining cap).
+
+**Where the spec was silent, and the code changes after the smoke test** (details in `scripts/brain/B3_NOTES.md`).
+- `Core(head_norm=True)`: a parameter-free layer norm before the heads and the precision read. Without it the first training steps diverged (L4 NLL about 5e7 before any update). `head_norm=False` reproduces B2 as committed; B2's Presence lanes were recomputed identical.
+- Six corpus tracks (006684, 012244, 032178, 036013, 112788, 136823) have fewer than 2 offline-grid beats. `grid_phase` gave an error at the first launch (`np.interp` on an empty array, epoch 1, no checkpoint). They now get zero phase columns (cos = sin = 0, the no-phase encoding) and stay in the corpus. The 6 of 3,176 are counted in the training log. Behaviour for 2 or more beats is unchanged.
+- The first run of the checks was killed for lack of memory (kernel OOM, 25.7 GB, 01:41) and took the terminal scope down with it. Cause: the B2 baseline's readout fit sampled the training states every 2nd 10 Hz bin instead of every 20th (a stride divided by 10). Fixed to every 20th bin, the documented 2 s; no rule changed. The checks then ran in 1.85 h at about 2 GB. The no-phase run uses `systemd-run --user --scope -p MemoryMax=20G -p MemorySwapMax=0`.
+- Persistence is the last frame; ridge AR rows every 2 s; the second-passage window and the median-over-songs reading of "0.25 x SD" are as in the `check_b3.py` docstring.
+
+**What this says, in plain terms.** B3's NLL is lower than all three baselines' on the held-out songs, with every interval above 0, and its MSE is above the ridge AR baseline's. The habituation drop on the second passage is about 0 for B3 and 0.087 for the untrained B2. At a splice, surprisal rises above 3 SDs on 59.8 % of cross-song cuts and the cross-song rise exceeds the within-song one. L3-phase coupling to L1 and L2 amplitude is above the surrogates; L4-phase coupling is not. In the arousal pre-check the brain readout's r is below the smoothed baseline's and core-2b's on both sets. By the rules, gates 4.3, 4.4 and 4.5 each fail; round 2 waits for the user and the planner. Nothing has been listened to or watched.
+
+### ★ B3, PAC control on the round-1 model (BRAIN_SPEC 4.7) — 2026-10-31
+
+Branch `b3-pac`. `check_b3.py --pac-control-only` (code beside the round-1 coupling code, same `tort_mi`, same 200 circular shifts of at least 10 s, 18 bins, seed `SEED_PAC`, same 40 first held-out songs, whole songs). Input side: each of the 44 standardised features band-passed with the layer filter (8–20 Hz for the L1 pair, 4–8 Hz for the L2 pair), Hilbert envelope, Tort MI against the grid phase (angle of the cos, sin columns); input MI per song is the maximum over the 44 features. The input surrogate statistic is the maximum over the 44 features for each shift. Checkpoint `ckpt/phase/last.pt` (epoch 8). Result: `/secondary/hyst-data/brain/b3/results/pac_control.json`. No song lacked a grid phase. Paired difference is network MI minus input max MI over 40 songs, 95 % bootstrap interval (2,000 resamples, `SEED_BOOT`).
+
+- L3 phase / L1 amp: median network MI 0.00479; median input max MI 0.02069; mean difference -0.0381, interval [-0.0593, -0.0214]; median difference -0.0134; network above input on 15 % of songs. Songs above their own surrogates (p < 0.05): network 85 %, input 27.5 %. Median surrogate MI: network 0.00084, input (max over features) 0.03097.
+- L3 phase / L2 amp: median network MI 0.00710; median input max MI 0.00709; mean difference -0.0102, interval [-0.0250, +0.0008]; median difference -0.00006; network above input on 50 % of songs. Songs above their own surrogates: network 82.5 %, input 15 %. Median surrogate MI: network 0.00141, input 0.01135.
+- The feature with the largest input MI is feature 43 in 28 of 40 songs (L1 pair) and 24 of 40 (L2 pair).
+
+Verdict under 4.7: coupling may be claimed only if the interval lies above 0. Both intervals lie at or below 0 (L1 pair entirely below). Neither pair passes the PAC control, so no beat-band coupling claim is allowed for the round-1 model. Round 2's result supersedes this.
+
+Tests: 94 in `scripts/brain` pass (new: input max picks the coupled feature, coupled envelope above surrogates, uncoupled not, paired-interval rule).

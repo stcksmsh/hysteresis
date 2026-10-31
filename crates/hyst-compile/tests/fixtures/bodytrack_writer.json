@@ -1,0 +1,70 @@
+{
+ "duration": 8.5,
+ "bodyTrack": {
+  "version": 1,
+  "source": "stage1-smooth8",
+  "map": "synthetic",
+  "dims": [
+   "curl_extension",
+   "height",
+   "arch",
+   "time",
+   "weight",
+   "flow",
+   "space",
+   "succession_direction",
+   "succession_delay",
+   "initiation",
+   "breath_depth",
+   "breath_rate",
+   "size",
+   "energy",
+   "rhythm"
+  ],
+  "phrases": [
+   {
+    "start": 0.5,
+    "end": 4.5,
+    "body": [
+     0.044906,
+     0.120788,
+     0.763877,
+     0.28353,
+     0.187279,
+     0.573207,
+     0.916566,
+     0.714157,
+     0.280808,
+     0.0785,
+     0.446545,
+     0.733617,
+     0.835727,
+     0.206738,
+     0.373691
+    ]
+   },
+   {
+    "start": 4.5,
+    "end": 8.5,
+    "body": [
+     0.30348,
+     0.29277,
+     0.323195,
+     0.506815,
+     0.175626,
+     0.387319,
+     0.75842,
+     0.723015,
+     0.23318,
+     0.052114,
+     0.593229,
+     0.476383,
+     0.855655,
+     0.30422,
+     0.534793
+    ]
+   }
+  ],
+  "authored": []
+ }
+}

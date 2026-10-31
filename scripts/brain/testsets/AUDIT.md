@@ -1,0 +1,54 @@
+# Test-set audit (scripts/brain/testsets_audit.py)
+
+Files decoded: 1697 of 1698. Not decodable: ['gtzan/jazz.00054'] ["Error opening '/secondary/hyst-data/brain/testsets/gtzan/audio/genres/jazz/jazz.00054.wav': Error : "]
+- ballroom: 698 clips, duration min 29.4 s, median 31.8 s, max 34.1 s, total 6.06 h; fewer than 20 annotated beats: ['ballroom/Media-103911']
+- gtzan: 1000 clips, duration min 29.9 s, median 30.0 s, max 30.6 s, total 8.33 h; fewer than 20 annotated beats: ['gtzan/country.00097', 'gtzan/reggae.00086']
+Exact duplicates (identical decoded samples): [['gtzan/disco.00098', 'gtzan/disco.00099'], ['gtzan/hiphop.00039', 'gtzan/hiphop.00045'], ['gtzan/hiphop.00076', 'gtzan/hiphop.00078'], ['gtzan/metal.00034', 'gtzan/metal.00094'], ['gtzan/metal.00040', 'gtzan/metal.00061'], ['gtzan/metal.00041', 'gtzan/metal.00062'], ['gtzan/metal.00042', 'gtzan/metal.00063'], ['gtzan/metal.00043', 'gtzan/metal.00064'], ['gtzan/metal.00044', 'gtzan/metal.00065'], ['gtzan/metal.00045', 'gtzan/metal.00066'], ['gtzan/metal.00058', 'gtzan/rock.00016'], ['gtzan/pop.00054', 'gtzan/pop.00060'], ['gtzan/pop.00067', 'gtzan/pop.00071'], ['gtzan/reggae.00081', 'gtzan/reggae.00082']]
+Near duplicates (Chromaprint, BER < 0.35 and at least 6 voting frames): 47 pairs
+  - ballroom/Albums-Ballroom_Magic-03 ~ ballroom/Albums-Ballroom_Magic-18  BER 0.28, votes 7, overlap 61 frames
+  - ballroom/Albums-Fire-01 ~ ballroom/Albums-Fire-14  BER 0.156, votes 7, overlap 43 frames
+  - ballroom/Albums-Fire-08 ~ ballroom/Albums-Fire-09  BER 0.0, votes 188, overlap 63 frames
+  - ballroom/Albums-Latin_Jam-08 ~ ballroom/Albums-Latin_Jam-14  BER 0.121, votes 22, overlap 62 frames
+  - ballroom/Albums-Latin_Jam3-02 ~ ballroom/Media-103414  BER 0.172, votes 7, overlap 62 frames
+  - ballroom/Albums-Secret_Garden-01 ~ ballroom/Media-104705  BER 0.171, votes 19, overlap 62 frames
+  - ballroom/Media-103402 ~ ballroom/Media-103415  BER 0.264, votes 6, overlap 65 frames
+  - ballroom/Media-105816 ~ ballroom/Media-105820  BER 0.157, votes 13, overlap 66 frames
+  - gtzan/disco.00060 ~ gtzan/disco.00089  BER 0.194, votes 7, overlap 61 frames
+  - gtzan/disco.00098 ~ gtzan/disco.00099  BER 0.0, votes 175, overlap 61 frames
+  - gtzan/hiphop.00039 ~ gtzan/hiphop.00045  BER 0.0, votes 179, overlap 63 frames
+  - gtzan/hiphop.00076 ~ gtzan/hiphop.00078  BER 0.0, votes 181, overlap 61 frames
+  - gtzan/jazz.00033 ~ gtzan/jazz.00051  BER 0.0, votes 178, overlap 61 frames
+  - gtzan/jazz.00034 ~ gtzan/jazz.00053  BER 0.0, votes 175, overlap 61 frames
+  - gtzan/jazz.00035 ~ gtzan/jazz.00055  BER 0.0, votes 172, overlap 61 frames
+  - gtzan/jazz.00036 ~ gtzan/jazz.00058  BER 0.0, votes 180, overlap 61 frames
+  - gtzan/jazz.00037 ~ gtzan/jazz.00060  BER 0.0, votes 171, overlap 61 frames
+  - gtzan/jazz.00038 ~ gtzan/jazz.00062  BER 0.0, votes 171, overlap 61 frames
+  - gtzan/jazz.00039 ~ gtzan/jazz.00065  BER 0.0, votes 173, overlap 61 frames
+  - gtzan/jazz.00040 ~ gtzan/jazz.00067  BER 0.0, votes 178, overlap 61 frames
+  - gtzan/jazz.00042 ~ gtzan/jazz.00068  BER 0.0, votes 171, overlap 61 frames
+  - gtzan/jazz.00043 ~ gtzan/jazz.00069  BER 0.0, votes 168, overlap 61 frames
+  - gtzan/jazz.00044 ~ gtzan/jazz.00070  BER 0.0, votes 173, overlap 61 frames
+  - gtzan/jazz.00045 ~ gtzan/jazz.00071  BER 0.0, votes 171, overlap 61 frames
+  - gtzan/jazz.00046 ~ gtzan/jazz.00072  BER 0.0, votes 165, overlap 61 frames
+  - gtzan/metal.00004 ~ gtzan/metal.00013  BER 0.184, votes 7, overlap 61 frames
+  - gtzan/metal.00034 ~ gtzan/metal.00094  BER 0.0, votes 179, overlap 61 frames
+  - gtzan/metal.00040 ~ gtzan/metal.00061  BER 0.0, votes 171, overlap 61 frames
+  - gtzan/metal.00041 ~ gtzan/metal.00062  BER 0.0, votes 179, overlap 61 frames
+  - gtzan/metal.00042 ~ gtzan/metal.00063  BER 0.0, votes 181, overlap 61 frames
+  - gtzan/metal.00043 ~ gtzan/metal.00064  BER 0.0, votes 174, overlap 61 frames
+  - gtzan/metal.00044 ~ gtzan/metal.00065  BER 0.0, votes 178, overlap 61 frames
+  - gtzan/metal.00045 ~ gtzan/metal.00066  BER 0.0, votes 166, overlap 61 frames
+  - gtzan/metal.00058 ~ gtzan/rock.00016  BER 0.0, votes 179, overlap 61 frames
+  - gtzan/pop.00015 ~ gtzan/pop.00022  BER 0.113, votes 20, overlap 61 frames
+  - gtzan/pop.00030 ~ gtzan/pop.00031  BER 0.07, votes 49, overlap 61 frames
+  - gtzan/pop.00052 ~ gtzan/pop.00057  BER 0.075, votes 47, overlap 61 frames
+  - gtzan/pop.00054 ~ gtzan/pop.00060  BER 0.0, votes 180, overlap 61 frames
+  - gtzan/pop.00056 ~ gtzan/pop.00059  BER 0.079, votes 45, overlap 61 frames
+  - gtzan/pop.00067 ~ gtzan/pop.00071  BER 0.0, votes 180, overlap 61 frames
+  - gtzan/pop.00087 ~ gtzan/pop.00090  BER 0.06, votes 71, overlap 61 frames
+  - gtzan/reggae.00003 ~ gtzan/reggae.00054  BER 0.034, votes 95, overlap 61 frames
+  - gtzan/reggae.00073 ~ gtzan/reggae.00074  BER 0.04, votes 101, overlap 61 frames
+  - gtzan/reggae.00080 ~ gtzan/reggae.00081  BER 0.033, votes 108, overlap 59 frames
+  - gtzan/reggae.00080 ~ gtzan/reggae.00082  BER 0.033, votes 108, overlap 59 frames
+  - gtzan/reggae.00081 ~ gtzan/reggae.00082  BER 0.0, votes 176, overlap 61 frames
+  - gtzan/reggae.00091 ~ gtzan/reggae.00092  BER 0.17, votes 8, overlap 61 frames

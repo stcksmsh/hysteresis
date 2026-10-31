@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Body study</title>
+<!-- Answer page for check 2b, round 2 (docs/BODY_STUDY.md, addendum 8). Loads
+     pN-a/b/c.mp4 (4 practice triplets, first) and tNN-a/b/c.mp4 (32 scored) and
+     practice.js (the practice odd positions only) from the folder in ?dir= (default
+     test/, next to this page). Never reads the key.
+     First pass: A, B, C alone, 1 s black between, pause only, no seek. Then at most 2
+     replays before the counted answer, each clip at most once, alone, from the start,
+     no seek. Counted answer final. Practice: right or wrong; if wrong, the odd clip and
+     one pair clip side by side, played together. Scored: replays with seek, optional
+     second answer and text. Progress is kept in localStorage after every step and can
+     be downloaded or loaded as JSON. -->
+<style>
+  :root { color-scheme: dark; --bg: #0c1114; --fg: #c7d6db; --mute: #6f8188; --line: #2a3a40; --on: #e8b45a; }
+  html, body { margin: 0; background: var(--bg); color: var(--fg); font: 16px system-ui, sans-serif; overflow-x: hidden; }
+  main { padding: 16px; box-sizing: border-box; width: 100%; }
+  .stage { display: flex; gap: 16px; align-items: center; }
+  .letter { width: 90px; flex: none; text-align: center; font-size: 64px; font-weight: 600; min-height: 1.2em; }
+  .screen { flex: 1; min-width: 0; max-width: calc((100vh - 230px) * 16 / 9); background: #000; aspect-ratio: 16 / 9; }
+  .pairview { display: flex; gap: 16px; }
+  .pairview figure { flex: 1; margin: 0; min-width: 0; }
+  .pairview video { aspect-ratio: 16 / 9; height: auto; }
+  video { width: 100%; height: 100%; display: block; background: #000; }
+  video.locked { pointer-events: none; }
+  .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 10px 0; }
+  button { font: inherit; padding: 9px 20px; background: #1a252a; color: var(--fg); border: 1px solid var(--line); border-radius: 6px; cursor: pointer; }
+  button:disabled { opacity: .35; cursor: default; }
+  button.pick { font-size: 22px; min-width: 70px; }
+  button.on { border-color: var(--on); color: var(--on); opacity: 1; }
+  textarea { width: 100%; min-height: 56px; font: inherit; background: #111a1e; color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 8px; box-sizing: border-box; }
+  .mute { color: var(--mute); }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <div class="row"><strong id="progress"></strong><span id="status" class="mute"></span>
+    <span style="flex:1"></span>
+    <button id="download">Download answers so far</button>
+    <label class="mute">Load a saved file <input id="load" type="file" accept="application/json,.json"></label></div>
+  <div class="stage" id="stage"><div class="letter" id="letter"></div><div class="screen"><video id="v" playsinline preload="auto" disablepictureinpicture controlslist="nodownload nofullscreen noremoteplayback noplaybackrate"></video></div></div>
+  <section id="first">
+    <div class="row"><button id="start">Start</button><button id="pause" disabled>Pause</button>
+      <span class="mute">A, B and C play once each, one after another. Pause is allowed.</span></div>
+  </section>
+  <section id="count" hidden>
+    <div class="row"><span>Replay before answering (at most 2 in all, each clip once):</span>
+      <button class="pre" data-k="A">A</button><button class="pre" data-k="B">B</button><button class="pre" data-k="C">C</button></div>
+    <div class="row"><span>Which one moved differently from the other two? This answer counts and is final.</span></div>
+    <div class="row"><button class="pick" data-k="A">A</button><button class="pick" data-k="B">B</button><button class="pick" data-k="C">C</button></div>
+  </section>
+  <section id="feedback" hidden>
+    <div class="row"><strong id="verdict"></strong><span class="mute">Practice, not scored.</span></div>
+    <div id="pairview" hidden>
+      <div class="pairview">
+        <figure><figcaption id="capOdd"></figcaption><video id="vOdd" class="locked" playsinline preload="auto" muted disablepictureinpicture></video></figure>
+        <figure><figcaption id="capPair"></figcaption><video id="vPair" class="locked" playsinline preload="auto" muted disablepictureinpicture></video></figure>
+      </div>
+      <div class="row"><button id="playBoth">Play both</button></div>
+    </div>
+    <div class="row"><button id="nextPractice">Next</button></div>
+  </section>
+  <section id="after" hidden>
+    <div class="row"><span id="counted"></span></div>
+    <div class="row"><span>Replay any clip (seek allowed):</span><button class="replay" data-k="A">A</button><button class="replay" data-k="B">B</button><button class="replay" data-k="C">C</button></div>
+    <div class="row"><span>Second answer (optional, not scored):</span><button class="second" data-k="A">A</button><button class="second" data-k="B">B</button><button class="second" data-k="C">C</button></div>
+    <textarea id="note" placeholder="What did the odd one look like? (optional)"></textarea>
+    <div class="row"><button id="next">Next triplet</button></div>
+  </section>
+  <section id="done" hidden><p>All 32 answered. Download the answers file.</p><div class="row"><button id="download2">Download answers</button></div></section>
+</main>
+<script>
+const NP = 4, N = 32, MAX_PRE = 2, STORE = 'hyst-bodystudy-r6-v1';
+const dir = new URLSearchParams(location.search).get('dir') || 'test/';
+const $ = id => document.getElementById(id);
+const v = $('v');
+// state: practice and answers (finished triplets), pending (counted answer given, not
+// finished), firstPass (triplet on screen before its counted answer)
+let state = { practice: [], answers: [], pending: null, firstPass: null };
+let cur = null; // record of the triplet on screen
+let phase = 'idle', firstK = 0, lastTime = 0, endedK = null;
+
+// Item on screen: practice p1..p4, then scored t01..t32.
+const isPractice = () => state.practice.length < NP;
+const shownName = () => isPractice() ? `p${state.practice.length + 1}` : `t${String(state.answers.length + 1).padStart(2, '0')}`;
+const file = (shown, k) => `${dir}${shown}-${k.toLowerCase()}.mp4`;
+
+function save() {
+  state.savedAt = new Date().toISOString();
+  try { localStorage.setItem(STORE, JSON.stringify(state)); } catch (e) { $('status').textContent = 'Could not save in the browser: use Download.'; }
+}
+function load() {
+  try { const s = JSON.parse(localStorage.getItem(STORE) || 'null'); if (s && Array.isArray(s.answers) && Array.isArray(s.practice)) state = s; } catch (e) {}
+}
+function show(id) { for (const s of ['first', 'count', 'feedback', 'after', 'done']) $(s).hidden = s !== id; $('stage').hidden = id === 'feedback'; }
+function setVideo(k, locked) {
+  v.src = file(cur.shown, k);
+  v.controls = !locked; v.classList.toggle('locked', locked);
+  v.hidden = false; $('letter').textContent = k;
+}
+function black() { v.pause(); v.removeAttribute('src'); v.load(); v.hidden = true; $('letter').textContent = ''; }
+
+function begin() {
+  const p = isPractice(), i = p ? state.practice.length : state.answers.length;
+  $('progress').textContent = p ? `Practice ${i + 1} / ${NP}` : i < N ? `${i + 1} / ${N}` : `${N} / ${N}`;
+  black(); stopPair();
+  if (!p && i >= N) { phase = 'done'; show('done'); return; }
+  const shown = shownName();
+  if (state.pending && state.pending.shown === shown) { cur = state.pending; afterPhase(); return; }
+  if (state.firstPass && state.firstPass.shown === shown) {
+    cur = state.firstPass;
+    // first pass finished: back to the counted answer, replays used stay used
+    if (cur.firstPassDone) { countPhase(); return; }
+    // a first pass cut off by a reload restarts from A; its counts are kept
+  } else cur = { shown, practice: p, counted: null, second: null, text: '', timeToCountedS: null, totalS: null,
+          pausesFirstPass: 0, firstPassStarts: 0, firstPassDone: false, replaysBeforeCounted: { A: 0, B: 0, C: 0 },
+          replays: { A: 0, B: 0, C: 0 }, started: null, countedAt: null, finishedAt: null };
+  phase = 'idle'; show('first'); $('start').disabled = false; $('pause').disabled = true; $('pause').textContent = 'Pause';
+  $('status').textContent = '';
+}
+function playLocked(k) {
+  lastTime = 0;
+  setVideo(k, true);
+  v.play().catch(e => { $('status').textContent = `Playback failed: ${e.message}`; });
+}
+$('start').addEventListener('click', () => {
+  $('start').disabled = true; $('pause').disabled = false;
+  cur.firstPassStarts += 1; cur.started = cur.started || new Date().toISOString(); cur.t0 = cur.t0 || Date.now();
+  state.firstPass = cur; save();
+  phase = 'first'; firstK = 0; playLocked('A');
+});
+$('pause').addEventListener('click', () => {
+  if (phase !== 'first' || v.hidden) return;
+  if (v.paused) { v.play(); $('pause').textContent = 'Pause'; }
+  else { v.pause(); cur.pausesFirstPass += 1; save(); $('pause').textContent = 'Resume'; }
+});
+// First pass and replays before the counted answer: no seek, rewind or replay.
+const lockedPhase = () => phase === 'first' || phase === 'pre';
+v.addEventListener('timeupdate', () => { if (lockedPhase() && !v.seeking) lastTime = v.currentTime; });
+v.addEventListener('seeking', () => { if (lockedPhase() && Math.abs(v.currentTime - lastTime) > 0.3) v.currentTime = lastTime; });
+v.addEventListener('contextmenu', e => { if (phase !== 'after') e.preventDefault(); });
+v.addEventListener('ended', () => {
+  if (phase === 'first') {
+    black();
+    if (firstK < 2) { firstK += 1; setTimeout(() => playLocked('ABC'[firstK]), 1000); }
+    else { cur.firstPassDone = true; state.firstPass = cur; save(); countPhase(); }
+  } else if (phase === 'pre') { black(); countPhase(); }
+  else if (phase === 'after') { endedK = v.dataset.k; }
+});
+// Before the counted answer: at most 2 replays, each clip once, alone, from the start.
+const preUsed = () => Object.values(cur.replaysBeforeCounted).reduce((a, b) => a + b, 0);
+function countPhase() {
+  phase = 'count'; show('count'); $('pause').disabled = true;
+  document.querySelectorAll('.pre').forEach(b => { b.disabled = preUsed() >= MAX_PRE || cur.replaysBeforeCounted[b.dataset.k] > 0; });
+}
+document.querySelectorAll('.pre').forEach(b => b.addEventListener('click', () => {
+  const k = b.dataset.k;
+  if (phase !== 'count' || preUsed() >= MAX_PRE || cur.replaysBeforeCounted[k] > 0) return;
+  cur.replaysBeforeCounted[k] = 1; state.firstPass = cur; save();
+  document.querySelectorAll('.pre').forEach(o => { o.disabled = true; });
+  phase = 'pre'; playLocked(k);
+}));
+// Counted answer: final, saved at once.
+document.querySelectorAll('.pick').forEach(b => b.addEventListener('click', () => {
+  if ((phase !== 'count' && phase !== 'pre') || cur.counted) return;
+  cur.counted = b.dataset.k; cur.countedAt = new Date().toISOString();
+  cur.timeToCountedS = (Date.now() - cur.t0) / 1000;
+  if (cur.practice) cur.correct = cur.counted === PRACTICE_ODD()[state.practice.length];
+  state.pending = cur; state.firstPass = null; save(); afterPhase();
+}));
+// Practice odd positions come from practice.js (window.PRACTICE = {odd: [...]}).
+const PRACTICE_ODD = () => (window.PRACTICE && window.PRACTICE.odd) || [];
+function afterPhase() {
+  black();
+  if (cur.practice) { feedbackPhase(); return; }
+  phase = 'after'; show('after');
+  $('counted').textContent = `Counted answer: ${cur.counted} (final).`;
+  document.querySelectorAll('.second').forEach(o => o.classList.toggle('on', o.dataset.k === cur.second));
+  $('note').value = cur.text || '';
+}
+// Practice feedback: right or wrong; if wrong, the odd clip and one pair clip together.
+function feedbackPhase() {
+  phase = 'feedback'; show('feedback');
+  const odd = PRACTICE_ODD()[state.practice.length];
+  $('verdict').textContent = cur.correct ? `Right: ${odd} was the odd one.` : `Wrong: the odd one was ${odd}, not ${cur.counted}.`;
+  $('pairview').hidden = cur.correct;
+  if (!cur.correct) {
+    const pair = 'ABC'.replace(odd, '')[0];
+    $('capOdd').textContent = `${odd} (odd one)`; $('capPair').textContent = `${pair} (one of the pair)`;
+    $('vOdd').src = file(cur.shown, odd); $('vPair').src = file(cur.shown, pair);
+  }
+}
+function stopPair() { for (const x of [$('vOdd'), $('vPair')]) { x.pause(); x.removeAttribute('src'); x.load(); } }
+$('playBoth').addEventListener('click', () => {
+  for (const x of [$('vOdd'), $('vPair')]) { x.pause(); x.currentTime = 0; }
+  Promise.all([$('vOdd').play(), $('vPair').play()]).catch(e => { $('status').textContent = `Playback failed: ${e.message}`; });
+  cur.pairPlays = (cur.pairPlays || 0) + 1; state.pending = cur; save();
+});
+$('nextPractice').addEventListener('click', () => {
+  cur.finishedAt = new Date().toISOString(); cur.totalS = cur.t0 ? (Date.now() - cur.t0) / 1000 : null;
+  const { t0, ...rec } = cur;
+  state.practice.push(rec); state.pending = null; save(); begin();
+});
+// Scored, after the counted answer: replays with seek, second answer, text.
+document.querySelectorAll('.replay').forEach(b => b.addEventListener('click', () => {
+  if (phase !== 'after') return;
+  const k = b.dataset.k; cur.replays[k] += 1; endedK = null;
+  setVideo(k, false); v.dataset.k = k; v.play().catch(() => {}); state.pending = cur; save();
+}));
+v.addEventListener('play', () => {
+  // playing a clip again after it ended counts as a replay
+  if (phase === 'after' && endedK && endedK === v.dataset.k) { cur.replays[endedK] += 1; endedK = null; state.pending = cur; save(); }
+});
+document.querySelectorAll('.second').forEach(b => b.addEventListener('click', () => {
+  cur.second = cur.second === b.dataset.k ? null : b.dataset.k;
+  document.querySelectorAll('.second').forEach(o => o.classList.toggle('on', o.dataset.k === cur.second));
+  state.pending = cur; save();
+}));
+$('note').addEventListener('input', () => { cur.text = $('note').value; state.pending = cur; save(); });
+$('next').addEventListener('click', () => {
+  cur.text = $('note').value.trim(); cur.finishedAt = new Date().toISOString();
+  cur.totalS = cur.t0 ? (Date.now() - cur.t0) / 1000 : null;
+  const { t0, ...rec } = cur;
+  state.answers.push({ ...rec, shown: state.answers.length + 1 }); state.pending = null; save(); begin();
+});
+// Download / load at any point.
+function download() {
+  const out = { finished: state.answers.length >= N, savedAt: new Date().toISOString(), practice: state.practice,
+                answers: state.answers, pending: state.pending, firstPass: state.firstPass };
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(out, null, 1)], { type: 'application/json' }));
+  a.download = 'answers.json'; a.click();
+}
+$('download').addEventListener('click', download);
+$('download2').addEventListener('click', download);
+$('load').addEventListener('change', async e => {
+  const f = e.target.files[0]; if (!f) return;
+  try {
+    const s = JSON.parse(await f.text());
+    if (!Array.isArray(s.answers) || !Array.isArray(s.practice)) throw Error('no answers');
+    const have = state.practice.length + state.answers.length, got = s.practice.length + s.answers.length;
+    if (got < have) throw Error(`it has ${got} answers, this browser has ${have}`);
+    state = { practice: s.practice, answers: s.answers, pending: s.pending || null, firstPass: s.firstPass || null }; save(); begin();
+    $('status').textContent = `Loaded ${s.practice.length} practice and ${s.answers.length} answers.`;
+  } catch (err) { $('status').textContent = `Could not load: ${err.message}`; }
+});
+const ps = document.createElement('script');
+ps.src = dir + 'practice.js';
+ps.onload = () => { load(); begin(); };
+ps.onerror = () => { load(); begin(); $('status').textContent = 'practice.js missing: practice feedback unavailable.'; };
+document.head.appendChild(ps);
+</script>
+</body>
+</html>

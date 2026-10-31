@@ -176,7 +176,7 @@ def analyze(wav, sidecar):
         provenance = stems['provenance']
         structure['sourceParticipation'] = {'kind': provenance['kind'], 'method': stems['method'],
                                             'producer': provenance.get('producer'),
-                                            'model': provenance.get('separationRun', {}).get('model'),
+                                            'model': (provenance.get('separationRun') or {}).get('model'),
                                             'groundTruth': False,
                                             'confidenceMeaning': provenance.get('confidenceMeaning'),
                                             'clippingNote': provenance.get('clippingNote'),

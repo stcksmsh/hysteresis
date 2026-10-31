@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Whole-song dial</title>
+<link rel="icon" href="data:,">
+<!--
+  Whole-song dial, format 2 (NEXT_BODY_THEN_MIND.md step 2, "Before it starts", revised
+  format; EMOTION.md stage 4.3). Audio only. Two passes per song, picked in any order:
+  A energy: one slider, 0 calm (bottom) .. 1 energetic (top); Space taps where something
+    lifts or lands.
+  B two feelings: a pad with two one-sided axes 0..1, light / bright (horizontal) and
+    heavy / dark (vertical); both may be high at once.
+  Sampled at 10 Hz on the audio clock (t = k / 10 s of audio.currentTime) while the song
+  plays, nothing while paused. One take per pass and song; "discard and redo" keeps the
+  discarded take. Saved in localStorage (every second and at each song end); download as
+  dial2.json. Served by dial_serve.cjs next to song1.m4a, song2.m4a, song3.m4a.
+-->
+<style>
+  :root { --bg: #16171a; --fg: #e8e8e8; --dim: #9a9ca3; --line: #3a3c42; --accent: #6aa8ff; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.4 system-ui, sans-serif; }
+  main { max-width: 980px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  #sub { margin: 0 0 4px; }
+  #status, #pstatus { color: var(--dim); min-height: 1.4em; margin: 0 0 12px; }
+  table { border-collapse: collapse; margin: 8px 0 16px; }
+  td, th { border: 1px solid var(--line); padding: 8px 12px; text-align: left; vertical-align: middle; }
+  .done { color: #8fd18f; }
+  .row { display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start; }
+  .wrap { position: relative; }
+  #wrapB { width: min(520px, calc(100vw - 32px)); }
+  #wrapA { width: 120px; }
+  canvas { display: block; width: 100%; border: 1px solid var(--line); cursor: crosshair; touch-action: none; }   /* square: a rounded corner is not hit by the pointer */
+  #pad { aspect-ratio: 1; }
+  #slider { aspect-ratio: 120 / 520; }
+  .lab { position: absolute; color: var(--fg); font-size: 13px; pointer-events: none; text-shadow: 0 0 3px #000, 0 0 6px #000; }
+  #prog { position: relative; height: 10px; background: var(--line); border-radius: 3px; margin-top: 12px; width: min(520px, calc(100vw - 32px)); }
+  #progbar { height: 100%; width: 0; background: var(--accent); border-radius: 3px; }
+  .tick { position: absolute; top: -4px; width: 2px; height: 18px; background: #fff; }
+  #nums { font: 600 34px/1.35 ui-monospace, monospace; white-space: pre; }
+  #side p { color: var(--dim); max-width: 360px; }
+  button { font: inherit; padding: 8px 16px; margin: 4px 8px 4px 0; border-radius: 6px; border: 1px solid var(--line); background: #2a2c31; color: var(--fg); cursor: pointer; }
+  button:disabled { opacity: .4; cursor: default; }
+  button.main { background: #2c4a78; border-color: #3d65a3; }
+  button.warn { background: #5a2a2a; border-color: #8a3d3d; }
+  .files { margin-top: 16px; color: var(--dim); font-size: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <section id="picker">
+    <h1>Whole-song dial</h1>
+    <p id="pstatus"></p>
+    <table id="grid"></table>
+  </section>
+  <section id="rec" hidden>
+    <h1 id="title"></h1>
+    <p id="sub"></p>
+    <p id="status"></p>
+    <div class="row">
+      <div>
+        <div class="wrap" id="wrapA">
+          <canvas id="slider" width="120" height="520"></canvas>
+          <span class="lab" style="left:50%;top:6px;transform:translateX(-50%)">energetic</span>
+          <span class="lab" style="left:50%;bottom:6px;transform:translateX(-50%)">calm</span>
+        </div>
+        <div class="wrap" id="wrapB">
+          <canvas id="pad" width="520" height="520"></canvas>
+          <span class="lab" style="left:8px;top:6px">↑ heavy / dark</span>
+          <span class="lab" style="right:8px;bottom:6px">light / bright →</span>
+          <span class="lab" style="left:8px;bottom:6px">0</span>
+        </div>
+        <div id="prog"><div id="progbar"></div></div>
+      </div>
+      <div id="side">
+        <div id="nums"></div>
+        <div>
+          <button id="practice">Practice 30 s (no audio)</button>
+          <button id="endpractice" hidden>End practice</button>
+          <button id="start" class="main">Start</button>
+          <button id="pause" hidden>Pause</button>
+          <button id="back">Back to the songs</button>
+        </div>
+        <p id="help"></p>
+      </div>
+    </div>
+  </section>
+  <div class="files">
+    <button id="download">Download dial2.json</button>
+    <button id="loadbtn">Load a saved file</button>
+    <input id="load" type="file" accept=".json,application/json" hidden>
+  </div>
+  <audio id="audio" preload="auto"></audio>
+</main>
+<script>
+'use strict';
+const SONGS = [
+  { file: 'song1.m4a', title: 'Instant Crush', artist: 'Daft Punk' },
+  { file: 'song2.m4a', title: 'Five Years', artist: 'David Bowie' },
+  { file: 'song3.m4a', title: 'Presence', artist: 'Justice' },
+];
+const PASSES = {
+  A: { name: 'Pass A, energy', axes: { energy: '0 calm (bottom) .. 1 energetic (top)' },
+       taps: 'Space bar: something lifts or lands here (a build, a drop, an entry); audio time in s',
+       sub: 'How energetic the music is now. Space bar where something lifts or lands.',
+       help: 'Move the pointer over the slider: the marker follows it, no button needed. When the pointer leaves, the marker stays. Up / Down keys move it by 0.05. Space bar marks a lift or a landing. Pause is allowed, seeking is not.' },
+  B: { name: 'Pass B, two feelings', axes: { light: '0 .. 1 light / bright (hopeful, joyful); horizontal, left 0', heavy: '0 .. 1 heavy / dark (sad, ominous, longing); vertical, bottom 0' },
+       sub: 'How the music sounds, not whether you like it. Both can be high at once.',
+       help: 'Move the pointer over the pad: the marker follows it, no button needed. When the pointer leaves, the marker stays. Arrow keys move it by 0.05. Pause is allowed, seeking is not.' },
+};
+const STORE = 'hyst-emotion-dial-v2', RATE = 10, STEP = 0.05, PRACTICE_S = 30, TRAIL_MS = 3000, FLASH_MS = 400;
+const $ = id => document.getElementById(id);
+const audio = $('audio');
+
+// ---- state -------------------------------------------------------------------------------
+function fresh() {
+  return { format: 'hyst-emotion-dial', version: 2, rate: RATE,
+    passes: Object.fromEntries(Object.entries(PASSES).map(([k, p]) => [k, { name: p.name, axes: p.axes, ...(p.taps ? { taps: p.taps } : {}), wording: p.sub }])),
+    songs: SONGS, practiceDone: { A: false, B: false },
+    // takes: {pass, song, title, status: playing | done | discarded | interrupted, duration,
+    // startedAt, endedAt, samples: [[t, energy] or [t, light, heavy]], taps: [t], events}
+    takes: [] };
+}
+const valid = s => s && s.format === 'hyst-emotion-dial' && s.version === 2 && Array.isArray(s.takes) && s.practiceDone &&
+  s.takes.every(x => PASSES[x.pass] && SONGS.some(g => g.file === x.song) && Array.isArray(x.samples) && Array.isArray(x.taps) && Array.isArray(x.events));
+// A take left mid-way (reload, or a file saved mid-song) is kept as interrupted; the pair starts again.
+function settle(s) {
+  for (const x of s.takes) if (x.status === 'playing') {
+    x.status = 'interrupted'; x.interruptedAt = new Date().toISOString();
+    x.reachedT = x.samples.length ? x.samples[x.samples.length - 1][0] : 0;
+  }
+  return s;
+}
+let state;
+try { const s = JSON.parse(localStorage.getItem(STORE) || 'null'); state = valid(s) ? settle(s) : fresh(); } catch { state = fresh(); }
+function save() { try { localStorage.setItem(STORE, JSON.stringify(state)); } catch { } }
+save();
+const doneTake = (p, song) => state.takes.find(x => x.pass === p && x.song === song && x.status === 'done');
+
+// ---- values, colour, drawing --------------------------------------------------------------
+let pass = null, songIx = 0, mode = 'idle';   // pass null: the picker; mode: idle | practice | song
+let val = { e: 0, l: 0, h: 0 }, trail = [], flashMs = -1e9;
+const c01 = x => Math.max(0, Math.min(1, x)), r2 = x => Math.round(x * 100) / 100;
+function setA(e) { val.e = c01(e); }
+function setB(l, h) { val = { ...val, l: c01(l), h: c01(h) }; trail.push({ l: val.l, h: val.h, ms: performance.now() }); }
+const GREY = [110, 110, 110], ENERGY = [235, 95, 40], LIGHT = [245, 205, 110], HEAVY = [40, 30, 95];
+// Each weight pulls the grey towards its colour; two at once add, giving a third tint.
+const mix = ws => `rgb(${[0, 1, 2].map(i => Math.round(Math.max(0, Math.min(255, GREY[i] + ws.reduce((s, [c, w]) => s + w * (c[i] - GREY[i]), 0))))).join(',')})`;
+const tintA = e => mix([[ENERGY, e]]);
+const tintB = (l, h) => mix([[LIGHT, l], [HEAVY, h]]);
+function draw() {
+  const now = performance.now();
+  if (pass === 'A') {
+    const cv = $('slider'), g = cv.getContext('2d'), W = cv.width, H = cv.height, y = (1 - val.e) * H;
+    g.fillStyle = tintA(val.e); g.fillRect(0, 0, W, H); cv.dataset.tint = g.fillStyle;
+    const f = Math.max(0, 1 - (now - flashMs) / FLASH_MS);
+    if (f > 0) { g.fillStyle = `rgba(255,255,255,${(0.6 * f).toFixed(3)})`; g.fillRect(0, 0, W, H); }
+    cv.dataset.flash = f > 0 ? '1' : '0';
+    g.strokeStyle = 'rgba(255,255,255,.25)'; g.lineWidth = 1;
+    for (let k = 1; k < 4; k++) { g.beginPath(); g.moveTo(0, k * H / 4); g.lineTo(W, k * H / 4); g.stroke(); }
+    g.fillStyle = '#fff'; g.strokeStyle = '#000'; g.lineWidth = 2;
+    g.beginPath(); g.rect(8, y - 6, W - 16, 12); g.fill(); g.stroke();
+    $('nums').textContent = `energy ${val.e.toFixed(2)}`;
+  } else if (pass === 'B') {
+    const cv = $('pad'), g = cv.getContext('2d'), W = cv.width, H = cv.height, X = l => l * W, Y = h => (1 - h) * H;
+    g.fillStyle = tintB(val.l, val.h); g.fillRect(0, 0, W, H); cv.dataset.tint = g.fillStyle;
+    g.strokeStyle = 'rgba(255,255,255,.25)'; g.lineWidth = 1;
+    for (let k = 1; k < 4; k++) { g.beginPath(); g.moveTo(k * W / 4, 0); g.lineTo(k * W / 4, H); g.moveTo(0, k * H / 4); g.lineTo(W, k * H / 4); g.stroke(); }
+    trail = trail.filter(p => now - p.ms < TRAIL_MS);
+    g.lineWidth = 3; g.lineCap = 'round';
+    for (let i = 1; i < trail.length; i++) {
+      g.strokeStyle = `rgba(255,255,255,${(0.7 * (1 - (now - trail[i].ms) / TRAIL_MS)).toFixed(3)})`;
+      g.beginPath(); g.moveTo(X(trail[i - 1].l), Y(trail[i - 1].h)); g.lineTo(X(trail[i].l), Y(trail[i].h)); g.stroke();
+    }
+    g.fillStyle = '#fff'; g.strokeStyle = '#000'; g.lineWidth = 2;
+    g.beginPath(); g.arc(X(val.l), Y(val.h), 11, 0, 2 * Math.PI); g.fill(); g.stroke();
+    $('nums').textContent = `light ${val.l.toFixed(2)}\nheavy ${val.h.toFixed(2)}`;
+  }
+  const d = audio.duration;
+  $('progbar').style.width = mode === 'song' && d > 0 ? `${(100 * audio.currentTime / d).toFixed(2)}%` : '0%';
+  requestAnimationFrame(draw);
+}
+
+$('slider').addEventListener('pointermove', e => { const r = e.currentTarget.getBoundingClientRect(); setA(1 - (e.clientY - r.top) / r.height); });
+$('pad').addEventListener('pointermove', e => { const r = e.currentTarget.getBoundingClientRect(); setB((e.clientX - r.left) / r.width, 1 - (e.clientY - r.top) / r.height); });
+const KEYS = { A: { ArrowUp: [STEP], ArrowDown: [-STEP] }, B: { ArrowLeft: [-STEP, 0], ArrowRight: [STEP, 0], ArrowUp: [0, STEP], ArrowDown: [0, -STEP] } };
+document.addEventListener('keydown', e => {
+  if (pass === null) return;
+  if (e.key === ' ') {   // Space never presses a focused button
+    e.preventDefault();
+    if (pass === 'A' && !e.repeat && mode !== 'idle') tap();
+    return;
+  }
+  const d = KEYS[pass][e.key]; if (!d) return;
+  e.preventDefault();
+  if (pass === 'A') setA(r2(val.e + d[0])); else setB(r2(val.l + d[0]), r2(val.h + d[1]));
+}, true);
+document.addEventListener('keyup', e => { if (e.key === ' ' && pass !== null) e.preventDefault(); }, true);
+
+// ---- recording on the audio clock ------------------------------------------------------------
+let take = null, lastGood = 0, lastSave = 0;
+const now3 = () => Math.round(audio.currentTime * 1000) / 1000;
+const cur = () => pass === 'A' ? [r2(val.e)] : [r2(val.l), r2(val.h)];
+function sampleUpTo(t) { while (take.samples.length / RATE <= t + 1e-9) take.samples.push([take.samples.length / RATE, ...cur()]); }
+function event(type, extra) { take.events.push({ type, t: now3(), at: new Date().toISOString(), ...extra }); }
+function tap() {
+  flashMs = performance.now();
+  if (mode !== 'song' || audio.paused) return;   // practice or paused: flash only
+  const t = now3(); take.taps.push(t); addTick(t / audio.duration); save();
+}
+function addTick(f) { const k = document.createElement('div'); k.className = 'tick'; k.style.left = `${(100 * f).toFixed(2)}%`; $('prog').append(k); }
+function tick() {
+  if (mode !== 'song' || !take || audio.paused || audio.seeking) return;
+  lastGood = audio.currentTime; sampleUpTo(lastGood);
+  if (performance.now() - lastSave >= 1000) { lastSave = performance.now(); save(); }
+}
+setInterval(tick, 20);
+audio.addEventListener('timeupdate', tick);
+audio.addEventListener('seeking', () => {   // no seek: any jump is undone
+  if (mode === 'song' && Math.abs(audio.currentTime - lastGood) > 0.25) { event('seekRefused', { to: audio.currentTime }); audio.currentTime = lastGood; }
+});
+audio.addEventListener('pause', () => { if (mode === 'song' && !audio.ended) { event('pause'); save(); show(); } });
+audio.addEventListener('play', () => { if (mode === 'song' && take.events.length) { event('resume'); save(); show(); } });
+audio.addEventListener('ended', () => {
+  if (mode !== 'song') return;
+  sampleUpTo(audio.duration);
+  event('end'); take.status = 'done'; take.endedAt = new Date().toISOString();
+  mode = 'idle'; save(); show();
+});
+
+// ---- screens --------------------------------------------------------------------------------
+let practiceTimer = null, practiceEnd = 0, armed = null;
+function grid() {
+  const rows = SONGS.map((s, i) => `<tr><th>${s.title} <span style="color:var(--dim)">(${s.artist})</span></th>` +
+    Object.keys(PASSES).map(p => {
+      const id = `${p}${i + 1}`;
+      return doneTake(p, s.file)
+        ? `<td><span class="done" id="state-${id}">done</span> <button class="warn redo" data-p="${p}" data-i="${i}" id="redo-${id}">${armed === id ? 'Really discard? Click again' : 'Discard and redo'}</button></td>`
+        : `<td><span id="state-${id}">not recorded</span> <button class="main go" data-p="${p}" data-i="${i}" id="go-${id}">Record</button></td>`;
+    }).join('') + '</tr>').join('');
+  $('grid').innerHTML = `<tr><th></th>${Object.values(PASSES).map(p => `<th>${p.name}</th>`).join('')}</tr>${rows}`;
+  const n = state.takes.filter(x => x.status === 'done').length;
+  $('pstatus').textContent = `Pick a pass and a song, in any order. Each pair is recorded once. Done: ${n} of 6. ` +
+    'Download dial2.json and put it in /secondary/hyst-data/emotion/dial/dial2.json.';
+}
+$('grid').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  const p = b.dataset.p, i = Number(b.dataset.i), id = `${p}${i + 1}`;
+  if (b.classList.contains('redo')) {
+    if (armed !== id) { armed = id; grid(); return; }
+    const d = doneTake(p, SONGS[i].file); d.status = 'discarded'; d.discardedAt = new Date().toISOString(); save();
+  }
+  openPair(p, i);
+});
+function openPair(p, i) {
+  pass = p; songIx = i; mode = 'idle'; armed = null;
+  val = { e: 0, l: 0, h: 0 }; trail = [];
+  document.querySelectorAll('.tick').forEach(k => k.remove());
+  show();
+}
+function show() {
+  $('picker').hidden = pass !== null; $('rec').hidden = pass === null;
+  if (pass === null) { grid(); return; }
+  const s = SONGS[songIx], P = PASSES[pass], d = doneTake(pass, s.file);
+  $('wrapA').hidden = pass !== 'A'; $('wrapB').hidden = pass !== 'B';
+  $('title').textContent = `${P.name}: ${s.title} (${s.artist})`;
+  $('sub').textContent = P.sub; $('help').textContent = P.help;
+  const interrupted = state.takes.some(x => x.pass === pass && x.song === s.file && x.status === 'interrupted');
+  $('status').textContent =
+    mode === 'practice' ? `Practice, not recorded: ${Math.max(0, Math.ceil((practiceEnd - performance.now()) / 1000))} s left.` :
+    mode === 'song' ? (audio.paused ? 'Paused. Recording is paused with the audio.' : 'Recording.') :
+    d ? 'Saved. Back to the songs for the next one.' :
+    interrupted ? 'The page was reloaded during this song, so it starts again from the beginning.' :
+    'Press Start when ready. The song plays once, start to end.';
+  $('practice').hidden = mode !== 'idle' || !!d;
+  $('endpractice').hidden = mode !== 'practice';
+  $('start').hidden = mode !== 'idle' || !!d; $('start').disabled = false;
+  $('pause').hidden = mode !== 'song'; $('pause').textContent = audio.paused ? 'Resume' : 'Pause';
+  $('back').hidden = mode !== 'idle';
+}
+$('back').onclick = () => { pass = null; show(); };
+$('practice').onclick = () => {
+  mode = 'practice'; practiceEnd = performance.now() + PRACTICE_S * 1000;
+  practiceTimer = setInterval(() => { if (performance.now() >= practiceEnd) endPractice(); else show(); }, 250); show();
+};
+function endPractice() { clearInterval(practiceTimer); mode = 'idle'; state.practiceDone[pass] = true; val = { e: 0, l: 0, h: 0 }; trail = []; save(); show(); }
+$('endpractice').onclick = endPractice;
+$('start').onclick = async () => {
+  const s = SONGS[songIx]; $('start').disabled = true;
+  audio.src = s.file; audio.currentTime = 0;
+  val = { e: 0, l: 0, h: 0 }; trail = []; lastGood = 0;
+  document.querySelectorAll('.tick').forEach(k => k.remove());
+  try { await audio.play(); } catch (e) { $('status').textContent = 'Could not play: ' + e.message; $('start').disabled = false; return; }
+  take = { pass, song: s.file, title: s.title, status: 'playing', duration: audio.duration, startedAt: new Date().toISOString(),
+    endedAt: null, samples: [], taps: [], events: [] };
+  state.takes.push(take); mode = 'song';
+  event('start'); lastSave = performance.now(); save(); show();
+};
+$('pause').onclick = () => { if (audio.paused) audio.play(); else audio.pause(); };
+$('download').onclick = () => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(state, null, 1)], { type: 'application/json' }));
+  a.download = 'dial2.json'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+};
+$('loadbtn').onclick = () => $('load').click();
+$('load').onchange = async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  try {
+    const s = JSON.parse(await f.text());
+    if (!valid(s)) throw Error('not a dial2 file');
+    if (mode === 'song') { mode = 'idle'; audio.pause(); }
+    if (mode === 'practice') clearInterval(practiceTimer);
+    state = settle(s); mode = 'idle'; pass = null; save(); show();
+    $('pstatus').textContent = `Loaded ${f.name}. ` + $('pstatus').textContent;
+  } catch (err) { (pass === null ? $('pstatus') : $('status')).textContent = 'Could not load that file: ' + err.message; }
+};
+window.addEventListener('beforeunload', () => { if (mode === 'song') save(); });
+show(); requestAnimationFrame(draw);
+</script>
+</body>
+</html>
