@@ -4807,6 +4807,6 @@ Written by the overseer from `/secondary/hyst-data/brain/b3/results/ablation.jso
 Held-out (357 tracks), per layer L1, L2, L3, L4:
 - NLL with grid phase 0.264, 0.141, 0.085, 0.093 (the same values as `results.json`); without 0.270, 0.142, 0.089, 0.090. Summed: 0.583 with, 0.590 without.
 - MSE with grid phase 0.165, 0.136, 0.148, 0.145; without 0.166, 0.137, 0.148, 0.146. Pooled: 0.1486 with, 0.1492 without (ridge AR 0.1307).
-- Held-out NLL of the two runs stayed within 0.01 per layer at every epoch.
+- Held-out NLL of the two runs stayed within 0.01 per layer from epoch 2 on (epoch 1 differed by up to 0.045, on L3).
 
 No interval was computed (reported only). In plain terms: the grid-phase input changes held-out NLL by about 1 % summed and MSE by about 0.4 %.
