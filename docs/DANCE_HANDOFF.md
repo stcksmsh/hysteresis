@@ -4787,3 +4787,26 @@ core-2b is its out-of-fold smoothed (tau 8 s) arousal from `check2b/predictions_
 - Persistence is the last frame; ridge AR rows every 2 s; the second-passage window and the median-over-songs reading of "0.25 x SD" are as in the `check_b3.py` docstring.
 
 **What this says, in plain terms.** B3's NLL is lower than all three baselines' on the held-out songs, with every interval above 0, and its MSE is above the ridge AR baseline's. The habituation drop on the second passage is about 0 for B3 and 0.087 for the untrained B2. At a splice, surprisal rises above 3 SDs on 59.8 % of cross-song cuts and the cross-song rise exceeds the within-song one. L3-phase coupling to L1 and L2 amplitude is above the surrogates; L4-phase coupling is not. In the arousal pre-check the brain readout's r is below the smoothed baseline's and core-2b's on both sets. By the rules, gates 4.3, 4.4 and 4.5 each fail; round 2 waits for the user and the planner. Nothing has been listened to or watched.
+
+### ★ B3, PAC control on the round-1 model (BRAIN_SPEC 4.7) — 2026-10-31
+
+Branch `b3-pac`. `check_b3.py --pac-control-only` (code beside the round-1 coupling code, same `tort_mi`, same 200 circular shifts of at least 10 s, 18 bins, seed `SEED_PAC`, same 40 first held-out songs, whole songs). Input side: each of the 44 standardised features band-passed with the layer filter (8–20 Hz for the L1 pair, 4–8 Hz for the L2 pair), Hilbert envelope, Tort MI against the grid phase (angle of the cos, sin columns); input MI per song is the maximum over the 44 features. The input surrogate statistic is the maximum over the 44 features for each shift. Checkpoint `ckpt/phase/last.pt` (epoch 8). Result: `/secondary/hyst-data/brain/b3/results/pac_control.json`. No song lacked a grid phase. Paired difference is network MI minus input max MI over 40 songs, 95 % bootstrap interval (2,000 resamples, `SEED_BOOT`).
+
+- L3 phase / L1 amp: median network MI 0.00479; median input max MI 0.02069; mean difference -0.0381, interval [-0.0593, -0.0214]; median difference -0.0134; network above input on 15 % of songs. Songs above their own surrogates (p < 0.05): network 85 %, input 27.5 %. Median surrogate MI: network 0.00084, input (max over features) 0.03097.
+- L3 phase / L2 amp: median network MI 0.00710; median input max MI 0.00709; mean difference -0.0102, interval [-0.0250, +0.0008]; median difference -0.00006; network above input on 50 % of songs. Songs above their own surrogates: network 82.5 %, input 15 %. Median surrogate MI: network 0.00141, input 0.01135.
+- The feature with the largest input MI is feature 43 in 28 of 40 songs (L1 pair) and 24 of 40 (L2 pair).
+
+Verdict under 4.7: coupling may be claimed only if the interval lies above 0. Both intervals lie at or below 0 (L1 pair entirely below). Neither pair passes the PAC control, so no beat-band coupling claim is allowed for the round-1 model. Round 2's result supersedes this.
+
+Tests: 94 in `scripts/brain` pass (new: input max picks the coupled feature, coupled envelope above surrogates, uncoupled not, paired-interval rule).
+
+### B3 no-phase ablation, round-1 model (reported only, BRAIN_SPEC 4.6 and 4.7) — 2026-11-01
+
+Written by the overseer from `/secondary/hyst-data/brain/b3/results/ablation.json`. The no-phase twin (grid-phase inputs zeroed, otherwise as round 1) trained 8 epochs in its own memory-capped scope (`hyst-b3-nophase`, peak 13.9 GB of 20 GB), 36,790 s of training wall, not stopped by the cap. Labelled "round-1 model" (4.7); there is no round-2 twin and no claim depends on it.
+
+Held-out (357 tracks), per layer L1, L2, L3, L4:
+- NLL with grid phase 0.264, 0.141, 0.085, 0.093 (the same values as `results.json`); without 0.270, 0.142, 0.089, 0.090. Summed: 0.583 with, 0.590 without.
+- MSE with grid phase 0.165, 0.136, 0.148, 0.145; without 0.166, 0.137, 0.148, 0.146. Pooled: 0.1486 with, 0.1492 without (ridge AR 0.1307).
+- Held-out NLL of the two runs stayed within 0.01 per layer from epoch 2 on (epoch 1 differed by up to 0.045, on L3).
+
+No interval was computed (reported only). In plain terms: the grid-phase input changes held-out NLL by about 1 % summed and MSE by about 0.4 %.
