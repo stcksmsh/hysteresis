@@ -40,6 +40,18 @@ def change_total(x):
     return out
 
 
+class TestB2Sampling(unittest.TestCase):
+    def test_readout_rows_are_every_2_seconds(self):
+        seen = []
+        real = b2.fit_layer
+        b2.fit_layer = lambda xs, ys: (seen.append(sum(len(x) for x in xs)) or {"mu": 0}, {})
+        try:
+            C.B2Method.fit(True, [np.random.default_rng(i).standard_normal((1700, core.N_IN)).astype(np.float32) for i in range(10)])
+        finally:
+            b2.fit_layer = real
+        self.assertEqual(seen, [10 * 9] * 4)               # 170 bins per song, every 20th: 9 rows; not every 2nd bin (85)
+
+
 class TestHelpers(unittest.TestCase):
     def test_boot_ci(self):
         lo, hi, pt = C.boot_ci(np.full(10, 3.0))

@@ -45,8 +45,10 @@ N_STATE = 2 * core.N
 
 
 def grid_phase(beats, n_frames):
-    """(n_frames, 2) cos, sin of the beat-grid phase at frame times t / 100 s."""
+    """(n_frames, 2) cos, sin of the beat-grid phase at frame times t / 100 s. Fewer than 2 beats: zeros (the no-phase encoding)."""
     b = np.asarray(beats, dtype=np.float64)
+    if len(b) < 2:
+        return np.zeros((n_frames, 2), np.float32)
     t = np.arange(n_frames) / 100.0
     k = np.interp(t, b, np.arange(len(b)))
     k = np.where(t < b[0], (t - b[0]) / (b[1] - b[0]), k)

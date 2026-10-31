@@ -113,10 +113,11 @@ def chunk_nll(out, x, nvalid, chunk=None):
     return sums, counts
 
 
-def run_epoch(model, tracks, load, batch, seed, epoch, opt=None, lr_fn=None, step0=0, deadline=None):
+def run_epoch(model, tracks, load, batch, seed, epoch, opt=None, lr_fn=None, step0=0, deadline=None, log=None, heartbeat_s=600):
     """One pass over `tracks`. With `opt` it trains; without, it evaluates (no grad). Returns (per-layer NLL, steps, hit_deadline)."""
     state = model.init_state(batch)
     tot, cnt, step, hit = np.zeros(4), np.zeros(4), step0, False
+    t_start = t_beat = time.perf_counter()
     for b in epoch_batches(tracks, load, batch, seed, epoch):
         if b["reset"].any():
             state = model.reset_rows(state, b["reset"])
@@ -138,6 +139,10 @@ def run_epoch(model, tracks, load, batch, seed, epoch, opt=None, lr_fn=None, ste
         tot += [s.item() for s in sums]
         cnt += [c.item() for c in counts]
         step += 1
+        if log is not None and time.perf_counter() - t_beat >= heartbeat_s:
+            t_beat = time.perf_counter()
+            log(json.dumps({"heartbeat": True, "epoch": epoch + 1, "step": step, "mean_loss_so_far": float((tot / np.maximum(cnt, 1)).sum()),
+                            "wall_s": t_beat - t_start}))
         if deadline is not None and time.perf_counter() >= deadline:
             hit = True
             break
@@ -191,7 +196,7 @@ def save_ckpt(path, model, opt, meta):
     os.replace(tmp, path)
 
 
-def fit(model, train, heldout, load, out_dir, epochs, batch=8, cap_s=CAP_S, seed=SEED, steps_per_ep=None, log=print,
+def fit(model, train, heldout, load, out_dir, epochs, batch=8, cap_s=CAP_S, seed=SEED, steps_per_ep=None, log=lambda s: print(s, flush=True),
         load_len=None, resume=True):
     """Train for `epochs` epochs (resuming from out_dir/last.pt when present). Returns the meta dict of the last checkpoint."""
     out_dir = Path(out_dir)
@@ -214,7 +219,7 @@ def fit(model, train, heldout, load, out_dir, epochs, batch=8, cap_s=CAP_S, seed
         e = meta["epoch"]
         t0 = time.perf_counter()
         remaining = cap_s - meta["wall_s"]
-        train_nll, step, hit = run_epoch(model, train, load, batch, seed, e, opt, lr_fn, meta["step"], deadline=t0 + remaining)
+        train_nll, step, hit = run_epoch(model, train, load, batch, seed, e, opt, lr_fn, meta["step"], deadline=t0 + remaining, log=log)
         wall = time.perf_counter() - t0
         meta["wall_s"] += wall
         meta["step"] = step
@@ -258,10 +263,17 @@ def main(argv=None):
     tracks = [Track(t["id"], t["feats"], t["beats"], t["split"]) for t in json.loads(Path(args.manifest).read_text())]
     trn, ho = [t for t in tracks if t.split == "train"], [t for t in tracks if t.split == "heldout"]
     torch.manual_seed(SEED)
+    no_grid = count_no_grid(tracks)
+    print(f"{len(no_grid)} of {len(tracks)} tracks have fewer than 2 grid beats and get zero phase columns: {no_grid}", flush=True)
     model = core.Core(phase=not args.no_phase)
     meta = fit(model, trn, ho, lambda t: load_inputs(t, mean, std), args.out, args.epochs, batch=args.batch,
                cap_s=args.cap_hours * 3600, load_len=lambda t: len(np.load(t.feats, mmap_mode="r")), resume=not args.no_resume)
     print(json.dumps({k: meta[k] for k in ("epoch", "step", "wall_s", "stopped_by_cap", "params")}))
+
+
+def count_no_grid(tracks):
+    """Tracks whose offline grid has fewer than 2 beats; they train with zero phase columns."""
+    return [t.id for t in tracks if len(json.loads(Path(t.beats).read_text())["beats"]) < 2]
 
 
 if __name__ == "__main__":

@@ -147,8 +147,8 @@ class B2Method:
         return [a for a, _ in p], [b for _, b in p]
 
     @classmethod
-    def fit(cls, phase, train_inputs, groups=10, stride=b2.STRIDE * 2, head_norm=True):
-        """Readouts from the training songs' states every `stride` bins; the songs are dealt into `groups` leave-out groups."""
+    def fit(cls, phase, train_inputs, groups=10, stride=20, head_norm=True):
+        """Readouts from the training songs' states every `stride` bins (20 = 2 s); the songs are dealt into `groups` leave-out groups."""
         model = core.Core(phase=phase, head_norm=head_norm).eval()
         Xs = [[[] for _ in range(groups)] for _ in range(4)]
         Ys = [[[] for _ in range(groups)] for _ in range(4)]
@@ -156,7 +156,7 @@ class B2Method:
             run = b2.run_core(model, x)
             for i, hz in enumerate(core.HORIZONS):
                 y, ok = b2.targets(x[:, :core.FEAT], hz)
-                sel = np.arange(0, len(y), stride // b2.STRIDE or 1)
+                sel = np.arange(0, len(y), stride)           # stride in 10 Hz bins: 20 = every 2 s
                 Xs[i][n % groups].append(run["states"][i][sel])
                 Ys[i][n % groups].append((y[sel], ok[sel]))
         readouts = []

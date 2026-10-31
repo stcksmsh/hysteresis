@@ -4744,3 +4744,46 @@ The 100 h E/P/R floor of the first draft could not be met: 89.1 h on the trainin
 - `features/<id:06d>.npy` float32, shape (frames, 44), 100 Hz.
 - `feature_stats.npz` keys `mean`, `sd` (44 each); `feature_stats.json` same plus column names and hash.
 - In git, `scripts/brain/corpus/`: `final_corpus.csv` (id, split train|heldout, genre, cls, hours, artist_id, sha256 of the mp3), `excluded_by_id.csv`, `excluded_by_fingerprint.csv`, `fp_matches.csv`, `selection_final_meta.csv` (artist and title), `selection_round1.csv`, `selection_report.txt` (first draft, superseded), `SOURCES.md`, `feature_stats.{npz,json}`.
+
+### ★ B3, after results: the trained core checked on held-out artists (round 1 of 2) — 2026-10-31
+
+Branch `b3-train` (code at `3307186`). **Not verified by eye.** Round 1 of 2; round 2 waits for the user and the planner. The rules are those of `docs/BRAIN_SPEC.md` 4.3 to 4.6, committed before any result (`check_b3.py` docstring); nothing was changed after the run started except the two crash fixes below. Outputs are outside git in `/secondary/hyst-data/brain/b3/` (`results/results.json`, `results/precheck.json`, `ckpt/phase/`, logs). The no-phase ablation is pending; a short follow-up entry will carry it.
+
+**What ran.** Corpus (agent 2's `final_corpus.csv`): 3,176 tracks; training 2,819 tracks, 174.73 h; held-out 357 tracks, 20.07 h; no artist on both sides. Features and statistics as the corpus builder made them (stats npz sha256 begins `29ddf65a07ba963d`); audio hashes checked against the list. Model: the B2 architecture with `head_norm=True`, 1,010,020 parameters, with grid phase (cos, sin). Training: 8 threads, 8 streams, 60 s chunks, 8 epochs, 12,004 steps, training wall 39,535 s (10.98 h of the 30 h cap), not stopped by the cap, no NaN. The B2 control in 4.3 is the untrained `head_norm=True` core with ridge readouts fitted on the training tracks.
+
+| Epoch | Train NLL per layer | Held-out NLL per layer | Wall s |
+|---|---|---|---|
+| 1 | 0.508, 0.350, 0.313, 0.375 | 0.487, 0.563, 0.618, 0.339 | 5647 |
+| 2 | 0.387, 0.212, 0.181, 0.275 | 0.386, 0.241, 0.208, 0.262 | 4699 |
+| 3 | 0.351, 0.169, 0.142, 0.243 | 0.419, 0.236, 0.197, 0.236 | 5842 |
+| 4 | 0.326, 0.143, 0.114, 0.218 | 0.330, 0.232, 0.184, 0.174 | 4380 |
+| 5 | 0.305, 0.119, 0.090, 0.197 | 0.316, 0.188, 0.134, 0.160 | 5121 |
+| 6 | 0.287, 0.096, 0.067, 0.168 | 0.294, 0.150, 0.107, 0.122 | 5192 |
+| 7 | 0.271, 0.077, 0.050, 0.148 | 0.269, 0.159, 0.093, 0.119 | 4338 |
+| 8 | 0.261, 0.064, 0.035, 0.135 | 0.263, 0.140, 0.085, 0.093 | 4315 |
+
+**Gate 4.3 (predicts music): fail, on the MSE margin.**
+- Per baseline, the 95 % interval of (baseline NLL minus B3 NLL), per held-out song, in nats summed over the 4 layers: persistence +3.069 [2.889, 3.229]; ridge AR +0.568 [0.447, 0.678]; B2 +1.113 [0.977, 1.230]. All three are above 0.
+- MSE of the predicted mean, pooled over held-out songs: B3 0.1486; persistence 0.4521; ridge AR 0.1307; B2 0.1966. The lowest baseline MSE is ridge AR's; B3's is 13.7 % above it (ratio 1.137). The gate needs B3 at least 5 % below. Condition 2 fails, so the gate fails.
+- NLL per layer (nats per feature): B3 0.264, 0.141, 0.085, 0.093; ridge AR 0.384, 0.217, 0.279, 0.267; B2 0.629, 0.365, 0.358, 0.348; persistence 0.827, 0.872, 0.970, 1.044. Bits per feature-frame: B3 0.381, 0.203, 0.123, 0.135; ridge AR 0.554, 0.313, 0.402, 0.384; B2 0.907, 0.527, 0.516, 0.502; persistence 1.193, 1.258, 1.399, 1.507. Ridge AR alpha 0.1.
+
+**Gate 4.4 (habituation): fail.** 329 held-out songs used, 28 skipped (shorter than 82 s). Surprisal on the second passage, version N minus version H:
+- B3: mean drop 0.0003 nats, 95 % interval [-0.115, 0.070]; median of drop / SD of the song's 8 s window means 0.0096 (needs 0.25). Both conditions fail.
+- B2 (control): mean drop 0.087, interval [0.020, 0.182]; median drop / SD 0.0056. The interval is above 0; the 0.25 rule fails.
+- B3 minus B2 paired drop: -0.087, interval [-0.286, 0.029], not above 0. Reported only.
+
+**Gate 4.5 (splice): fail.** 353 songs, 1,412 cross-song cuts, 4 songs skipped (too short). z at least 3 on 59.8 % of cross-song cuts (needs 80 %); median cross-song z 4.76, median within-song z 0.59. Cross-song minus within-song, mean per song 12.49, interval [7.46, 18.69]: above 0, so that condition holds. The gate fails on the first condition.
+
+**4.6 reported (40 held-out songs for coupling).** Tort modulation index against 200 circular time-shift surrogates of the amplitude, median MI (median surrogate MI; share of songs with p below 0.05): L3 phase with L1 amplitude 0.0048 (0.0008; 85 %); L3 with L2 0.0071 (0.0014; 82.5 %); L4 with L1 0.0047 (0.0054; 20 %); L4 with L2 0.0076 (0.0071; 22.5 %). Coupling is above the surrogates for the L3 phase pairs and not for the L4 phase pairs.
+DEAM / MERP within-song arousal r, mean over clips with 95 % bootstrap over clips (ridge on the 1,024 layer-mode magnitudes pooled to 0.5 s, 5 folds by song):
+- DEAM, 1,744 clips: brain 0.201 [0.184, 0.218]; smoothed pooled-feature baseline 0.323 [0.298, 0.347]; core-2b 0.276 [0.251, 0.302].
+- MERP, 43 songs: brain 0.399 [0.326, 0.472]; smoothed baseline 0.480 [0.371, 0.584]; core-2b 0.644 [0.575, 0.703].
+core-2b is its out-of-fold smoothed (tau 8 s) arousal from `check2b/predictions_heldout.npz`. With and without grid phase: pending (the no-phase model trains in its own memory-capped scope, 8 epochs, inside the remaining cap).
+
+**Where the spec was silent, and the code changes after the smoke test** (details in `scripts/brain/B3_NOTES.md`).
+- `Core(head_norm=True)`: a parameter-free layer norm before the heads and the precision read. Without it the first training steps diverged (L4 NLL about 5e7 before any update). `head_norm=False` reproduces B2 as committed; B2's Presence lanes were recomputed identical.
+- Six corpus tracks (006684, 012244, 032178, 036013, 112788, 136823) have fewer than 2 offline-grid beats. `grid_phase` gave an error at the first launch (`np.interp` on an empty array, epoch 1, no checkpoint). They now get zero phase columns (cos = sin = 0, the no-phase encoding) and stay in the corpus. The 6 of 3,176 are counted in the training log. Behaviour for 2 or more beats is unchanged.
+- The first run of the checks was killed for lack of memory (kernel OOM, 25.7 GB, 01:41) and took the terminal scope down with it. Cause: the B2 baseline's readout fit sampled the training states every 2nd 10 Hz bin instead of every 20th (a stride divided by 10). Fixed to every 20th bin, the documented 2 s; no rule changed. The checks then ran in 1.85 h at about 2 GB. The no-phase run uses `systemd-run --user --scope -p MemoryMax=20G -p MemorySwapMax=0`.
+- Persistence is the last frame; ridge AR rows every 2 s; the second-passage window and the median-over-songs reading of "0.25 x SD" are as in the `check_b3.py` docstring.
+
+**What this says, in plain terms.** B3's NLL is lower than all three baselines' on the held-out songs, with every interval above 0, and its MSE is above the ridge AR baseline's. The habituation drop on the second passage is about 0 for B3 and 0.087 for the untrained B2. At a splice, surprisal rises above 3 SDs on 59.8 % of cross-song cuts and the cross-song rise exceeds the within-song one. L3-phase coupling to L1 and L2 amplitude is above the surrogates; L4-phase coupling is not. In the arousal pre-check the brain readout's r is below the smoothed baseline's and core-2b's on both sets. By the rules, gates 4.3, 4.4 and 4.5 each fail; round 2 waits for the user and the planner. Nothing has been listened to or watched.
