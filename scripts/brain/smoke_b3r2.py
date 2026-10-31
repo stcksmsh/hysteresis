@@ -43,8 +43,8 @@ def main():
     opt = train.make_optimizer(model)
     lr_fn = train.lr_schedule(spe_fit, train.EPOCHS)
     state, times, losses = model.init_state(a.batch), [], []
+    t0 = time.perf_counter()          # the clock runs from the end of the previous step, so loading the next batch is counted
     for step, b in enumerate(train.epoch_batches(fit, load, a.batch, train.SEED, 0)):
-        t0 = time.perf_counter()
         if b["reset"].any():
             state = model.reset_rows(state, b["reset"])
         out, state = model(b["x"][:, :train.CHUNK], state)
@@ -60,7 +60,8 @@ def main():
         model.clamp_modes()
         state = model.detach_state(state)
         times.append(time.perf_counter() - t0)
-        losses.append(float(loss))
+        t0 = time.perf_counter()
+        losses.append(float(loss.detach()))
         print(json.dumps({"step": step + 1, "s": round(times[-1], 1), "loss": round(losses[-1], 4)}), flush=True)
         if step + 1 >= a.steps:
             break
@@ -68,8 +69,8 @@ def main():
     vtimes = []
     state = model.init_state(a.batch)
     with torch.no_grad():
+        t0 = time.perf_counter()
         for step, b in enumerate(train.epoch_batches(val, load, a.batch, train.SEED, 0)):
-            t0 = time.perf_counter()
             if b["reset"].any():
                 state = model.reset_rows(state, b["reset"])
             out, state = model(b["x"][:, :train.CHUNK], state)
@@ -77,6 +78,7 @@ def main():
             del out
             state = model.detach_state(state)
             vtimes.append(time.perf_counter() - t0)
+            t0 = time.perf_counter()
             print(json.dumps({"val_step": step + 1, "s": round(vtimes[-1], 1)}), flush=True)
             if step + 1 >= a.val_steps:
                 break
