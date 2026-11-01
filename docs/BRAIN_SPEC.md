@@ -423,7 +423,10 @@ how fast the predicted σ rises after a cut.
 
 **Compute.** Round 2 exceeds the 3-night cap (about 30 h used). Raising it by one run
 is the user's decision; the planner recommends yes. *User, 2026-10-31, 19:3x:* the cap is
-raised by one run, bounded by the 20 h hard stop above.
+raised by one run, bounded by the 20 h hard stop above. *User, 2026-11-01, 01:4x, after
+the first round-2 epoch (validation only, no gated result), because other CPU-heavy work
+shares the machine:* the hard stop is 24 h instead of 20 h. The run resumes from the
+epoch-1 checkpoint with `--cap-hours 24`; nothing else changes.
 
 **Ablation.** The no-phase run on the round-1 model is the reported ablation, labelled
 "round-1 model". There is no round-2 twin. No claim depends on it.
