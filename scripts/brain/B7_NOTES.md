@@ -72,3 +72,34 @@ B7 at step 0 equals B3 exactly in the maths: in float64 the two differ by about 
 smoke run). In float32 the two scans are rounded differently (B3: 75-frame blocks plus a carry; B7: 50-frame blocks with the state carried
 directly), so the deep layers differ by float32 noise (about 1e-5 of the activation scale on noise input). The smoke run reports the real
 numbers on 10 held-out songs.
+
+## Toy tests and smoke run (2026-11-01, this machine, other jobs sharing it)
+
+**T3** (unit tests, `test_core_b7.py::TestModulationT3`): pass. With w = 0 the outputs equal the frozen-modulation outputs exactly; with h0 only
+and a given exponent the modes follow |h_t| = |h0| exp(-nu e (t+1)), arg = arg h0 + theta (t+1) to 1e-5, theta unchanged; the gain scales the
+drive linearly; an arousal step of 1 gives e = 1 + w_tau and tau_eff = base / e exactly.
+
+**T2** (500 steps, reduced width): model MSE 0.03185, ridge AR 0.02738 (ratio 1.163, needs <= 1.05), relay off 0.04801 (ratio 1.753). Fail; the
+loss was still falling at the end, the relay clearly carries the gain. Needs more steps (not run).
+
+**T1** (recall): fail in all three data designs tried, all recorded in the `toy_b7.py` docstring. Untrained, retrieval finds the right passage
+(source time and recognition 0.78 to 0.84 against 0.59 elsewhere on noise input). After training the error ratio repeat / first is 0.99 to 1.00
+and the recognition saturates (p95 before the repeat 0.43 to 0.99, repeat median -0.12 to 0.99), also with the key and query projections
+frozen. So the relay does not learn to use the retrieved value in 300 to 500 steps, and the cosine of layer-normed states is not
+discriminative once the states are trained (a common offset dominates). Not fixed; this is the open point.
+
+**Identity** (10 held-out songs, B3 round 2 epoch 12): max abs difference over every layer's mean, log-variance and error: float32 1.6e-4
+(per song 6.8e-5 to 1.6e-4), float64 3.3e-13 (first 2 songs). The float32 value is rounding of two different scans, not a different function.
+
+**Step time and memory** (8 streams x 180 s, 8 threads, median of steps 2 to 4, machine shared, B3 measured the same way):
+
+| Setting | Train step | Epoch (567 + 47 val steps) | 8 epochs | Peak RSS | Scope peak |
+|---|---|---|---|---|---|
+| B3, 8 streams | 14.5 s | 2.35 h | 18.8 h | 14.2 GB | 14.6 GB |
+| B7, 8 streams | 30.5 s | 4.96 h | 39.6 h | 22.2 GB (OOM at the 20 GB scope) | - |
+| B7, 8 streams, grad checkpoint | 41.0 s | 6.59 h | 52.7 h | 10.0 GB | 10.4 GB |
+| B7, 3 streams | 22.9 s (noisy) | 9.86 h | 78.9 h | 8.8 GB | 9.0 GB |
+
+Slowdown of the block-sequential modulation, B7 over B3: 2.1 x per step. B3 round 2's real run took about 1.46 h per epoch against 2.35 h here,
+so these projections are about 1.6 x too slow for a quiet machine. 24 h of wall time would still cover roughly 5 to 6 epochs of B7 with
+checkpointing.

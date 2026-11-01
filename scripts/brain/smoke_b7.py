@@ -107,6 +107,7 @@ def steps(a):
         if b["reset"].any():
             state = model.reset_rows(state, b["reset"])
         out, state = model(b["x"][:, :train.CHUNK], state)
+        rss_fwd = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1e6
         sums, _, _, counts = train.chunk_terms(out, b["x"], b["nvalid"], beta=train.BETA)
         del out
         loss = sum(s / max(float(c), 1.0) for s, c in zip(sums, counts))
@@ -121,7 +122,7 @@ def steps(a):
         times.append(time.perf_counter() - t0)
         losses.append(float(loss))
         print(json.dumps({"step": step + 1, "s": round(times[-1], 1), "loss": round(losses[-1], 4), "store_columns": int(state["sk"].shape[1]) if "sk" in state else None,
-                          "peak_rss_gb": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1e6}), flush=True)
+                          "peak_rss_gb": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1e6, "peak_rss_after_forward_gb": rss_fwd}), flush=True)
         if step + 1 >= a.steps:
             break
     model.eval()
