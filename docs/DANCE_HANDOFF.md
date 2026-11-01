@@ -4810,3 +4810,15 @@ Held-out (357 tracks), per layer L1, L2, L3, L4:
 - Held-out NLL of the two runs stayed within 0.01 per layer from epoch 2 on (epoch 1 differed by up to 0.045, on L3).
 
 No interval was computed (reported only). In plain terms: the grid-phase input changes held-out NLL by about 1 % summed and MSE by about 0.4 %.
+
+### ★ B3 round 2, after results: the retrained core checked on held-out artists (final) — 2026-11-01
+
+Written by the overseer from `/secondary/hyst-data/brain/b3r2/results/` (`results.json`, `precheck.json`, `pac_control.json`). Code: branch `b3-round2` at `16baa53` (merged into `keys-decide`). Rules: BRAIN_SPEC 4.7, committed before any result; the user raised the hard stop to 24 h after epoch 1 (`8b9da7f`); the run resumed from the epoch-1 checkpoint with `relaunch24.sh` (outside git, identical to `launch_b3r2.sh` plus `--cap-hours 24`). 12 epochs, 17.5 h wall, best epoch 12 (validation β-NLL 0.622), no cut, no early stop. Full numbers, per epoch and per layer, are in `docs/PLANNER_BRIEF_B3_ROUND2_RESULTS.md`.
+
+- 4.3: NLL condition passes against all three baselines (AR +0.66 [0.57, 0.77]); MSE B3 0.141 against ridge AR 0.131, ratio 1.080, needs at most 0.95. Fail.
+- 4.4: B3 mean drop 0.016 [−0.023, 0.063], median drop / SD 0.006 (needs 0.25); B2 0.080 [0.018, 0.172]. Fail.
+- 4.5: z ≥ 3 on 60.5 % of cross-song cuts (needs 80 %); cross − within 10.9 [7.5, 14.7]. Fail.
+- PAC control on the round-2 model: L3/L1 −0.040 [−0.061, −0.023], L3/L2 −0.013 [−0.028, −0.002]. Not claimable.
+- Pre-check: DEAM brain 0.202, MERP 0.408 (core-2b 0.276, 0.644).
+
+By 4.7 each failed claim is dropped; there is no round 3. What follows waits for the planner and the user. Not verified by eye.
