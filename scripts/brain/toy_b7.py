@@ -179,7 +179,7 @@ def fit(model, make_batch, steps, lr=3e-3, log=print, seed=0, aux=0.0, oracle=No
 
 def t1_eval(model, design, n=32, seed=991, oracle=False):
     rng = np.random.default_rng(seed)
-    res = {"first": [[] for _ in range(4)], "repeat": [[] for _ in range(4)]}
+    res = {"first": [[] for _ in range(3)], "repeat": [[] for _ in range(3)]}
     rec_rep, rec_pre, hits, blocks = [], [], 0, 0
     for _ in range(n):
         x, (s1, s2) = t1_sequence(rng, design)
@@ -198,7 +198,7 @@ def t1_eval(model, design, n=32, seed=991, oracle=False):
             hits += int(src[b] >= 0 and s1 <= src[b] * 100 <= s1 + T1_S)
     model.oracle = None
     mse = {k: [float(np.mean(v)) for v in res[k]] for k in res}
-    first, rep = sum(mse["first"]), sum(mse["repeat"])
+    first, rep = sum(mse["first"][:3]), sum(mse["repeat"][:3])
     share = hits / max(blocks, 1)
     p95 = float(np.percentile(np.concatenate(rec_pre), 95))
     med = float(np.median(np.concatenate(rec_rep)))
