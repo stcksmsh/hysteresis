@@ -340,9 +340,10 @@ def as_lanes(r):
     return r if isinstance(r, dict) else {"total": r}
 
 
-def habituation(songs, total_fn, audio_of, stats, full_total, per_layer=None):
+def habituation(songs, total_fn, audio_of, stats, full_total, per_layer=None, hook=None):
     """songs: [(id, duration_s, phase (T, 2))]; total_fn(x) -> total lane (or lanes dict); audio_of(id) -> audio.
-    -> (drops, sds, skipped ids). With a dict `per_layer`, it is filled with {layer: [drop per song]} (reported only)."""
+    -> (drops, sds, skipped ids). With a dict `per_layer`, it is filled with {layer: [drop per song]} (reported only).
+    `hook(sid, name, lanes, t0, t1)` (B7), if given, sees the lanes of each version ("H" or "N") and the second passage's window."""
     drops, sds, skipped = [], [], []
     for n, (sid, dur, phase) in enumerate(songs):
         plan = hab_plan(dur, SEED_HAB + n)
@@ -358,6 +359,8 @@ def habituation(songs, total_fn, audio_of, stats, full_total, per_layer=None):
             audio = xfade_concat([first[0], F[0], S[0]])
             ph = frames_concat([first[1], F[1], S[1]])
             lanes = as_lanes(total_fn(song_inputs_from_audio(audio, ph, *stats)))
+            if hook is not None:
+                hook(sid, name, lanes, t0, t1)
             tot[name] = {k: lane_mean(lanes[k], t0, t1) for k in ("total", *LAYERS) if k in lanes}
         drops.append(tot["N"]["total"] - tot["H"]["total"])
         if per_layer is not None:
@@ -421,9 +424,10 @@ def sigma_report(curves):
                 "half_peak_time_s": half_rise_time(m[i])} for i, L in enumerate(LAYERS)}
 
 
-def splice(songs, total_fn, audio_of, stats, z_gate=3.0, frac_gate=0.8):
+def splice(songs, total_fn, audio_of, stats, z_gate=3.0, frac_gate=0.8, extra=()):
     """songs: [(id, duration_s, phase)] held-out. -> per-song cross and within z lists and the gate.
-    When total_fn gives lanes dicts the rows also carry per-layer z ("cross_layers", "within_layers") and the sigma rise curves."""
+    When total_fn gives lanes dicts the rows also carry per-layer z ("cross_layers", "within_layers") and the sigma rise curves.
+    `extra`: names of further lanes (B7: "novelty") whose z is also kept, as "cross_<name>" and "within_<name>" lists per row."""
     rows, skipped = [], []
     for n, (sid, dur, phase) in enumerate(songs):
         cuts = splice_plan(dur, SEED_SPLICE + n)
@@ -436,6 +440,7 @@ def splice(songs, total_fn, audio_of, stats, z_gate=3.0, frac_gate=0.8):
         zc, zw = [], []
         zl = {"cross": {L: [] for L in LAYERS}, "within": {L: [] for L in LAYERS}}
         sg = {"cross": [], "within": []}
+        ex = {f"{kind}_{k}": [] for kind in ("cross", "within") for k in extra}
         for c in cuts:
             j = int(rng.choice(others))
             oid, odur, ophase = songs[j]
@@ -449,13 +454,15 @@ def splice(songs, total_fn, audio_of, stats, z_gate=3.0, frac_gate=0.8):
                 x = song_inputs_from_audio(xfade_concat([head[0], tail[0]]), frames_concat([head[1], tail[1]]), *stats)
                 lanes = as_lanes(total_fn(x))
                 sink.append(splice_z(lanes["total"], c - XF))
+                for k in extra:
+                    ex[f"{kind}_{k}"].append(splice_z(lanes[k], c - XF))
                 for L in LAYERS:
                     if L in lanes:
                         zl[kind][L].append(splice_z(lanes[L], c - XF))
                 if "sigma" in lanes:
                     sg[kind].append(sigma_rise(lanes["sigma"], c - XF))
         rows.append({"id": sid, "cross": zc, "within": zw, "cross_layers": zl["cross"], "within_layers": zl["within"],
-                     "sigma_cross": sg["cross"], "sigma_within": sg["within"]})
+                     "sigma_cross": sg["cross"], "sigma_within": sg["within"], **ex})
     return rows, skipped
 
 
