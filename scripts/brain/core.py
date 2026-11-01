@@ -80,13 +80,29 @@ def scan(lam_log, u, h0, block=SCAN_BLOCK):
     return out, out[:, -1]
 
 
-def scan_rows(lam, u, h0):
-    """h_t = lam h_{t-1} + u_t with a per-row lam (B, M) over one short block u (B, T, M), from h0 (B, M)."""
-    h, out = h0, []
-    for ut in u.unbind(1):
-        h = lam * h + ut
-        out.append(h)
-    return torch.stack(out, 1), h
+def scan_rows(ll, u, h0, block=25):
+    """h_t = exp(ll) h_{t-1} + u_t with a per-row log-modulus-and-phase ll (B, M) over one block u (B, T, M), from h0 (B, M).
+    The same two-level scheme as `scan`: sequential inside sub-blocks of `block` frames (batched), then over the sub-block ends."""
+    B, T, M = u.shape
+    pad = (-T) % block
+    if pad:
+        u = torch.cat([u, u.new_zeros(B, pad, M)], 1)
+    nb = u.shape[1] // block
+    lam = torch.exp(ll).repeat_interleave(nb, 0)
+    h, loc = torch.zeros(B * nb, M, dtype=u.dtype), []
+    for uk in u.reshape(B * nb, block, M).unbind(1):
+        h = lam * h + uk
+        loc.append(h)
+    loc = torch.stack(loc, 1).reshape(B, nb, block, M)
+    lam_block = torch.exp(ll * block)
+    carry, carries = h0, []
+    for end in loc[:, :, -1].unbind(1):
+        carries.append(carry)
+        carry = lam_block * carry + end
+    carries = torch.stack(carries, 1)
+    pw = torch.exp(ll[:, None, :] * torch.arange(1, block + 1, dtype=torch.float32)[None, :, None])
+    out = (loc + pw[:, None] * carries[:, :, None]).reshape(B, nb * block, M)[:, :T]
+    return out, out[:, -1]
 
 
 def sample_modes(g, band, n=None):
@@ -141,9 +157,9 @@ class Layer(nn.Module):
             h, hT = scan(ll, torch.complex(z[..., :N], z[..., N:]) * g, h0)
         else:
             nu = torch.exp(self.nu_log)[None] * expo[:, None]
-            lam = torch.exp(torch.complex(-nu, self.theta[None].expand_as(nu)))
+            ll_rows = torch.complex(-nu, self.theta[None].expand_as(nu))
             u = torch.complex(z[..., :N], z[..., N:]) * (torch.sqrt(1 - torch.exp(-2 * nu)) * gain[:, None])[:, None]
-            h, hT = scan_rows(lam, u, h0)
+            h, hT = scan_rows(ll_rows, u, h0)
         x = x + self.out(torch.cat([h.real, h.imag], -1)) + self.skip * x
         g, v = self.mlp_in(self.ln2(x)).chunk(2, -1)
         x = x + self.mlp_out(F.gelu(g) * v)

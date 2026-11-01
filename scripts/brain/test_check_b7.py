@@ -12,7 +12,7 @@ import core_b7
 class TestRules(unittest.TestCase):
     def test_tau_rel_top_vs_bottom_quartile(self):
         nblk = 40
-        arousal = np.repeat(np.arange(nblk, dtype=float), 50)           # rises with time: the last blocks are the top quartile
+        arousal = np.repeat(np.arange(nblk, dtype=float), 200)           # rises with time: the last blocks are the top quartile
         tau = np.ones((4, nblk))
         tau[:, 30:] = 0.5                                                # top quartile (blocks 30..39 start values 29..38) halves tau
         rel = c7.tau_rel(tau, arousal)
@@ -20,8 +20,8 @@ class TestRules(unittest.TestCase):
 
     def test_tau_rel_uses_the_arousal_known_at_block_start(self):
         nblk = 8
-        a = np.zeros(nblk * 50)
-        a[49::50][2] = 5.0                                               # arousal peaks at the end of block 2: block 3 starts high
+        a = np.zeros(nblk * 200)
+        a[199::200][2] = 5.0                                               # arousal peaks at the end of block 2: block 3 starts high
         tau = np.ones((4, nblk))
         tau[:, 3] = 2.0
         rel = c7.tau_rel(tau, a, frac=0.125)                             # one block per quartile: block 3 on top (block 0 and others tie low)
@@ -108,13 +108,13 @@ class TestRules(unittest.TestCase):
 class TestRunner(unittest.TestCase):
     def test_bins7_shapes_and_variants(self):
         m = core_b7.Core7().eval()
-        x = np.random.default_rng(0).standard_normal((1075, core.N_IN)).astype(np.float32)
-        r = c7.bins7(m, x, chunk=500)
-        self.assertEqual(r["mean"][0].shape, (107, core.FEAT))
-        self.assertEqual(r["recognition"].shape, (107,))
-        self.assertEqual(r["tau"].shape, (4, 22))                        # 21 full blocks and a partial one
-        self.assertEqual(r["arousal"].shape, (1075,))
-        one = c7.bins7(m, x, chunk=1075)
+        x = np.random.default_rng(0).standard_normal((2150, core.N_IN)).astype(np.float32)
+        r = c7.bins7(m, x, chunk=1000)
+        self.assertEqual(r["mean"][0].shape, (215, core.FEAT))
+        self.assertEqual(r["recognition"].shape, (215,))
+        self.assertEqual(r["tau"].shape, (4, 11))                        # 10 full blocks and a partial one
+        self.assertEqual(r["arousal"].shape, (2150,))
+        one = c7.bins7(m, x, chunk=2150)
         for i in range(4):
             self.assertLess(float(np.abs(one["mean"][i] - r["mean"][i]).max()), 1e-5)
         with c7.variant(m, retrieval=False, relay=False, modulation="frozen"):
@@ -127,13 +127,13 @@ class TestRunner(unittest.TestCase):
         with torch.no_grad():
             for mod in m.relay:
                 mod.weight.copy_(0.05 * torch.randn(mod.weight.shape, generator=g))
-        x = np.random.default_rng(2).standard_normal((1500, core.N_IN)).astype(np.float32)
+        x = np.random.default_rng(2).standard_normal((4000, core.N_IN)).astype(np.float32)
         on = c7.bins7(m, x)
         with c7.variant(m, retrieval=False):
             off = c7.bins7(m, x)
-        self.assertTrue(np.array_equal(on["novelty"][:80], off["novelty"][:80]))                  # before anything can differ
-        self.assertTrue((off["novelty"][100:] < 1.0).any())                                      # still computed once the store is eligible
-        self.assertFalse(np.allclose(on["mean"][3][100:], off["mean"][3][100:]))
+        self.assertTrue(np.array_equal(on["novelty"][:160], off["novelty"][:160]))                # nothing is eligible before 17 s
+        self.assertTrue((off["novelty"][220:] < 1.0).any())                                      # still computed once the store is eligible
+        self.assertFalse(np.allclose(on["mean"][3][220:], off["mean"][3][220:]))
 
 
 if __name__ == "__main__":

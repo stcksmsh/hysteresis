@@ -50,6 +50,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import b2  # noqa: E402
 import check_b3 as cb  # noqa: E402
 import core  # noqa: E402
+import core_b7  # noqa: E402
 import train  # noqa: E402
 import train_b7  # noqa: E402
 import val_split  # noqa: E402
@@ -57,7 +58,7 @@ import val_split  # noqa: E402
 RESULTS_DIR = Path("/secondary/hyst-data/brain/b7/results")
 SCRATCH_DIR = Path("/secondary/hyst-data/brain/b7/scratch")
 EVAL_CHUNK = cb.EVAL_CHUNK
-BLOCK = 50
+BLOCK = core_b7.BLOCK
 MSE_MARGIN = 0.05
 C1_SHARE = 0.5
 C4_REL, C4_SHARE = 0.10, 0.70
@@ -143,7 +144,8 @@ def c1_stats(col, share_gate=C1_SHARE):
     hits, tot = sum(h for h, _ in col.pointing.values()), sum(n for _, n in col.pointing.values())
     share = hits / max(tot, 1)
     per_song = [h / max(n, 1) for h, n in col.pointing.values()]
-    return {"n_songs": len(ids), "recognition_H_minus_N_mean": pt, "ci": [lo, hi], "above_0": bool(lo > 0),
+    return {"per_song": {str(i): {"recognition_H": col.rec["H"][i], "recognition_N": col.rec["N"][i], "pointing": col.pointing.get(i)} for i in ids},
+            "n_songs": len(ids), "recognition_H_minus_N_mean": pt, "ci": [lo, hi], "above_0": bool(lo > 0),
             "mean_recognition_H": float(np.mean([col.rec["H"][s] for s in ids])), "mean_recognition_N": float(np.mean([col.rec["N"][s] for s in ids])),
             "pointing_share_pooled": share, "pointing_share_median_per_song": float(np.median(per_song)), "n_retrievals": tot,
             "pass": bool(lo > 0 and share >= share_gate)}
@@ -262,6 +264,8 @@ def run_all(args, log=print):
     scores, base_scores = {v: arr(s) for v, s in scores.items()}, {m: arr(s) for m, s in base_scores.items()}
     res["C5"] = {v: c5_gate({**base_scores, "b7": scores[v]}) for v in VARIANTS}
     res["C5"]["full"]["variants_reported"] = {v: {k: res["C5"][v][k] for k in ("pass", "mse_ratio_to_ridge_ar", "baselines", "mse")} for v in VARIANTS if v != "full"}
+    res["per_song_scores"] = {v: {k: s[k].tolist() for k in ("nll", "mse", "n")} for v, s in scores.items()}        # R7
+    res["heldout_ids"] = [t.id for t in ho]
     res["C4"] = {"a": c4a_stats(scores["full"]["nll"].sum(1), scores["modulation_frozen"]["nll"].sum(1)), "b": c4b_stats(rels), "rel_per_song": np.asarray(rels).tolist()}
     res["C4"]["pass"] = bool(res["C4"]["a"]["pass"] and res["C4"]["b"]["pass"])
 
@@ -283,6 +287,7 @@ def run_all(args, log=print):
     rows, skipped = cb.splice(held, full_fn, audio_of, stats, extra=("novelty",))
     res["C3"] = {**c3_stats(rows), "skipped": skipped} if rows else {"n_songs": 0, "pass": False, "skipped": skipped}
     res["C3"]["pass"] = bool(rows and res["C3"]["novelty"]["pass"])
+    res["C3"]["per_cut_z"] = [{k: r[k] for k in ("id", "cross", "within", "cross_novelty", "within_novelty")} for r in rows]       # R7
 
     log("phase-amplitude coupling (reported)")
     pairs = {}
