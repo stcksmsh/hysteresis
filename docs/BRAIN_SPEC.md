@@ -504,11 +504,185 @@ recorded in `mindState`. Arousal regression from the brain is not used.
   expects, anticipates, remembers, dreams, conscious, feels. "Knows" is reserved for
   "it knows the score" (D4).
 
-## 7. Out of this spec
+## 7. B7: memory, relay, modulation
 
-Ignition (cross-band coherence events), B4 dreaming, B5 monitor, B6 staging.
+Decided by the user, 2026-11-01, after B3 round 2. Committed before any B7 code runs.
+B3's final rulings and truth table (2026-11-01) stay closed. B7 is a new system with new
+checks. Old claims may be re-earned only through B7's own checks. Proprioception is
+specced later (§7.8).
 
-## 8. Fixed before any result (committed with each check)
+### 7.0 Why, per weak spot
+
+- **Habituation was zero.** The core's memory is fading waves, with nothing that stores
+  and looks up an episode. → Hippocampus (7.1a).
+- **Cut spikes reached z ≥ 3 on only 60 % of cross-song cuts.** No mechanism compares now
+  against stored experience. → Hippocampal mismatch, i.e. novelty (7.1a).
+- **Short-horizon MSE lost to ridge AR.** Raw input reaches the upper layers and the heads
+  only through the layers below. → Thalamic relay (7.1b).
+- **The neuromod lanes act on nothing.** → Acting neuromodulation (7.1c).
+- **Not addressed, on purpose:**
+  - arousal regression and emotion decoding (not the brain's job since the pivot);
+  - PAC (a test problem, not an architecture one).
+
+### 7.1 Additions (all causal at runtime)
+
+**7.1a Hippocampus (episodic store, per song).**
+- The store resets at song start and carries across chunks within a song.
+- **Write**, every 0.5 s. The entry for time t is (key_t, value_t), written at t + 2 s,
+  when the value is known.
+  - key_t = a learned linear projection (dim 64, then L2-normalised) of the concatenated
+    L3 + L4 states (real and imaginary parts, layer-normed).
+  - value_t = the 44 fast features averaged over [t, t + 2 s).
+- **Read**, every frame.
+  - query = a learned projection of the current L3 + L4 state (dim 64, normalised).
+  - Cosine similarity against entries at least 8 s old, so there is no trivial copying of
+    the recent past.
+  - top-k = 4, then a softmax with a learned temperature.
+- **Outputs per frame:**
+  - retrieved value (similarity-weighted, 44 dims);
+  - recognition = the maximum similarity;
+  - novelty = 1 − recognition;
+  - recall source time = the timestamp of the top-1 entry (for the monitor).
+- The retrieved value and recognition feed every layer's input through the relay (7.1b).
+- **Gradients:** keys and values within the current chunk get gradients. Entries from
+  earlier chunks are detached.
+
+**7.1b Thalamic relay.**
+- Every layer's input = the layer below's output + a learned linear projection of [the raw
+  44 fast features, grid phase, the hippocampal outputs].
+- Every head also gets a linear skip from the current raw features.
+
+**7.1c Acting neuromodulation.**
+- arousal_t = the existing lane (rise τ 1 s, decay τ 8 s), computed causally: only from L1
+  and L2 surprisal of predictions whose target windows have ended by t. Stop-gradient on
+  arousal (it acts as an external modulator).
+- It acts per layer, in blocks of 0.5 s, using the arousal value known at the block's
+  start:
+  - input gain g = 1 + w_g · (arousal − running mean);
+  - modulus |λ| → |λ|^(1 + w_τ · (arousal − running mean)), clamped below 1;
+  - mode frequencies are unchanged (the band clamps hold).
+- w_g and w_τ are learned per layer, zero-initialised.
+- Block-sequential, parallel within a block. The slowdown is measured in the smoke run.
+
+### 7.2 Training
+
+- **Warm start** from B3 round 2, epoch 12. All new projections and weights are
+  zero-initialised, so B7 at step 0 equals B3 exactly. Verified on 10 held-out songs before
+  training: maximum absolute difference < 1e-5.
+- **As B3 round 2:** same corpus, splits and validation artists; β-NLL with β = 0.5; 180 s
+  chunks; 8 streams; the memory ladder rules of 4.7.
+- **Length:** up to 8 epochs. Early stopping on validation β-NLL, patience 2. The best
+  validation epoch is checked.
+- **Budget:** hard stop at 24 h of wall time (approved by the user).
+- **No control run of "B3 trained longer".** The attribution comes from evaluation-time
+  ablations (7.4). No B7 claim says "the additions improved prediction over B3".
+
+### 7.3 Toy tests (engineering go/no-go before the long run)
+
+These are not claim gates and not rounds. The code is fixed until they pass.
+- **T1, recall.** Synthetic feature sequences with an exact 16 s repeat after a 30 s gap. A
+  small model is trained briefly on such data. Pass:
+  - prediction error on the repeat ≥ 50 % below that on the first occurrence;
+  - recognition during the repeat above the 95th percentile of non-repeat frames.
+- **T2, relay.** On a synthetic AR(4) process, the model with relay reaches MSE within 5 %
+  of a fitted ridge AR at +100 ms.
+- **T3, modulation (unit tests).**
+  - With w = 0, outputs are identical to no modulation.
+  - With a synthetic arousal step, gain and |λ| change by the designed amounts, and mode
+    frequencies stay fixed.
+- **Smoke run:** peak RAM and time per epoch, reported before training.
+
+### 7.4 Checks
+
+All fixed now. Held-out: 357 songs, 73 artists. Two rounds at most per check. Ablations
+switch modules off at evaluation time, on the same B7 weights.
+
+- **C1, recognition.** The synthetic H = S F S against N = S′ F S construction of 4.4.
+  - (a) Mean recognition over the second S is higher in H than in N: paired per-song 95 %
+    bootstrap interval above 0.
+  - (b) In H, ≥ 50 % of top-1 retrievals during the second S point into the first S.
+  - Claim if both pass: "It stores what it hears and recognises a passage when it returns."
+- **C2, habituation (new mechanism, B7 only).** The committed rule of 4.4, applied to B7:
+  - the drop is ≥ 0.25 × the SD of 8 s window means, with the interval above 0;
+  - and with retrieval off, the drop shrinks: the interval of (drop with retrieval − drop
+    without) lies above 0.
+  - Claim if pass: "It habituates: its surprisal on a passage drops when it has heard that
+    passage earlier in the same song."
+- **C3, novelty.** The cut construction and z definition of 4.5, applied to the novelty
+  signal, not surprisal.
+  - Pass: z ≥ 3 on ≥ 80 % of cross-song cuts, and cross − within with a paired interval
+    above 0.
+  - Claim if pass: "Its novelty signal rises when the music cuts to something it has not
+    heard."
+  - 4.5 on total surprisal is rerun and reported.
+- **C4, modulation acts.**
+  - (a) With arousal frozen at its song mean, held-out NLL is worse: interval above 0.
+  - (b) The effective time constant of each layer differs between the top and bottom
+    arousal quartiles by ≥ 10 % (median over songs), in a consistent direction on ≥ 70 %
+    of songs.
+  - Claim if pass, stating the measured direction: "Its arousal changes how its network
+    runs: when arousal is high, its layers [shorten/lengthen] their memory."
+- **C5, prediction.** 4.3 rerun as committed, on B7:
+  - the NLL condition against all three baselines;
+  - and MSE ≥ 5 % below ridge AR.
+  - Claim if pass: "It learned to predict music from 175 hours of Creative Commons music."
+  - Each reported: relay off, hippocampus off, modulation frozen.
+- **Reported, not gated:**
+  - every B3 allowed claim, re-measured on B7;
+  - DEAM/MERP arousal r;
+  - PAC (still no claim).
+
+### 7.5 Truth words
+
+- **Newly allowed, each only if its check passes:** recognises, stores, habituates, novelty
+  signal, arousal changes its dynamics, learned to predict.
+- **Still forbidden:** remembers, surprised, expects, anticipates, familiar, dreams, feels,
+  conscious, entrains, pulse, meter, coupling.
+
+### 7.6 `mindState` and monitor (after the checks; mechanism names only)
+
+- **New lanes:**
+  - `hippo.recognition` and `hippo.novelty` (10 Hz);
+  - `hippo.recall_source`, the top-1 entry's time (2 Hz);
+  - `neuromod.arousal`, now acting.
+- **Monitor idea for B5, no claim needed:** draw an arc from "now" back to the moment it
+  recalled from.
+- **Authoring:** the authoring tool may use any lane. Lanes whose claim failed keep their
+  mechanism name and lose their interpretive one.
+
+### 7.7 Parallel work
+
+- The second builder builds the authoring tool now, per the 2026-11-01 ruling, on B3's
+  lanes.
+- When B7 lands, its lanes are swapped in through `mindState` (same shape).
+- There is no dependency in either direction.
+
+### 7.8 Parked, specced later
+
+- **B8, proprioception and efference copy.**
+  - Input: the commanded joint angles and velocities, at 100 Hz.
+  - A head predicting the next pose; on real servos, also the measured position. This
+    gives a self-prediction error lane.
+  - It needs the arm in a runtime loop, so it waits for the authoring tool.
+- **B4 dreaming:** replay from the hippocampal store in silence. It becomes possible with
+  7.1a.
+- **Lifetime learning and nightly consolidation.**
+
+### 7.9 Order
+
+1. Toy tests.
+2. Smoke run: RAM, speed, and the B7 = B3 identity check.
+3. Commit C1–C5.
+4. Train.
+5. Checks.
+6. Report with numbers.
+
+## 8. Out of this spec
+
+Ignition (cross-band coherence events), B4 dreaming, B5 monitor, B6 staging, B8
+proprioception (parked in 7.8).
+
+## 9. Fixed before any result (committed with each check)
 
 - Test sets and their hashes.
 - The exclusion list.
@@ -519,7 +693,7 @@ Ignition (cross-band coherence events), B4 dreaming, B5 monitor, B6 staging.
 - The feature code.
 - The GrFNN parameters with their sources.
 
-## 9. Open points
+## 10. Open points
 
 None in the design. U1 (corpus access), U2 (the overseer's fills) and U3 (the two changed
 numbers) are ruled above. The user said yes on 2026-10-29.
