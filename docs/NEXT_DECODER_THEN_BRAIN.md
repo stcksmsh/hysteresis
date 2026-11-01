@@ -260,6 +260,58 @@ the user).** Where it differs from anything above or in `BRAIN_SPEC.md`, it wins
 - Stage 4 (the user's odd-one-out and match tests) stays as the later check of whether
   the authored body reads as the song.
 
+- **The authoring tool on B3's lanes (planning agent, passed on by the user, 2026-11-01;
+  brief `PLANNER_BRIEF_AUTHORING.md`).** This is design: no rules, no claims.
+  1. **Scope.** Re-point the existing page (`scripts/author/`) to B3 round-2 lanes, with
+     two small additions:
+     - **"Render window" button:** compiles the arm preview for the current 20 s window
+       only (Layered + Music, current mapping) and shows it in the page. Full-song export
+       stays as it is.
+     - **Per-input response curve:** gamma 0.3–3, default 1, applied after normalisation
+       and before the weights.
+
+     The round-trip time (slider change → visible window preview) is reported. If it
+     exceeds 30 s, a live arm previz becomes the next task, sized separately; not now.
+  2. **Lanes.** Round 2 epoch 12 for every brain lane.
+     - **Spike:** a source selector (total / L1 / L2 / L1+L2), default L2. L2 has the
+       clearest cut response: 75 % of cross-song cuts at z ≥ 3, against 49 % for L1. The
+       threshold and peak-hold τ sliders stay.
+     - **Familiarity:** kept as an input, renamed "surprisal slope (30 s)"; its premise
+       failed.
+     - **The rest unchanged:** smoothed surprisal, L4 predicted variance, raw surprisal,
+       band1..band4, and energy from core-2b.
+  3. **Names.** On the page: mechanism name first, nickname in brackets, because the page
+     is the user's private UI. Exported JSON and `mindState` use mechanism names only.
+     - smoothed surprisal (arousal);
+     - L4 predicted variance (uncertainty, 8 s);
+     - surprisal slope (30 s), with no nickname, since "familiarity" would mislead the
+       user's own design thinking;
+     - surprisal spike [source] (startle);
+     - band power L1..L4;
+     - mood.energy (core-2b).
+  4. **B7 shape.** No empty slots. The input list is data-driven: the page builds its
+     sliders from the lanes present in the sidecar's `mindState` (name, rate, source).
+     B7's lanes then appear when they land, with no page change.
+  5. **Done when:**
+     - the page runs on the three danced songs (Instant Crush, Five Years, Presence) on
+       B3 lanes;
+     - one global mapping preset, applied to all songs, with save and load (JSON).
+       Per-song tweaks go through the existing `authored` field, not separate presets;
+     - the render-window button works, and the round-trip time is reported;
+     - tests in node and Python pass;
+     - one exported full-song arm preview per song from the neutral mapping, as proof the
+       path works;
+     - a five-line how-to for the user at the top of the page.
+
+     No rule, no claim.
+  6. **Blind second viewer:** yes, as advice only, not a gate.
+     - Protocol, informal: the 3 songs, silent first, then with audio.
+     - Questions: what is it doing; does it seem to react to anything; which part felt
+       most alive or most mechanical.
+     - Their words are recorded verbatim, with no scoring.
+     - A later check with rules fixed in advance comes only if a public claim ever needs
+       it (e.g. "viewers read X"). Not now.
+
 ## 3. Rules (all steps)
 
 - `EMOTION.md` rules hold. Version 47 stays reachable and byte-identical: every

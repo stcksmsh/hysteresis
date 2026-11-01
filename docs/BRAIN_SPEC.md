@@ -653,7 +653,8 @@ switch modules off at evaluation time, on the same B7 weights.
 ### 7.7 Parallel work
 
 - The second builder builds the authoring tool now, per the 2026-11-01 ruling, on B3's
-  lanes.
+  lanes. The ruling is recorded in `NEXT_DECODER_THEN_BRAIN.md` §2 ("The authoring tool on
+  B3's lanes").
 - When B7 lands, its lanes are swapped in through `mindState` (same shape).
 - There is no dependency in either direction.
 
