@@ -1,11 +1,15 @@
 # NIGHT LOG: B7, overnight order of 2026-11-02
 
-## MORNING SUMMARY (updated after every phase)
+## MORNING SUMMARY (updated 2026-11-02 12:35)
 
-- Phase: 0 (setup) done. Path through the decision tree: not started.
-- Toys: not run yet. Leak: not looked at yet. Smoke: not run yet. Training: not launched.
-- FOR USER: (none yet)
-- Commits: see the log below.
+- **Path through the tree:** R1/R2 built (pointer replay, centred keys, 2 s blocks). T1a (retrieval finds the source) passes on designs B and C in every run, A fails after training; the oracle (true pointer) passes T1b (ratio 0.348); trained T1b fails in tries 1, 2 and 2 + lr x10 (best 0.61). **Hippocampus DROPPED** (flag `hippo_flag` = 0). B7 = relay (features + grid phase) + head skip with a 10-frame tapped delay + acting modulation (2 s blocks). C1 to C3 and the words "recognises, stores, habituates, novelty signal" are not claimable.
+- **T2:** 2000 steps, 1 tap: 1.069 x ridge AR (fail); R4 fallback 10 taps: **1.017 (pass)**, relay off 1.515.
+- **Toy table** (ratio repeat/first, <= 0.5 needed; A iid | B levels+clock | C smooth): try 1 0.609 | 0.745 | 0.712; oracle A 0.348; aux 0.1: 0.737 | 0.808 | 0.804; aux + lr x10: 0.958 | 0.773 | 0.790.
+- **Identity:** float64 4.6e-14 (<= 1e-9 PASS), float32 1.2e-4 on 10 held-out songs.
+- **Smoke** (8 streams x 180 s): no checkpointing 13.3 s/step, 20.5 GB peak (> 18); **checkpointing 14.5 s/step, 8.4 GB**, epoch 2.34 h, 8 epochs 18.7 h (fits the 24 h stop). Leak: not found (jump 15 -> 20.5 GB between steps 1 and 2 without checkpointing; detach verified in code and tests). Dry run C1-C5 on 5 songs: clean, per-cut z saved.
+- **Training:** RUNNING since 2026-11-02 12:29. Service `hyst-b7-train.service` (MainPID 158213, MemoryMax 20G), log `/secondary/hyst-data/brain/b7/train.log`, checkpoints `/secondary/hyst-data/brain/b7/ckpt/phase/` (epoch_NNN.pt, best.pt, last.pt; resume = rerun the same command). Warm start B3 round 2 epoch 12, 8 epochs max, patience 2, hard stop 24 h (ends by 2026-11-03 12:29), batch 8, gradient checkpointing, 10-tap skip. Validation beta-NLL per epoch: see the log (JSON line per epoch). Stop: `systemctl --user stop hyst-b7-train`. Do NOT run C1-C5 until the user is awake.
+- **FOR USER:** (1) hippocampus dropped (default of the order); code and tests kept, retrieval works, the relay did not learn to use it in the toy budget. (2) memory leak not found; checkpointing used. (3) novelty lane would have updated only every 2 s (block read), so C3 as written could not see a cut within its 1 s window even with a working hippocampus. (4) training uses `--taps 10` (R4 fallback), not part of the first spec text. (5) float32 identity is 1.2e-4, float64 passes.
+- **Commits:** see `git log` on b7 (BRAIN_SPEC 7.10 c81ad68; core fc1fa6f; later commits below).
 
 ## LOG
 
@@ -31,3 +35,5 @@
   IDENTITY on 10 held-out songs (B3 round 2 epoch 12): float64 max abs diff 4.6e-14 (criterion <= 1e-9: PASS); float32 1.2e-4 (logged).
 - 2026-11-02 12:00 DRY RUN of C1 to C5 on 5 held-out songs with step-0 B7 (hippocampus dropped), 12 training songs for the baselines: runs end to end, writes results.json with per-cut z values (C3 per_cut_z, C1 per_song, per_song_scores, C4 rel_per_song). Numbers not looked at or acted on.
 - 2026-11-02 12:00 T2 (2000 steps, reduced width, lr 1e-3): model MSE 0.006262, ridge AR 0.005859, ratio 1.069 (needs <= 1.05; relay off ratio 5.42). Still > 1.05 -> R4: tapped delay of 10 frames in each head skip, rerun once (t2tap, 2000 steps, running). Training launch waits for this one result (it decides whether the run uses --taps 10).
+- 2026-11-02 12:28 T2 with the 10-frame tapped skip (R4): model MSE 0.005960, ridge AR 0.005859, ratio 1.017 PASS (relay off 1.515). Final module set fixed: relay + 10-tap skip + modulation, no hippocampus.
+- 2026-11-02 12:29 TRAINING LAUNCHED: hyst-b7-train.service (a systemd user service, MemoryMax=20G, detached from this session), MainPID 158213, batch 8, grad checkpointing, taps 10, warm start B3 round 2 epoch 12, 1,415,789 parameters, 2602 fit / 217 validation tracks, cap 24 h.
