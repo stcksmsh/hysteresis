@@ -331,7 +331,7 @@ def main(argv=None):
     res = run_all(args)
     out.mkdir(parents=True, exist_ok=True)
     (out / "results.json").write_text(json.dumps(res, indent=1, default=float))
-    print(json.dumps({k: res[k].get("pass") for k in ("C1", "C2", "C3", "C4", "C5")}, default=str))
+    print(json.dumps({k: (res[k]["full"] if k == "C5" else res[k]).get("pass") for k in ("C1", "C2", "C3", "C4", "C5")}, default=str))
 
 
 if __name__ == "__main__":
