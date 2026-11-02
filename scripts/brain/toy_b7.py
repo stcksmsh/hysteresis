@@ -22,7 +22,7 @@ Fixed here, before any result (7.10 is silent on all of these; also in B7_NOTES.
               frames that have a source (so retrieval learns directly).
   T2 data     44 independent AR(4) series per sequence (the same AR(4) for all 44, poles at radius 0.96 with angles in [0.3, 2.0] rad), unit variance,
               40 s, train 8 per step, eval 24 draws. Compare: MSE of L1's mean (+100 ms) against a ridge AR (last 16 frames of the 44 features -> the
-              44 target means, fitted on 200 fresh train sequences, alpha on 50 more). Pass: model <= 1.05 x ridge. Reported: relay off.
+              44 target means, fitted on 120 fresh train sequences, every 5th frame, alpha on 30 more); lr 1e-3, no flat-loss stop. Pass: model <= 1.05 x ridge. Reported: relay off.
 """
 import argparse
 import contextlib
@@ -133,13 +133,23 @@ def aux_loss(out, x):
     return tot
 
 
-def fit(model, make_batch, steps, lr=3e-3, log=print, seed=0, aux=0.0, oracle=None, deadline_s=None, flat_s=300):
+NEW_PARAMS = ('key_proj', 'query_proj', 'log_tau', 'relay', 'skip', 'w_g', 'w_tau')
+
+
+def fit(model, make_batch, steps, lr=3e-3, log=print, seed=0, aux=0.0, oracle=None, deadline_s=None, flat_s=300, newlr=1.0):
     """Brief training on beta-NLL (+ aux * the replay loss). make_batch(rng) -> x (B, T, 46). Stops at deadline_s, or when the loss has not
     improved for flat_s seconds (a run with a flat loss is killed)."""
     torch.set_num_threads(THREADS)
     torch.manual_seed(seed)
     rng = np.random.default_rng(seed)
     opt = train.make_optimizer(model)
+    if newlr != 1.0:                                  # the new B7 parameters learn at newlr x the rate (the B3 parameters are not touched)
+        new = {id(p) for n, p in model.named_parameters() if n.split('.')[0] in NEW_PARAMS}
+        for g in list(opt.param_groups):
+            mine = [p for p in g['params'] if id(p) in new]
+            if mine:
+                g['params'] = [p for p in g['params'] if id(p) not in new]
+                opt.add_param_group({**{k: v for k, v in g.items() if k != 'params'}, 'params': mine, 'lr_mult': g['lr_mult'] * newlr})
     model.train()
     model.oracle = oracle
     t0 = t_best = time.time()
@@ -153,7 +163,7 @@ def fit(model, make_batch, steps, lr=3e-3, log=print, seed=0, aux=0.0, oracle=No
         sums, _, _, counts = train.chunk_terms(out, xp, torch.full((B,), T), chunk=T, beta=train.BETA)
         loss = sum(s / max(float(c), 1.0) for s, c in zip(sums, counts))
         if aux > 0:
-            loss = loss + aux * aux_loss(out, x)
+            loss = loss + aux * aux_loss(out, xp)
         for g in opt.param_groups:
             g["lr"] = lr * min(1.0, (step + 1) / 20) * g["lr_mult"]
         opt.zero_grad()
@@ -207,15 +217,15 @@ def t1_eval(model, design, n=32, seed=991, oracle=False):
             "T1a_pass": bool(share >= 0.5 and med > p95)}
 
 
-def t1(design, steps=400, oracle=False, aux=0.0, log=print, deadline_s=1100):
+def t1(design, steps=400, oracle=False, aux=0.0, log=print, deadline_s=1100, newlr=1.0):
     with small():
         model = core_b7.Core7(seed=0, phase=False)
         pre = None if oracle else t1_eval(model, design, n=8)
         fit(model, lambda rng: np.stack([pad46(t1_train_sequence(rng, design)[:, :core.FEAT]) for _ in range(8)]), steps, log=log, aux=aux,
-            oracle=train_oracle if oracle else None, deadline_s=deadline_s)
+            oracle=train_oracle if oracle else None, deadline_s=deadline_s, newlr=newlr)
         res = t1_eval(model, design, oracle=oracle)
         res["untrained_T1a"] = None if pre is None else {k: pre[k] for k in ("source_share_in_first_S", "recognition_repeat_median", "recognition_pre_repeat_p95", "T1a_pass")}
-        res["steps_arg"], res["aux"] = steps, aux
+        res["steps_arg"], res["aux"], res["newlr"] = steps, aux, newlr
         if not oracle:
             model.retrieval_on = False
             res["ratio_retrieval_off"] = t1_eval(model, design, n=16)["ratio_repeat_over_first"]
@@ -228,6 +238,7 @@ def ridge_ar_mse(train_x, val_x, test_x, lags=16, alphas=(1e-3, 1e-2, 1e-1, 1.0,
         z, h = x[:, :core.FEAT], core.HORIZONS[0]
         T = len(z)
         t = np.arange(lags - 1, T - 2 * h + 1)
+        t = t[::5]                                                  # every 5th frame keeps the fit inside a few GB
         X = np.stack([z[t - j] for j in range(lags)], 1).reshape(len(t), -1)
         cs = np.concatenate([np.zeros((1, core.FEAT)), np.cumsum(z.astype(np.float64), 0)])
         Y = (cs[t + 2 * h] - cs[t + h]) / h
@@ -262,9 +273,9 @@ def t2(steps=2000, taps=1, log=print, deadline_s=3300):
     a = ar4_coeffs()
     with small():
         model = core_b7.Core7(seed=0, phase=False, skip_taps=taps)
-        fit(model, lambda rng: np.stack([t2_sequence(rng, a) for _ in range(8)]), steps, log=log, deadline_s=deadline_s, flat_s=900)
+        fit(model, lambda rng: np.stack([t2_sequence(rng, a) for _ in range(8)]), steps, lr=1e-3, log=log, deadline_s=deadline_s, flat_s=10 ** 9)
         rng = np.random.default_rng(555)
-        tr, va = [t2_sequence(rng, a) for _ in range(200)], [t2_sequence(rng, a) for _ in range(50)]
+        tr, va = [t2_sequence(rng, a) for _ in range(120)], [t2_sequence(rng, a) for _ in range(30)]
         test = [t2_sequence(np.random.default_rng(900 + k), a) for k in range(24)]
         ridge, alpha = ridge_ar_mse(tr, va, test)
         mse = t2_eval(model, test)
@@ -282,10 +293,11 @@ def main(argv=None):
     ap.add_argument("--oracle", action="store_true")
     ap.add_argument("--aux", type=float, default=0.0)
     ap.add_argument("--taps", type=int, default=1)
+    ap.add_argument("--newlr", type=float, default=1.0)
     ap.add_argument("--deadline", type=float, default=1100)
     a = ap.parse_args(argv)
     if a.which == "t1":
-        r = t1(a.design, a.steps, a.oracle, a.aux, deadline_s=a.deadline)
+        r = t1(a.design, a.steps, a.oracle, a.aux, deadline_s=a.deadline, newlr=a.newlr)
         ok = r["T1b_pass"] and (a.oracle or r["T1a_pass"])
     else:
         r = t2(a.steps, a.taps, deadline_s=a.deadline)
