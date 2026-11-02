@@ -372,6 +372,29 @@ class TestModulationT3(unittest.TestCase):
         self.assertAlmostEqual(float(st["a"][0]), float(a[-1]), places=6)
 
 
+class TestDropped(unittest.TestCase):
+    def test_dropped_hippocampus_has_no_store_and_keeps_relay_and_modulation(self):
+        m = core_b7.Core7(hippocampus=False).eval()
+        g = torch.Generator().manual_seed(2)
+        with torch.no_grad():
+            for mod in (*m.relay, *m.skip):
+                mod.weight.copy_(0.05 * torch.randn(mod.weight.shape, generator=g))
+            m.w_tau.fill_(0.3)
+        x = noise(4400, seed=30)
+        o, st = run(m, x)
+        h = o[0][0]["hippo"]
+        self.assertEqual(st["kr"].shape[1], 0)
+        self.assertTrue(torch.equal(h["recognition"], torch.zeros(1, 4400)))
+        self.assertTrue(torch.equal(h["novelty"], torch.ones(1, 4400)))
+        m.relay_on = False
+        off, _ = run(m, x)
+        self.assertFalse(torch.equal(cat(o, 3, "mean"), cat(off, 3, "mean")))        # the relay (features + phase) still acts
+        sd = m.state_dict()
+        m2 = core_b7.Core7(hippocampus=True)
+        m2.load_state_dict(sd)
+        self.assertEqual(float(m2.hippo_flag), 0.0)
+
+
 class TestTappedSkip(unittest.TestCase):
     def test_taps_see_the_last_frames_across_blocks(self):
         m = core_b7.Core7(skip_taps=10).eval()

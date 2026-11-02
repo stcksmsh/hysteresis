@@ -27,6 +27,9 @@ Fixed here, before any result (7.10 is silent on all of these; B7_NOTES.md has t
               projections is a saddle).
   switches    `relay_on` (relay input and head skip zero), `retrieval_on` (replay and recognition zero at the relay input; novelty still computed),
               `modulation` ("on" or "frozen": dev = 0), `oracle` (callable n0 (B,) -> source frame (B,) or -1; replaces the read: weight 1 on that frame).
+  hippocampus `hippocampus` (default True; saved in the checkpoint as the buffer `hippo_flag`). False = DROPPED (overnight order, decision tree 1c, after
+              the toy tests could not pass T1b): no buffer, no keys, no read; replay and recognition are zeros, novelty 1, source -1. The relay (features +
+              grid phase), the head skip and the modulation stay; the unused key / query weights get no gradient.
 State: the B3 state plus lv, the buffer cs, the entries (kr raw keys, kj tick index, kv valid), ksum / kcnt (running key mean), qs, a, amean.
 """
 import math
@@ -77,8 +80,9 @@ def window_mean(cs, lo, hi, width):
 
 
 class Core7(core.Core):
-    def __init__(self, seed=core.SEED, phase=True, head_norm=True, skip_taps=1):
+    def __init__(self, seed=core.SEED, phase=True, head_norm=True, skip_taps=1, hippocampus=True):
         super().__init__(seed, phase, head_norm)
+        self.register_buffer("hippo_flag", torch.tensor(1.0 if hippocampus else 0.0))
         g = torch.Generator().manual_seed(SEED_B7)
         d_in = core.FEAT + 4 * core.N
         self.key_proj = core._lin(g, d_in, KEY_DIM, bias=False)
@@ -146,7 +150,7 @@ class Core7(core.Core):
         B = n0.shape[0]
         zero = torch.zeros(B, BLOCK, 4, core.FEAT)
         K0, Kn = st["kr"].shape[1], len(new_k)
-        if K0 + Kn == 0 and self.oracle is None:
+        if (K0 + Kn == 0 and self.oracle is None) or not float(self.hippo_flag):
             return zero, torch.zeros(B), -torch.ones(B, dtype=torch.long), None, None
         if self.oracle is not None:
             src = self.oracle(n0).long()
@@ -198,9 +202,10 @@ class Core7(core.Core):
         ksum, kcnt = state["ksum"], state["kcnt"]
         cs = state["cs"]
         need = int(state["n"].max()) + T + 1
-        if cs.shape[1] < need:
+        if cs.shape[1] < need and bool(float(self.hippo_flag)):
             cs = torch.cat([cs, torch.zeros(B, max(need - cs.shape[1], cs.shape[1] // 2), core.FEAT, dtype=torch.float64)], 1)
         new_k, new_j = [], []
+        hip = bool(float(self.hippo_flag))
         ra, rd, rm = _arousal_rates()
         nl = len(self.layers)
         blocks, tau_e, expo_l, dev_l, ar_l, rep_l = [], [[] for _ in range(nl)], [[] for _ in range(nl)], [], [], []
@@ -211,10 +216,11 @@ class Core7(core.Core):
             Tb = fb.shape[1]
             n0 = base["n"]
             # the raw buffer: this block's features go in first (every read below looks strictly at earlier frames)
-            tot = torch.gather(cs, 1, n0[:, None, None].expand(-1, 1, core.FEAT))[:, 0]
-            cum = tot[:, None] + f64[:, s0:s0 + Tb].cumsum(1)
-            for r in range(B):
-                cs[r, int(n0[r]) + 1:int(n0[r]) + 1 + Tb] = cum[r]
+            if hip:
+                tot = torch.gather(cs, 1, n0[:, None, None].expand(-1, 1, core.FEAT))[:, 0]
+                cum = tot[:, None] + f64[:, s0:s0 + Tb].cumsum(1)
+                for r in range(B):
+                    cs[r, int(n0[r]) + 1:int(n0[r]) + 1 + Tb] = cum[r]
             st_read = {"kr": state["kr"], "kj": state["kj"], "kv": state["kv"], "qs": qs}
             replay, rec, src, _, _ = self.read(st_read, new_k, new_j, n0, ksum, kcnt, cs)
             nov = 1.0 - rec
@@ -256,7 +262,7 @@ class Core7(core.Core):
                 ar_l.append(torch.from_numpy(ar))
             # four entries (one per 0.5 s), from the L3 + L4 modes at the tick frame and the raw features of the last 2 s
             h3, h4 = out[2]["h"], out[3]["h"]
-            for i in range(0, Tb, TICK):
+            for i in range(0, Tb if hip else 0, TICK):
                 t_song = n0 + i
                 st_vec = F.layer_norm(torch.cat([h3[:, i].real, h3[:, i].imag, h4[:, i].real, h4[:, i].imag], -1), (4 * core.N,))
                 key = self.key_proj(torch.cat([self._pooled(cs, t_song), st_vec], -1))

@@ -5,6 +5,8 @@ Fixed here, before any result:
   warm start   the B3 round-2 weights fill every B3 parameter; the new ones (relay, skip, w_g, w_tau at zero; key / query projections and
                log_tau as in core_b7) stay at their init, so step 0 is B3 (checked in smoke_b7.py). The optimiser and its state are new.
   schedule     train.py's: 200 warm-up steps to LR 1e-3, then cosine per epoch to 0.1 LR over the 8 epochs (the B3 round-2 values).
+  hippocampus DROPPED (NIGHT_LOG 2026-11-02: T1b failed after tries 1 and 2): `warm_started(hippocampus=False)`; relay (features + phase), skip and
+               modulation train. `--taps N` sets the head-skip tap count (R4 fallback if T2 needs it).
   epochs       up to 8, patience 2, 24 h of wall time (training and validation), the best validation beta-NLL epoch is best.pt.
 Outputs: OUT/ (default /secondary/hyst-data/brain/b7/ckpt/phase/): epoch_NNN.pt, best.pt, last.pt, warm_start.json.
 """
@@ -27,13 +29,13 @@ CAP_H = 24.0
 WARM = Path("/secondary/hyst-data/brain/b3r2/ckpt/phase/best.pt")
 
 
-def warm_started(path=WARM, **kw):
+def warm_started(path=WARM, hippocampus=False, **kw):
     """A Core7 holding the B3 checkpoint's weights; the only missing keys are the new B7 ones."""
     ck = torch.load(path, weights_only=False)
     meta = ck["meta"]
-    model = core_b7.Core7(phase=meta["phase"], head_norm=meta.get("head_norm", True), **kw)
+    model = core_b7.Core7(phase=meta["phase"], head_norm=meta.get("head_norm", True), hippocampus=hippocampus, **kw)
     r = model.load_state_dict(ck["model"], strict=False)
-    new = {n for n, _ in model.named_parameters() if n.split(".")[0] in ("key_proj", "query_proj", "log_tau", "relay", "skip", "w_g", "w_tau")}
+    new = {n for n, _ in model.named_parameters() if n.split(".")[0] in ("key_proj", "query_proj", "log_tau", "relay", "skip", "w_g", "w_tau")} | {"hippo_flag"}
     if r.unexpected_keys or set(r.missing_keys) != new:
         raise ValueError(f"warm start: unexpected {r.unexpected_keys}, missing {sorted(set(r.missing_keys) ^ new)}")
     return model, {"warm_start": str(path), "epoch": meta["epoch"], "best_score": meta.get("best_score")}
@@ -42,7 +44,8 @@ def warm_started(path=WARM, **kw):
 def load_model7(path):
     """Checkpoint -> Core7 (eval mode) and its meta."""
     ck = torch.load(path, weights_only=False)
-    model = core_b7.Core7(phase=ck["meta"]["phase"], head_norm=ck["meta"].get("head_norm", True))
+    taps = ck["model"]["skip.0.weight"].shape[1] // core.FEAT
+    model = core_b7.Core7(phase=ck["meta"]["phase"], head_norm=ck["meta"].get("head_norm", True), skip_taps=taps)
     model.load_state_dict(ck["model"])
     return model.eval(), ck["meta"]
 
@@ -59,12 +62,14 @@ def main(argv=None):
     ap.add_argument("--warm", default=str(WARM))
     ap.add_argument("--grad-checkpoint", action="store_true")
     ap.add_argument("--no-resume", action="store_true")
+    ap.add_argument("--taps", type=int, default=1)
+    ap.add_argument("--hippocampus", action="store_true", help="keep the hippocampus (dropped by default)")
     args = ap.parse_args(argv)
     mean, std = train.load_stats(args.stats)
     tracks = [train.Track(t["id"], t["feats"], t["beats"], t["split"]) for t in json.loads(Path(args.manifest).read_text())]
     trn, val = val_split.split_tracks([t for t in tracks if t.split == "train"], val_split.load(args.val_artists))
     torch.manual_seed(train.SEED)
-    model, warm = warm_started(args.warm)
+    model, warm = warm_started(args.warm, hippocampus=args.hippocampus, skip_taps=args.taps)
     model.grad_checkpoint = args.grad_checkpoint
     Path(args.out).mkdir(parents=True, exist_ok=True)
     (Path(args.out) / "warm_start.json").write_text(json.dumps(warm))
