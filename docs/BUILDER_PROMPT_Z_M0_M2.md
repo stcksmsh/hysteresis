@@ -1,14 +1,12 @@
 # Builder prompt: step Z (Z1–Z5), M0 and M2, local (2026-11-03)
 
-## User tasks first (the builder cannot do these; do them while it works)
+## Kaggle access (done by the user, 2026-11-03)
 
-1. Create a Kaggle account (free). No card.
-2. Verify the phone number in Kaggle settings (needed for internet and GPU in kernels).
-3. Kaggle → Settings → API → "Create New Token". Save the file as `~/.kaggle/kaggle.json`, then run `chmod 600 ~/.kaggle/kaggle.json`.
-4. Tell the builder your Kaggle user name.
-5. Keep the laptop on mains power while the builder runs anything longer than a few minutes.
-
-Until step 3 is done, the builder does everything except the two Kaggle runs in Z5 and the uploads in Z3/Z4.
+- Kaggle user name: `kostavukicevic`. The token is a new-style access token in `~/.kaggle/access_token` (mode 600), not `kaggle.json`.
+  Never print it, copy it into the repo, or put it in a log.
+- Tested by the overseer: Kaggle CLI 2.2.5 authenticates with it (`kaggle datasets list --mine` answers "No datasets found").
+  That CLI needs `six`, which it does not declare: install `kaggle==2.2.5 six` in `/secondary/hyst-env/body`.
+- Keep the laptop on mains power for anything longer than a few minutes.
 
 ---
 
@@ -71,11 +69,10 @@ Failure default: per-epoch resume only; log FOR USER.
 
 **Phase Z3 (time box 1.5 h): pack the features.** Correction C1 first. Pack the corpus with `pack_features.py` (float16) into
 `/secondary/hyst-data/pack/features`. Record the cast error it prints, the folder size and the track count. `manifest.py verify` passes.
-Upload only after the user's Kaggle token exists (`~/.kaggle/kaggle.json`); the dataset is **private**; audio never goes up (the packer
+Upload with the token above; the dataset is **private**; audio never goes up (the packer
 nulls it; confirm no `.mp3`/`.wav` is in the folder). `manifest.py verify` on a download of it, if cheap; else log "not re-verified".
 
-**Phase Z4 (time box 30 min): code snapshot** of the commit the Kaggle jobs will run, into `/secondary/hyst-data/pack/code`. Private upload
-after the token exists.
+**Phase Z4 (time box 30 min): code snapshot** of the commit the Kaggle jobs will run, into `/secondary/hyst-data/pack/code`. Private upload.
 
 **Phase M0 (time box 5 h): the body in physics**, plan §6, in `scripts/body/`:
 - `arm.xml` (MJCF) generated from the rig numbers by a script (`make_arm.py`), so the numbers have one source. Axes, links and ranges as in
@@ -103,10 +100,10 @@ Run M2 through M0 for 60 s of random commands and export the CSV; `hyst check-cs
 - Run both locally through `scripts/compute/run_job.py`, memory-capped: B7 forward+backward per audio hour, peak memory, with and without
   gradient checkpointing, and forward-only per audio hour (8 threads, correction C5); physics steps per second at 1, 64, 512, 1,024 and 4,096
   environments on MuJoCo CPU (and MJX CPU if it installed).
-- Kaggle: only after the user's token exists. Build kernels with `scripts/compute/kaggle/make_kernel.py`, push, fetch outputs to
-  `/secondary/hyst-data/runs/<job-id>/`. First, check what the README lists as "to check on first use" and log the answers. If the token is
-  not there when you reach this phase, leave the kernels built (folders under `/secondary/hyst-data/pack/kernels/`) with the exact push
-  commands in the log, and finish.
+- Kaggle: build kernels with `scripts/compute/kaggle/make_kernel.py`, push, fetch outputs to
+  `/secondary/hyst-data/runs/<job-id>/`. First, check what the README lists as "to check on first use" and log the answers. If Kaggle refuses
+  (auth, quota, GPU not granted), leave the kernels built (folders under `/secondary/hyst-data/pack/kernels/`) with the exact push commands
+  and the error in the log, and finish.
 - No long run of any kind after this phase. Nothing beyond these two benchmarks goes to Kaggle.
 
 ## Finish
