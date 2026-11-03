@@ -2,7 +2,7 @@
 
 ## H1 MORNING SUMMARY (filled at the end)
 
-- (pending)
+- Try 1, A and B only: both fail T1a and T1b (A ratio 1.084, B 0.790). C, oracle reference and try 2 not run (usage limit). Hippocampus stays off.
 
 ## H1 LOG
 
@@ -14,6 +14,10 @@
   - (b) `oracle_p` (scheduled sampling). Per row and per read, with probability p the oracle pointer (weight 1 on the true source, as the oracle of try 0) replaces the retrieved sources; recognition stays the retrieved cosine. p = 1 - step / (0.5 steps), so p = 0 from half-way on. Rows where the oracle says "no source" use retrieval. The oracle is training-only; evaluation is pure retrieval.
   - Novelty lane (`novelty_lane`). At every tick (0.5 s), 1 - max cosine of the tick's own key (centred by the running key mean at that tick) against the eligible entries (>= 17 s old), no gradient, computed after the block, independent of the 2 s read; 1 if nothing is eligible. Reported on the toy: repeat ticks (from the 2nd second of the repeat on) against all other ticks from 17 s on. No pass rule.
   Toy otherwise as toy_b7.py (reduced width, random init seed 0, lr 3e-3, 20 warm-up steps, 8 sequences per step, 4 threads per run, eval 32 draws seed 991). Bar fixed: T1a and T1b of 7.10 R3. Oracle reference: the same code, pure oracle training (`--oracle`), design A.
+- 2026-11-03 TRY 1 (1500 steps planned, lr 3e-3, hind 0.1, sched 0.5, seed 0; designs A and B only, C and the oracle reference NOT run). Both runs hit the existing flat-loss stop at step ~800-875 (after the handover, which ended at step 750).
+  A iid: ratio 1.084 (T1b fail); T1a fail (source share 0.263, recognition median 0.282 vs p95 0.518); retrieval off 1.000. Novelty lane: repeat mean 0.478, outside mean 0.686.
+  B levels+clock: ratio 0.790 (T1b fail); T1a fail (share 0.902, recognition median 0.580 vs p95 0.635); retrieval off 1.000. Novelty lane: repeat mean 0.458, outside mean 0.689.
+  Logs: /secondary/hyst-data/brain/h1/try1_{A,B}.log. Unit tests: pass (OK). Try 2 and design C not started: usage limit reached.
 
 ---
 
