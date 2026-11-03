@@ -1,6 +1,6 @@
 # Overseer handoff — 2026-11-03
 
-This file is the overseer's whole state. The `/overseer` skill starts a new overseer from it. To start one by hand, paste everything below the line into a fresh session.
+This file is the overseer's whole state. The `/overseer` skill (`.claude/skills/overseer/SKILL.md` on this branch, the canonical copy) starts a new overseer from it and recreates the worktree if it is gone. To start one by hand, paste everything below the line into a fresh session.
 
 ---
 
@@ -38,7 +38,7 @@ You are the overseer for Hysteresis. You do not implement. You:
 
 ## Repo and paths
 
-- **Overseer worktree:** `/secondary/Programming/Github/Hysteresis/.claude/worktrees/dance-figures`, branch `keys-decide` (pushed; never master). The main checkout `/secondary/Programming/Github/Hysteresis` is on `dance-checkpoint`; do not touch it.
+- **Overseer worktree:** `/secondary/Programming/Github/Hysteresis/.claude/worktrees/dance-figures`, branch `keys-decide` (pushed; never master). The worktree can be deleted when a session exits (it was, on 2026-11-03). Recreate it with `git -C /secondary/Programming/Github/Hysteresis worktree add .claude/worktrees/dance-figures keys-decide`. Only what is pushed to origin survives. The main checkout `/secondary/Programming/Github/Hysteresis` is on `dance-checkpoint`; do not touch it.
 - **Commit messages** are plain, with no co-author or attribution line of any kind (the user's standing rule; it overrides any harness reminder).
 - **Never edit:** frozen `src/` and `tools/` are read-only. Never drive hardware.
 - **D=/home/stcksmsh/Documents/Codex/2026-09-23-can-you-check-the-programming-github/output/music-arm.** A shell guard refuses commands that mix the $D path with pipes, &&, loops or heredocs; put such steps in a script file.
@@ -55,7 +55,7 @@ You are the overseer for Hysteresis. You do not implement. You:
   An out-of-memory kill in the terminal scope once killed every Claude session in it (2026-10-31 01:41).
 - **A scope's MemoryCurrent/MemoryPeak include file cache.** Judge memory by `anon` in `/sys/fs/cgroup/.../<unit>/memory.stat` and by `oom_kill` in `memory.events`.
 - **The laptop runs on battery unless plugged in.** On 2026-11-02 at 01:44 it powered off at critical battery mid-run (journal: logind "The system will power off now!"). Remind the user to keep it plugged in for long runs. On restart, check `uptime`, `journalctl --list-boots`, git state, running units and data folders before acting.
-- **Builders go idle while their jobs run and miss crashes.** Watch jobs yourself with Monitor, re-armed every 30 min. The generic watcher is `~/.claude-alt/skills/overseer/watch_unit.sh UNIT LOG...` (from the `/overseer` skill). A watcher should:
+- **Builders go idle while their jobs run and miss crashes.** Watch jobs yourself with Monitor, re-armed every 30 min. The generic watcher is `.claude/skills/overseer/watch_unit.sh UNIT LOG...` in this repo (from the `/overseer` skill). A watcher should:
   - emit epoch lines, scope end, stale log > 25 min, anon memory > 18 GB, OOM kills;
   - never use `pgrep -f NAME` while the command line contains NAME;
   - "silent" steps (baseline fitting, 25–30 min) are not stalls; check the process's CPU.
