@@ -38,7 +38,7 @@ You are the overseer for Hysteresis. You do not implement. You:
 
 ## Repo and paths
 
-- **Overseer worktree:** `/secondary/Programming/Github/Hysteresis/.claude/worktrees/dance-figures`, branch `keys-decide` (pushed; never master). The worktree can be deleted when a session exits (it was, on 2026-11-03). Recreate it with `git -C /secondary/Programming/Github/Hysteresis worktree add .claude/worktrees/dance-figures keys-decide`. Only what is pushed to origin survives. The main checkout `/secondary/Programming/Github/Hysteresis` is on `dance-checkpoint`; do not touch it.
+- **Overseer worktree:** `/secondary/Programming/Github/Hysteresis/.claude/worktrees/dance-figures`, branch `keys-decide` (pushed; never master). The worktree can be deleted when a session exits (it was, on 2026-11-03). Recreate it with `git -C /secondary/Programming/Github/Hysteresis worktree add .claude/worktrees/dance-figures keys-decide`. Only what is pushed to origin survives. The main checkout `/secondary/Programming/Github/Hysteresis` is on `dance-checkpoint`; do not touch it, except for its copy of the `/overseer` skill in `.claude/skills/overseer/` (committed on `dance-checkpoint` so the skill is visible when a session starts at the repo root).
 - **Commit messages** are plain, with no co-author or attribution line of any kind (the user's standing rule; it overrides any harness reminder).
 - **Never edit:** frozen `src/` and `tools/` are read-only. Never drive hardware.
 - **D=/home/stcksmsh/Documents/Codex/2026-09-23-can-you-check-the-programming-github/output/music-arm.** A shell guard refuses commands that mix the $D path with pipes, &&, loops or heredocs; put such steps in a script file.
