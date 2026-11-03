@@ -41,8 +41,14 @@ local folder. Worktrees can be deleted on exit; git on origin is the only durabl
   An unpushed change is not saved: the worktree may be deleted on exit.
 - Prompts waiting to be sent are saved as `docs/BUILDER_PROMPT_*.md` or `docs/PLANNER_BRIEF_*.md`, committed and pushed.
   Never keep them only in a job's tmp folder.
-- If you change this skill, edit this file (the repo copy), commit and push it. Then refresh the user-level copy:
-  `cp .claude/skills/overseer/* ~/.claude-alt/skills/overseer/`.
+- If you change this skill, edit this file (the copy on `keys-decide`), commit and push it. Then refresh the three
+  other copies, so `/overseer` is visible from every launch point:
+  - the repo root's checkout (branch `dance-checkpoint`): copy both files into
+    `/secondary/Programming/Github/Hysteresis/.claude/skills/overseer/`, then commit only that folder
+    (`git commit -- .claude/skills/overseer`) and push. Touch nothing else in the root checkout;
+  - `~/.claude/skills/overseer/` and `~/.claude-alt/skills/overseer/` (the two user configs).
+
+  If the root checkout ever moves to another branch, put the skill on that branch too.
 - Durable lessons about the user also go into memory.
 
 ## Job watcher
