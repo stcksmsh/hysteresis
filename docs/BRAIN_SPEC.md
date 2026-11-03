@@ -702,6 +702,21 @@ Binding. It changes how 7.1a, 7.1c, 7.2 and 7.3 are built; the checks C1 to C5 (
 - **Fallback (overnight order):** if the toy tests cannot be passed with the hippocampus within their budget, the hippocampus is dropped from B7
   (relay + modulation stay), and C1 to C3 and the "recognises, stores, habituates, novelty signal" words are not claimed.
 
+### 7.11 B7 close-out: user ruling 2026-11-03, via planner (after B7 round 1)
+
+Binding. Recorded from `docs/BODY_BRAIN_PLAN.md` §2, which is the work order from here on.
+
+1. Round 2 is not taken. **B7 epoch 6 is the cortex of record** and the source of every brain lane in `mindState`. C4 and C5 round-2
+   rights are recorded as "not taken", not as failed twice.
+2. C5 is unchanged (round 1: MSE ratio 1.041 against ridge AR, needs <= 0.95; fail). For the record, the warm start restarted the learning
+   rate at about 9x B3's final rate. **Rule for every future warm start:** constant learning rate at the source run's final rate, or a
+   warm-up of <= 200 steps to it.
+3. C4(b): "one common direction across all four layers" is the correct reading and stays (fail). The per-layer directions are reported as
+   data (L1 +36 %, L2 -29 %, L3 -8 %, L4 -12 %; 99.4 % same sign) and may appear on the monitor as numbers.
+4. The hippocampus is not in B7. It continues as toy step H1 (`BODY_BRAIN_PLAN.md` §5).
+5. Backlog: the unexplained step-2 memory growth; long runs on mains power only.
+6. Truth table for B7: `BODY_BRAIN_PLAN.md` §10.
+
 ## 8. Out of this spec
 
 Ignition (cross-band coherence events), B4 dreaming, B5 monitor, B6 staging, B8
