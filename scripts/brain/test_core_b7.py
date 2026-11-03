@@ -167,13 +167,13 @@ class TestRead(unittest.TestCase):
     def test_17_second_exclusion_and_source_time(self):
         m = core_b7.Core7().eval()
         st, cs, ksum, kcnt = self._store(m, 3000)
-        rep, rec, src, w, top = m.read(st, [], [], torch.tensor([3000]), ksum, kcnt, cs)
+        rep, rec, src, w, top, _ = m.read(st, [], [], torch.tensor([3000]), ksum, kcnt, cs)
         self.assertAlmostEqual(float(rec), 0.8, places=5)
         self.assertEqual(int(src), 26 * 50)                              # the age-16.98 s entry is not read
-        rep, rec, src, w, top = m.read(st, [], [], torch.tensor([3050]), ksum, kcnt, cs)
+        rep, rec, src, w, top, _ = m.read(st, [], [], torch.tensor([3050]), ksum, kcnt, cs)
         self.assertAlmostEqual(float(rec), 1.0, places=5)
         self.assertEqual(int(src), 27 * 50)                              # exactly 17 s old: eligible
-        rep, rec, src, w, top = m.read({**st, "kv": torch.zeros_like(st["kv"])}, [], [], torch.tensor([3050]), ksum, kcnt, cs)
+        rep, rec, src, w, top, _ = m.read({**st, "kv": torch.zeros_like(st["kv"])}, [], [], torch.tensor([3050]), ksum, kcnt, cs)
         self.assertEqual((float(rec), int(src), float(rep.abs().sum())), (0.0, -1, 0.0))
 
     def test_empty_store_early_in_a_song(self):
@@ -411,6 +411,101 @@ class TestTappedSkip(unittest.TestCase):
         d = (o[0]["mean"][0, :, 0] - o0[0]["mean"][0, :, 0])
         # the oldest tap of frame t is frame t - 9; the edit adds exactly that value to the mean of head 0 (the raw skip adds to the head output)
         self.assertLess(float((d[9:] - z[:-9]).abs().max()), 1e-4)
+
+
+class TestH1(unittest.TestCase):
+    """Hindsight loss, scheduled sampling, novelty lane (docs/BODY_BRAIN_PLAN.md 5). Flags off = unchanged is covered by every test above."""
+
+    def repeat_input(self, s1=400, s2=5200, L=3200, T=9000):
+        x = noise(T, seed=31)
+        x[:, s2:s2 + L] = x[:, s1:s1 + L]
+        return x, s1, s2
+
+    def test_hindsight_loss_has_gradient_to_query_and_key_and_picks_the_source(self):
+        m = live().train()
+        m.hind = True
+        x, s1, s2 = self.repeat_input()
+        out, _ = m(x, m.init_state(1))
+        loss = out[0]["hind"]
+        self.assertTrue(math.isfinite(float(loss.detach())) and float(loss.detach()) > 0)
+        loss.backward()
+        for p in (m.query_proj.weight, m.key_proj.weight, m.log_tau):
+            self.assertIsNotNone(p.grad)
+            self.assertTrue(torch.isfinite(p.grad).all() and float(p.grad.abs().sum()) > 0)
+
+    def test_hindsight_target_is_the_true_source_in_a_repeat(self):
+        """Inside the repeat the lowest-error entry is the true source (replay error 0), whatever the query says."""
+        m = live().eval()
+        m.hind = True
+        x, s1, s2 = self.repeat_input()
+        seen, orig = [], m._hindsight
+        def spy(*a):
+            r = orig(*a)
+            if r is not None:
+                seen.append((int(a[3][0]), int(r[2][0])))
+            return r
+        m._hindsight = spy
+        with torch.no_grad():
+            m(x, m.init_state(1))
+        hits = [tgt for n0, tgt in seen if s2 + 200 <= n0 <= s2 + 1400]
+        self.assertGreater(len(hits), 3)
+        for n0, tgt in seen:
+            if s2 + 200 <= n0 <= s2 + 1400:
+                self.assertLessEqual(abs(tgt - (s1 + n0 - s2)), core_b7.BLOCK, (n0, tgt))
+
+    def test_hindsight_off_adds_nothing(self):
+        m = live().eval()
+        x, _, _ = self.repeat_input(T=3000, s2=1900, L=600, s1=100)
+        out, _ = m(x, m.init_state(1))
+        self.assertNotIn("hind", out[0])
+        self.assertNotIn("novelty_lane", out[0])
+
+    def test_scheduled_sampling_endpoints(self):
+        m = live().eval()
+        x, s1, s2 = self.repeat_input()
+        orc = lambda n0: torch.where(n0 >= s2, s1 + (n0 - s2), -torch.ones_like(n0))
+        def sources(p):
+            m.oracle, m.oracle_p = orc, p
+            with torch.no_grad():
+                out, _ = m(x, m.init_state(1))
+            return out[0]["hippo"]["source_t"][0], out[0]["replay"] if False else None
+        full, _ = sources(1.0)
+        none, _ = sources(0.0)
+        m.oracle = None
+        with torch.no_grad():
+            ref, _ = m(x, m.init_state(1))
+        self.assertTrue(torch.equal(none, ref[0]["hippo"]["source_t"][0]))                  # p = 0 is plain retrieval
+        b = s2 + 1000
+        self.assertAlmostEqual(float(full[b + 5]) * 100, s1 + 1000, delta=1)               # p = 1 is the oracle pointer
+        mid, _ = sources(0.5)
+        blocks = range(s2 + 400, s2 + 3000, 200)
+        share = np.mean([abs(float(mid[b + 5]) * 100 - (s1 + b - s2)) < 1 for b in blocks])
+        self.assertTrue(0.05 < share < 1.0 or share == 1.0, share)                         # a mix (retrieval may hit the same source)
+
+    def test_novelty_lane_low_in_repeat_high_elsewhere(self):
+        m = live().eval()
+        m.novelty_lane = True
+        x, s1, s2 = self.repeat_input()
+        with torch.no_grad():
+            out, _ = m(x, m.init_state(1))
+        t, nv = out[0]["novelty_lane"]["t"][0], out[0]["novelty_lane"]["novelty"][0]
+        self.assertEqual(len(t), x.shape[1] // core_b7.TICK)
+        self.assertTrue(torch.equal(t, torch.arange(len(t)) * core_b7.TICK))
+        inrep = (t >= s2 + 300) & (t < s2 + 3200)
+        out_ = (t >= 1700) & ~((t >= s2) & (t < s2 + 3200))
+        self.assertTrue(torch.all(nv[t < 1700] == 1.0))                                     # nothing 17 s old yet
+        self.assertLess(float(nv[inrep].mean()), float(nv[out_].mean()))
+
+    def test_novelty_lane_changes_no_output(self):
+        m = live().eval()
+        x, _, _ = self.repeat_input(T=4000, s2=2600, L=800, s1=200)
+        with torch.no_grad():
+            a, _ = m(x, m.init_state(1))
+            m.novelty_lane = True
+            b, _ = m(x, m.init_state(1))
+        for i in range(4):
+            self.assertTrue(torch.equal(a[i]["mean"], b[i]["mean"]))
+        self.assertTrue(torch.equal(a[0]["hippo"]["source_t"], b[0]["hippo"]["source_t"]))
 
 
 if __name__ == "__main__":

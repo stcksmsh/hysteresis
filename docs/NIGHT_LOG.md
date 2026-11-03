@@ -1,3 +1,22 @@
+# NIGHT LOG: H1, hippocampus toy (order of 2026-11-03)
+
+## H1 MORNING SUMMARY (filled at the end)
+
+- (pending)
+
+## H1 LOG
+
+- 2026-11-03 Setup. Worktree `.claude/worktrees/body-h1`, branch `body-h1` from origin/body (ded76a9). Read: BODY_BRAIN_PLAN 1, 5, 12; BRAIN_SPEC 7.1, 7.3, 7.10, 7.11; core_b7.py, toy_b7.py, test_core_b7.py, B7_NOTES.md, the B7 log below.
+  Mechanisms, all behind default-off attributes of `Core7` (flags off = module unchanged; every older test passes unmodified except that `read` returns a 6th value, `hind`):
+  - (a) `hind` (hindsight loss). Per read (one per 2 s block), per row: for every eligible entry (>= 17 s old) the squared error between its replay and the block's true targets,
+    on every 20th frame of the block (10 offsets) and on each of the four horizons whose target window lies inside the chunk, computed under no_grad; the target is the entry with the lowest
+    summed error (argmin, no gate, no margin). Loss = cross-entropy of softmax(cos / tau) over the eligible entries toward that entry, averaged over rows and blocks, weight 0.1 added to the beta-NLL loss. Gradient reaches the query, the keys of the chunk and log_tau.
+  - (b) `oracle_p` (scheduled sampling). Per row and per read, with probability p the oracle pointer (weight 1 on the true source, as the oracle of try 0) replaces the retrieved sources; recognition stays the retrieved cosine. p = 1 - step / (0.5 steps), so p = 0 from half-way on. Rows where the oracle says "no source" use retrieval. The oracle is training-only; evaluation is pure retrieval.
+  - Novelty lane (`novelty_lane`). At every tick (0.5 s), 1 - max cosine of the tick's own key (centred by the running key mean at that tick) against the eligible entries (>= 17 s old), no gradient, computed after the block, independent of the 2 s read; 1 if nothing is eligible. Reported on the toy: repeat ticks (from the 2nd second of the repeat on) against all other ticks from 17 s on. No pass rule.
+  Toy otherwise as toy_b7.py (reduced width, random init seed 0, lr 3e-3, 20 warm-up steps, 8 sequences per step, 4 threads per run, eval 32 draws seed 991). Bar fixed: T1a and T1b of 7.10 R3. Oracle reference: the same code, pure oracle training (`--oracle`), design A.
+
+---
+
 # NIGHT LOG: B7, overnight order of 2026-11-02
 
 ## MORNING SUMMARY (updated 2026-11-02 12:35)

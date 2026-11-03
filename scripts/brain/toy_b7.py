@@ -136,7 +136,7 @@ def aux_loss(out, x):
 NEW_PARAMS = ('key_proj', 'query_proj', 'log_tau', 'relay', 'skip', 'w_g', 'w_tau')
 
 
-def fit(model, make_batch, steps, lr=3e-3, log=print, seed=0, aux=0.0, oracle=None, deadline_s=None, flat_s=300, newlr=1.0):
+def fit(model, make_batch, steps, lr=3e-3, log=print, seed=0, aux=0.0, oracle=None, deadline_s=None, flat_s=300, newlr=1.0, hind=0.0, sched=0.0):
     """Brief training on beta-NLL (+ aux * the replay loss). make_batch(rng) -> x (B, T, 46). Stops at deadline_s, or when the loss has not
     improved for flat_s seconds (a run with a flat loss is killed)."""
     torch.set_num_threads(THREADS)
@@ -152,10 +152,13 @@ def fit(model, make_batch, steps, lr=3e-3, log=print, seed=0, aux=0.0, oracle=No
                 opt.add_param_group({**{k: v for k, v in g.items() if k != 'params'}, 'params': mine, 'lr_mult': g['lr_mult'] * newlr})
     model.train()
     model.oracle = oracle
+    model.hind = hind > 0
     t0 = t_best = time.time()
     best = 1e9
     ema = None
     for step in range(steps):
+        if sched > 0:                                  # H1 scheduled sampling: oracle probability falls linearly to 0 over the first `sched` of the steps
+            model.oracle_p = max(0.0, 1.0 - step / (sched * steps))
         x = torch.from_numpy(make_batch(rng))
         B, T = x.shape[0], x.shape[1]
         xp = torch.cat([x, torch.zeros(B, train.LOOK, core.N_IN)], 1)
@@ -164,6 +167,8 @@ def fit(model, make_batch, steps, lr=3e-3, log=print, seed=0, aux=0.0, oracle=No
         loss = sum(s / max(float(c), 1.0) for s, c in zip(sums, counts))
         if aux > 0:
             loss = loss + aux * aux_loss(out, xp)
+        if hind > 0:
+            loss = loss + hind * out[0]["hind"]
         for g in opt.param_groups:
             g["lr"] = lr * min(1.0, (step + 1) / 20) * g["lr_mult"]
         opt.zero_grad()
@@ -183,7 +188,7 @@ def fit(model, make_batch, steps, lr=3e-3, log=print, seed=0, aux=0.0, oracle=No
         if time.time() - t_best > flat_s and step > 50:
             log("flat loss: stopped")
             break
-    model.oracle = None
+    model.oracle, model.oracle_p, model.hind = None, 1.0, False
     return model.eval()
 
 
@@ -191,6 +196,8 @@ def t1_eval(model, design, n=32, seed=991, oracle=False):
     rng = np.random.default_rng(seed)
     res = {"first": [[] for _ in range(3)], "repeat": [[] for _ in range(3)]}
     rec_rep, rec_pre, hits, blocks = [], [], 0, 0
+    nov_rep, nov_out = [], []
+    model.novelty_lane = True
     for _ in range(n):
         x, (s1, s2) = t1_sequence(rng, design)
         model.oracle = (lambda n0, s1=s1, s2=s2: torch.where(n0 >= s2, s1 + (n0 - s2), -torch.ones_like(n0))) if oracle else None
@@ -201,31 +208,40 @@ def t1_eval(model, design, n=32, seed=991, oracle=False):
                 res[k][i].append(float((out[i]["err"][:, s + 2 * h:s + T1_S] ** 2).mean()))
         r = out[0]["hippo"]["recognition"][0].numpy()
         src = out[0]["hippo"]["source_t"][0].numpy()
+        nl = out[0].get("novelty_lane")
+        if nl is not None:                                            # ticks from 17 s on: repeat ticks (from the 2nd s of the repeat) against all other
+            tt, nv = nl["t"][0].numpy(), nl["novelty"][0].numpy()
+            inrep = (tt >= s2 + 200) & (tt < s2 + T1_S)
+            nov_rep.append(nv[inrep])
+            nov_out.append(nv[(tt >= 1700) & ((tt < s2) | (tt >= s2 + T1_S))])
         rec_rep.append(r[s2:s2 + T1_S])
         rec_pre.append(r[1700:s2])
         for b in range(s2 + 200, s2 + T1_S, 200):
             blocks += 1
             hits += int(src[b] >= 0 and s1 <= src[b] * 100 <= s1 + T1_S)
-    model.oracle = None
+    model.oracle, model.novelty_lane = None, False
     mse = {k: [float(np.mean(v)) for v in res[k]] for k in res}
     first, rep = sum(mse["first"][:3]), sum(mse["repeat"][:3])
     share = hits / max(blocks, 1)
     p95 = float(np.percentile(np.concatenate(rec_pre), 95))
     med = float(np.median(np.concatenate(rec_rep)))
-    return {"design": design, "oracle": oracle, "mse_first_L1L2L3": mse["first"], "mse_repeat_L1L2L3": mse["repeat"], "ratio_repeat_over_first": rep / first,
+    nr, no = np.concatenate(nov_rep), np.concatenate(nov_out)
+    novelty = {"repeat_mean": float(nr.mean()), "outside_mean": float(no.mean()), "repeat_median": float(np.median(nr)), "outside_median": float(np.median(no)),
+               "outside_p05": float(np.percentile(no, 5)), "repeat_share_below_outside_p05": float((nr < np.percentile(no, 5)).mean()), "n_repeat": len(nr), "n_outside": len(no)}
+    return {"design": design, "oracle": oracle, "novelty_lane": novelty, "mse_first_L1L2L3": mse["first"], "mse_repeat_L1L2L3": mse["repeat"], "ratio_repeat_over_first": rep / first,
             "T1b_pass": bool(rep <= 0.5 * first), "source_share_in_first_S": share, "recognition_repeat_median": med, "recognition_pre_repeat_p95": p95,
             "T1a_pass": bool(share >= 0.5 and med > p95)}
 
 
-def t1(design, steps=400, oracle=False, aux=0.0, log=print, deadline_s=1100, newlr=1.0):
+def t1(design, steps=400, oracle=False, aux=0.0, log=print, deadline_s=1100, newlr=1.0, hind=0.0, sched=0.0, seed=0):
     with small():
         model = core_b7.Core7(seed=0, phase=False)
         pre = None if oracle else t1_eval(model, design, n=8)
         fit(model, lambda rng: np.stack([pad46(t1_train_sequence(rng, design)[:, :core.FEAT]) for _ in range(8)]), steps, log=log, aux=aux,
-            oracle=train_oracle if oracle else None, deadline_s=deadline_s, newlr=newlr)
+            oracle=train_oracle if (oracle or sched > 0) else None, deadline_s=deadline_s, newlr=newlr, hind=hind, sched=sched, seed=seed)
         res = t1_eval(model, design, oracle=oracle)
         res["untrained_T1a"] = None if pre is None else {k: pre[k] for k in ("source_share_in_first_S", "recognition_repeat_median", "recognition_pre_repeat_p95", "T1a_pass")}
-        res["steps_arg"], res["aux"], res["newlr"] = steps, aux, newlr
+        res["steps_arg"], res["aux"], res["newlr"], res["hind"], res["sched"], res["seed"] = steps, aux, newlr, hind, sched, seed
         if not oracle:
             model.retrieval_on = False
             res["ratio_retrieval_off"] = t1_eval(model, design, n=16)["ratio_repeat_over_first"]
@@ -294,10 +310,13 @@ def main(argv=None):
     ap.add_argument("--aux", type=float, default=0.0)
     ap.add_argument("--taps", type=int, default=1)
     ap.add_argument("--newlr", type=float, default=1.0)
+    ap.add_argument("--hind", type=float, default=0.0)
+    ap.add_argument("--sched", type=float, default=0.0)
+    ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--deadline", type=float, default=1100)
     a = ap.parse_args(argv)
     if a.which == "t1":
-        r = t1(a.design, a.steps, a.oracle, a.aux, deadline_s=a.deadline, newlr=a.newlr)
+        r = t1(a.design, a.steps, a.oracle, a.aux, deadline_s=a.deadline, newlr=a.newlr, hind=a.hind, sched=a.sched, seed=a.seed)
         ok = r["T1b_pass"] and (a.oracle or r["T1a_pass"])
     else:
         r = t2(a.steps, a.taps, deadline_s=a.deadline)
