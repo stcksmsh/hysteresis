@@ -67,7 +67,8 @@ You are the overseer for Hysteresis. You do not implement. You:
 
 ## Read, in order
 
-1. `docs/BRAIN_SPEC.md`: the brain spec with every dated ruling.
+0. `docs/BODY_BRAIN_PLAN.md`: the work order from 2026-11-03. It wins where it differs.
+1. `docs/BRAIN_SPEC.md`: the brain spec with every dated ruling (§7.11 = B7 close-out).
    - §4 is B3, including 4.7 (B3 round-2 rulings, the PAC control, lane sources, the round-1 truth table, the 24 h cap).
    - §7 is B7, including 7.10 (the 2026-11-02 rulings R1–R7 and the hippocampus fallback).
 2. `docs/NEXT_DECODER_THEN_BRAIN.md` §2: the pivot (authored state-to-body mapping, design by eye), and the note "The authoring tool on B3's lanes (2026-11-01)".
@@ -82,64 +83,27 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## Where things stand (2026-11-03 08:30)
+## Where things stand (2026-11-03, after the planner's new plan)
 
-**Nothing is running.** No jobs, no builders active (both cleared). `keys-decide` is at `a03c8e3` or later, with `b7` merged in.
+**New direction (user, 2026-11-03): `docs/BODY_BRAIN_PLAN.md` is the work order.** It wins over NEXT_DECODER's next steps. Goal: a scaled
+human brain + body that drives itself (cortex = B7 epoch 6, frozen; MuJoCo body; cerebellum; spinal oscillators; basal ganglia/dopamine via
+PPO; monitor B5). The authoring tool is the last-resort fallback only. Order: Z -> M0 -> M2 -> M1 -> T-M3 -> M3 -> M4; H1 and B5 in parallel.
 
-**D (dance body path): paused by the user's order.**
-- core-2b is the `mindState` source. The music clock is accepted.
-- 9 re-exports for the user's watch are in `$D/watch/`. The verdict is not given.
-
-**B1 (pulse):** failed twice, claims dropped. The pulse is the offline beat grid.
-
-**B2:** done, untrained control.
-
-**B3 (trained core): closed, both rounds failed.**
-- **Round 1** (60 s chunks, NLL, 8 epochs; results in `/secondary/hyst-data/brain/b3/`):
-  - 4.3: MSE 13.7 % above ridge AR (fail);
-  - 4.4: habituation ≈ 0 (fail);
-  - 4.5: 59.8 % of cuts at z ≥ 3 (fail).
-- **Round 2** (β-NLL, 180 s chunks, 12 epochs, best epoch 12; results in `/secondary/hyst-data/brain/b3r2/`):
-  - 4.3: 8.0 % above (fail);
-  - 4.4: drop 0.016 (fail);
-  - 4.5: 60.5 % (fail).
-- **PAC control fails** on both rounds. Network MI is below the input's max-of-44; that control is biased by max selection (reported to the planner, not changed).
-- **No-phase ablation:** grid phase changes NLL by about 1 %.
-- **Truth table:** the round-1 truth table in 4.7 holds. The round-2 handover (`PLANNER_BRIEF_B3_ROUND2_RESULTS.md`) has no recorded answer; the user said B3's "final rulings (2026-11-01) stay closed", but their text was never pasted to the overseer. Ask the user for it if a B3 claim matters.
-
-**B7 (memory, relay, modulation): round 1 done; C4 and C5 fail.**
-- **Hippocampus dropped** after the toy decision tree.
-  - Trained T1b best ratio 0.61, needing ≤ 0.5. The oracle passes (0.348).
-  - It stays in code behind `hippo_flag`, off.
-- **Model:** relay (features + grid phase), a 10-frame tapped head skip, acting modulation (2 s blocks). 1,415,789 parameters.
-- **Training:** warm start from B3 r2 epoch 12. 8 epochs, 17.3 h, best epoch 6 (validation β-NLL 0.590 against the warm start's 0.622).
-- **Data:** `/secondary/hyst-data/brain/b7/` (`train.log`, `ckpt/phase/`, `results/results.json`, `results/precheck.json`, `check.log`).
-- **Held-out results:**
-  - **C5:** NLL condition holds (ridge AR +0.70 [0.60, 0.81]). MSE 0.1363 against AR 0.1309, ratio 1.041; needs ≤ 0.95. Fail. Relay off: ratio 5.40.
-  - **C4:** (a) frozen-arousal NLL +0.061 [0.025, 0.103], holds. (b) Time-constant change L1 +36 %, L2 −29 %, L3 −8 %, L4 −12 %: L3 is under 10 %, and there is no common direction. Fail.
-  - **C1–C3:** no claim (no hippocampus).
-  - **§4.5 rerun on surprisal:** 61.8 %.
-  - **Arousal r:** DEAM 0.192, MERP 0.419 (core-2b 0.276, 0.644).
-- **Planner handover sent:** `docs/PLANNER_BRIEF_B7_RESULTS.md`. It asks:
-  1. round 2 or stop;
-  2. what C5's round 2 may change (the learning rate is the main suspect);
-  3. the C4(b) direction reading;
-  4. the hippocampus;
-  5. the budget against starting the authoring work;
-  6. the truth table.
-
-  **Waiting for the user to paste the answer.**
-
-**Authoring tool:** ruled 2026-11-01 (NEXT_DECODER §2). The prompt is ready at `docs/BUILDER_PROMPT_AUTHORING.md`; it was never sent. The user wants it built by a fresh agent when they say so.
+- **Branch `body`** (cut from keys-decide, which = b7 + docs; pushed). keys-decide is fast-forwarded to it. Holds the plan, `scripts/compute/`
+  (test_compute 12/12 pass), BRAIN_SPEC §7.11 (B7 close-out: round 2 not taken, epoch 6 is the cortex of record, warm-start LR rule).
+- **Builder prompts ready, not sent:** `docs/BUILDER_PROMPT_Z_M0_M2.md` (branch `body-z`; user tasks at top: Kaggle account, phone, token),
+  `docs/BUILDER_PROMPT_H1.md` (branch `body-h1`, toy only, 2 x 3 h). Send only when the user says, to the agent they name.
+- **Planner brief sent to the user:** `docs/PLANNER_BRIEF_BODY_PLAN_CHECK.md` (11 mismatches, 3 questions: implement mass, ±180° cap, B7 lane
+  export timing). Defaults are in the prompts. Waiting for the answer.
+- Nothing running. B7 results are in BRAIN_SPEC §7.11 and the plan §2/§10. `docs/BUILDER_PROMPT_AUTHORING.md` is obsolete (plan §0.2).
+- The planner's zip is at the repo root (`hysteresis_body_brain_2026-11-03.zip`, untracked); its content is committed on `body`.
 
 ## Your first job
 
-- **Wait for the planner's answer** to `PLANNER_BRIEF_B7_RESULTS.md`. Then:
-  1. Record it in BRAIN_SPEC §7 as a dated note, then commit and push.
-  2. Write the builder prompt(s).
-  3. Verify the builders' work as below.
-- **When the user says to start the authoring tool:** send `docs/BUILDER_PROMPT_AUTHORING.md` to the agent they name, then verify the result. The prompt has the v47 byte-identical check.
-- **Nothing else unless the user asks.**
+- When the user says go: send the two prompts. Verify each report as below, recomputing M0 numbers (sag, torque margins, CPU/MJX parity) and
+  benchmark numbers from the saved files.
+- Record the planner's answer to the plan-check brief as a dated note in BODY_BRAIN_PLAN or BRAIN_SPEC before any result it scores.
+- Report back to the planner after the first work order (OVERSEER_PROMPT_2026-11-03.md lists what it wants).
 
 ## When a builder says it finished
 
