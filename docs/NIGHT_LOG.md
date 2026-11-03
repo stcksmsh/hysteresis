@@ -1,3 +1,13 @@
+# NIGHT LOG: step Z + M0 + M2, local order of 2026-11-03 (builder, branch body-z)
+
+## MORNING SUMMARY (not filled yet)
+
+## LOG
+
+- 2026-11-03 Setup: order read (origin/body:docs/BUILDER_PROMPT_Z_M0_M2.md, BODY_BRAIN_PLAN.md). Worktree `.claude/worktrees/body-z`, branch body-z from origin/body 858ce61. Mains: ADP1 online=1.
+
+---
+
 # NIGHT LOG: B7, overnight order of 2026-11-02
 
 ## MORNING SUMMARY (updated 2026-11-02 12:35)
