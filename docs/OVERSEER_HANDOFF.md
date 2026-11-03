@@ -91,7 +91,7 @@ PPO; monitor B5). The authoring tool is the last-resort fallback only. Order: Z 
 
 - **Branch `body`** (cut from keys-decide, which = b7 + docs; pushed). keys-decide is fast-forwarded to it. Holds the plan, `scripts/compute/`
   (test_compute 12/12 pass), BRAIN_SPEC §7.11 (B7 close-out: round 2 not taken, epoch 6 is the cortex of record, warm-start LR rule).
-- **Kaggle:** user `kostavukicevic`, token in `~/.kaggle/access_token` (600); CLI 2.2.5 needs `six`. Auth tested OK.
+- **Kaggle:** user `kostavukicevic`, token in `~/.kaggle/access_token` (600); CLI 2.2.5 needs `six`. Auth tested OK. Weekly quota seen by the user 2026-11-03: GPU 30 h, TPU 20 h; AI credit $10/day, $100/month (not in the plan; unused).
 - **Builder prompts ready, not sent:** `docs/BUILDER_PROMPT_Z_M0_M2.md` (branch `body-z`; user tasks at top: Kaggle account, phone, token),
   `docs/BUILDER_PROMPT_H1.md` (branch `body-h1`, toy only, 2 x 3 h). Send only when the user says, to the agent they name.
 - **Planner brief sent to the user:** `docs/PLANNER_BRIEF_BODY_PLAN_CHECK.md` (11 mismatches, 3 questions: implement mass, ±180° cap, B7 lane
