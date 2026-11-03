@@ -1,6 +1,15 @@
 # NIGHT LOG: step Z + M0 + M2, local order of 2026-11-03 (builder, branch body-z)
 
-## MORNING SUMMARY (not filled yet)
+## MORNING SUMMARY (PARTIAL: builder stopped at its usage limit, 2026-11-03)
+
+- **Z1 done in code:** `--device {cpu,cuda}` in train.py, train_b7.py (core.use_device, no-op on cpu); manifest paths relative-OK (train.read_manifest); torch.load map_location cpu. check_*.py/b2.py LEFT OUT: their baseline models (B2Method) are built on cpu and a default-device switch would mix devices; logged. No cuda here: cuda tests skip.
+- **Z2 done:** mid-epoch `mid.pt` (every 30 min + SIGTERM, atomic; model, optimiser, meta/step, batch index, carried state, loss sums, RNG states). Toy kill test (test_resume.py): SIGTERM mid-epoch then resume vs straight run, max abs parameter difference 0.0 (tolerance used atol 1e-6/rtol 1e-5). A SIGTERM during validation saves train stats and re-runs validation: implemented, not tested.
+- **Z3 partial:** C1 fixed (pack_features reads `sd` or `std`, test added, 13 compute tests pass). Pack of the full corpus (no splits filter) was running into /secondary/hyst-data/pack/features at ~1 file/s (machine load ~100); NOT finished/verified/uploaded at stop time. Check `ls feats | wc -l` (3176 expected), then `python scripts/compute/manifest.py verify`, then `kaggle datasets create -p` (private).
+- **Z4, Z5: not started.** Kaggle not touched.
+- **M0 partial:** make_arm.py -> arm.xml (mass 0.448 kg; servo = Feetech STS3215 12 V 30 kg.cm, 55 g, 12-bit, PROVISIONAL), arm_sim.py (rate limiter, delayed quantised proprioception, power, CSV export), FK parity MuJoCo vs ensemble.rs port 4e-16 m. At rest: shoulder torque 1.5-1.7 N.m of 2.94 stall; sag 5-6 deg with kp = stall/10 deg (provisional). BODY_NOTES.md, MJX parity test, test file NOT written.
+- **M2 partial:** cpg.py written; 60 s random-command runs reach 0.7-0.87 of speed limits, shoulder accel up to 1.2x of limit at 50 Hz second difference (not fixed; derate the accel share). `hyst check-csv` (built at /secondary/hyst-env/cargo-target-body/debug/hyst) refuses random runs on floor margin; note point 1 sits at z=0.08 so margin is only 0.03 m: use floor_margin_m <= 0.03 in random_commands and a narrower box. M2 unit tests not written.
+- **FOR USER:** continuous-joint amplitude cap +-180 deg (default taken). Brain test suite full run result not read.
+
 
 ## LOG
 

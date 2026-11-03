@@ -31,7 +31,7 @@ WARM = Path("/secondary/hyst-data/brain/b3r2/ckpt/phase/best.pt")
 
 def warm_started(path=WARM, hippocampus=False, **kw):
     """A Core7 holding the B3 checkpoint's weights; the only missing keys are the new B7 ones."""
-    ck = torch.load(path, weights_only=False)
+    ck = torch.load(path, weights_only=False, map_location="cpu")
     meta = ck["meta"]
     model = core_b7.Core7(phase=meta["phase"], head_norm=meta.get("head_norm", True), hippocampus=hippocampus, **kw)
     r = model.load_state_dict(ck["model"], strict=False)
@@ -43,7 +43,7 @@ def warm_started(path=WARM, hippocampus=False, **kw):
 
 def load_model7(path):
     """Checkpoint -> Core7 (eval mode) and its meta."""
-    ck = torch.load(path, weights_only=False)
+    ck = torch.load(path, weights_only=False, map_location="cpu")
     taps = ck["model"]["skip.0.weight"].shape[1] // core.FEAT
     model = core_b7.Core7(phase=ck["meta"]["phase"], head_norm=ck["meta"].get("head_norm", True), skip_taps=taps)
     model.load_state_dict(ck["model"])
@@ -63,14 +63,16 @@ def main(argv=None):
     ap.add_argument("--grad-checkpoint", action="store_true")
     ap.add_argument("--no-resume", action="store_true")
     ap.add_argument("--taps", type=int, default=1)
+    ap.add_argument("--device", default="cpu", help="cpu (default) or cuda")
     ap.add_argument("--hippocampus", action="store_true", help="keep the hippocampus (dropped by default)")
     args = ap.parse_args(argv)
     mean, std = train.load_stats(args.stats)
-    tracks = [train.Track(t["id"], t["feats"], t["beats"], t["split"]) for t in json.loads(Path(args.manifest).read_text())]
+    tracks = train.read_manifest(args.manifest)
     trn, val = val_split.split_tracks([t for t in tracks if t.split == "train"], val_split.load(args.val_artists))
     torch.manual_seed(train.SEED)
     model, warm = warm_started(args.warm, hippocampus=args.hippocampus, skip_taps=args.taps)
     model.grad_checkpoint = args.grad_checkpoint
+    core.use_device(model, args.device)
     Path(args.out).mkdir(parents=True, exist_ok=True)
     (Path(args.out) / "warm_start.json").write_text(json.dumps(warm))
     print(f"{len(trn)} fit tracks, {len(val)} validation tracks (the held-out side is not read); warm start {warm}; {model.n_params()} parameters", flush=True)
