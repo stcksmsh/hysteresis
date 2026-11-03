@@ -678,6 +678,30 @@ switch modules off at evaluation time, on the same B7 weights.
 5. Checks.
 6. Report with numbers.
 
+### 7.10 User ruling 2026-11-02, via planner (after the B7 smoke run and toy tests of 2026-11-01)
+
+Binding. It changes how 7.1a, 7.1c, 7.2 and 7.3 are built; the checks C1 to C5 (7.4), the truth words and everything in the B3 record are unchanged.
+
+- **R1. Hippocampus = pointer replay with centred keys.** Per song: a raw buffer of the 44 fast features at 100 Hz, plus keys every 0.5 s.
+  Key = a learned projection (dim 64) of [the raw features pooled over the last 2 s, the L3 + L4 state], minus the per-song running mean of keys,
+  then L2-normalised. The query is built the same way with its own projection, centred by the same mean. Key and query projections start equal
+  and random. Read once per block (2 s), from the previous block's final state: cosine against keys at least 17 s old, top-k 4, learned
+  temperature. Value = replay: for each source s_j and each frame t in the block (block start b), per horizon h in {0.1, 0.5, 2, 8 s}, the raw
+  features averaged over [s_j + (t - b) + h, s_j + (t - b) + 2h), mixed by the softmax weights. Relay input = the 4 x 44 replayed targets +
+  recognition (max similarity) + grid phase + features. Relay, skip, w_g and w_tau are zero at init, so step 0 equals B3.
+- **R2. Modulation blocks are 2 s** (was 0.5 s). Arousal as built.
+- **R3. T1 is split, both parts required.** T1a, retrieval finds the source: during the repeat at least 50 % of top-1 sources point into the first S
+  and recognition is above the 95th percentile of non-repeat frames. T1b, the network uses it: error ratio (repeat / first) <= 0.5 on the
+  iid-noise design and <= 0.5 on at least one of the two other designs.
+- **R4. T2:** 2,000 steps. If still > 1.05 x ridge AR: add a 10-frame tapped delay of raw features to each head's skip, rerun once. If it still
+  fails, keep the relay anyway and log the numbers.
+- **R5. Identity:** the float64 maximum difference <= 1e-9 is the criterion; the float32 difference is logged.
+- **R6. Training budget:** hard stop 24 h wall time, never more; up to 8 epochs, early stopping on validation beta-NLL with patience 2, best epoch
+  kept. If 8 epochs project past 24 h, run anyway.
+- **R7.** Per-cut z values are saved in results.json for every check.
+- **Fallback (overnight order):** if the toy tests cannot be passed with the hippocampus within their budget, the hippocampus is dropped from B7
+  (relay + modulation stay), and C1 to C3 and the "recognises, stores, habituates, novelty signal" words are not claimed.
+
 ## 8. Out of this spec
 
 Ignition (cross-band coherence events), B4 dreaming, B5 monitor, B6 staging, B8

@@ -80,8 +80,34 @@ def scan(lam_log, u, h0, block=SCAN_BLOCK):
     return out, out[:, -1]
 
 
-def sample_modes(g, band, n=N):
-    """(theta, nu) for n modes: f log-uniform in band, Q log-uniform in 2..8."""
+def scan_rows(ll, u, h0, block=25):
+    """h_t = exp(ll) h_{t-1} + u_t with a per-row log-modulus-and-phase ll (B, M) over one block u (B, T, M), from h0 (B, M).
+    The same two-level scheme as `scan`: sequential inside sub-blocks of `block` frames (batched), then over the sub-block ends."""
+    B, T, M = u.shape
+    pad = (-T) % block
+    if pad:
+        u = torch.cat([u, u.new_zeros(B, pad, M)], 1)
+    nb = u.shape[1] // block
+    lam = torch.exp(ll).repeat_interleave(nb, 0)
+    h, loc = torch.zeros(B * nb, M, dtype=u.dtype), []
+    for uk in u.reshape(B * nb, block, M).unbind(1):
+        h = lam * h + uk
+        loc.append(h)
+    loc = torch.stack(loc, 1).reshape(B, nb, block, M)
+    lam_block = torch.exp(ll * block)
+    carry, carries = h0, []
+    for end in loc[:, :, -1].unbind(1):
+        carries.append(carry)
+        carry = lam_block * carry + end
+    carries = torch.stack(carries, 1)
+    pw = torch.exp(ll[:, None, :] * torch.arange(1, block + 1, dtype=torch.float32)[None, :, None])
+    out = (loc + pw[:, None] * carries[:, :, None]).reshape(B, nb * block, M)[:, :T]
+    return out, out[:, -1]
+
+
+def sample_modes(g, band, n=None):
+    """(theta, nu) for n modes (default N): f log-uniform in band, Q log-uniform in 2..8."""
+    n = n or N
     lo, hi = band
     f = torch.exp(torch.empty(n).uniform_(math.log(lo), math.log(hi), generator=g))
     q = torch.exp(torch.empty(n).uniform_(math.log(2.0), math.log(8.0), generator=g))
@@ -117,17 +143,28 @@ class Layer(nn.Module):
     def freqs_hz(self):
         return (self.theta / (2 * math.pi * DT)).detach()
 
-    def forward(self, x, h0, q_shift):
+    def forward(self, x, h0, q_shift, add=None, head_add=None, gain=None, expo=None):
+        """B7 hooks (all None in B3): `add` (B, T, D) joins the input (relay), `head_add` (B, T, 2 FEAT) joins the head output (skip), `gain` (B,)
+        scales the drive and `expo` (B,) is the exponent of |lam| for the block (modulation; direct per-row scan, T of one block)."""
         if self.couple is not None:
             x = x + self.couple(q_shift)
+        if add is not None:
+            x = x + add
         ll = self.lam_log()
         z = self.inp(self.ln1(x))
-        gain = torch.sqrt(1 - torch.exp(2 * ll.real))
-        h, hT = scan(ll, torch.complex(z[..., :N], z[..., N:]) * gain, h0)
+        if expo is None:
+            g = torch.sqrt(1 - torch.exp(2 * ll.real))
+            h, hT = scan(ll, torch.complex(z[..., :N], z[..., N:]) * g, h0)
+        else:
+            nu = torch.exp(self.nu_log)[None] * expo[:, None]
+            ll_rows = torch.complex(-nu, self.theta[None].expand_as(nu))
+            u = torch.complex(z[..., :N], z[..., N:]) * (torch.sqrt(1 - torch.exp(-2 * nu)) * gain[:, None])[:, None]
+            h, hT = scan_rows(ll_rows, u, h0)
         x = x + self.out(torch.cat([h.real, h.imag], -1)) + self.skip * x
         g, v = self.mlp_in(self.ln2(x)).chunk(2, -1)
         x = x + self.mlp_out(F.gelu(g) * v)
-        mean, logvar = self.head(F.layer_norm(x, (D,)) if self.head_norm else x).chunk(2, -1)
+        o = self.head(F.layer_norm(x, (D,)) if self.head_norm else x)
+        mean, logvar = (o if head_add is None else o + head_add).chunk(2, -1)
         return x, h, hT, mean, logvar.clamp(LOGVAR_MIN, LOGVAR_MAX)
 
 
@@ -171,8 +208,9 @@ class Core(nn.Module):
         return {"n": state["n"] * keep.long(), "f": z(fresh["f"]), "h": [z(h) for h in fresh["h"]],
                 "q": [z(q) for q in fresh["q"]], "mean": [z(m) for m in fresh["mean"]]}
 
-    def forward(self, f, state):
-        """f: (B, T, 46) -> (out, state). out: per layer dict h (B,T,N complex), mean, logvar, err (B,T,44), x (B,T,128).
+    def forward(self, f, state, extra=None):
+        """`extra` (B7, one block): dict of per-layer lists "add", "head_add", "gain", "expo" passed to each Layer.
+        f: (B, T, 46) -> (out, state). out: per layer dict h (B,T,N complex), mean, logvar, err (B,T,44), x (B,T,128).
         state["n"] counts frames per batch row, so rows can be reset independently (`reset_rows`)."""
         if not self.phase:
             f = torch.cat([f[..., :FEAT], torch.zeros_like(f[..., FEAT:])], -1)
@@ -189,7 +227,10 @@ class Core(nn.Module):
                 st["q"].append(q[:, -1])
             else:
                 st["q"].append(state["q"][0])
-            if self.grad_checkpoint and torch.is_grad_enabled():
+            if extra is not None:
+                args = (x, state["h"][i], q_shift, *(extra[k][i] for k in ("add", "head_add", "gain", "expo")))
+                x, h, hT, mean, logvar = checkpoint(L, *args, use_reentrant=False) if self.grad_checkpoint and torch.is_grad_enabled() else L(*args)
+            elif self.grad_checkpoint and torch.is_grad_enabled():
                 x, h, hT, mean, logvar = checkpoint(L, x, state["h"][i], q_shift, use_reentrant=False)
             else:
                 x, h, hT, mean, logvar = L(x, state["h"][i], q_shift)
