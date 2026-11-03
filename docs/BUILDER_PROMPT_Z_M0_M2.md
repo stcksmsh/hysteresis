@@ -6,6 +6,7 @@
   Never print it, copy it into the repo, or put it in a log.
 - Tested by the overseer: Kaggle CLI 2.2.5 authenticates with it (`kaggle datasets list --mine` answers "No datasets found").
   That CLI needs `six`, which it does not declare: install `kaggle==2.2.5 six` in `/secondary/hyst-env/body`.
+- Quota (user, 2026-11-03): GPU 30 h/week, TPU 20 h/week. Log GPU hours used per job. Do not use the Kaggle "AI" credit.
 - Keep the laptop on mains power for anything longer than a few minutes.
 
 ---
