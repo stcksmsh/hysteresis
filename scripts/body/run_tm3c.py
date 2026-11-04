@@ -44,9 +44,11 @@ def main():
     ap.add_argument("--threads", type=int, default=2)
     ap.add_argument("--eval-eps", type=int, default=8)
     ap.add_argument("--eval-secs", type=float, default=90.0)
+    ap.add_argument("--obs-hidden", type=int, default=64)
     ap.add_argument("--no-policy", action="store_true")
     a = ap.parse_args()
     torch.set_num_threads(a.threads)
+    tm3c.OBS_HIDDEN = a.obs_hidden
     out = Path(a.out)
     log = lambda s: print(s, flush=True)
     cortex = load_cortex(out)

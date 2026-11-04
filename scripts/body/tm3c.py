@@ -35,6 +35,7 @@ NON_ROLL = [0, 1, 2, 3]
 KAPPA_MAX = 2 * math.pi
 K = tm3.K
 N_Y = 8
+OBS_HIDDEN = 64                                              # try 2 sets 16 (run_tm3c.py --obs-hidden)
 OBS_LR, OBS_BATCH, OBS_STEPS, OBS_BUF = 1e-3, 128, 30, 4000
 READY_FRAMES = 201                                          # 2.00 s of 100 Hz positions
 BASELINE_LEG = -1.0                                         # the mean predictor's loss on standardised targets
@@ -90,7 +91,7 @@ def kappa_of(a):
 class Observer(nn.Module):
     def __init__(self):
         super().__init__()
-        self.net = nn.Sequential(nn.Linear(bdesc.N_DESC, 64), nn.Tanh(), nn.Linear(64, 64), nn.Tanh(), nn.Linear(64, N_Y))
+        self.net = nn.Sequential(nn.Linear(bdesc.N_DESC, OBS_HIDDEN), nn.Tanh(), nn.Linear(OBS_HIDDEN, OBS_HIDDEN), nn.Tanh(), nn.Linear(OBS_HIDDEN, N_Y))
 
     def forward(self, x):
         return self.net(x)
