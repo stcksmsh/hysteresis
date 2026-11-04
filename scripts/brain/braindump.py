@@ -141,7 +141,7 @@ def run_song(model, x, chunk=CHUNK):
     T = len(x)
     nl = len(core.BANDS)
     frames = sample_frames(T)
-    per = {k: [[] for _ in range(nl)] for k in ("mean", "logvar", "err", "coh", "modes", "expo", "gain")}
+    per = {k: [[] for _ in range(nl)] for k in ("mean", "logvar", "err", "coh", "pw", "modes", "expo", "gain")}
     ticks, tick_state, arousal = [], [], []
     st = model.init_state(1)
     with torch.no_grad():
@@ -155,6 +155,7 @@ def run_song(model, x, chunk=CHUNK):
                 for k in ("mean", "logvar", "err"):
                     per[k][i].append(o[k][0].numpy())
                 per["coh"][i].append(order_parameter(h.numpy()))
+                per["pw"][i].append((h.real ** 2 + h.imag ** 2).mean(-1).numpy())
                 per["modes"][i].append(torch.view_as_real(h[sel]).numpy().astype(np.float16))
                 per["expo"][i].append(o["expo"][0].numpy())
                 per["gain"][i].append(1.0 + float(model.w_g[i]) * out[0]["dev"][0].numpy())

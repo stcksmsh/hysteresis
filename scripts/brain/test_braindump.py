@@ -102,6 +102,27 @@ class TestRun(unittest.TestCase):
         want = out[0]["arousal"][0].numpy()[bd.sample_frames(600)]
         self.assertTrue(np.allclose(arr["arousal"][:len(want)].astype(np.float32), want, rtol=2e-3, atol=2e-3))
 
+    def test_brain_field(self):
+        import json
+        import brain_mindstate as bm
+        with toy_b7.small():
+            torch.manual_seed(0)
+            model = core_b7.Core7(seed=0, phase=True, hippocampus=False, skip_taps=10).eval()
+            x = np.random.default_rng(0).standard_normal((1300, 46)).astype(np.float32)
+            res = bd.run_song(model, x)
+            f = bm.brain_field(res, x[:, :core.FEAT], np.full(4, 0.2))
+        nb = 130
+        for k in ("smoothedSurprisal", "arousalSignal", "l4PredictedVariance", "surprisalSlope30s", "selfSimilarity"):
+            self.assertEqual(len(f[k]), nb, k)
+        for k in ("surprisal", "bandPower", "gain", "exponent", "coherence"):
+            self.assertTrue(all(len(v) == nb for v in f[k].values()), k)
+        self.assertEqual(set(f["surprisal"]), {"L1", "L2", "L3", "L4", "total"})
+        self.assertIsNone(f["surprisal"]["L1"][0])                      # nothing scored before frame 2h - 1 = 19
+        self.assertIsNotNone(f["surprisal"]["L1"][2])                   # bin 2 is stamped at frame 29
+        self.assertIsNone(f["coherence"]["L1"][8])
+        self.assertIsNotNone(f["coherence"]["L1"][9])
+        json.dumps(f, allow_nan=False)                                  # strict JSON: no NaN anywhere
+
 
 if __name__ == "__main__":
     unittest.main()

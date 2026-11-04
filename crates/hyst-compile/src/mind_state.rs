@@ -331,6 +331,17 @@ mod tests {
     }
 
     #[test]
+    fn a_brain_object_beside_the_reserved_arrays_changes_nothing() {
+        // scripts/brain/brain_mindstate.py adds `brain` inside mindState; version 1 ignores it
+        let mut f = field();
+        f["brain"] = json!({"source": "b7-epoch6", "hopSeconds": 0.1, "smoothedSurprisal": [0.1, null]});
+        assert_eq!(
+            read(&sidecar(f)).unwrap(),
+            read(&sidecar(field())).unwrap()
+        );
+    }
+
+    #[test]
     fn reads_what_the_python_writer_makes() {
         let text = include_str!("../tests/fixtures/mindstate_writer.json");
         let MindState::On(m) = read(&serde_json::from_str(text).unwrap()).unwrap() else {
