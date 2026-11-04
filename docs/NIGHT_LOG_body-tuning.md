@@ -25,7 +25,17 @@ Branch `body-tuning` (from `origin/body`). One arm only; no ensemble work. No cl
 
 ## Results of the phase 3 check
 
-(see `tuning/check.json`; to be filled in by the overseer or the next session if the detached run finishes after this log was written)
+All paths under `/secondary/hyst-data/brain/author/tuning/` (`check.json` has the numbers). Window start 100 s, example-sketch.json, 1280x720.
+
+| song | window mp4 | window s (audio window 20 s) | audio RMS window / source (aac re-encode) | 720p copy | bytes | s (whole song) |
+|---|---|---|---|---|---|---|
+| instant-crush | `instant-crush-example-sketch-100s-20s.mp4` | 20.000 | 8861.3 / 8921.1 | `720p/instant-crush-fallback-720p.mp4` | 28,288,112 (27.0 MiB) | 339.833 (339.833) |
+| five-years | `five-years-example-sketch-100s-20s.mp4` | 20.000 | 2753.8 / 2773.9 | `720p/five-years-fallback-720p.mp4` | 28,551,237 (27.2 MiB) | 283.771 (283.767) |
+| presence | `presence-example-sketch-100s-20s.mp4` | 20.000 | 5416.8 / 5469.8 | `720p/presence-fallback-720p.mp4` | 28,582,033 (27.3 MiB) | 270.744 (270.733) |
+
+Audio RMS differs by about 1 % (the window audio is re-encoded to aac, so bytes are not compared). Middle frames in `frames/*-window-mid.png` (looked at):
+arm, disc, floor and shadow drawn, no part below the floor in any of the three; in the Presence frame (110 s) the hand is partly above the top edge of the
+view (camera crop, not a floor issue). Whole-song 1080p presence render from the timing run: `tuning/presence-example-sketch.mp4`.
 
 ## FOR USER
 
