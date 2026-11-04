@@ -17,7 +17,7 @@ Branch `body-tuning` (from `origin/body`). One arm only; no ensemble work. No cl
   5th/95th percentiles like the other lanes. Mappings saved with ten inputs still load (zero 11th column). `mappings/*.json` regenerated with 11 inputs.
 - **Phase 3, check.** Detached service `hyst-wo6-b2-check` runs `scripts/author/tuning_check.sh`: a 20 s window per song from `example-sketch.json`, the middle frame,
   duration and audio checks, and the 720p copies (< 30 MiB) of the whole-song fallback videos. Results: `/secondary/hyst-data/brain/author/tuning/check.json`,
-  frames in `tuning/frames/`. **Status when this was written: running; fill in below from check.json.**
+  frames in `tuning/frames/`. Finished; results below.
 - **v47 Off:** no Rust or `crates/` change on this branch (scripts only), so the v47 bytes cannot have changed. Not re-run on this branch; the
   `body-fallback` cmp (3/3 identical) is the last one.
 - **Tests:** node author 11 pass; Python `test_attach` 5, `test_build` 1, `test_serve` 2 pass (`python3 -m unittest discover -s scripts/author -p "test_*.py"`).
