@@ -145,6 +145,13 @@ class Core7(core.Core):
         """(B, 44): mean of the raw features over the POOL frames before song frame t (B,), zero-padded before the song."""
         return window_mean(cs, (t - POOL)[:, None].clamp(min=0), t[:, None], POOL)[:, 0].float()
 
+    def _key_of(self, x):
+        """Raw key of an input [pooled features, L3 + L4 state]. A hook: H2 (hippo_h2.py) replaces it with a fixed sparse random code."""
+        return self.key_proj(x)
+
+    def _query_of(self, x):
+        return self.query_proj(x)
+
     def _centre(self, v, ksum, kcnt):
         m = ksum / kcnt.clamp(min=1)[:, None]
         return F.normalize(v - (m[:, None] if v.dim() == 3 else m), dim=-1)
@@ -173,7 +180,7 @@ class Core7(core.Core):
             kv = torch.cat([st["kv"]] + ([torch.ones(B, Kn, dtype=torch.bool)] if new_k else []), 1)
             pooled = self._pooled(cs, n0)
             qin = torch.cat([pooled, F.layer_norm(st["qs"], (4 * core.N,))], -1)
-            q = self._centre(self.query_proj(qin), ksum, kcnt)
+            q = self._centre(self._query_of(qin), ksum, kcnt)
             kc = self._centre(kr, ksum, kcnt)
             sim = torch.einsum("bd,bkd->bk", q, kc)
             elig = kv & (kj * TICK <= (n0[:, None] - MIN_AGE))
@@ -321,7 +328,7 @@ class Core7(core.Core):
             for i in range(0, Tb if hip else 0, TICK):
                 t_song = n0 + i
                 st_vec = F.layer_norm(torch.cat([h3[:, i].real, h3[:, i].imag, h4[:, i].real, h4[:, i].imag], -1), (4 * core.N,))
-                key = self.key_proj(torch.cat([self._pooled(cs, t_song), st_vec], -1))
+                key = self._key_of(torch.cat([self._pooled(cs, t_song), st_vec], -1))
                 new_k.append(key)
                 new_j.append(t_song // TICK)
                 ksum, kcnt = ksum + key, kcnt + 1
