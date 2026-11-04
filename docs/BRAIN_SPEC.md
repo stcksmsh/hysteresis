@@ -770,3 +770,38 @@ Binding. They answer `docs/PLANNER_BRIEF_PLAN_V2_CHECK.md`.
 6. Accepted: the self-similarity lane uses H2's input and timing with no sparsification, so it does not depend on H2 passing.
 7. Accepted: the M3 benchmark reports the largest environment count that fits the cap.
 8. Accepted: `docs/NIGHT_LOG_<branch>.md` per builder; `BODY_BRAIN_PLAN.md` §11 reads accordingly.
+
+### 7.14 Rulings on work order 2, 2026-11-04, via planner
+
+Binding. They answer `docs/PLANNER_BRIEF_WO2_RESULTS.md`.
+
+1. **Self-surprisal lane:** exported from the K1 round-2 bundle as a mechanism-named data lane ("cerebellum: prediction error of its own
+   arm"). No claim. Record for K1: the v47 out-of-distribution set contained targets the M0 servos cannot follow (up to 10° RMS of limiter
+   change). That is a flaw in the check's design (the planner's), not a reason to rerun. K1 stays failed and its claim forbidden. The cerebellum
+   stays usable as a mechanism (babbling passes).
+2. **M3 is closed by the rule. A new plan item, M3b, is opened.** The diagnosis names three design flaws:
+   - (a) was hackable: S_still came from relay weights trained only on moving input, so stillness was out of distribution (the control: about
+     85 % of (a) did not depend on timing);
+   - the wrist roll moves no point of the chain, so it was the cheapest way to "move";
+   - selection collapsed (2 programs, entropy 0.034 nats).
+
+   M3b changes, fixed now:
+   - Reward: r = (S_shifted − S_moving) + β·LP − λ·E, where S_shifted = the cortex fed the same episode's proprioception shifted by a random
+     2–8 s (fixed seeds). Only timing-relevant movement pays. No S_still anywhere.
+   - The roll is excluded from (b), from the dominant joint in (c) and K3, and from the proprioception into the cortex relay. It still costs
+     energy, and the cerebellum still sees it.
+   - Selection: an entropy bonus on the program choice (weight from the toy grid), plus a report of programs used. The pass adds (d): at least
+     4 programs, each chosen in ≥ 5 % of decisions.
+   - Toy bar = T-M3 (a)–(c), with (a) on the new reward, plus (d). Two tries, 4 h box each. The grid (β, λ, c_sw, entropy weight) runs on the
+     toy only.
+   - The 2 s block staleness is parked until a real run.
+
+   If M3b fails twice, the self-driven body is closed for this plan and the fallback drives the arm.
+3. Parked with M3b (above).
+4. **Ignition lane:** show the four per-layer synchrony traces (magnitude-weighted order parameters) as continuous data; drop the crossing
+   marks. Finding recorded: no 3-of-4 co-synchronisation above the per-layer 99th percentile on 20 training songs or on the 3 danced songs.
+   No thresholds are tuned to make events appear.
+5. **`mindState` version 2:** yes, with the monitor build. v47 byte-identical in `Off`.
+6. **Next work order, two builders.** Builder 1: the M3b toy, unattended template. Builder 2: the fallback, minimal (the authoring tool on B7
+   lanes for the three danced songs, plus the self-surprisal export, so a watchable arm exists whatever M3b does); then `mindState` v2;
+   `manifest.py` skips `dataset-metadata.json`. The monitor build waits for the user's choice of mockup.
