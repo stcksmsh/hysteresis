@@ -32,16 +32,16 @@ You are a builder for Hysteresis. Work alone and unattended. Never wait for inpu
 5. `docs/NEXT_DECODER_THEN_BRAIN.md` §2 and its 2026-11-01 note (names: exported JSON and `mindState` use mechanism names only);
    `crates/hyst-compile/src/mind_state.rs`; `scripts/emotion/mind.py`, `mood.py`; `scripts/author/build.py`.
 
-## Overseer's defaults for points the plan leaves open (apply them; they are logged to the planner, not rule changes)
+## Rulings on the open points (BRAIN_SPEC §7.13, planner, 2026-11-04; binding)
 
 - **D1, self-similarity lane.** The same input and timing as H2's key (fixed random projection of [features pooled over 2 s, L3 + L4 state],
   every 0.5 s, against entries ≥ 17 s old), with no sparsification, so it does not depend on H2. Value = 1 − max cosine. Name it
   "self-similarity" in files; never "novelty" or "recognition".
-- **D2, ignition readout.** A layer's phase = the magnitude-weighted circular mean of its 256 mode phases. Coherence = the mean resultant
-  length over a 1 s window of each adjacent layer pair's n:m phase difference (n:m = the rounded ratio of the two bands' centre frequencies),
-  averaged over the 3 pairs. Threshold = the 99th percentile over 20 training songs (fixed seed for which songs), fixed and committed before
-  the danced songs are run. Name it "cross-band coherence" in files; never "ignition" or "awareness". The planner may replace D2; keep the
-  code so the definition is one function.
+- **D2, ignition readout** (a data lane, no claim). Per layer, the magnitude-weighted Kuramoto order parameter of its 256 mode phases,
+  computed at 100 Hz and averaged over 1 s windows stepped every 0.1 s. Per layer, a threshold = its 99th percentile over 20 training songs
+  (fixed seed for which songs), fixed and committed before the danced songs run. A crossing = at least 3 of the 4 layers above their own
+  threshold in the same window. No n:m cross-band phase comparisons. Export the four order parameters and the crossing marks. Name it
+  "cross-band coherence" or "phase order parameter" in files; never "ignition" or "awareness".
 
 ## Phases (the work order's, with its time boxes and defaults)
 
@@ -55,7 +55,7 @@ Default: H2 fails both tries, so log it; the hippocampus is closed for this plan
 
 **Phase 2, brainDump exporter (≤ 3 h).** Plan §8: a script that runs B7 epoch 6 (`/secondary/hyst-data/brain/b7/ckpt/phase/epoch_006.pt`)
 over a song's features and writes at 30 Hz: mode states (4 × 256 complex), per-layer predicted mean and actual target, per-layer surprisal,
-arousal, gain and |λ| exponent per layer, the self-similarity lane (D1), the cross-band coherence readout with threshold crossings marked (D2).
+arousal, gain and |λ| exponent per layer, the self-similarity lane (D1), the four per-layer order parameters with the crossing marks (D2).
 Format: float16 `.npz` per song plus a JSON schema. Run it on the three danced songs (Instant Crush, Five Years, Presence; find their
 features from the v47 build). Report the size per song. No claims, mechanism names only.
 
@@ -70,7 +70,7 @@ Keep it outside git with the data (the audio must not enter git).
 
 Fill the MORNING SUMMARY. Report to the overseer in a few lines:
 - H2: T1a and T1b per design and try, oracle and untrained-H1 baselines, unit tests;
-- brainDump: size per song, the coherence threshold and the 20 songs it came from, the three songs' files;
+- brainDump: size per song, the four per-layer thresholds and the 20 songs they came from, the three songs' files;
 - the B7 lanes in `mindState` and the v47 check result;
 - FOR USER items; branch, last commit, data paths.
 

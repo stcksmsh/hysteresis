@@ -749,3 +749,24 @@ Binding. Recorded from `docs/BODY_BRAIN_PLAN.md` version 2, §2, which replaces 
 - K4 is fixed as in plan §6 (paired runs per song, 8 s windows, d_diff − d_same).
 - The self-similarity data lane (plan §8) is allowed with no claim.
 - H1 is confirmed off. M4 (H1-based) is dropped. The hippocampus continues only as H2 (plan §4).
+
+### 7.13 Rulings on the plan v2 check, 2026-11-04, via planner
+
+Binding. They answer `docs/PLANNER_BRIEF_PLAN_V2_CHECK.md`.
+
+1. Accepted: the cerebellum's command is the servo target (joint angles at 100 Hz) in every set; efference copy = the last 10 targets
+   (100 ms). In M3 the policy's commands pass through the generators, and the cerebellum still sees targets.
+2. Changed: all 18 v47 trajectories (6 arms x 3 songs) are used, split into 60 s segments. Bootstrap at two levels: arms within song, then
+   segments within arm, with the 3 songs held fixed (not resampled); 10,000 resamples. The report states that the interval is conditional on
+   these three songs, and that arms in unison or mirrored formations are near-duplicates.
+3. Accepted: 120 independent 60 s held-out babbling trajectories, bootstrap over trajectories, 10,000 resamples.
+4. Accepted: builder 1 runs the Kaggle verify job first.
+5. Changed, ignition readout (a data lane, no claim):
+   - per layer, the magnitude-weighted Kuramoto order parameter of its 256 mode phases, computed at 100 Hz and averaged over 1 s windows
+     (stepped every 0.1 s);
+   - per layer, a threshold = its 99th percentile over 20 training songs, fixed before the danced songs run;
+   - a crossing = at least 3 of the 4 layers above their own threshold in the same window.
+   No n:m cross-band phase comparisons. Export the four order parameters and the crossing marks.
+6. Accepted: the self-similarity lane uses H2's input and timing with no sparsification, so it does not depend on H2 passing.
+7. Accepted: the M3 benchmark reports the largest environment count that fits the cap.
+8. Accepted: `docs/NIGHT_LOG_<branch>.md` per builder; `BODY_BRAIN_PLAN.md` §11 reads accordingly.
