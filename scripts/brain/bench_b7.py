@@ -7,7 +7,7 @@ Per variant, in its own process (so the peak memory is that variant's own):
   forward        forward only, no grad
 A step is batch 8 x 180 s = 0.4 audio hours. Step 0 (warm-up) is dropped; the median of the others is reported. Model: Core7, 10-tap skip, no hippocampus, fresh init
 (the B7 training configuration; the warm-start weights do not change the cost). Threads: --threads (8 locally, spec §0; on Kaggle pass the core count).
-    python bench_b7.py --out DIR [--data DIR] [--device cpu|cuda] [--threads 8] [--steps 4] [--minutes 20]
+    python bench_b7.py --out DIR [--data DIR] [--device auto|cpu|cuda] [--threads 8] [--steps 4] [--minutes 20]
 """
 import argparse
 import json
@@ -81,13 +81,16 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--out", required=True)
     ap.add_argument("--data", default="")
-    ap.add_argument("--device", default="cpu")
-    ap.add_argument("--threads", type=int, default=8)
+    ap.add_argument("--device", default="auto", help="auto = cuda if there is one, else cpu")
+    ap.add_argument("--threads", type=int, default=min(8, os.cpu_count() or 1), help="8 on the laptop (spec section 0); the core count on a smaller host")
     ap.add_argument("--steps", type=int, default=4)
     ap.add_argument("--minutes", type=float, default=20, help="total wall budget; each variant gets a third (after its first two steps)")
     ap.add_argument("--variant", choices=VARIANTS, help="internal: run one variant in this process")
     a = ap.parse_args(argv)
     Path(a.out).mkdir(parents=True, exist_ok=True)
+    if a.device == "auto":
+        a.device = "cuda" if torch.cuda.is_available() else "cpu"
+        sys.argv += ["--device", a.device]
     a.budget_s = a.minutes * 60 / len(VARIANTS)
     if a.variant:
         return run_variant(a)
