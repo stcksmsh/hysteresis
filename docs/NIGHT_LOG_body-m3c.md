@@ -42,3 +42,35 @@ New files: `tm3c.py`, `run_tm3c.py`, `test_tm3c.py` (T-M3 untouched). Stated bef
 - **Unit tests** (`test_tm3c.py`, 11, own process; `test_bdesc.py`, 4): descriptor parity; observer input is a function of the last 2 s of joint positions only and the observer module takes 31 numbers; roll motion does not change
   the descriptors; brain targets are the same whatever the policy does (the cortex never sees the arm); kappa = 0 identical to the old generator (generator level and a full block of arm trajectory); kappa bounded; the coupling pulls the phase;
   the shuffled control pairs i with j != i (fixed seed, a derangement) and its loss is computed on that pairing; (c) on synthetic choice sequences; a full iteration trains observer and policy.
+
+### Phase 3: calibration and grid (24 runs, 30 iterations each, 8 envs x 300 steps, evaluation 8 x 90 s)
+Calibration (`/secondary/hyst-data/body/m3c/calib.json`): R0 = 1 (by construction), LP0 0.0540, E0 0.0692; observer loss on random movement during calibration about 0.45 (training episodes).
+
+Grid, a = mean (shuffled - matched) loss, 95 % interval; b = RMS non-roll deg/s; programs used / above 5 %; kappa active share was 0.00 in every run:
+
+- l0.01_b0.1_e0.01_c0.1: a -0.0019 [-0.0041, +0.0004], matched loss 1.016, b 33.1, programs 2/1, entropy 0.03
+- l0.01_b0.1_e0.01_c0: a -0.0020 [-0.0063, +0.0026], matched loss 1.017, b 35.8, programs 2/1, entropy 0.03
+- l0.01_b0.1_e0.05_c0.1: a +0.0001 [-0.0014, +0.0016], matched loss 1.011, b 51.7, programs 1/1, entropy -0.00
+- l0.01_b0.1_e0.05_c0: a +0.0004 [-0.0018, +0.0030], matched loss 1.024, b 51.5, programs 1/1, entropy -0.00
+- l0.01_b0_e0.01_c0.1: a +0.0004 [-0.0022, +0.0033], matched loss 1.007, b 52.0, programs 1/1, entropy -0.00
+- l0.01_b0_e0.01_c0: a -0.0002 [-0.0028, +0.0020], matched loss 1.008, b 52.9, programs 1/1, entropy -0.00
+- l0.01_b0_e0.05_c0.1: a +0.0001 [-0.0021, +0.0022], matched loss 1.038, b 50.9, programs 2/2, entropy 0.48
+- l0.01_b0_e0.05_c0: a +0.0008 [-0.0006, +0.0023], matched loss 1.025, b 46.2, programs 1/1, entropy -0.00
+- l0.1_b0.1_e0.01_c0.1: a -0.0005 [-0.0034, +0.0026], matched loss 1.034, b 42.7, programs 2/1, entropy 0.03
+- l0.1_b0.1_e0.01_c0: a -0.0013 [-0.0045, +0.0011], matched loss 1.031, b 51.0, programs 1/1, entropy -0.00
+- l0.1_b0.1_e0.05_c0.1: a -0.0010 [-0.0058, +0.0038], matched loss 1.035, b 28.3, programs 2/1, entropy 0.03
+- l0.1_b0.1_e0.05_c0: a -0.0010 [-0.0064, +0.0039], matched loss 0.995, b 47.3, programs 1/1, entropy -0.00
+- l0.1_b0_e0.01_c0.1: a -0.0001 [-0.0027, +0.0027], matched loss 1.027, b 27.6, programs 2/1, entropy 0.03
+- l0.1_b0_e0.01_c0: a +0.0006 [-0.0015, +0.0024], matched loss 1.013, b 27.7, programs 2/1, entropy 0.03
+- l0.1_b0_e0.05_c0.1: a -0.0006 [-0.0027, +0.0021], matched loss 1.029, b 27.8, programs 2/1, entropy 0.03
+- l0.1_b0_e0.05_c0: a +0.0006 [-0.0011, +0.0023], matched loss 1.019, b 27.7, programs 2/1, entropy 0.03
+- l1_b0.1_e0.01_c0.1: a +0.0001 [-0.0012, +0.0015], matched loss 1.033, b 28.0, programs 2/1, entropy 0.03
+- l1_b0.1_e0.01_c0: a +0.0017 [-0.0008, +0.0041], matched loss 1.026, b 27.9, programs 2/1, entropy 0.03
+- l1_b0.1_e0.05_c0.1: a +0.0001 [-0.0012, +0.0015], matched loss 1.024, b 27.9, programs 2/1, entropy 0.03
+- l1_b0.1_e0.05_c0: a -0.0016 [-0.0033, -0.0001], matched loss 1.027, b 28.3, programs 2/1, entropy 0.03
+- l1_b0_e0.01_c0.1: a -0.0009 [-0.0023, +0.0003], matched loss 1.043, b 27.7, programs 2/1, entropy 0.03
+- l1_b0_e0.01_c0: a -0.0003 [-0.0016, +0.0010], matched loss 1.037, b 27.6, programs 2/1, entropy 0.03
+- l1_b0_e0.05_c0.1: a +0.0000 [-0.0012, +0.0010], matched loss 1.031, b 27.6, programs 2/1, entropy 0.03
+- l1_b0_e0.05_c0: a +0.0004 [-0.0007, +0.0014], matched loss 1.022, b 27.6, programs 2/1, entropy 0.03
+
+Reading: no setting has an interval above 0 for (a); held-out matched loss is about 1.0 (the mean predictor's value) in every run while the training-episode observer loss is about 0.4, so the observer does not carry over to fresh songs; (c) fails in all 24 (at most 2 programs above 5 %); kappa is never used. **Chosen by the rule (no setting meets (c): maximise (a) subject to (b)): lambda 1, beta 0.1, entropy weight 0.01, c_sw 0** (a +0.0017 [-0.0008, +0.0041], b 27.9). Differences between settings are within noise. Frozen here, before try 1.
