@@ -1,6 +1,6 @@
 //! `hyst` command-line entry point.
 //!
-//!   hyst score-csv SCORE_JSON OUT.csv [--hz 50] [--mode off|layered] [--body-source NAME]
+//!   hyst score-csv SCORE_JSON OUT.csv [--hz 50] [--mode off|layered] [--body-source NAME] [--agent N]
 //!   hyst check-csv FILE.csv
 //!
 //! `score-csv` writes one arm's joint angles (step H of docs/NEXT_DECODER_THEN_BRAIN.md);
@@ -11,14 +11,15 @@ use std::process::ExitCode;
 
 use hyst_compile::body::LIMITS;
 use hyst_compile::ensemble::EnsembleScore;
-use hyst_compile::score_csv::{check, export, Meta, SHOWN};
+use hyst_compile::score_csv::{check, export_agent, Meta, SHOWN};
 
-const USAGE: &str = "usage: hyst score-csv SCORE_JSON OUT.csv [--hz 50] [--mode off|layered] [--body-source NAME]\n       hyst check-csv FILE.csv";
+const USAGE: &str = "usage: hyst score-csv SCORE_JSON OUT.csv [--hz 50] [--mode off|layered] [--body-source NAME] [--agent N]\n       hyst check-csv FILE.csv";
 
 fn run(args: &[String]) -> Result<ExitCode, String> {
     match args.first().map(String::as_str) {
         Some("score-csv") if args.len() >= 3 => {
-            let (mut hz, mut mode, mut body_source) = (50.0, None, "none".to_string());
+            let (mut hz, mut mode, mut body_source, mut agent) =
+                (50.0, None, "none".to_string(), 0usize);
             let mut rest = args[3..].iter();
             while let Some(flag) = rest.next() {
                 let value = rest.next().ok_or(format!("{flag} needs a value"))?;
@@ -26,6 +27,7 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
                     "--hz" => hz = value.parse().map_err(|_| "bad --hz")?,
                     "--mode" => mode = Some(value.clone()),
                     "--body-source" => body_source = value.clone(),
+                    "--agent" => agent = value.parse().map_err(|_| "bad --agent")?,
                     _ => return Err(format!("unknown option {flag}\n{USAGE}")),
                 }
             }
@@ -40,8 +42,9 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
             let name = std::path::Path::new(&args[1])
                 .file_name()
                 .map_or(String::new(), |n| n.to_string_lossy().into());
-            let csv = export(
+            let csv = export_agent(
                 &score,
+                agent,
                 hz,
                 &Meta {
                     source_score: &name,
