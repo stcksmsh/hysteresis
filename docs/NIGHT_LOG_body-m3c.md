@@ -4,7 +4,17 @@ Provisional servo model throughout: Feetech STS3215 12 V assumed (kp, rotor iner
 
 ## MORNING SUMMARY
 
-(in progress: code and unit tests done, calibration and grid next)
+Provisional servo model: Feetech STS3215 12 V assumed (kp, rotor inertia, damping 1.5, acceleration share 0.25).
+**M3c toy fails twice. Stopped after try 2; no real run started.** Per BRAIN_SPEC 7.15 the toy's own pass was not reached; nothing here licenses K5.
+- Descriptors: Python port `bdesc.py`, 31 of Rust's 37 (roll's 6 excluded); parity on 3 fixed 8 s clips, tolerance 1e-6 relative, max difference 2.6e-8, pass. On the 2 s window the periodicity lags run 0.3-1.0 s (Rust's 0.3-3 s do not fit).
+- Observer: MLP 31 -> 64 -> 64 -> 8 (try 2: 16 hidden), MSE on 8 standardised brain-state numbers (arousal, total surprisal, cos/sin L3 phase, log band power L1-L4, 0.5 s blocks), movement-only input.
+- Grid (24 runs): no (a) interval above 0 in any; (c) fails in all (at most 1 program above 5 %); kappa never used. Chosen (rule: maximise (a) subject to (b), none meets (c)): lambda 1, beta 0.1, entropy 0.01, c_sw 0.
+- Try 1: (a) +0.0005 [-0.0010, +0.0019] FAIL; (b) 28.3 deg/s pass; (c) FAIL, 2 programs (8 / 1432), 0.67 switches/min, entropy 0.034 nats; per-joint RMS 53.5 / 13.6 / 0.17 / 12.8 (roll 93.1); kappa 0; K3-style PLV 0.0056, p 0.57 (report only).
+- Diagnosis: the observer does not beat the control even on random movement (+0.0005 [-0.0026, +0.0037]); it memorises training episodes (train loss 0.43, fresh-episode loss 1.04); policy collapses as in T-M3; kappa unused.
+- Try 2 (observer width 16): (a) -0.0003 [-0.0018, +0.0011] FAIL; (b) 28.1 deg/s pass; (c) FAIL, same 8 / 1432 counts, entropy 0.034; per-joint RMS 53.3 / 15.6 / 0.21 / 9.2 (roll 86.6); kappa 0; PLV 0.0044, p 0.73.
+- Reading (not tested further): in this toy the brain state is a function of the synthetic song, slowly varying; the 31 descriptors of the arm's movement do not carry it across songs, and the reward as defined pays episode identity. The program selection collapse reproduces T-M3's exactly (counts 8 / 1432) under the entropy bonus.
+- FOR USER: M3c's toy bar not met in two tries; the self-driven body stays closed unless the user wants a redesign (e.g. an observer evaluated on held-out songs inside the reward, which would change the reward definition and is outside this order).
+- Branch body-m3c; data /secondary/hyst-data/body/m3c/ (grid g_*, try1, diag_random, t2/try2); Rust reference scratch crate /secondary/hyst-data/body/m3c/parity_rs. Tests: test_bdesc 4, test_tm3c 11, all pass (own processes).
 
 ## Log
 
@@ -79,3 +89,6 @@ Reading: no setting has an interval above 0 for (a); held-out matched loss is ab
 Try 1 (frozen setting, seed 1, 30 iterations, 8 x 90 s evaluation; `m3c/try1.result.json`): **(a) FAIL** +0.0005 [-0.0010, +0.0019] (matched loss 1.036, shuffled 1.037); (b) pass 28.3 deg/s over joints 0-3 (per joint 53.5 / 13.6 / 0.17 / 12.8, roll 93.1); (c) **FAIL**: 2 programs used, counts 8 / 1432, 1 above 5 %, 0.67 switches/min, entropy 0.034 nats; kappa 0.0 in every joint; K3-style PLV 0.0056 (surrogate mean 0.0066, max 0.021, p 0.57), report only.
 Diagnosis (about 10 min, `diag_random`: initial random policy kept, observer trains for 30 iterations, same evaluation): (1) the observer does NOT beat the control with random movement either: a +0.0005 [-0.0026, +0.0037], matched loss 1.039. (2) Policy collapses as in T-M3: training entropy 0.71 nats but the mean action picks one program (value loss 70, |delta| 0.75: the critic does not keep up). (3) kappa is not used (training mean 0.002). The observer's training-episode loss falls to about 0.43 while its loss on fresh episodes is about 1.04: it memorises the training episodes (8 environments, a 4,000-block replay buffer, slowly varying targets, movement statistics that identify an episode), so the legibility the policy is paid is mostly episode identity, not a state read from movement.
 Try 2: one change, **observer size, hidden width 64 -> 16** (`--obs-hidden 16`; architecture otherwise as stated: 31 -> 16 -> 16 -> 8), to limit memorisation. Calibration repeated with the small observer (`m3c/t2/`). Reward definition, bar, setting (lambda 1, beta 0.1, ent 0.01, c_sw 0), seed 1, iterations and evaluation unchanged. Named before the run.
+
+### Phase 5: try 2
+`m3c/t2/try2.result.json` (observer width 16, calibration repeated in `m3c/t2/`): (a) -0.0003 [-0.0018, +0.0011] fail (matched 1.046, shuffled 1.045); (b) 28.1 deg/s pass; (c) fail, programs 8 / 1432, entropy 0.034 nats, 0.67 switches/min; kappa 0.0; PLV 0.0044 (surrogate max 0.018, p 0.73). Two tries failed: stopped, no real run.
