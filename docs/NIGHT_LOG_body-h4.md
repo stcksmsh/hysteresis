@@ -37,3 +37,4 @@
   Oracle replay is exact (target is the stored frames), the retrieval replay is far from it: it reads the top-1 entry's pointer quantised to TICK = 50 frames (0.5 s) and blends up to 4 sources with softmax(sim/0.05); H2's oracle takes the exact frame s1+(n0-s2). That is H2/B7 design, not an H4 deviation.
   Control: H3's `_with(m, 0.0, 1e3)` gives w = sigmoid(0) = 0.5, not 0; H3 with a=1, b=1e3 (w=0) gives 1.0000/1.0000/1.0001 = H4's control. H4's 1.000 is correct. Cortex has no memory, so repeat = first.
   Remainder (diag rerun logging the retrieval source count, test_h3/test_h4/full unittest) runs detached: unit hyst-wo6-h4-rest, logs /secondary/hyst-data/brain/h4/{diag2,tests_h3h4,tests_all}.log, marker wo6_rest.done.
+- 2026-11-05 WO6 remainder finished: retrieval weights shape (1, 4) = top-4 sources (diag2.log). Tests: test_h3 + test_h4 16 OK; full unittest 192 OK (1 skipped).
