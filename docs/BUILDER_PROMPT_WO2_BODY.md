@@ -29,17 +29,19 @@ You are a builder for Hysteresis. Work alone and unattended. Never wait for inpu
 3. `scripts/body/` (`make_arm.py`, `arm_sim.py`, `cpg.py`, `BODY_NOTES.md`, `test_body.py`), `scripts/compute/README.md`,
    `scripts/brain/core.py`, `core_b7.py`, `train.py`, `toy_b7.py`, `bench_b7.py`.
 
-## Overseer's defaults for points the plan leaves open (apply them; they are logged to the planner, not rule changes)
+## Rulings on the open points (BRAIN_SPEC §7.13, planner, 2026-11-04; binding)
 
 - **D1, command space.** The cerebellum's "command" is the servo target (5 joint angles at 100 Hz, what the generators output), in babbling
-  and in the v47 set alike. Efference copy = the last 10 targets (100 ms).
+  and in the v47 set alike. Efference copy = the last 10 targets (100 ms). In T-M3 and M3 the policy's commands pass through the generators, and the cerebellum still sees targets.
 - **D2, the v47 set.** v47 is a six-arm hexagon per song. Use all six arms of each of the three danced songs (Instant Crush, Five Years,
-  Presence): 18 trajectories, each replayed in physics as servo targets. Find the trajectories from the v47 build (`$D/tracker-scratch/newsong/three.sh`
-  and its outputs, `D=/home/stcksmsh/Documents/Codex/2026-09-23-can-you-check-the-programming-github/output/music-arm`; a shell guard refuses
-  commands mixing `$D` with pipes, `&&`, loops or heredocs, so put such steps in a script file). If a trajectory exceeds M0's limits in physics,
-  keep it and report how much.
-- **D3, K1 bootstrap.** Held-out babbling = 120 independent 60 s trajectories (own seed, own start pose). Bootstrap over trajectories,
-  10,000 resamples, 95 % interval. Same for the v47 set over its 18 trajectories.
+  Presence): 18 trajectories, each replayed in physics as servo targets, split into 60 s segments. Find the trajectories from the v47 build
+  (`$D/tracker-scratch/newsong/three.sh` and its outputs, `D=/home/stcksmsh/Documents/Codex/2026-09-23-can-you-check-the-programming-github/output/music-arm`;
+  a shell guard refuses commands mixing `$D` with pipes, `&&`, loops or heredocs, so put such steps in a script file). If a trajectory exceeds
+  M0's limits in physics, keep it and report how much.
+- **D3, K1 bootstrap.** Held-out babbling = 120 independent 60 s trajectories (own seed, own start pose); bootstrap over trajectories,
+  10,000 resamples, 95 % interval. v47 set: two-level bootstrap, arms within song, then segments within arm, the 3 songs held fixed (not
+  resampled), 10,000 resamples. The report states that the v47 interval is conditional on these three songs, and that arms in unison or
+  mirrored formations are near-duplicates.
 - **D4, Kaggle verify job (ruling of 2026-11-04).** First thing, before phase 1: a Kaggle kernel (no GPU needed: `--no-gpu`) that attaches
   `kostavukicevic/hyst-features` and runs `scripts/compute/manifest.py verify` on it. Log the result. If it fails, log FOR USER and continue.
 - **D5, M3 benchmark memory.** If 256 environments do not fit in 14 GB, report the largest count that fits.
