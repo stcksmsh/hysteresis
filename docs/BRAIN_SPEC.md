@@ -805,3 +805,34 @@ Binding. They answer `docs/PLANNER_BRIEF_WO2_RESULTS.md`.
 6. **Next work order, two builders.** Builder 1: the M3b toy, unattended template. Builder 2: the fallback, minimal (the authoring tool on B7
    lanes for the three danced songs, plus the self-surprisal export, so a watchable arm exists whatever M3b does); then `mindState` v2;
    `manifest.py` skips `dataset-metadata.json`. The monitor build waits for the user's choice of mockup.
+
+### 7.15 Change of direction, user, 2026-11-04 (via planner)
+
+Binding. It replaces M3b (§7.14 point 2) and adds H3. Builder 2's fallback order (§7.14 point 6) stands, plus previz videos for the user, so a
+watchable arm exists either way.
+
+**Principle.** Stop literal brain mimicry where it blocks learning. Build mechanisms in; train only small, well-defined parts.
+
+**H3 (memory), new plan item, toy only first.**
+- Keep H2's fixed sparse random code and one-shot store (untrained H2 passes T1a on all three designs).
+- The hippocampus makes its own prediction: the replayed horizon targets from the top-k sources (the oracle path, which passes T1b).
+- Final prediction per layer = a blend of cortex and hippocampus: w = sigmoid(a·(recognition − b)); mean = (1 − w)·cortex + w·replay; the
+  variance blended likewise. Only a and b are trained, per layer. The cortex is unchanged. After kNN-LM (Khandelwal et al. 2020); verify the
+  citation before any public use.
+- Toy bar: T1a + T1b as before (§7.10 R3); two tries, 3 h box each.
+- If it passes: C1–C3 round 1 on held-out songs with B7 epoch 6 + H3 (no cortex retrain).
+
+**M3c (learning to move), replaces M3b.**
+- Reward: r = legibility − λ·E. Legibility = −loss of an observer network that decodes the brain's inner state (arousal, total surprisal, L3
+  phase as cos/sin, per-layer band power, smoothed to 0.5 s) from the arm's movement alone, through the 37 body-study descriptors over a
+  sliding 2 s window, excluding the wrist roll. The observer trains alongside (as in GAIL-style setups), on training songs only.
+- Kept: basal ganglia selection among 8 programs with the entropy bonus and (d); dopamine δ; the cerebellum's LP as an optional term (the grid
+  includes β = 0); spinal generators with a phase coupling to L3 (κ set by the motor cortex; κ = 0 recovers the old generators).
+- Toy (two tries, 4 h box each), synthetic features. Pass: (a) observer decoding on held-out toy episodes beats a song-shuffled control,
+  interval above 0; (b) RMS joint speed ≥ 10 °/s excluding the roll; (c) at least 4 programs, each chosen in ≥ 5 % of decisions.
+- Real-run claims, checks fixed before results:
+  - **K5** "Its inner state can be read from its movement": held-out-song decoding above a shuffled control, per-song bootstrap interval above 0.
+  - **K4** as ruled (§7.12 / plan §6).
+  - **K3** "Its movement locks to the beat": reported, not required.
+- Wall wording: "It was rewarded for movement that shows what is inside it. Nobody designed how it moves."
+- **Retired:** the M3 and M3b reward designs. Their premise (prediction gain) fails because the cortex does not need a body to predict.
