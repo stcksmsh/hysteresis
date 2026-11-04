@@ -737,3 +737,15 @@ proprioception (parked in 7.8).
 
 None in the design. U1 (corpus access), U2 (the overseer's fills) and U3 (the two changed
 numbers) are ruled above. The user said yes on 2026-10-29.
+
+### 7.12 Rulings of 2026-11-04, via planner (after step Z, M0, M2 and H1)
+
+Binding. Recorded from `docs/BODY_BRAIN_PLAN.md` version 2, §2, which replaces version 1 in full.
+
+- Implement for M0 and later: the mirror ball. Continuous joints (base yaw, wrist roll): amplitude cap ±180°.
+- The B7 lane export comes with the monitor work (plan §8). Checks stay on CPU.
+- Servo values stay provisional (Feetech STS3215 12 V; kp, rotor inertia, damping 1.5, acceleration share 0.25), and every body result states them.
+- A Kaggle job verifies the whole `hyst-features` upload.
+- K4 is fixed as in plan §6 (paired runs per song, 8 s windows, d_diff − d_same).
+- The self-similarity data lane (plan §8) is allowed with no claim.
+- H1 is confirmed off. M4 (H1-based) is dropped. The hippocampus continues only as H2 (plan §4).
