@@ -1,12 +1,48 @@
 #!/usr/bin/env python3
-"""Local static server with HTTP Range support (audio seeking). usage: serve.py [DIR] [PORT]  (defaults: the build dir, 8765)."""
+"""Local static server with HTTP Range support (audio seeking) and POST /retune (the page's Render button -> retune.sh). usage: serve.py [DIR] [PORT]  (defaults: the build dir, 8765)."""
 import http.server
+import json
 import os
 import re
+import subprocess
 import sys
+import time
+from pathlib import Path
+
+RETUNE = Path(__file__).resolve().parent / "retune.sh"
+SONGS = ("instant-crush", "five-years", "presence")
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
+    def do_POST(self):
+        """POST /retune {song, mapping, start, duration}: save the mapping, run retune.sh for that window, answer {url, seconds}."""
+        def reply(code, obj):
+            body = json.dumps(obj).encode()
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        try:
+            if self.path != "/retune":
+                return reply(404, {"error": "unknown path"})
+            req = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
+            song, start, dur = req["song"], float(req["start"]), float(req.get("duration", 20))
+            if song not in SONGS or not (start >= 0 and 0 < dur <= 120):
+                return reply(400, {"error": "bad song, start or duration"})
+            name = re.sub(r"[^A-Za-z0-9_-]", "_", str(req["mapping"].get("name") or "page"))[:40]
+            work = Path(os.getcwd()) / "tuning" / "work"
+            work.mkdir(parents=True, exist_ok=True)
+            mp = work / f"{name}.json"
+            mp.write_text(json.dumps(req["mapping"]))
+            t0 = time.time()
+            r = subprocess.run([str(RETUNE), song, str(mp), str(int(start)), str(int(dur))], capture_output=True, text=True, timeout=600)
+            if r.returncode:
+                return reply(500, {"error": (r.stderr or r.stdout)[-600:]})
+            return reply(200, {"url": "tuning/" + Path(r.stdout.strip().splitlines()[-1]).name, "seconds": time.time() - t0})
+        except (KeyError, ValueError, TypeError, AttributeError, json.JSONDecodeError) as e:
+            return reply(400, {"error": f"bad request: {e}"})
+
     def send_head(self):
         rng = self.headers.get("Range")
         path = self.translate_path(self.path)
