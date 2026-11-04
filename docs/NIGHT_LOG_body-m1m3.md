@@ -27,3 +27,24 @@ Kernel `kostavukicevic/hyst-job-verify-features-001` (CPU, no GPU) pushed; it at
 - `check_m1.py` (K1) committed in 3dfcdc2 before training. As committed: per set, all three horizons (+10, +50, +100 ms) must pass: NLL gain over persistence and over ridge with the 95 % bootstrap lower bound above 0, and MSE at least 5 % below the better baseline (point estimate). I chose "all three horizons on both sets" because the plan names no horizon; it is stricter than a pooled reading.
 - Environment change: `uv pip install mujoco==3.17.0` into `/secondary/hyst-env/brain` (adds absl-py 2.5.1, etils 1.15.0, glfw 2.11.0, pyopengl 3.1.10, websockets 17.4, zipp 4.1.2; no existing package changed) so one interpreter has torch and MuJoCo.
 - M1 round 1: `hyst-wo2b1-m1r1` (systemd user unit, MemoryMax 14G, run_job), GRU 128, 30 epochs, about 160 s/epoch on the laptop (12 threads), about 80 min; `/secondary/hyst-data/body/runs/m1-r1/`.
+
+### Phase 2: M1 round 1 and K1
+- Round 1: GRU 128 + skip, 30 epochs, trained locally (12 threads, 3,588 s, unit hyst-wo2b1-m1r1), bundle `/secondary/hyst-data/body/runs/m1-r1/m1_r1.pt`. K1 as committed (`k1_round1.json`): **FAIL**.
+- Held-out babbling (120 trajectories), gain = baseline NLL minus model NLL, 95 % interval: +10 ms vs persistence 1.92 [1.91, 1.93], vs ridge 0.33 [0.32, 0.34], MSE 0.039 vs ridge 0.142 (-73 %): pass. +50 ms vs persistence 1.73 [1.72, 1.74], **vs ridge -0.17 [-0.18, -0.16]: fail** (MSE 0.084 vs 0.170, -51 %). +100 ms vs persistence 1.69, vs ridge 0.043 [0.036, 0.050], MSE 0.125 vs 0.209 (-40 %): pass. So the babbling set fails on one condition: the model's predicted variance is worse calibrated than ridge's constant one at +50 ms, although its error is half.
+- v47 set (78 segments, two-level bootstrap): **fail on every condition.** NLL gains negative (vs persistence -36.6 [-64, -11] at +10 ms; -6.2 at +50 ms; -7.9 at +100 ms), MSE model 0.75 / 0.77 / 0.66 against persistence 0.66 / 0.68 / 0.70 and ridge 0.33 / 0.32 / 0.59. Out of distribution the model does worse than persistence; the v47 trajectories (raw targets that the sim's limiter changes by up to 10 deg RMS, speeds and accelerations above M0's limits, long smooth stretches unlike OU babbling) are far from the training babbling.
+- Round 2 (the one allowed rerun, width and training length only): hidden 256, 30 epochs, unit hyst-wo2b1-m1r2, 7 threads, `/secondary/hyst-data/body/runs/m1-r2/`. Nothing else changes (data, inputs, loss, baselines, check). I expect the v47 set to stay failed; capacity does not change what the training data covers. If K1 fails again, M1's claim stays unlicensed and T-M3 uses the better bundle as a toy cerebellum (logged).
+
+### Phase 3: M3 step benchmark (report only)
+One step = one 2 s block per environment (200 frames), E environments: physics (E arms x 200 control steps, 12 worker processes) + B7 epoch 6 twin pass (moving and still, batch 2E, gradient checkpointing) with the proprioceptive relays + backward into the relays (cortex frozen) + basal ganglia / motor cortex / critic forward and backward on E x 20 samples. Non-zero relays and synthetic standardised features (cost does not depend on content). "Per simulated hour" = wall seconds to produce one hour of experience summed over environments = step seconds x 3600 / (2E).
+
+| E | device | physics s | cortex twin fwd s | relay bwd s | policy s | step s | wall s per simulated hour | peak memory |
+|---|---|---|---|---|---|---|---|---|
+| 16 | laptop CPU, 12 threads | 0.104 | 0.141 | 0.189 | 0.006 | 0.454 | 51.1 | 1.0 GB RSS (main process) |
+| 64 | laptop CPU | 0.329 | 0.600 | 1.119 | 0.012 | 2.05 | 57.7 | 2.1 GB |
+| 256 | laptop CPU | 1.283 | 2.748 | 4.376 | 0.034 | 8.47 | 59.5 | 6.7 GB (256 environments fit in 14 GB) |
+| 16 | Kaggle T4 (4 CPU cores for physics) | 0.295 | 0.029 | 0.037 | 0.004 | 0.368 | 41.4 | 0.39 GB GPU |
+| 64 | T4 | 1.311 | 0.067 | 0.105 | 0.004 | 1.511 | 42.5 | 1.41 GB GPU |
+| 256 | T4 | 4.907 | 0.278 | 0.386 | 0.005 | 5.576 | 39.2 | 5.53 GB GPU |
+
+Reading: on the laptop the cortex twin pass plus relay backward is about 85 % of the step; on the T4 the cortex costs 0.66 s at 256 environments and the 4 Kaggle CPU cores doing physics (4.9 s) dominate. The two machines differ by about 1.5x per simulated hour as measured. The T4 job ran 59 s of kernel time (the first attempt, 40 s, failed on a benchmark bug fixed in c087504): GPU hours used about 0.05. Peak RSS above is the main process only (ru_maxrss of children is not counted); the 12 physics workers each hold small arm models.
+Real-M3 caveat found while building T-M3: B7 runs in blocks of 200 frames (2 s) and a chunk must start on a block edge, so with epoch 6 unchanged the policy sees the cortex state of the previous block (up to 2 s stale). The toy uses 0.5 s blocks (its cortex is retrained, so that is allowed there); the real run does not have that option without changing the frozen cortex.
