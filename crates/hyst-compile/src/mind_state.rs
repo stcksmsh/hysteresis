@@ -334,11 +334,9 @@ mod tests {
     fn a_brain_object_beside_the_reserved_arrays_changes_nothing() {
         // scripts/brain/brain_mindstate.py adds `brain` inside mindState; version 1 ignores it
         let mut f = field();
-        f["brain"] = json!({"source": "b7-epoch6", "hopSeconds": 0.1, "smoothedSurprisal": [0.1, null]});
-        assert_eq!(
-            read(&sidecar(f)).unwrap(),
-            read(&sidecar(field())).unwrap()
-        );
+        f["brain"] =
+            json!({"source": "b7-epoch6", "hopSeconds": 0.1, "smoothedSurprisal": [0.1, null]});
+        assert_eq!(read(&sidecar(f)).unwrap(), read(&sidecar(field())).unwrap());
     }
 
     #[test]
