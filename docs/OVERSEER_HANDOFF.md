@@ -96,10 +96,10 @@ latter corrects WO2: "selection collapse" was an argmax evaluation artefact).
 | Agent | Order (prompt on origin/body) | Branch | Share |
 |---|---|---|---|
 | 5 | fallback: authoring tool on B7 lanes for the 3 danced songs + full-song previz videos + self-surprisal export + mindState v2 + manifest.py skip + brainDump without crossings (`docs/BUILDER_PROMPT_WO3_FALLBACK.md` + previz addendum; **priority on the machine**) | body-fallback (not pushed yet at 00:00) | 6 thr / 6 GB |
-| 1 | M3d toy (`docs/BUILDER_PROMPT_WO5_M3D.md`): STOPPED 00:05 for a user clear; re-send to a fresh agent with the branch body-m3d (if pushed) and its night log | body-m3d | 8 thr / 10 GB |
-| 2 | H4 toy (`docs/BUILDER_PROMPT_WO5_H4.md`): STOPPED 00:05 for a user clear; re-send to a fresh agent with branch body-h4 and its night log | body-h4 | 3 thr / 4 GB |
+| 1 | M3d toy (`docs/BUILDER_PROMPT_WO5_M3D.md`), re-sent fresh 23:40 after a clear (first session left nothing) | body-m3d | 8 thr / 10 GB |
+| 2 | H4 toy (`docs/BUILDER_PROMPT_WO5_H4.md`), resumed 23:40 after a clear: branch at 8614dd7, try 1 rerun cleanly with committed parameters (design A had finished, B was killed) | body-h4 | 3 thr / 4 GB |
 | 3 | sampled re-evaluation of T-M3/M3b/M3c policies + program/state MI (`docs/BUILDER_PROMPT_WO5_REEVAL.md`) | body-reeval | 2 thr / 4 GB |
-Agent 4 is blank (spare). Units are named `hyst-wo3b2-*` (fallback) and `hyst-wo5-*`.
+body-fallback pushed 02b724b at 23:30 (previews, self-surprisal, mindState v2, brainDump, manifest fix); recording videos (hyst-wo3b2-rec1). Machine load ~111 at 23:30, mostly a Kabl factory_bank process. Agent 4 is blank (spare). Units are named `hyst-wo3b2-*` (fallback) and `hyst-wo5-*`.
 
 **When each reports:** verify (below), merge into body, push. For body-fallback also the v47 cmp (it touches crates/ and mindState). Then
 the planner brief `docs/PLANNER_BRIEF_WO5_RESULTS.md` with: fallback preview/video paths, self-surprisal sizes, mindState v2 tests, v47 cmp;
