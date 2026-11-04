@@ -123,7 +123,7 @@ fresh one for verification. (6) `tm3_world` patches `core.N`/`core_b7.BLOCK` on 
 `_WO6_M3D_RELAUNCH.md` (agent 1; agent 1 had already relaunched by itself at 00:16 as `hyst-wo5-m3d-grid`, sequential lambdas, 8 threads, 9 GB cap, anon ~1 GB),
 `_WO6_TUNING.md` (agent 5: one-arm tuning loop, fast re-render of a song or a 20 s window, + self-surprisal lane). **User correction 2026-11-05: the installation is ONE arm; ensemble out of scope for good** (7.17.4 rewritten, plan §10). Sent 2026-11-05 ~00:45 to agents 2 (H4 diag), 5 (tuning, branch body-tuning), 1 (M3d note), notify_when_idle on all three. AGENTS.md now opens with the one-arm rule (body, keys-decide, dance-checkpoint c9bbf3c). H4 both tries fail T1b; diagnostic per 7.17.1 decides closure.
 
-**Hourly wakeup:** session cron e1eec50b at :23 (set 2026-11-04 23:40, dies with the session; recreate after restart).
+**Hourly wakeup:** session cron f0f15a81 (fires ~:51 each hour after jitter; explicit resume/OOM-relaunch/handover prompt; dies with the session, recreate after restart). Claude-independent watchdog: systemd timer `hyst-overseer-watchdog.timer` every 15 min appends unit states, failures (oom-kill/exit-code), power and memory to `/secondary/hyst-data/overseer/watch.log` (script `watchdog.sh` there). Old handled failed units were reset-failed 2026-11-05 00:28, so any FAILED line after that is new. 00:25: builders 1, 2, 5 told to chain their remaining long runs into one detached service before the usage limit.
 
 **Wakeups:** set a session cron after restart, e.g. hourly at :23: check agents/branches/units/uptime, resume stalled builders, hand dead ones
 to blank agents, verify finished ones.
