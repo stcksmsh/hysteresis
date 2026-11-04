@@ -103,7 +103,7 @@ def run(a):
         t["cortex_twin_forward"] = time.perf_counter() - t0
         t0 = time.perf_counter()
         feat = torch.cat([out[2]["x"], out[3]["x"]], -1)[:E].detach()                                    # pooled-state input for the policy
-        feat = torch.cat([feat.reshape(E, 20, 10, -1).mean(2), prop[:E].reshape(E, 20, 10, -1).mean(2), s[:E].reshape(E, 20, 10).mean(2)[..., None]], -1)
+        feat = torch.cat([feat.reshape(E, 20, 10, -1).mean(2), prop[:E].reshape(E, 20, 10, -1).mean(2), s[:E].detach().reshape(E, 20, 10).mean(2)[..., None]], -1)
         opt.zero_grad()
         s[:E].sum().backward()                             # relay backward (cortex frozen): through all four layers into the proprioceptive relays
         if dev == "cuda":
