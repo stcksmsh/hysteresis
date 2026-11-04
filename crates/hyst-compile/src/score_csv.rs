@@ -30,7 +30,21 @@ pub struct Meta<'a> {
 
 /// The file's text for the first arm of `score`.
 pub fn export(score: &EnsembleScore, hz: f64, meta: &Meta) -> Result<String, String> {
-    if !(hz.is_finite() && hz > 0.0) || score.tracks.is_empty() || score.rig.channels.len() != 5 {
+    export_agent(score, 0, hz, meta)
+}
+
+/// The file's text for arm `agent` of `score` (`export` is arm 0).
+pub fn export_agent(
+    score: &EnsembleScore,
+    agent: usize,
+    hz: f64,
+    meta: &Meta,
+) -> Result<String, String> {
+    if !(hz.is_finite() && hz > 0.0)
+        || agent >= score.tracks.len()
+        || agent >= score.placements.len()
+        || score.rig.channels.len() != 5
+    {
         return Err("score-csv needs hz > 0 and a five-axis score with an arm".into());
     }
     let mut out =
@@ -50,12 +64,12 @@ pub fn export(score: &EnsembleScore, hz: f64, meta: &Meta) -> Result<String, Str
     );
     out += &format!(
         "# placement_json: {}\n{COLUMNS}\n",
-        serde_json::to_string(&score.placements[0]).map_err(|e| e.to_string())?
+        serde_json::to_string(&score.placements[agent]).map_err(|e| e.to_string())?
     );
     let rows = (score.duration * hz + 1e-9).floor() as usize;
     for i in 0..=rows {
         let t = i as f64 / hz;
-        let q = &score.sample(t)?.agents[0].joints_degrees;
+        let q = &score.sample(t)?.agents[agent].joints_degrees;
         out += &format!("{t:.6}");
         for v in q {
             out += &format!(",{v:.6}");
