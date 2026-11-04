@@ -104,6 +104,16 @@ class Manifest(unittest.TestCase):
         (d / "a" / "x.bin").unlink()
         self.assertEqual(sorted(mf.verify(d)), ["changed y.txt", "missing a/x.bin"])
 
+    def test_dataset_metadata_is_skipped(self):
+        d = Path(tempfile.mkdtemp())
+        (d / "y.txt").write_text("hi")
+        (d / "dataset-metadata.json").write_text("{}")
+        self.assertEqual(mf.build(d), 1)
+        self.assertNotIn("dataset-metadata", (d / mf.NAME).read_text())
+        (d / mf.NAME).write_text((d / mf.NAME).read_text() + "0" * 64 + "  dataset-metadata.json\n")    # an older manifest that listed it
+        (d / "dataset-metadata.json").write_text('{"changed": 1}')
+        self.assertEqual(mf.verify(d), [])
+
 
 class Pack(unittest.TestCase):
     def test_pack_relative_float16(self):

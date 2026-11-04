@@ -3,13 +3,14 @@
     python manifest.py build DIR        writes DIR/MANIFEST.sha256 ("<hash>  <relative path>", sorted)
     python manifest.py verify DIR       exit 0 if every listed file exists with the same hash, else prints mismatches, exit 1
 
-MANIFEST.sha256 itself is never listed. No third-party dependencies.
+MANIFEST.sha256 itself and dataset-metadata.json (Kaggle consumes it on upload) are never listed or checked. No third-party dependencies.
 """
 import hashlib
 import sys
 from pathlib import Path
 
 NAME = "MANIFEST.sha256"
+SKIP = (NAME, "dataset-metadata.json")
 
 
 def sha256(path, block=1 << 20):
@@ -24,7 +25,7 @@ def build(root):
     root = Path(root)
     lines = []
     for p in sorted(root.rglob("*")):
-        if p.is_file() and p.name != NAME and not p.name.endswith(".tmp"):
+        if p.is_file() and p.name not in SKIP and not p.name.endswith(".tmp"):
             lines.append(f"{sha256(p)}  {p.relative_to(root).as_posix()}")
     (root / NAME).write_text("\n".join(lines) + "\n")
     return len(lines)
@@ -37,6 +38,8 @@ def verify(root):
         if not line.strip():
             continue
         digest, rel = line.split("  ", 1)
+        if rel in SKIP:
+            continue
         p = root / rel
         if not p.is_file():
             bad.append(f"missing {rel}")
