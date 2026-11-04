@@ -143,7 +143,7 @@ class Run:
 
     # -- one block (0.5 s)
     @torch.no_grad()
-    def block(self, deterministic=False, learn_cb=True, record=None):
+    def block(self, deterministic=False, learn_cb=True, record=None, sample_prog=False):
         E, cfg = self.cfg.E, self.cfg
         feats, ph, bpm = zip(*[m.next(W.BLOCK) for m in self.music])
         f = torch.from_numpy(np.stack(feats))
@@ -156,7 +156,7 @@ class Run:
             if decide:
                 logits = self.pol.scores(z)
                 dist = torch.distributions.Categorical(logits=logits)
-                k = logits.argmax(-1) if deterministic else dist.sample()
+                k = logits.argmax(-1) if deterministic and not sample_prog else dist.sample()   # sample_prog: program sampled, modulation stays the mean
                 logp_k = dist.log_prob(k)
                 eps = torch.zeros(E, 20) if deterministic else SIGMA_P * torch.randn(E, 20)
                 self.a_p = self.pol.theta[k] + eps
@@ -213,7 +213,8 @@ class Run:
             self.cb.learn()
         self.t += 1
         res = {"steps": steps, "d": d, "lp": torch.from_numpy(lp).float(), "en": torch.from_numpy(np.stack(en_b, 1)).float(), "sync": torch.from_numpy(sync).float(),
-               "f": f, "prop": prop, "obs": obs, "pulse_phase": np.stack(ph), "nll": torch.stack(nll_b, 1)}
+               "f": f, "prop": prop, "obs": obs, "pulse_phase": np.stack(ph), "nll": torch.stack(nll_b, 1),
+               "s_state": s_all[:E], "h3_state": out[2]["h"][:E]}
         if record is not None:
             record.append(res)
         return res
@@ -317,12 +318,63 @@ def iteration(run, learn_policy=True):
     return info, roll
 
 
+def mutual_information(a, b):
+    """Plug-in mutual information (nats) of two integer arrays of the same shape."""
+    a, b = np.asarray(a).ravel(), np.asarray(b).ravel()
+    na, nb = a.max() + 1, b.max() + 1
+    j = np.bincount(a * nb + b, minlength=na * nb).reshape(na, nb) / a.size
+    pa, pb = j.sum(1, keepdims=True), j.sum(0, keepdims=True)
+    m = j > 0
+    return float((j[m] * np.log(j[m] / (pa @ pb)[m])).sum())
+
+
+def mi_with_shuffle(k, state, n_shuffle=1000, seed=0):
+    """k, state (E, N) integer arrays. MI between the program and the state; control = shuffle of k within each episode, n_shuffle times;
+    p = (1 + #(shuffled >= observed)) / (1 + n_shuffle)."""
+    obs = mutual_information(k, state)
+    rng = np.random.default_rng(seed)
+    sh = np.array([mutual_information(np.stack([rng.permutation(row) for row in k]), state) for _ in range(n_shuffle)])
+    return {"mi_nats": obs, "mi_shuffle_mean": float(sh.mean()), "mi_shuffle_max": float(sh.max()), "mi_p": float((1 + (sh >= obs).sum()) / (1 + n_shuffle))}
+
+
+def brain_state_bins(s_state, h3_state):
+    """Per block: the brain state the policy saw at the block start = state at the end of the previous block. Arousal = the one-pole of the total
+    music surprisal (rise tau 1 s when above, decay tau 8 s; same as tm3c.brain_state), binned in quartiles of the pooled evaluation (edges 25, 50, 75 %);
+    L3 phase = angle of the L3 mode with the largest mean |h| in the block, at the block's last frame, binned in 4 equal sectors of [0, 2 pi).
+    state = 4 * arousal bin + phase bin (16 states). Returns (E, nblocks) ints, entry b = state at the end of block b."""
+    E = s_state[0].shape[0]
+    a = np.zeros(E)
+    arousal, phase = [], []
+    for s, h in zip(s_state, h3_state):
+        s, h = s.numpy(), h.numpy()
+        for t in range(s.shape[1]):
+            a = a + (s[:, t] - a) * (W.DT / np.where(s[:, t] > a, 1.0, 8.0))
+        arousal.append(a.copy())
+        m = np.abs(h).mean(1).argmax(-1)
+        phase.append(np.angle(h[np.arange(E), -1, m]) % (2 * np.pi))
+    ar, ph = np.stack(arousal, 1), np.stack(phase, 1)
+    return ar, ph
+
+
+def program_state_mi(rec, skip_blocks, n_shuffle=1000):
+    """MI between the chosen program (one per block) and the brain state at that block's start, blocks from skip_blocks on."""
+    ks = torch.stack([torch.stack([s["k"] for s in r["steps"] if s["decide"]], 1)[:, 0] for r in rec], 1).numpy()          # (E, nblocks)
+    ar, ph = brain_state_bins([r["s_state"] for r in rec], [r["h3_state"] for r in rec])
+    ar, ph = ar[:, skip_blocks - 1:-1], ph[:, skip_blocks - 1:-1]                      # state at the start of blocks skip_blocks..end
+    k = ks[:, skip_blocks:]
+    ab = np.searchsorted(np.quantile(ar, [0.25, 0.5, 0.75]), ar, side="right")
+    pb = np.minimum((ph / (2 * np.pi) * 4).astype(int), 3)
+    out = mi_with_shuffle(k, 4 * ab + pb, n_shuffle)
+    out["mi_n_decisions"] = int(k.size)
+    return out
+
+
 # ---------------------------------------------------------------------------------------------------------------- evaluation
 def plv(a, b):
     return float(np.abs(np.mean(np.exp(1j * (a - b)))))
 
 
-def evaluate(run, n_ep=16, secs=120.0, skip=10.0, seed=999, surrogates=1000):
+def evaluate(run, n_ep=16, secs=120.0, skip=10.0, sample_prog=False, seed=999, surrogates=1000):
     """Fresh arms and songs, the policy's mean action (argmax program, no noise), cerebellum not learning, relay as trained.
     (a) S_still - S_moving per episode, bootstrap interval over episodes; (b) RMS joint speed; (c) pooled 1:1 phase-locking of the dominant joint's velocity
     to the pulse against circular-shift surrogates. Also programs used, switches per minute, selection entropy."""
@@ -333,7 +385,7 @@ def evaluate(run, n_ep=16, secs=120.0, skip=10.0, seed=999, surrogates=1000):
     ev.cb.net.load_state_dict(run.cb.net.state_dict())
     rec = []
     for _ in range(int(secs / 0.5)):
-        ev.block(deterministic=True, learn_cb=False, record=rec)
+        ev.block(deterministic=True, learn_cb=False, record=rec, sample_prog=sample_prog)
     sk = int(skip / 0.5)
     d = torch.cat([r["d"] for r in rec], 1)[:, sk * BLOCK_STEPS:]                         # (E, steps)
     per_ep = d.mean(1).numpy()
@@ -380,6 +432,8 @@ def evaluate(run, n_ep=16, secs=120.0, skip=10.0, seed=999, surrogates=1000):
     res["control_still_minus_moving"] = float((s3[2] - s3[0]).mean())
     res["control_still_minus_shifted"] = float((s3[2] - s3[1]).mean())
     res["control_shifted_minus_moving"] = float((s3[1] - s3[0]).mean())
+    res["sampled"] = bool(sample_prog)
+    res.update(program_state_mi(rec, sk))
     res["pass"] = res["a_pass"] and res["b_pass"] and res["c_pass"]
     return res
 

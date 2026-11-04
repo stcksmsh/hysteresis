@@ -66,7 +66,7 @@ class RunB(tm3.Run):
         self.f0 = 0                                          # frames elapsed
 
     @torch.no_grad()
-    def block(self, deterministic=False, learn_cb=True, record=None):
+    def block(self, deterministic=False, learn_cb=True, record=None, sample_prog=False):
         E, cfg = self.cfg.E, self.cfg
         feats, ph, bpm = zip(*[m.next(W.BLOCK) for m in self.music])
         f = torch.from_numpy(np.stack(feats))
@@ -79,7 +79,7 @@ class RunB(tm3.Run):
             if decide:
                 logits = self.pol.scores(z)
                 dist = torch.distributions.Categorical(logits=logits)
-                k = logits.argmax(-1) if deterministic else dist.sample()
+                k = logits.argmax(-1) if deterministic and not sample_prog else dist.sample()   # sample_prog: program sampled, modulation stays the mean
                 logp_k = dist.log_prob(k)
                 eps = torch.zeros(E, 20) if deterministic else tm3.SIGMA_P * torch.randn(E, 20)
                 self.a_p = self.pol.theta[k] + eps
@@ -136,7 +136,8 @@ class RunB(tm3.Run):
             self.cb.learn()
         self.t += 1
         res = {"steps": steps, "d": d, "lp": torch.from_numpy(lp).float(), "en": torch.from_numpy(np.stack(en_b, 1)).float(), "sync": torch.zeros(E),
-               "f": f, "prop": prop, "prop_shifted": prop_sh, "obs": obs, "pulse_phase": np.stack(ph), "nll": torch.stack(nll_b, 1)}
+               "f": f, "prop": prop, "prop_shifted": prop_sh, "obs": obs, "pulse_phase": np.stack(ph), "nll": torch.stack(nll_b, 1),
+               "s_state": s_all[:E], "h3_state": out[2]["h"][:E]}
         if record is not None:
             record.append(res)
         return res
@@ -169,7 +170,7 @@ def boot_ci(x, n=10000):
     return float(np.percentile(bs, 2.5)), float(np.percentile(bs, 97.5))
 
 
-def evaluate(run, n_ep=8, secs=90.0, skip=10.0, seed=999, surrogates=1000):
+def evaluate(run, n_ep=8, secs=90.0, skip=10.0, sample_prog=False, seed=999, surrogates=1000):
     """Fresh arms and songs, the policy's mean action, cerebellum not learning, relay as trained. (a) S_shifted - S_moving (shift A) per episode with a
     bootstrap interval over episodes; (b) RMS joint speed over the four non-roll joints; (c) 1:1 phase-locking of the dominant non-roll joint's velocity to
     the pulse against circular-shift surrogates; (d) selection. Control: S_shifted - S_moving again with the independent shift B, offline on the same
@@ -181,7 +182,7 @@ def evaluate(run, n_ep=8, secs=90.0, skip=10.0, seed=999, surrogates=1000):
     ev.cb.net.load_state_dict(run.cb.net.state_dict())
     rec = []
     for _ in range(int(secs / 0.5)):
-        ev.block(deterministic=True, learn_cb=False, record=rec)
+        ev.block(deterministic=True, learn_cb=False, record=rec, sample_prog=sample_prog)
     sk = int(skip / 0.5)
     assert skip >= SHIFT_RANGE_S[1]
     d = torch.cat([r["d"] for r in rec], 1)[:, sk * tm3.BLOCK_STEPS:]
@@ -222,5 +223,7 @@ def evaluate(run, n_ep=8, secs=90.0, skip=10.0, seed=999, surrogates=1000):
            "dominant_joints": dom, **sel, "policy_mean_entropy_nats": pol_entropy, "policy_mean_probs": pol_probs,
            "control_shiftA_offline": float(dA.mean()), "control_shiftB_mean": float(dB.mean()), "control_shiftB_lo": bl, "control_shiftB_hi": bh,
            "control_shiftB_per_episode": dB.tolist(), "shifts_A_s": (ev.shifts / 100).tolist(), "shifts_B_s": (make_shifts(SHIFT_SEED_B, n_ep) / 100).tolist()}
+    res["sampled"] = bool(sample_prog)
+    res.update(tm3.program_state_mi(rec, sk))
     res["pass"] = res["a_pass"] and res["b_pass"] and res["c_pass"] and res["d_pass"]
     return res

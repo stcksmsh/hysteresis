@@ -106,6 +106,34 @@ class Integration(unittest.TestCase):
         self.assertTrue(np.isfinite(info["relay_loss"]))
         self.assertFalse(torch.equal(before, run.pol.theta.detach()))
 
+    def test_sampled_mode_samples_on_flat_logits_and_argmax_does_not(self):
+        run = tm3.Run(tm3.Config(E=8, seed=6), self.cortex, self.bundle, CAL)
+        for net in (run.pol.go, run.pol.nogo):
+            net[-1].weight.data.zero_()
+            net[-1].bias.data.zero_()
+        torch.manual_seed(0)
+        arg = run.block(deterministic=True)["steps"][0]["k"]
+        self.assertEqual(len(set(arg.tolist())), 1)                       # argmax of equal logits: one program for every episode
+        samp = run.block(deterministic=True, sample_prog=True)["steps"][0]["k"]
+        self.assertGreater(len(set(samp.tolist())), 1)                    # sampled: 8 episodes, uniform over 8 programs
+
+
+class MutualInformation(unittest.TestCase):
+    def test_independent_choice_is_within_noise(self):
+        rng = np.random.default_rng(0)
+        r = tm3.mi_with_shuffle(rng.integers(0, 8, (8, 160)), rng.integers(0, 16, (8, 160)), n_shuffle=300)
+        self.assertGreater(r["mi_p"], 0.01)
+
+    def test_dependent_choice_is_above_the_shuffle(self):
+        rng = np.random.default_rng(1)
+        st = rng.integers(0, 16, (8, 160))
+        r = tm3.mi_with_shuffle(st % 8, st, n_shuffle=300)
+        self.assertLess(r["mi_p"], 0.01)
+        self.assertGreater(r["mi_nats"], 5 * r["mi_shuffle_mean"])
+
+    def test_constant_choice_has_zero_mi(self):
+        self.assertEqual(tm3.mutual_information(np.zeros((4, 50), int), np.arange(200).reshape(4, 50) % 16), 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()
