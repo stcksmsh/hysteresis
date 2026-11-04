@@ -144,7 +144,7 @@ class RunC(tm3.Run):
         return ((y - torch.from_numpy(self.stats["ymu"]).float()) / torch.from_numpy(self.stats["ysd"]).float()).clamp(-8, 8)
 
     @torch.no_grad()
-    def block(self, deterministic=False, learn_cb=True, record=None):
+    def block(self, deterministic=False, learn_cb=True, record=None, sample_prog=False):
         E, cfg = self.cfg.E, self.cfg
         feats, ph, bpm = zip(*[m.next(W.BLOCK) for m in self.music])
         f = torch.from_numpy(np.stack(feats))
@@ -157,7 +157,7 @@ class RunC(tm3.Run):
             if decide:
                 logits = self.pol.scores(z)
                 dist = torch.distributions.Categorical(logits=logits)
-                k = logits.argmax(-1) if deterministic else dist.sample()
+                k = logits.argmax(-1) if deterministic and not sample_prog else dist.sample()   # sample_prog: program sampled, modulation stays the mean
                 logp_k = dist.log_prob(k)
                 eps = torch.zeros(E, 20) if deterministic else tm3.SIGMA_P * torch.randn(E, 20)
                 self.a_p = self.pol.theta[k] + eps
@@ -226,7 +226,8 @@ class RunC(tm3.Run):
         self.t += 1
         res = {"steps": steps, "d": leg[:, None].expand(E, tm3.BLOCK_STEPS).clone(), "lp": torch.from_numpy(lp).float(),
                "en": torch.from_numpy(np.stack(en_b, 1)).float(), "sync": torch.zeros(E), "f": f, "prop": torch.zeros(E, W.BLOCK, 1), "obs": obs,
-               "pulse_phase": np.stack(ph), "nll": torch.stack(nll_b, 1), "desc": desc, "y": y, "ready": ready, "kappa": torch.stack(kap_b, 1)}
+               "pulse_phase": np.stack(ph), "nll": torch.stack(nll_b, 1), "desc": desc, "y": y, "ready": ready, "kappa": torch.stack(kap_b, 1),
+               "s_state": s_all, "h3_state": out[2]["h"]}
         if record is not None:
             record.append(res)
         return res
@@ -344,7 +345,7 @@ def decode_losses(obs, xd, y, partner):
 
 
 # ---------------------------------------------------------------------------------------------------------------- evaluation
-def evaluate(run, n_ep=8, secs=90.0, skip=10.0, seed=999, surrogates=1000):
+def evaluate(run, n_ep=8, secs=90.0, skip=10.0, sample_prog=False, seed=999, surrogates=1000):
     """Fresh arms and songs, the policy's mean action, cerebellum and observer not learning. (a) per-episode mean loss of the song-shuffled control minus the matched
     loss (positive: movement carries the brain state), bootstrap interval over episodes; (b) RMS joint speed over the four non-roll joints; (c) programs; report:
     1:1 phase locking of the dominant non-roll joint's velocity to the pulse (K3-style), kappa used."""
@@ -358,7 +359,7 @@ def evaluate(run, n_ep=8, secs=90.0, skip=10.0, seed=999, surrogates=1000):
     ev.collect_obs = False
     rec = []
     for _ in range(int(secs / 0.5)):
-        ev.block(deterministic=True, learn_cb=False, record=rec)
+        ev.block(deterministic=True, learn_cb=False, record=rec, sample_prog=sample_prog)
     sk = int(skip / 0.5)
     rdy = rec[sk:]
     xd = torch.stack([ev.std_desc(r["desc"]) for r in rdy], 1)                     # (E, B, 31)
@@ -389,5 +390,7 @@ def evaluate(run, n_ep=8, secs=90.0, skip=10.0, seed=999, surrogates=1000):
            "b_rms_deg_s_nonroll": rms, "b_per_joint_deg_s": per_joint, "b_pass": bool(rms >= 10.0), **sel, "policy_mean_entropy_nats": pol_entropy,
            "k3_plv_report_only": obs_plv, "k3_surrogate_mean": float(np.mean(sur)), "k3_surrogate_max": float(np.max(sur)), "k3_p": float(p), "dominant_joints": dom,
            "kappa_mean_per_joint": kap.mean((0, 1)).tolist(), "kappa_active_share": float((kap > 0).float().mean()), "kappa_max": KAPPA_MAX}
+    res["sampled"] = bool(sample_prog)
+    res.update(tm3.program_state_mi(rec, sk))
     res["pass"] = res["a_pass"] and res["b_pass"] and res["c_pass"]
     return res
