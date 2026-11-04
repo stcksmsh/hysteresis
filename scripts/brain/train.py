@@ -28,6 +28,8 @@ Fixed here, before any result (the spec is silent on all of these):
 import json
 import math
 import os
+import random
+import signal
 import sys
 import time
 from dataclasses import dataclass
@@ -68,6 +70,13 @@ def load_stats(path):
     return z["mean"], z["std"] if "std" in z.files else z["sd"]
 
 
+def read_manifest(path):
+    """Manifest JSON -> [Track]; relative feats / beats paths are resolved against the manifest's folder."""
+    base = Path(path).resolve().parent
+    res = lambda p: str(p if Path(p).is_absolute() else base / p)
+    return [Track(t["id"], res(t["feats"]), res(t["beats"]), t["split"]) for t in json.loads(Path(path).read_text())]
+
+
 def load_inputs(track, mean, std):
     """Track -> (T, 46) float32 core input (standardised, clipped features + grid phase)."""
     feats = np.load(track.feats).astype(np.float32)
@@ -76,9 +85,10 @@ def load_inputs(track, mean, std):
 
 # ---- batching ---------------------------------------------------------------------------------------------------
 
-def epoch_batches(tracks, load, batch, seed, epoch, chunk=None):
+def epoch_batches(tracks, load, batch, seed, epoch, chunk=None, device="cpu", skip=0):
     """Yield dicts per step: x (B, chunk + LOOK, 46), nvalid (B,) frames left in the song from the chunk start,
-    reset (B,) bool (a song starts in this row). Rows without a song are all zero with nvalid 0."""
+    reset (B,) bool (a song starts in this row). Rows without a song are all zero with nvalid 0.
+    The first `skip` steps are walked through (songs are loaded, nothing is built or yielded): a mid-epoch resume."""
     chunk = chunk or CHUNK
     order = list(np.random.default_rng(seed + epoch).permutation(len(tracks)))
     slots = [None] * batch    # [inputs, pos]
@@ -88,18 +98,23 @@ def epoch_batches(tracks, load, batch, seed, epoch, chunk=None):
 
     for i in range(batch):
         refill(i)
+    n = 0
     while any(s is not None for s in slots):
-        x = np.zeros((batch, chunk + LOOK, core.N_IN), np.float32)
+        build = n >= skip
+        n += 1
+        x = np.zeros((batch, chunk + LOOK, core.N_IN), np.float32) if build else None
         nvalid, reset = np.zeros(batch, np.int64), np.zeros(batch, bool)
         for i, s in enumerate(slots):
             if s is None:
                 continue
             inp, pos = s
-            seg = inp[pos:pos + chunk + LOOK]
-            x[i, :len(seg)] = seg
+            if build:
+                seg = inp[pos:pos + chunk + LOOK]
+                x[i, :len(seg)] = seg
             nvalid[i], reset[i] = len(inp) - pos, pos == 0
             s[1] = pos + chunk
-        yield {"x": torch.from_numpy(x), "nvalid": torch.from_numpy(nvalid), "reset": torch.from_numpy(reset)}
+        if build:
+            yield {"x": torch.from_numpy(x).to(device), "nvalid": torch.from_numpy(nvalid).to(device), "reset": torch.from_numpy(reset).to(device)}
         for i, s in enumerate(slots):
             if s is not None and s[1] >= len(s[0]):
                 refill(i)
@@ -137,13 +152,20 @@ def chunk_nll(out, x, nvalid, chunk=None):
     return sums, counts
 
 
-def run_epoch(model, tracks, load, batch, seed, epoch, opt=None, lr_fn=None, step0=0, deadline=None, log=None, heartbeat_s=600, beta=BETA):
+def run_epoch(model, tracks, load, batch, seed, epoch, opt=None, lr_fn=None, step0=0, deadline=None, log=None, heartbeat_s=600, beta=BETA,
+              resume=None, tick=None):
     """One pass over `tracks`. With `opt` it trains on the beta-NLL; without, it evaluates (no grad).
-    Returns ({"beta_nll", "nll", "mse"}: per-layer means over valid frames, steps, hit_deadline)."""
+    Returns ({"beta_nll", "nll", "mse"}: per-layer means over valid frames, steps, hit_deadline).
+    `resume` {batch, state, tot, cnt} continues a mid-epoch checkpoint (`step0` is then the epoch's first step); `tick(n, state, tot, cnt)` is called after
+    every step with n = steps done in this epoch (it may save a checkpoint and raise)."""
+    dev = next(model.parameters()).device
     state = model.init_state(batch)
-    tot, cnt, step, hit = np.zeros((3, 4)), np.zeros(4), step0, False
+    tot, cnt, done, hit = np.zeros((3, 4)), np.zeros(4), 0, False
+    if resume:
+        state, tot, cnt, done = _move(resume["state"], dev), resume["tot"].copy(), resume["cnt"].copy(), resume["batch"]
+    step = step0 + done
     t_start = t_beat = time.perf_counter()
-    for b in epoch_batches(tracks, load, batch, seed, epoch):
+    for b in epoch_batches(tracks, load, batch, seed, epoch, device=dev, skip=done):
         if b["reset"].any():
             state = model.reset_rows(state, b["reset"])
         x = b["x"]
@@ -165,6 +187,9 @@ def run_epoch(model, tracks, load, batch, seed, epoch, opt=None, lr_fn=None, ste
         tot += [[s.item() for s in v] for v in (sums, plain, mse)]
         cnt += [c.item() for c in counts]
         step += 1
+        done += 1
+        if tick is not None:
+            tick(done, state, tot, cnt)
         if log is not None and time.perf_counter() - t_beat >= heartbeat_s:
             t_beat = time.perf_counter()
             log(json.dumps({"heartbeat": True, "epoch": epoch + 1, "step": step, "mean_loss_so_far": float((tot[0] / np.maximum(cnt, 1)).sum()),
@@ -216,11 +241,40 @@ def steps_per_epoch(tracks, load_len, batch):
 
 # ---- checkpoints and the training loop -------------------------------------------------------------------------------
 
-def save_ckpt(path, model, opt, meta):
+def save_ckpt(path, model, opt, meta, **extra):
     path = Path(path)
     tmp = path.with_suffix(".tmp")
-    torch.save({"model": model.state_dict(), "opt": opt.state_dict(), "meta": meta}, tmp)
+    torch.save({"model": model.state_dict(), "opt": opt.state_dict(), "meta": meta, **extra}, tmp)
     os.replace(tmp, path)
+
+
+def _move(obj, device):
+    """Tensors inside nested dicts / lists / tuples to `device`."""
+    if isinstance(obj, torch.Tensor):
+        return obj.to(device)
+    if isinstance(obj, dict):
+        return {k: _move(v, device) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return type(obj)(_move(v, device) for v in obj)
+    return obj
+
+
+def rng_state():
+    """Every RNG a run could draw from (the epoch order itself is a function of seed and epoch)."""
+    return {"torch": torch.get_rng_state(), "cuda": torch.cuda.get_rng_state_all() if torch.cuda.is_available() and torch.cuda.is_initialized() else None,
+            "numpy": np.random.get_state(), "python": random.getstate()}
+
+
+def set_rng_state(s):
+    torch.set_rng_state(s["torch"])
+    if s["cuda"] is not None and torch.cuda.is_available():
+        torch.cuda.set_rng_state_all(s["cuda"])
+    np.random.set_state(s["numpy"])
+    random.setstate(s["python"])
+
+
+class Interrupted(Exception):
+    """SIGTERM arrived and the mid-epoch checkpoint is written."""
 
 
 def early_stop_step(meta, epoch, score, patience=PATIENCE):
@@ -238,7 +292,7 @@ def mark_cut(path, wall_s):
     path = Path(path)
     if not path.exists():
         return False
-    ck = torch.load(path, weights_only=False)
+    ck = torch.load(path, weights_only=False, map_location="cpu")
     ck["meta"].update(cut=True, stopped_by_cap=True, wall_s=wall_s)
     tmp = path.with_suffix(".tmp")
     torch.save(ck, tmp)
@@ -247,69 +301,119 @@ def mark_cut(path, wall_s):
 
 
 def fit(model, train, val, load, out_dir, epochs=EPOCHS, batch=8, cap_s=CAP_S, seed=SEED, steps_per_ep=None, log=lambda s: print(s, flush=True),
-        load_len=None, resume=True, beta=BETA, patience=PATIENCE):
+        load_len=None, resume=True, beta=BETA, patience=PATIENCE, ckpt_every_s=1800.0):
     """Train for up to `epochs` epochs on the beta-NLL (resuming from out_dir/last.pt when present), validating on `val` after each.
     Early stop after `patience` epochs without a lower validation beta-NLL (summed over the 4 layers). Every epoch is saved as epoch_NNN.pt, the best
-    one also as best.pt. At `cap_s` of wall time (training and validation) it saves and stops; best.pt then says cut. Returns the last meta."""
+    one also as best.pt. At `cap_s` of wall time (training and validation) it saves and stops; best.pt then says cut. Returns the last meta.
+    Mid-epoch checkpoint out_dir/mid.pt (atomic): every `ckpt_every_s` of wall time and on SIGTERM; it holds model, optimiser, meta (so the step that
+    fixes the learning rate), the batch index in the epoch, the carried recurrent state, the running loss sums and every RNG state. A rerun continues
+    from it: same epoch order (a function of seed and epoch), the batches already done are walked through unbuilt. SIGTERM stops the run with
+    meta["terminated"] = True. A SIGTERM during validation saves the finished training stats; the validation then restarts from its first batch."""
     if not val:
         raise ValueError("fit needs validation tracks")
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     torch.set_num_threads(THREADS)
+    dev = next(model.parameters()).device
     opt = make_optimizer(model)
     meta = {"epoch": 0, "step": 0, "wall_s": 0.0, "log": [], "stopped_by_cap": False, "cut": False, "stopped_early": False,
             "best_score": None, "best_epoch": 0, "bad_epochs": 0, "phase": model.phase, "head_norm": model.head_norm, "epochs": epochs,
             "batch": batch, "chunk": CHUNK, "beta": beta, "patience": patience, "grad_checkpoint": model.grad_checkpoint,
             "seed": seed, "model_seed": core.SEED, "params": model.n_params()}
-    last = out_dir / "last.pt"
+    last, mid_path = out_dir / "last.pt", out_dir / "mid.pt"
     if resume and last.exists():
-        ck = torch.load(last, weights_only=False)
+        ck = torch.load(last, weights_only=False, map_location="cpu")
         model.load_state_dict(ck["model"])
         opt.load_state_dict(ck["opt"])
         meta = ck["meta"]
         log(f"resumed after epoch {meta['epoch']}, wall {meta['wall_s']:.0f} s")
+    mid = None
+    if resume and mid_path.exists():
+        ck = torch.load(mid_path, weights_only=False, map_location="cpu")
+        if ck["mid"]["epoch"] == meta["epoch"]:
+            model.load_state_dict(ck["model"])
+            opt.load_state_dict(ck["opt"])
+            meta, mid = ck["meta"], ck["mid"]
+            set_rng_state(mid["rng"])
+            log(f"resumed inside epoch {meta['epoch'] + 1}: {mid['stage']} stage, batch {mid['batch']}, wall {meta['wall_s']:.0f} s")
+        else:
+            mid_path.unlink()
     if steps_per_ep is None:
         steps_per_ep = steps_per_epoch(train, load_len, batch) if load_len else 1
     lr_fn = lr_schedule(steps_per_ep, epochs)
-    while meta["epoch"] < epochs and not meta["stopped_by_cap"] and not meta["stopped_early"]:
-        e = meta["epoch"]
-        t0 = time.perf_counter()
-        stats, step, hit = run_epoch(model, train, load, batch, seed, e, opt, lr_fn, meta["step"], deadline=t0 + cap_s - meta["wall_s"], log=log, beta=beta)
-        meta["step"] = step
-        if hit:
-            meta["wall_s"] += time.perf_counter() - t0
-            meta["stopped_by_cap"] = meta["cut"] = True
-            log(f"cap reached in epoch {e + 1}: saving and stopping")
-        else:
-            model.eval()
-            vstats = run_epoch(model, val, load, batch, seed, e, log=log, beta=beta)[0]
-            wall = time.perf_counter() - t0
-            meta["wall_s"] += wall
-            meta["epoch"] = e + 1
-            score = float(vstats["beta_nll"].sum())
-            is_best, stop = early_stop_step(meta, e + 1, score, patience)
-            meta["log"].append({"epoch": e + 1, "wall_s": wall, "val_score": score, "best": is_best,
-                                **{f"train_{k}": [float(v) for v in a] for k, a in stats.items()},
-                                **{f"val_{k}": [float(v) for v in a] for k, a in vstats.items()}})
-            log(json.dumps(meta["log"][-1]))
-            save_ckpt(out_dir / f"epoch_{e + 1:03d}.pt", model, opt, meta)
-            if is_best:
-                save_ckpt(out_dir / "best.pt", model, opt, meta)
-            if stop:
-                meta["stopped_early"] = True
-                log(f"early stop after epoch {e + 1}: best epoch {meta['best_epoch']}")
-            elif meta["wall_s"] >= cap_s:
+
+    stop, last_save = [False], [time.monotonic()]
+    old_handler = None
+    try:
+        old_handler = signal.signal(signal.SIGTERM, lambda *_: stop.__setitem__(0, True))
+    except ValueError:      # not the main thread
+        pass
+
+    def make_tick(stage, t0, stats=None):
+        def tick(n, state, tot, cnt):
+            if not stop[0] and (stage == "val" or time.monotonic() - last_save[0] < ckpt_every_s):
+                return
+            m = dict(meta, wall_s=meta["wall_s"] + time.perf_counter() - t0)
+            save_ckpt(mid_path, model, opt, m, mid={"epoch": meta["epoch"], "stage": stage, "batch": n, "state": _move(state, "cpu"), "tot": tot, "cnt": cnt,
+                                                    "stats": stats, "rng": rng_state()})
+            last_save[0] = time.monotonic()
+            log(f"mid-epoch checkpoint: epoch {meta['epoch'] + 1}, {stage}, batch {n}")
+            if stop[0]:
+                raise Interrupted
+        return tick
+
+    try:
+        while meta["epoch"] < epochs and not meta["stopped_by_cap"] and not meta["stopped_early"]:
+            e = meta["epoch"]
+            t0 = time.perf_counter()
+            if mid is not None and mid["stage"] == "val":
+                stats, step, hit = mid["stats"], meta["step"], False
+            else:
+                stats, step, hit = run_epoch(model, train, load, batch, seed, e, opt, lr_fn, meta["step"], deadline=t0 + cap_s - meta["wall_s"], log=log,
+                                             beta=beta, resume=mid, tick=make_tick("train", t0))
+            mid = None
+            meta["step"] = step
+            if hit:
+                meta["wall_s"] += time.perf_counter() - t0
                 meta["stopped_by_cap"] = meta["cut"] = True
-                log(f"cap reached after epoch {e + 1}")
-        if meta["cut"] and not mark_cut(out_dir / "best.pt", meta["wall_s"]):
-            log("cut before the first finished epoch: there is no best checkpoint")
-        save_ckpt(out_dir / "last.pt", model, opt, meta)
+                log(f"cap reached in epoch {e + 1}: saving and stopping")
+            else:
+                model.eval()
+                vstats = run_epoch(model, val, load, batch, seed, e, log=log, beta=beta, tick=make_tick("val", t0, stats))[0]
+                wall = time.perf_counter() - t0
+                meta["wall_s"] += wall
+                meta["epoch"] = e + 1
+                score = float(vstats["beta_nll"].sum())
+                is_best, stop_early = early_stop_step(meta, e + 1, score, patience)
+                meta["log"].append({"epoch": e + 1, "wall_s": wall, "val_score": score, "best": is_best,
+                                    **{f"train_{k}": [float(v) for v in a] for k, a in stats.items()},
+                                    **{f"val_{k}": [float(v) for v in a] for k, a in vstats.items()}})
+                log(json.dumps(meta["log"][-1]))
+                save_ckpt(out_dir / f"epoch_{e + 1:03d}.pt", model, opt, meta)
+                if is_best:
+                    save_ckpt(out_dir / "best.pt", model, opt, meta)
+                if stop_early:
+                    meta["stopped_early"] = True
+                    log(f"early stop after epoch {e + 1}: best epoch {meta['best_epoch']}")
+                elif meta["wall_s"] >= cap_s:
+                    meta["stopped_by_cap"] = meta["cut"] = True
+                    log(f"cap reached after epoch {e + 1}")
+            if meta["cut"] and not mark_cut(out_dir / "best.pt", meta["wall_s"]):
+                log("cut before the first finished epoch: there is no best checkpoint")
+            save_ckpt(last, model, opt, meta)
+            mid_path.unlink(missing_ok=True)
+    except Interrupted:
+        meta["terminated"] = True
+        log("SIGTERM: mid-epoch checkpoint written, stopping")
+    finally:
+        if old_handler is not None:
+            signal.signal(signal.SIGTERM, old_handler)
     return meta
 
 
 def load_model(path):
     """Checkpoint -> Core (eval mode) and its meta."""
-    ck = torch.load(path, weights_only=False)
+    ck = torch.load(path, weights_only=False, map_location="cpu")
     model = core.Core(phase=ck["meta"]["phase"], head_norm=ck["meta"].get("head_norm", True))
     model.load_state_dict(ck["model"])
     return model.eval(), ck["meta"]
@@ -328,15 +432,17 @@ def main(argv=None):
     ap.add_argument("--val-artists", default=str(val_split.ARTISTS_JSON), help="JSON from val_split.py: the validation track ids")
     ap.add_argument("--grad-checkpoint", action="store_true", help="recompute each layer in the backward pass (less memory, same maths)")
     ap.add_argument("--no-resume", action="store_true")
+    ap.add_argument("--device", default="cpu", help="cpu (default) or cuda")
     args = ap.parse_args(argv)
     mean, std = load_stats(args.stats)
-    tracks = [Track(t["id"], t["feats"], t["beats"], t["split"]) for t in json.loads(Path(args.manifest).read_text())]
+    tracks = read_manifest(args.manifest)
     trn, val = val_split.split_tracks([t for t in tracks if t.split == "train"], val_split.load(args.val_artists))
     torch.manual_seed(SEED)
     no_grid = count_no_grid(tracks)
     print(f"{len(no_grid)} of {len(tracks)} tracks have fewer than 2 grid beats and get zero phase columns: {no_grid}", flush=True)
     model = core.Core(phase=not args.no_phase)
     model.grad_checkpoint = args.grad_checkpoint
+    core.use_device(model, args.device)
     print(f"{len(trn)} fit tracks, {len(val)} validation tracks (the held-out side is not read)", flush=True)
     meta = fit(model, trn, val, lambda t: load_inputs(t, mean, std), args.out, args.epochs, batch=args.batch,
                cap_s=args.cap_hours * 3600, load_len=lambda t: len(np.load(t.feats, mmap_mode="r")), resume=not args.no_resume)

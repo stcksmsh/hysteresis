@@ -115,6 +115,17 @@ def sample_modes(g, band, n=None):
     return 2 * math.pi * f * DT, DT / tau
 
 
+def use_device(model, device="cpu"):
+    """Move `model` to `device` and make it the default for new tensors (init_state, arange, zeros). 'cpu' changes nothing at all.
+    Call after building the model: init draws from a CPU generator. The complex recurrence stays float32."""
+    if device == "cpu":
+        return model
+    if device.startswith("cuda") and not torch.cuda.is_available():
+        raise SystemExit(f"--device {device}: no CUDA device is available")
+    torch.set_default_device(device)
+    return model.to(device)
+
+
 class Layer(nn.Module):
     def __init__(self, g, band, coupled, head_norm=True):
         super().__init__()

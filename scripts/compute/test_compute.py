@@ -132,6 +132,19 @@ class Pack(unittest.TestCase):
         self.assertEqual(mf.verify(out), [])
 
 
+    def test_stats_file_with_sd_key_scales_the_cast_error(self):
+        src = Path(tempfile.mkdtemp())
+        np.save(src / "f.npy", np.random.default_rng(0).normal(size=(500, 44)).astype(np.float32))
+        np.save(src / "b.npy", np.arange(10, dtype=np.float64))
+        (src / "manifest.json").write_text(json.dumps([{"id": "t", "audio": None, "feats": "f.npy", "beats": "b.npy", "split": "train"}]))
+        errs = {}
+        for name, key, sd in (("one", "sd", 1.0), ("hundred", "sd", 100.0), ("std_key", "std", 100.0)):
+            np.savez(src / "stats.npz", mean=np.zeros(44), **{key: sd * np.ones(44)})
+            errs[name] = pack_features.pack(src / "manifest.json", src / "stats.npz", Path(tempfile.mkdtemp()) / "p")[1]
+        self.assertAlmostEqual(errs["one"] / errs["hundred"], 100.0, places=3)     # `sd` is read, not ignored (raw units)
+        self.assertEqual(errs["hundred"], errs["std_key"])
+
+
 class Snapshot(unittest.TestCase):
     def test_snapshot_and_dirty_refusal(self):
         repo = Path(tempfile.mkdtemp())
