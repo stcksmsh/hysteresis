@@ -3,11 +3,17 @@
 //! `scripts/emotion/mindstate.py`. Nothing in the planner reads it yet (D3). A sidecar without
 //! the field is `MindState::Off`.
 
+use std::collections::BTreeMap;
+
 use serde_json::Value;
 
 use crate::body::PARAMS;
 
 pub const VERSION: u64 = 1;
+/// Version 2: the reserved `bands` / `surprise` / `neuromod` arrays carry the B7 lanes (`scripts/brain/brain_mindstate.py`, `to_v2`).
+pub const VERSION_2: u64 = 2;
+/// B7 lanes are stored on 0.1 s bins (`brainHopSeconds`), bin k stamped 0.1 (k + 1) s; `None` = undefined there.
+pub const BRAIN_HOP_SECONDS: f64 = 0.1;
 /// Mood lanes are stored on the 0.5 s step grid of the emotion encoding.
 pub const HOP_SECONDS: f64 = 0.5;
 
@@ -27,6 +33,19 @@ pub struct Authored {
     pub bias: Vec<(usize, f64)>,
 }
 
+/// Named lanes of one reserved group, all the same length. Mechanism names only.
+pub type Lanes = BTreeMap<String, Vec<Option<f64>>>;
+
+/// The B7 lanes of a version-2 field: `bands` (band power, phase order parameter, self-similarity),
+/// `surprise` (prediction error per layer), `neuromod` (arousal signal, gain, exponent).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Brain {
+    pub hop_seconds: f64,
+    pub bands: Lanes,
+    pub surprise: Lanes,
+    pub neuromod: Lanes,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Mood {
     pub source: String,
@@ -38,6 +57,8 @@ pub struct Mood {
     pub rest: Vec<Vec<f64>>,
     pub scale: Scale,
     pub authored: Vec<Authored>,
+    /// `None` for version 1.
+    pub brain: Option<Box<Brain>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -47,6 +68,7 @@ pub enum MindState {
 }
 
 const RESERVED: [&str; 4] = ["bands", "pulse", "surprise", "neuromod"];
+const BRAIN_GROUPS: [&str; 3] = ["bands", "surprise", "neuromod"];
 
 fn number(v: &Value, what: &str) -> Result<f64, String> {
     v.as_f64()
@@ -94,6 +116,50 @@ fn empty(v: &Value, what: &str) -> Result<(), String> {
     }
 }
 
+fn lanes(v: &Value, what: &str, len: &mut Option<usize>) -> Result<Lanes, String> {
+    let obj = v
+        .as_object()
+        .ok_or_else(|| format!("mindState: {what} is not an object in version 2"))?;
+    let mut out = Lanes::new();
+    for (name, lane) in obj {
+        let items = lane
+            .as_array()
+            .ok_or_else(|| format!("mindState: {what}.{name} is not an array"))?;
+        let lane = items
+            .iter()
+            .map(|x| {
+                if x.is_null() {
+                    Ok(None)
+                } else {
+                    number(x, &format!("{what}.{name}")).map(Some)
+                }
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        if *len.get_or_insert(lane.len()) != lane.len() {
+            return Err(format!("mindState: {what}.{name} differs in length"));
+        }
+        out.insert(name.clone(), lane);
+    }
+    Ok(out)
+}
+
+fn brain(m: &Value) -> Result<Brain, String> {
+    let hop_seconds = number(&m["brainHopSeconds"], "brainHopSeconds")?;
+    if hop_seconds != BRAIN_HOP_SECONDS {
+        return Err(format!(
+            "mindState: brainHopSeconds is not {BRAIN_HOP_SECONDS}"
+        ));
+    }
+    let mut len = None;
+    let [bands, surprise, neuromod] = BRAIN_GROUPS.map(|g| lanes(&m[g], g, &mut len));
+    Ok(Brain {
+        hop_seconds,
+        bands: bands?,
+        surprise: surprise?,
+        neuromod: neuromod?,
+    })
+}
+
 fn authored(v: &Value) -> Result<Vec<Authored>, String> {
     let items = v.as_array().ok_or("mindState: authored is not an array")?;
     items
@@ -132,9 +198,14 @@ pub fn read(sidecar: &Value) -> Result<MindState, String> {
     let Some(m) = sidecar.get("mindState") else {
         return Ok(MindState::Off);
     };
-    if m["version"].as_u64() != Some(VERSION) {
-        return Err(format!("mindState: version is not {VERSION}"));
-    }
+    let version = m["version"]
+        .as_u64()
+        .filter(|v| [VERSION, VERSION_2].contains(v));
+    let Some(version) = version else {
+        return Err(format!(
+            "mindState: version is not {VERSION} or {VERSION_2}"
+        ));
+    };
     let hop_seconds = number(&m["hopSeconds"], "hopSeconds")?;
     if hop_seconds != HOP_SECONDS {
         return Err(format!("mindState: hopSeconds is not {HOP_SECONDS}"));
@@ -176,9 +247,15 @@ pub fn read(sidecar: &Value) -> Result<MindState, String> {
         rest: rest_scale,
     };
     empty(&m["events"], "events")?;
-    for name in RESERVED {
-        empty(&m[name], name)?;
-    }
+    empty(&m["pulse"], "pulse")?;
+    let brain = if version == VERSION_2 {
+        Some(Box::new(brain(m)?))
+    } else {
+        for name in RESERVED {
+            empty(&m[name], name)?;
+        }
+        None
+    };
     Ok(MindState::On(Mood {
         source,
         hop_seconds,
@@ -187,6 +264,7 @@ pub fn read(sidecar: &Value) -> Result<MindState, String> {
         rest,
         scale,
         authored: authored(&m["authored"])?,
+        brain,
     }))
 }
 
@@ -268,7 +346,7 @@ mod tests {
     #[test]
     fn rejects_schema_errors() {
         let cases: [(&str, Value); 8] = [
-            ("version", json!(2)),
+            ("version", json!(3)),
             ("hopSeconds", json!(1.0)),
             ("source", json!("")),
             (
@@ -337,6 +415,82 @@ mod tests {
         f["brain"] =
             json!({"source": "b7-epoch6", "hopSeconds": 0.1, "smoothedSurprisal": [0.1, null]});
         assert_eq!(read(&sidecar(f)).unwrap(), read(&sidecar(field())).unwrap());
+    }
+
+    fn field_v2() -> Value {
+        let mut f = field();
+        f["version"] = json!(2);
+        f["brainHopSeconds"] = json!(0.1);
+        f["bands"] = json!({"power.L1": [0.5, null, 0.25], "coherence.L1": [null, null, 0.75]});
+        f["surprise"] = json!({"L1": [null, 1.5, 2.0], "total": [null, 1.5, 2.5]});
+        f["neuromod"] = json!({"arousalSignal": [0.0, 0.5, 1.0]});
+        f
+    }
+
+    #[test]
+    fn version_2_reads_the_lanes_and_keeps_mood() {
+        let (MindState::On(v1), MindState::On(v2)) = (
+            read(&sidecar(field())).unwrap(),
+            read(&sidecar(field_v2())).unwrap(),
+        ) else {
+            panic!("expected On");
+        };
+        assert_eq!(v1.brain, None);
+        assert_eq!(
+            (&v2.energy, &v2.power, &v2.rest, &v2.scale),
+            (&v1.energy, &v1.power, &v1.rest, &v1.scale)
+        );
+        let b = v2.brain.unwrap();
+        assert_eq!(b.hop_seconds, 0.1);
+        assert_eq!(b.bands["power.L1"], vec![Some(0.5), None, Some(0.25)]);
+        assert_eq!(b.surprise["total"], vec![None, Some(1.5), Some(2.5)]);
+        assert_eq!(
+            b.neuromod["arousalSignal"],
+            vec![Some(0.0), Some(0.5), Some(1.0)]
+        );
+    }
+
+    #[test]
+    fn version_2_rejects_bad_lanes() {
+        let cases: [(&str, Value); 6] = [
+            ("brainHopSeconds", json!(0.5)),
+            ("bands", json!([])),
+            ("surprise", json!({"L1": [0.0, "x", 1.0]})),
+            ("neuromod", json!({"a": [0.0, 1.0]})),
+            ("bands", json!({"a": 3})),
+            ("pulse", json!([1])),
+        ];
+        for (key, value) in cases {
+            let mut f = field_v2();
+            f[key] = value;
+            assert!(read(&sidecar(f)).is_err(), "{key} should be rejected");
+        }
+        let mut f = field_v2();
+        f.as_object_mut().unwrap().remove("brainHopSeconds");
+        assert!(read(&sidecar(f)).is_err());
+    }
+
+    #[test]
+    fn version_1_still_wants_the_reserved_arrays_empty() {
+        let mut f = field();
+        f["surprise"] = json!({"L1": [0.0]});
+        assert!(read(&sidecar(f)).is_err());
+    }
+
+    #[test]
+    fn reads_what_the_python_writer_makes_in_version_2() {
+        let text = include_str!("../tests/fixtures/mindstate_v2_writer.json");
+        let MindState::On(m) = read(&serde_json::from_str(text).unwrap()).unwrap() else {
+            panic!("expected On");
+        };
+        let b = m.brain.unwrap();
+        assert_eq!(
+            (b.bands.len(), b.surprise.len(), b.neuromod.len()),
+            (9, 8, 9)
+        );
+        assert_eq!(b.bands["coherence.L1"][8], None);
+        assert!(b.bands["coherence.L1"][9].is_some());
+        assert_eq!(m.energy.len(), 4);
     }
 
     #[test]

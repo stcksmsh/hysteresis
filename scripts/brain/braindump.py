@@ -17,9 +17,9 @@ No claims; mechanism names only. Fixed here, before the danced songs are run (al
   layer_mean_re  per layer, the mean over the 256 modes of Re h at EVERY frame (100 Hz, (T, 4)): the trace the viewer draws as the layer's "EEG" strip. The
               30 Hz mode grid cannot show L1's 8-20 Hz band without aliasing.
   coherence   per layer, the magnitude-weighted Kuramoto order parameter of the 256 mode phases at each frame, R = |sum h| / sum |h|, averaged over 1 s windows
-              (100 frames) stepped every 0.1 s: (nw, 4) at 10 Hz, window m ends at frame 10 m + 100 (time (m + 10) / 10 s). A crossing = at least 3 of the 4
-              layers above their own threshold in that window. Thresholds = the 99th percentile of each layer's windowed values over 20 training songs
-              (`thresholds` below; fixed seed for which songs; committed in braindump_thresholds.json before the danced songs run).
+              (100 frames) stepped every 0.1 s: (nw, 4) at 10 Hz, window m ends at frame 10 m + 100 (time (m + 10) / 10 s). Continuous data only: the
+              crossing marks were dropped (BRAIN_SPEC 7.14 point 4); braindump_thresholds.json keeps the recorded finding (no 3-of-4 above the
+              per-layer 99th percentile on 20 training songs or on the 3 danced songs).
 Outputs: <out>/<song>.braindump.npz (float16 arrays, one compressed file) and <song>.braindump.json (the shapes and metadata); braindump.schema.json
 in git describes the format.
 
@@ -174,7 +174,7 @@ def run_song(model, x, chunk=CHUNK):
     return res
 
 
-def export_arrays(res, z, thresholds):
+def export_arrays(res, z):
     """The run's results + the standardised features z (T, 44) -> (arrays dict for the npz, meta dict)."""
     T = len(z)
     frames = sample_frames(T)
@@ -184,7 +184,6 @@ def export_arrays(res, z, thresholds):
     codes = torch.from_numpy(code).float() @ projection()
     codes = F.normalize(codes, dim=-1).numpy()
     coh = window_means(np.stack(res["coh"], 1))
-    cross = crossings(coh, thresholds) if len(coh) else np.zeros(0, bool)
     f16 = lambda a: np.asarray(a, np.float32).astype(np.float16)
     arr = {
         "modes": np.stack([res["modes"][i] for i in range(nl)], 1),
@@ -196,10 +195,9 @@ def export_arrays(res, z, thresholds):
         "exponent": f16(np.stack([res["expo"][i][blk] for i in range(nl)], 1)),
         "selfsimilarity": f16(selfsim_lane(codes, res["ticks"], T)[frames]),
         "coherence": f16(coh),
-        "crossing": cross,
         "layer_mean_re": f16(np.stack(res["lfp"], 1)),
     }
-    meta = {"frames": int(T), "duration_s": T / 100.0, "samples": int(len(frames)), "windows": int(len(coh)), "crossings": int(cross.sum()),
+    meta = {"frames": int(T), "duration_s": T / 100.0, "samples": int(len(frames)), "windows": int(len(coh)),
             "shapes": {k: list(v.shape) for k, v in arr.items()}}
     return arr, meta
 
@@ -212,15 +210,14 @@ def stats():
     return train.load_stats(CORPUS / "feature_stats.npz")
 
 
-def write_song(name, model, meta_model, x, out=OUT, thresholds=None):
-    thresholds = load_thresholds() if thresholds is None else thresholds
+def write_song(name, model, meta_model, x, out=OUT):
     t0 = time.time()
     res = run_song(model, x)
-    arr, meta = export_arrays(res, x[:, :core.FEAT], thresholds)
+    arr, meta = export_arrays(res, x[:, :core.FEAT])
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(out / f"{name}.braindump.npz", **arr)
-    meta.update(song=name, grid_hz=HZ, window_frames=WIN, window_step_frames=STEP, thresholds=[float(t) for t in thresholds], checkpoint=str(CKPT),
+    meta.update(song=name, grid_hz=HZ, window_frames=WIN, window_step_frames=STEP, checkpoint=str(CKPT),
                 checkpoint_epoch=meta_model.get("epoch"), checkpoint_sha256=hashlib.sha256(CKPT.read_bytes()).hexdigest(), seconds_to_export=time.time() - t0,
                 npz_bytes=(out / f"{name}.braindump.npz").stat().st_size)
     (out / f"{name}.braindump.json").write_text(json.dumps(meta, indent=1))
