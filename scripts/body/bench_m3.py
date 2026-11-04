@@ -69,7 +69,7 @@ def run(a):
     torch.manual_seed(0)
     dev = a.device if a.device != "auto" else ("cuda" if torch.cuda.is_available() else "cpu")
     E = a.envs
-    wrapped = M.Cortex(M.load_epoch())
+    wrapped = M.Cortex(M.core_b7.Core7(skip_taps=10, hippocampus=False) if a.fresh else M.load_epoch())      # --fresh: the cost does not depend on the weights
     wrapped.freeze_cortex()
     wrapped.core.grad_checkpoint = True
     for p in wrapped.prop.parameters():
@@ -145,4 +145,5 @@ if __name__ == "__main__":
     ap.add_argument("--threads", type=int, default=12)
     ap.add_argument("--procs", type=int, default=12)
     ap.add_argument("--steps", type=int, default=3)
+    ap.add_argument("--fresh", action="store_true")
     run(ap.parse_args())
