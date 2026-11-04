@@ -22,6 +22,37 @@
 ## LOG
 
 - 2026-11-03 Setup: order read (origin/body:docs/BUILDER_PROMPT_Z_M0_M2.md, BODY_BRAIN_PLAN.md). Worktree `.claude/worktrees/body-z`, branch body-z from origin/body 858ce61. Mains: ADP1 online=1.
+# NIGHT LOG: H1, hippocampus toy (order of 2026-11-03)
+
+## H1 MORNING SUMMARY (filled at the end)
+
+- **H1 result: FAIL after two tries.** The hippocampus stays off; the monitor never shows recall.
+- Error ratio repeat/first (needs <= 0.5 on A and on one of B, C), A iid | B levels+clock | C smooth: try 1 1.084 | 0.790 | 0.962; try 2 (gated hindsight loss) 1.140 | 0.812 | 1.139. Retrieval off: 1.000 everywhere.
+- T1a (top-1 source share in first S, needs >= 0.5 / recognition median vs p95 of non-repeat frames): try 1 A 0.263 / 0.282 vs 0.518, B 0.902 / 0.580 vs 0.635, C 0.643 / 0.320 vs 0.599; try 2 A 0.384 / 0.456 vs 0.649, B 0.830 / 0.630 vs 0.686, C 0.696 / 0.489 vs 0.669. All six fail. Untrained passes T1a (A 0.98 / 0.73 vs 0.38).
+- Oracle (design A, same code, pure oracle training): ratio 0.329 (T1b pass).
+- Novelty lane (repeat-tick mean vs outside-tick mean, no pass rule): try 1 A 0.478 vs 0.686, B 0.458 vs 0.689, C 0.414 vs 0.565; try 2 A 0.533 vs 0.750, B 0.443 vs 0.672, C 0.464 vs 0.640; oracle A 0.569 vs 0.938. Lower inside the repeat in every run.
+- Unit tests: 158 pass (`cd scripts/brain && python -m unittest`); the new flags are default-off.
+- Reading, numbers only: the oracle passes, so the relay can use a correct replay; trained retrieval ends worse on T1a than untrained, and the gate (try 2) did not fix it. Cause not isolated. All six runs stopped on the flat-loss rule before 1500 steps. Logs: /secondary/hyst-data/brain/h1/.
+
+## H1 LOG
+
+- 2026-11-03 Setup. Worktree `.claude/worktrees/body-h1`, branch `body-h1` from origin/body (ded76a9). Read: BODY_BRAIN_PLAN 1, 5, 12; BRAIN_SPEC 7.1, 7.3, 7.10, 7.11; core_b7.py, toy_b7.py, test_core_b7.py, B7_NOTES.md, the B7 log below.
+  Mechanisms, all behind default-off attributes of `Core7` (flags off = module unchanged; every older test passes unmodified except that `read` returns a 6th value, `hind`):
+  - (a) `hind` (hindsight loss). Per read (one per 2 s block), per row: for every eligible entry (>= 17 s old) the squared error between its replay and the block's true targets,
+    on every 20th frame of the block (10 offsets) and on each of the four horizons whose target window lies inside the chunk, computed under no_grad; the target is the entry with the lowest
+    summed error (argmin, no gate, no margin). Loss = cross-entropy of softmax(cos / tau) over the eligible entries toward that entry, averaged over rows and blocks, weight 0.1 added to the beta-NLL loss. Gradient reaches the query, the keys of the chunk and log_tau.
+  - (b) `oracle_p` (scheduled sampling). Per row and per read, with probability p the oracle pointer (weight 1 on the true source, as the oracle of try 0) replaces the retrieved sources; recognition stays the retrieved cosine. p = 1 - step / (0.5 steps), so p = 0 from half-way on. Rows where the oracle says "no source" use retrieval. The oracle is training-only; evaluation is pure retrieval.
+  - Novelty lane (`novelty_lane`). At every tick (0.5 s), 1 - max cosine of the tick's own key (centred by the running key mean at that tick) against the eligible entries (>= 17 s old), no gradient, computed after the block, independent of the 2 s read; 1 if nothing is eligible. Reported on the toy: repeat ticks (from the 2nd second of the repeat on) against all other ticks from 17 s on. No pass rule.
+  Toy otherwise as toy_b7.py (reduced width, random init seed 0, lr 3e-3, 20 warm-up steps, 8 sequences per step, 4 threads per run, eval 32 draws seed 991). Bar fixed: T1a and T1b of 7.10 R3. Oracle reference: the same code, pure oracle training (`--oracle`), design A.
+- 2026-11-03 TRY 1 (1500 steps planned, lr 3e-3, hind 0.1, sched 0.5, seed 0; designs A and B only, C and the oracle reference NOT run). Both runs hit the existing flat-loss stop at step ~800-875 (after the handover, which ended at step 750).
+  A iid: ratio 1.084 (T1b fail); T1a fail (source share 0.263, recognition median 0.282 vs p95 0.518); retrieval off 1.000. Novelty lane: repeat mean 0.478, outside mean 0.686.
+  B levels+clock: ratio 0.790 (T1b fail); T1a fail (share 0.902, recognition median 0.580 vs p95 0.635); retrieval off 1.000. Novelty lane: repeat mean 0.458, outside mean 0.689.
+  Logs: /secondary/hyst-data/brain/h1/try1_{A,B}.log. Unit tests: pass (OK). Try 2 and design C not started: usage limit reached.
+- 2026-11-04 TRY 1 completed. C smooth: ratio 0.962 (T1b fail), T1a fail (share 0.643, recognition median 0.320 vs p95 0.599), novelty lane repeat 0.414 vs outside 0.565. Oracle reference, design A, same code, 1500 steps planned (stopped by the flat-loss rule): ratio 0.329 (T1b pass), T1a forced/pass; novelty lane repeat 0.569 vs outside 0.938. Both runs of try 1 on A and C stopped by the flat-loss rule at step ~800-1300.
+  Try 1 failure, as named by the numbers: T1b fails on all three designs; T1a, which the untrained model passes on all three (A: share 0.98, recognition 0.73 vs p95 0.38), fails after training on A and C and on B for recognition (A 0.263 / 0.28 vs 0.52; C 0.643 / 0.32 vs 0.60; B 0.902 / 0.580 vs 0.635). So training with the hindsight loss made retrieval worse than untrained. Reading (not tested): on blocks with no useful entry (all non-repeat blocks, in iid noise nearly all of them) the argmin entry is noise, and cross-entropy toward it pulls query and keys away from content similarity.
+  TRY 2 CHANGE (written before the run; the only change): hindsight loss counts a row only when the best entry's replay error is lower than the error of a zero replay on the same terms (the replay would have helped); `hind_gate` flag, `--hindgate`. Everything else as try 1: 1500 steps, lr 3e-3, hind weight 0.1, sched 0.5, seed 0, A B C, same eval.
+- 2026-11-04 TRY 2 (gated hindsight loss; otherwise as try 1; all three stopped by the flat-loss rule). Ratio (repeat/first, <= 0.5 needed): A 1.140, B 0.812, C 1.139: T1b fails on all three. T1a: A fail (share 0.384, recognition median 0.456 vs p95 0.649), B fail (0.83, 0.630 vs 0.686), C fail (0.696, 0.489 vs 0.669). Novelty lane (repeat mean / outside mean): A 0.533/0.750, B 0.443/0.672, C 0.464/0.640. The gate did not restore T1a to the untrained level (A untrained share 0.98, recognition 0.73 vs p95 0.38).
+  DECISION: both tries failed. Hippocampus stays off; the monitor never shows recall. Unit tests: 158 pass.
 
 ---
 

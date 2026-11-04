@@ -99,6 +99,11 @@ class Core7(core.Core):
         self.w_g = nn.Parameter(torch.zeros(nl))
         self.w_tau = nn.Parameter(torch.zeros(nl))
         self.relay_on, self.retrieval_on, self.modulation, self.oracle = True, True, "on", None
+        # H1 (all off by default: with them off the module is unchanged). hind: hindsight retrieval loss, returned in out[0]["hind"] and weighted by
+        # the caller. oracle_p: scheduled sampling, the per-row, per-read probability of taking the oracle pointer (1 = pure oracle, 0 = retrieval).
+        # novelty_lane: 1 - max cosine against the eligible store at every tick (0.5 s), no gradient, independent of the block read.
+        self.hind, self.oracle_p, self.novelty_lane, self.hind_gate = False, 1.0, False, False
+        self.sched_gen = torch.Generator().manual_seed(SEED_B7)
 
     # ---- state ------------------------------------------------------------------------------------------------------
 
@@ -144,15 +149,18 @@ class Core7(core.Core):
         m = ksum / kcnt.clamp(min=1)[:, None]
         return F.normalize(v - (m[:, None] if v.dim() == 3 else m), dim=-1)
 
-    def read(self, st, new_k, new_j, n0, ksum, kcnt, cs):
+    def read(self, st, new_k, new_j, n0, ksum, kcnt, cs, hind_ctx=None):
         """One read for every row at the block start (song frames n0 (B,)). -> replay (B, BLOCK, 4, 44), recognition (B,), source frame (B,) (-1:
-        none), weights (B, k) and the top-1 column."""
+        none), weights (B, k), the top-1 column and the hindsight loss (sum, count) or None. hind_ctx = (cl, local0, T): the chunk's cumulative sums
+        of the raw features (B, T + 1, 44, float64) and the block start inside the chunk, so the true targets of this block can be looked up (training only)."""
         B = n0.shape[0]
         zero = torch.zeros(B, BLOCK, 4, core.FEAT)
         K0, Kn = st["kr"].shape[1], len(new_k)
-        if (K0 + Kn == 0 and self.oracle is None) or not float(self.hippo_flag):
-            return zero, torch.zeros(B), -torch.ones(B, dtype=torch.long), None, None
-        if self.oracle is not None:
+        pure = self.oracle is not None and self.oracle_p > 0 and (self.oracle_p >= 1 or K0 + Kn == 0)
+        if (K0 + Kn == 0 and not pure) or not float(self.hippo_flag):
+            return zero, torch.zeros(B), -torch.ones(B, dtype=torch.long), None, None, None
+        hind = None
+        if pure:
             src = self.oracle(n0).long()
             has = src >= 0
             w = has.float()[:, None]
@@ -177,6 +185,16 @@ class Core7(core.Core):
             srcs = torch.gather(kj, 1, top_idx) * TICK
             src = torch.where(has, srcs[:, 0], -torch.ones_like(srcs[:, 0]))
             top = top_idx[:, 0]
+            if hind_ctx is not None and self.hind:
+                hind = self._hindsight(sim, elig, kj, n0, cs, hind_ctx)
+            if self.oracle is not None and self.oracle_p > 0:               # scheduled sampling: some rows take the oracle pointer, rec stays retrieved
+                osrc = self.oracle(n0).long()
+                use = (torch.rand(B, generator=self.sched_gen) < self.oracle_p) & (osrc >= 0)
+                one = torch.zeros_like(w)
+                one[:, 0] = 1.0
+                w = torch.where(use[:, None], one, w)
+                srcs = torch.cat([torch.where(use, osrc, srcs[:, 0])[:, None], srcs[:, 1:]], 1)
+                src = torch.where(use, osrc, src)
         k = srcs.shape[1]
         o = torch.arange(BLOCK)
         rep = []
@@ -184,7 +202,39 @@ class Core7(core.Core):
             base = (srcs[:, :, None] + o[None, None]).reshape(B, k * BLOCK)
             m = window_mean(cs, base + h, base + 2 * h, h).float().reshape(B, k, BLOCK, core.FEAT)
             rep.append((w[:, :, None, None] * m).sum(1))
-        return torch.stack(rep, 2), rec, src, w, top
+        return torch.stack(rep, 2), rec, src, w, top, hind
+
+    def _hindsight(self, sim, elig, kj, n0, cs, ctx):
+        """Hindsight retrieval loss of one read. No gradient in the target: per eligible entry, the squared error between its replay and the block's
+        true targets (every 20th frame of the block, all four horizons whose target window lies inside the chunk). Cross-entropy of the query's
+        softmax(sim / tau) over the eligible entries toward the entry with the lowest error. -> (sum over rows, rows counted, the target entry's frame)."""
+        cl, local0, T = ctx
+        B, K = sim.shape
+        Os = torch.arange(0, BLOCK, 20)
+        with torch.no_grad():
+            err = torch.zeros(B, K)
+            zerr = torch.zeros(B)
+            ok_any = False
+            for h in core.HORIZONS:
+                Oo = Os[local0 + Os + 2 * h <= T]
+                if not len(Oo):
+                    continue
+                ok_any = True
+                lo = (local0 + Oo + h)[None].expand(B, -1)
+                tgt = window_mean(cl, lo, lo + h, h).float()
+                base = (kj[:, :, None] * TICK + Oo[None, None]).reshape(B, K * len(Oo))
+                m = window_mean(cs, base + h, base + 2 * h, h).float().reshape(B, K, len(Oo), core.FEAT)
+                err = err + ((m - tgt[:, None]) ** 2).mean(-1).sum(-1)
+                zerr = zerr + (tgt ** 2).mean(-1).sum(-1)
+            if not ok_any:
+                return None
+            best = torch.where(elig, err, torch.full_like(err, float("inf"))).argmin(1)
+        logp = torch.log_softmax(torch.where(elig, sim / torch.exp(self.log_tau), torch.full_like(sim, -1e9)), 1)
+        rows = elig.any(1)
+        if self.hind_gate:                                   # only where the best replay beats a zero replay
+            rows = rows & (err.gather(1, best[:, None])[:, 0] < zerr)
+        rows = rows.float()
+        return (-(logp.gather(1, best[:, None])[:, 0]) * rows).sum(), rows.sum(), torch.gather(kj, 1, best[:, None])[:, 0] * TICK
 
     # ---- forward -----------------------------------------------------------------------------------------------------
 
@@ -211,6 +261,9 @@ class Core7(core.Core):
         blocks, tau_e, expo_l, dev_l, ar_l, rep_l = [], [[] for _ in range(nl)], [[] for _ in range(nl)], [], [], []
         hippo = {"recognition": [], "novelty": [], "source_t": []}
         f64 = f[..., :core.FEAT].double()
+        cl = torch.cat([torch.zeros(B, 1, core.FEAT, dtype=torch.float64), f64.cumsum(1)], 1) if self.hind else None
+        hs, hc = 0.0, 0.0
+        nov_t, nov_v = [], []
         for s0 in range(0, T, BLOCK):
             fb = f[:, s0:s0 + BLOCK]
             Tb = fb.shape[1]
@@ -222,7 +275,9 @@ class Core7(core.Core):
                 for r in range(B):
                     cs[r, int(n0[r]) + 1:int(n0[r]) + 1 + Tb] = cum[r]
             st_read = {"kr": state["kr"], "kj": state["kj"], "kv": state["kv"], "qs": qs}
-            replay, rec, src, _, _ = self.read(st_read, new_k, new_j, n0, ksum, kcnt, cs)
+            replay, rec, src, _, _, hb = self.read(st_read, new_k, new_j, n0, ksum, kcnt, cs, (cl, s0, T) if self.hind else None)
+            if hb is not None:
+                hs, hc = hs + hb[0], hc + hb[1]
             nov = 1.0 - rec
             replay, rec_in = replay[:, :Tb], rec
             if not self.retrieval_on:
@@ -270,6 +325,18 @@ class Core7(core.Core):
                 new_k.append(key)
                 new_j.append(t_song // TICK)
                 ksum, kcnt = ksum + key, kcnt + 1
+                if self.novelty_lane:
+                    with torch.no_grad():
+                        kr_all = torch.cat([state["kr"]] + [torch.stack(new_k, 1)], 1).detach()
+                        kj_all = torch.cat([state["kj"]] + [torch.stack(new_j, 1)], 1)
+                        kv_all = torch.cat([state["kv"], torch.ones(B, len(new_k), dtype=torch.bool)], 1)
+                        kc = self._centre(kr_all, ksum.detach(), kcnt)
+                        qn = self._centre(key.detach(), ksum.detach(), kcnt)
+                        sm = torch.einsum("bd,bkd->bk", qn, kc)
+                        el = kv_all & (kj_all * TICK <= (t_song[:, None] - MIN_AGE))
+                        mx = torch.where(el, sm, torch.full_like(sm, -2.0)).max(1).values
+                        nov_v.append(torch.where(el.any(1), 1.0 - mx, torch.ones(B)))
+                        nov_t.append(t_song)
             qs = torch.cat([h3[:, -1].real, h3[:, -1].imag, h4[:, -1].real, h4[:, -1].imag], -1)
             blocks.append(out)
             for i in range(nl):
@@ -291,6 +358,10 @@ class Core7(core.Core):
         outs[0]["dev"] = torch.stack(dev_l, 1)
         if return_replay:
             outs[0]["replay"] = torch.cat(rep_l, 1)
+        if self.hind:
+            outs[0]["hind"] = hs / max(float(hc), 1.0) if hc else torch.zeros(())
+        if nov_v:
+            outs[0]["novelty_lane"] = {"t": torch.stack(nov_t, 1), "novelty": torch.stack(nov_v, 1)}
         kr = torch.cat([state["kr"]] + ([torch.stack(new_k, 1)] if new_k else []), 1)
         kj = torch.cat([state["kj"]] + ([torch.stack(new_j, 1)] if new_j else []), 1)
         kv = torch.cat([state["kv"]] + ([torch.ones(B, len(new_k), dtype=torch.bool)] if new_k else []), 1)
