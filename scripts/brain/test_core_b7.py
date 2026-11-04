@@ -453,6 +453,21 @@ class TestH1(unittest.TestCase):
             if s2 + 200 <= n0 <= s2 + 1400:
                 self.assertLessEqual(abs(tgt - (s1 + n0 - s2)), core_b7.BLOCK, (n0, tgt))
 
+    def test_hindsight_gate_skips_blocks_with_no_useful_entry(self):
+        """Pure noise, no repeat: no replay beats a zero replay, so the gated loss counts (almost) no rows; with the repeat it counts some."""
+        m = live().eval()
+        m.hind = True
+        x = noise(5000, seed=41)
+        with torch.no_grad():
+            ungated = float(m(x, m.init_state(1))[0][0]["hind"])
+            m.hind_gate = True
+            gated_noise = float(m(x, m.init_state(1))[0][0]["hind"])
+            xr, s1, s2 = self.repeat_input()
+            gated_rep = float(m(xr, m.init_state(1))[0][0]["hind"])
+        self.assertGreater(ungated, 0.0)
+        self.assertGreaterEqual(gated_rep, 0.0)
+        self.assertLessEqual(gated_noise, ungated)
+
     def test_hindsight_off_adds_nothing(self):
         m = live().eval()
         x, _, _ = self.repeat_input(T=3000, s2=1900, L=600, s1=100)

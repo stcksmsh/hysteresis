@@ -136,7 +136,7 @@ def aux_loss(out, x):
 NEW_PARAMS = ('key_proj', 'query_proj', 'log_tau', 'relay', 'skip', 'w_g', 'w_tau')
 
 
-def fit(model, make_batch, steps, lr=3e-3, log=print, seed=0, aux=0.0, oracle=None, deadline_s=None, flat_s=300, newlr=1.0, hind=0.0, sched=0.0):
+def fit(model, make_batch, steps, lr=3e-3, log=print, seed=0, aux=0.0, oracle=None, deadline_s=None, flat_s=300, newlr=1.0, hind=0.0, sched=0.0, hind_gate=False):
     """Brief training on beta-NLL (+ aux * the replay loss). make_batch(rng) -> x (B, T, 46). Stops at deadline_s, or when the loss has not
     improved for flat_s seconds (a run with a flat loss is killed)."""
     torch.set_num_threads(THREADS)
@@ -152,7 +152,7 @@ def fit(model, make_batch, steps, lr=3e-3, log=print, seed=0, aux=0.0, oracle=No
                 opt.add_param_group({**{k: v for k, v in g.items() if k != 'params'}, 'params': mine, 'lr_mult': g['lr_mult'] * newlr})
     model.train()
     model.oracle = oracle
-    model.hind = hind > 0
+    model.hind, model.hind_gate = hind > 0, hind_gate
     t0 = t_best = time.time()
     best = 1e9
     ema = None
@@ -188,7 +188,7 @@ def fit(model, make_batch, steps, lr=3e-3, log=print, seed=0, aux=0.0, oracle=No
         if time.time() - t_best > flat_s and step > 50:
             log("flat loss: stopped")
             break
-    model.oracle, model.oracle_p, model.hind = None, 1.0, False
+    model.oracle, model.oracle_p, model.hind, model.hind_gate = None, 1.0, False, False
     return model.eval()
 
 
@@ -233,12 +233,12 @@ def t1_eval(model, design, n=32, seed=991, oracle=False):
             "T1a_pass": bool(share >= 0.5 and med > p95)}
 
 
-def t1(design, steps=400, oracle=False, aux=0.0, log=print, deadline_s=1100, newlr=1.0, hind=0.0, sched=0.0, seed=0):
+def t1(design, steps=400, oracle=False, aux=0.0, log=print, deadline_s=1100, newlr=1.0, hind=0.0, sched=0.0, seed=0, hind_gate=False):
     with small():
         model = core_b7.Core7(seed=0, phase=False)
         pre = None if oracle else t1_eval(model, design, n=8)
         fit(model, lambda rng: np.stack([pad46(t1_train_sequence(rng, design)[:, :core.FEAT]) for _ in range(8)]), steps, log=log, aux=aux,
-            oracle=train_oracle if (oracle or sched > 0) else None, deadline_s=deadline_s, newlr=newlr, hind=hind, sched=sched, seed=seed)
+            oracle=train_oracle if (oracle or sched > 0) else None, deadline_s=deadline_s, newlr=newlr, hind=hind, sched=sched, seed=seed, hind_gate=hind_gate)
         res = t1_eval(model, design, oracle=oracle)
         res["untrained_T1a"] = None if pre is None else {k: pre[k] for k in ("source_share_in_first_S", "recognition_repeat_median", "recognition_pre_repeat_p95", "T1a_pass")}
         res["steps_arg"], res["aux"], res["newlr"], res["hind"], res["sched"], res["seed"] = steps, aux, newlr, hind, sched, seed
@@ -312,11 +312,12 @@ def main(argv=None):
     ap.add_argument("--newlr", type=float, default=1.0)
     ap.add_argument("--hind", type=float, default=0.0)
     ap.add_argument("--sched", type=float, default=0.0)
+    ap.add_argument("--hindgate", action="store_true")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--deadline", type=float, default=1100)
     a = ap.parse_args(argv)
     if a.which == "t1":
-        r = t1(a.design, a.steps, a.oracle, a.aux, deadline_s=a.deadline, newlr=a.newlr, hind=a.hind, sched=a.sched, seed=a.seed)
+        r = t1(a.design, a.steps, a.oracle, a.aux, deadline_s=a.deadline, newlr=a.newlr, hind=a.hind, sched=a.sched, seed=a.seed, hind_gate=a.hindgate)
         ok = r["T1b_pass"] and (a.oracle or r["T1a_pass"])
     else:
         r = t2(a.steps, a.taps, deadline_s=a.deadline)

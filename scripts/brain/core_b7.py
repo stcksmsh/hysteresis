@@ -102,7 +102,7 @@ class Core7(core.Core):
         # H1 (all off by default: with them off the module is unchanged). hind: hindsight retrieval loss, returned in out[0]["hind"] and weighted by
         # the caller. oracle_p: scheduled sampling, the per-row, per-read probability of taking the oracle pointer (1 = pure oracle, 0 = retrieval).
         # novelty_lane: 1 - max cosine against the eligible store at every tick (0.5 s), no gradient, independent of the block read.
-        self.hind, self.oracle_p, self.novelty_lane = False, 1.0, False
+        self.hind, self.oracle_p, self.novelty_lane, self.hind_gate = False, 1.0, False, False
         self.sched_gen = torch.Generator().manual_seed(SEED_B7)
 
     # ---- state ------------------------------------------------------------------------------------------------------
@@ -213,6 +213,7 @@ class Core7(core.Core):
         Os = torch.arange(0, BLOCK, 20)
         with torch.no_grad():
             err = torch.zeros(B, K)
+            zerr = torch.zeros(B)
             ok_any = False
             for h in core.HORIZONS:
                 Oo = Os[local0 + Os + 2 * h <= T]
@@ -224,11 +225,15 @@ class Core7(core.Core):
                 base = (kj[:, :, None] * TICK + Oo[None, None]).reshape(B, K * len(Oo))
                 m = window_mean(cs, base + h, base + 2 * h, h).float().reshape(B, K, len(Oo), core.FEAT)
                 err = err + ((m - tgt[:, None]) ** 2).mean(-1).sum(-1)
+                zerr = zerr + (tgt ** 2).mean(-1).sum(-1)
             if not ok_any:
                 return None
             best = torch.where(elig, err, torch.full_like(err, float("inf"))).argmin(1)
         logp = torch.log_softmax(torch.where(elig, sim / torch.exp(self.log_tau), torch.full_like(sim, -1e9)), 1)
-        rows = elig.any(1).float()
+        rows = elig.any(1)
+        if self.hind_gate:                                   # only where the best replay beats a zero replay
+            rows = rows & (err.gather(1, best[:, None])[:, 0] < zerr)
+        rows = rows.float()
         return (-(logp.gather(1, best[:, None])[:, 0]) * rows).sum(), rows.sum(), torch.gather(kj, 1, best[:, None])[:, 0] * TICK
 
     # ---- forward -----------------------------------------------------------------------------------------------------
