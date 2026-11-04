@@ -1,8 +1,23 @@
 # NIGHT LOG: work order 4, builder 3, the H3 toy (blend memory), branch body-h3
 
-## MORNING SUMMARY (filled at the end; updated after every phase)
+## MORNING SUMMARY (2026-11-04; both tries run)
 
-- H3 toy: try 1 not run yet.
+- **H3: FAIL after two tries (T1b). The hippocampus stays off.** Ratio repeat / first (needs <= 0.5), A iid | B levels+clock | C smooth: try 1 (lr 0.05, 400 steps, b0 0.5) **0.921 | 0.681 | 0.520**; try 2 (lr 0.1,
+  1,500 steps, b0 0.8) **0.921 | 0.699 | 0.552**. **T1a passes on all three designs in both tries** (source share 0.812 | 0.830 | 0.955; recognition median above the p95 of non-repeat frames: 0.853 vs 0.808,
+  0.543 vs 0.463, 0.314 vs 0.220).
+- **Baselines (same toy and evaluation):** cortex-only (frozen toy cortex, w = 0) 0.881 | 0.656 | 0.566 (so the blend is worse than cortex-only on A and B in both tries, better on C only in try 1, by 0.046);
+  oracle (H2's runs) 0.327 | 0.440 | 0.348, T1b pass. Blend untrained (a 8, b 0.5) 0.904 | 0.801 | 0.817.
+- **Learned a and b per layer (L1..L4):** try 1 A a [7.4, 8.8, 18.8, 6.7] b [0.993, 0.905, 0.801, 1.365]; B a [8.9, 22.8, 20.2, 22.5] b [1.338, 0.539, 0.425, 0.422]; C a [7.3, 8.4, 18.8, 21.7] b [0.745, 0.304, 0.158, 0.161].
+  Try 2 A a [11.4, 13.3, 57.0, 3.5] b [0.94, 0.89, 0.76, 1.96]; B a [9.4, 40.7, 23.6, 33.2] b [1.36, 0.51, 0.41, 0.37]; C a [7.5, 8.5, 23.6, 36.1] b [0.87, 0.36, 0.20, 0.19].
+- **Variance formula (fixed before the first run):** var = (1 - w) var_c + w VAR_H + w (1 - w) (mu_c - replay)^2, VAR_H = 0.05; w = has * sigmoid(a (recognition - b)). Cortex: trained as in H2's toy with the
+  hippocampus off, then frozen, one per design (`/secondary/hyst-data/brain/h3/cortex_<design>.pt`).
+- **Unit tests:** `test_h3.py` 6 pass (gradient only on a and b; w = 0 recovers the cortex; w = 1 gives the replay; err of the blend; one-shot storage and 17 s eligibility; cortex equals a hippocampus-off Core7).
+  Whole `scripts/brain` suite: 182 pass (1 skipped = cuda).
+- **Citation:** kNN-LM = Khandelwal, Levy, Jurafsky, Zettlemoyer, Lewis, "Generalization through Memorization: Nearest Neighbor Language Models", ICLR 2020 (arXiv 1911.00172). **Not verified** (written from memory, no check made).
+- **FOR USER:** (1) the toy cortex trained without the hippocampus already reaches 0.57-0.88 on T1b (it carries some of the repeat in its slow state), so the 0.5 bar leaves the blend little room on A and B; the work
+  order fixed the bar, nothing was changed. (2) The recognition gap between repeat and non-repeat frames is small on A (0.853 vs 0.808), so a recognition gate cannot separate them there. (3) `core_b7.py` gained one
+  default-off flag (`tap_replay`).
+- **Branch** `body-h3`, data `/secondary/hyst-data/brain/h3/`. Nothing is running.
 
 ## LOG
 
@@ -32,3 +47,6 @@
   Reading, numbers only: the retrieval is right (T1a), the trained blend is no better than cortex-only on A and B and 0.046 better on C; the toy cortex already reaches 0.57-0.88 without the hippocampus,
   and the recognition gap between repeat and non-repeat frames is small on A (0.853 vs 0.808).
 - 2026-11-04 TRY 2 CHANGE (written before the run; only the training of a and b): lr 0.1, 1,500 steps planned (flat-loss stop 600 s as before), b initial 0.8; k 64, tau 0.05, a initial 8 and the cortex unchanged.
+- 2026-11-04 TRY 2 RESULT (lr 0.1, 1,500 steps planned, b0 0.8; rest as try 1). Ratio repeat / first, A | B | C: **0.921 | 0.699 | 0.552**, T1b fails on all three (cortex-only 0.881 | 0.656 | 0.566). T1a passes on
+  all three (same retrieval as try 1: share 0.812 | 0.830 | 0.955). Learned a A [11.4, 13.3, 57.0, 3.5], B [9.4, 40.7, 23.6, 33.2], C [7.5, 8.5, 23.6, 36.1]; b A [0.94, 0.89, 0.76, 1.96], B [1.36, 0.51, 0.41, 0.37],
+  C [0.87, 0.36, 0.20, 0.19]. Logs try2_{A,B,C}.log. DECISION: both tries failed; the hippocampus stays off.
