@@ -96,8 +96,8 @@ latter corrects WO2: "selection collapse" was an argmax evaluation artefact).
 | Agent | Order (prompt on origin/body) | Branch | Share |
 |---|---|---|---|
 | 5 | fallback: authoring tool on B7 lanes for the 3 danced songs + full-song previz videos + self-surprisal export + mindState v2 + manifest.py skip + brainDump without crossings (`docs/BUILDER_PROMPT_WO3_FALLBACK.md` + previz addendum; **priority on the machine**) | body-fallback (not pushed yet at 00:00) | 6 thr / 6 GB |
-| 1 | M3d toy, gradient through MJX (`docs/BUILDER_PROMPT_WO5_M3D.md`) | body-m3d | 8 thr / 10 GB |
-| 2 | H4 toy, uncertainty arbitration (`docs/BUILDER_PROMPT_WO5_H4.md`) | body-h4 | 3 thr / 4 GB |
+| 1 | M3d toy (`docs/BUILDER_PROMPT_WO5_M3D.md`): STOPPED 00:05 for a user clear; re-send to a fresh agent with the branch body-m3d (if pushed) and its night log | body-m3d | 8 thr / 10 GB |
+| 2 | H4 toy (`docs/BUILDER_PROMPT_WO5_H4.md`): STOPPED 00:05 for a user clear; re-send to a fresh agent with branch body-h4 and its night log | body-h4 | 3 thr / 4 GB |
 | 3 | sampled re-evaluation of T-M3/M3b/M3c policies + program/state MI (`docs/BUILDER_PROMPT_WO5_REEVAL.md`) | body-reeval | 2 thr / 4 GB |
 Agent 4 is blank (spare). Units are named `hyst-wo3b2-*` (fallback) and `hyst-wo5-*`.
 
