@@ -30,9 +30,9 @@ Definitions (fixed before running). Same evaluation seed (999), 8 episodes x 90 
 (a) for M3b is S_shifted - S_moving; for M3c the matched-versus-song-shuffled observer loss difference; (c) for M3c is the report-only K3-style PLV (p = k3_p); (d) = at least 4 programs each above 5 % of decisions (M3b only). Per-policy interval and per-joint values are in the JSON files.
 
 Reading (measurement only):
-- The argmax counts (2 programs, 0.7 switches/min, 0.03 nats) are reproduced for every policy except two M3b grid policies, so the "selection collapse" was the argmax; sampled, every policy uses 7-8 programs, 48-104 switches per minute, entropy 0.7-2.07 nats (M3c lower: its logits are less flat).
+- The argmax counts (2 programs, 0.7 switches/min, 0.03 nats) appear for T-M3 try 1/2, M3c try 1/2 and two of the four M3b policies (3-4 programs, 3.7-5.1 switches/min for the other two), so the "selection collapse" was the argmax; sampled, every policy uses 7-8 programs, 48-104 switches per minute, entropy 0.7-2.07 nats (M3c lower: its logits are less flat).
 - Program choice carries no information about the brain state beyond the shuffle in 13 of 16 policy-mode pairs. T-M3 try 2 sampled has MI 0.0137 against a shuffle mean of 0.0082, p = 0.032: not below 0.01. M3b's two argmax policies with MI p = 0.001 (MI 0.017 and 0.155 nats) use 3-4 programs over a few decisions; with so few switches that MI is carried by a small number of decisions and is argmax-only; the sampled versions of the same policies show none (p 0.49, 0.50).
-- (a) of T-M3 survives sampling (0.71, 0.53), smaller than under argmax; (c) fails in both modes for both tries. M3b's (a) reads positive but near 0 (+0.002 to +0.004; two to four of the sampled versions have an interval above 0, see JSON): its argmax versions fail (a). M3c (a) fails in both modes.
+- (a) of T-M3 survives sampling (0.71, 0.53), smaller than under argmax; (c) fails in both modes for both tries. M3b's (a) reads positive but near 0 (+0.002 to +0.004; three of the four sampled versions have a 95 % interval above 0: [0.0016, 0.0071], [0.0007, 0.0061], [0.0004, 0.0059]; the fourth [-0.0006, 0.0051]; no claim of a pass: M3b's (c) and the pre-registered round stand): its argmax versions fail (a). M3c (a) fails in both modes.
 - No claim of a pass: the original tries and their rounds stand as recorded.
 
 ## Log
