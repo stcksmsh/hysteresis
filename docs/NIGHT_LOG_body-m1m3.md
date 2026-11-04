@@ -4,7 +4,12 @@ Provisional servo model throughout: Feetech STS3215 12 V assumed; kp, rotor iner
 
 ## MORNING SUMMARY
 
-(in progress; phases 0 and 1 below)
+Provisional servo model: Feetech STS3215 12 V assumed (kp, rotor inertia, damping 1.5, acceleration share 0.25).
+- D4: Kaggle verify of `hyst-features` exit 1, one problem only: `dataset-metadata.json` missing (Kaggle does not store it). FOR USER: `manifest.py` should skip it.
+- K1: **FAIL both rounds.** Round 1 (GRU 128, 3,588 s local): babbling fails one condition (+50 ms vs ridge, -0.17 [-0.18, -0.16]); v47 fails all. Round 2 (GRU 256, 6,732 s local): babbling passes all three horizons (NLL gain vs ridge 1.26 / 0.42 / 0.41, intervals above 0; MSE -87 % / -66 % / -56 % vs ridge); v47 passes MSE, fails NLL at +10 and +50 ms (vs ridge -4.01 [-5.40, -2.70], -1.23 [-2.17, -0.50]) and vs persistence at all three. Predictions are accurate on v47 (MSE 3-6x below persistence), predicted variances overconfident. M1 claim unlicensed. **Self-surprisal lane for the danced songs: not exported** (K1 failed; no export code written). FOR USER/overseer: decide whether to export it anyway from the round-2 bundle.
+- M3 benchmark: table in Phase 3 (laptop 51-60 s, T4 39-43 s wall per simulated hour; 256 environments fit: 6.7 GB laptop). Identity test: see Phase 3 / commit f016bbf.
+- T-M3: grid of 18 done; chosen beta 0.1, lambda 1, c_sw 0.1; gamma (SYNC fallback) 1 (no gamma passes (c)). Try 1: (a) pass 0.799 [0.767, 0.832], (b) pass 42.1 deg/s, (c) FAIL p = 0.016; 2 programs, 0.67 switches/min, entropy 0.034 nats. Try 2 (lr 1e-3): (a) pass 0.645, (b) pass 46.7, (c) FAIL PLV 0.0004, p = 0.90; same selection collapse. **T-M3 fails twice: per plan §6, M3 stops; the real M3 run was not started.** Control: about 85 % of (a) is the relay preferring moving-arm input (still - shifted 0.68 of still - moving 0.80).
+- Kaggle GPU hours: about 0.05 (benchmark). Data: `/secondary/hyst-data/body/{runs,tm3,tm3_sync}`.
 
 ## Log
 
@@ -64,3 +69,6 @@ Provisional servo model as above. Toy: reduced cortex (16 modes), K = 8 programs
 - Diagnosis (training log, nothing rerun): S_still - S_moving is non-zero (d about 1.1 per 0.1 s at the end). Critic does not keep up: value loss rises 1.4 to 62-87 over the run while mean |delta| rises 0.19 to 0.85, because the return scale grows as the relay learns (non-stationary reward). Selection is near-collapsed at evaluation (policy-mean action) although training entropy is still 1.5 of 2.08 nats. Reading: the critic/advantage is too noisy and slow to shape rhythm-specific behaviour.
 - Try 2: one change, **learning rate 3e-4 to 1e-3** (policy and critic share it); reward definition, beta, lambda, c_sw, seed, evaluation unchanged. Named before the run.
 - SYNC fallback gamma grid (flag on, report only, beta 0.1, lambda 1, c_sw 0.1, own calibration SYNC0 = 0.160, `tm3_sync/`): gamma 0.1: PLV 0.016 (surrogate max 0.030, p 0.18), a 0.753, b 40.8; gamma 0.3: PLV 0.013 (p 0.63), a 0.755, b 39.6; gamma 1: PLV 0.023 (surrogate max 0.036, p 0.11), a 0.691, b 41.6, 2 programs, 1.33 switches/min, entropy 0.54. None passes (c). **gamma fixed at 1** (highest PLV, only setting with more than one regular program switch), before any K2 result; weak evidence, 8 x 90 s evaluation.
+
+### Phase 5: try 2 (learning rate 1e-3)
+`tm3/try2.result.json`: (a) 0.645 [0.616, 0.676] pass; (b) 46.7 deg/s pass; (c) PLV 0.0004 vs surrogate mean 0.0011, p = 0.90 fail. Programs 2 (8 / 1,432), 0.67 switches/min, entropy 0.034 nats, dominant joint 4 in all episodes; still - shifted 0.546. Final value loss 3.4 (critic tracks better) but selection still collapses and movement is not pulse-locked. Two tries failed: T-M3 stops here (plan §6); real M3 not started.
