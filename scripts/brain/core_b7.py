@@ -104,6 +104,7 @@ class Core7(core.Core):
         # novelty_lane: 1 - max cosine against the eligible store at every tick (0.5 s), no gradient, independent of the block read.
         self.hind, self.oracle_p, self.novelty_lane, self.hind_gate = False, 1.0, False, False
         self.sched_gen = torch.Generator().manual_seed(SEED_B7)
+        self.tap_replay = False          # H3: out[0]["replay_true"] = the replay as read, even when retrieval_on is False (the relay input is zeroed, the tap is not)
 
     # ---- state ------------------------------------------------------------------------------------------------------
 
@@ -271,6 +272,7 @@ class Core7(core.Core):
         cl = torch.cat([torch.zeros(B, 1, core.FEAT, dtype=torch.float64), f64.cumsum(1)], 1) if self.hind else None
         hs, hc = 0.0, 0.0
         nov_t, nov_v = [], []
+        tap = []
         for s0 in range(0, T, BLOCK):
             fb = f[:, s0:s0 + BLOCK]
             Tb = fb.shape[1]
@@ -287,6 +289,8 @@ class Core7(core.Core):
                 hs, hc = hs + hb[0], hc + hb[1]
             nov = 1.0 - rec
             replay, rec_in = replay[:, :Tb], rec
+            if self.tap_replay:
+                tap.append(replay)
             if not self.retrieval_on:
                 replay, rec_in = torch.zeros_like(replay), torch.zeros_like(rec)
             rel_in = torch.cat([fb[..., :core.FEAT], fb[..., core.FEAT:], replay.reshape(B, Tb, 4 * core.FEAT), rec_in[:, None, None].expand(-1, Tb, 1)], -1)
@@ -365,6 +369,8 @@ class Core7(core.Core):
         outs[0]["dev"] = torch.stack(dev_l, 1)
         if return_replay:
             outs[0]["replay"] = torch.cat(rep_l, 1)
+        if tap:
+            outs[0]["replay_true"] = torch.cat(tap, 1)
         if self.hind:
             outs[0]["hind"] = hs / max(float(hc), 1.0) if hc else torch.zeros(())
         if nov_v:
