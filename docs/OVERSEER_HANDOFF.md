@@ -98,7 +98,7 @@ latter corrects WO2: "selection collapse" was an argmax evaluation artefact).
 | 5 | fallback: authoring tool on B7 lanes for the 3 danced songs + full-song previz videos + self-surprisal export + mindState v2 + manifest.py skip + brainDump without crossings (`docs/BUILDER_PROMPT_WO3_FALLBACK.md` + previz addendum; **priority on the machine**) | body-fallback (not pushed yet at 00:00) | 6 thr / 6 GB |
 | 1 | M3d toy (`docs/BUILDER_PROMPT_WO5_M3D.md`), re-sent fresh 23:40 after a clear (first session left nothing) | body-m3d | 8 thr / 10 GB |
 | 2 | H4 toy (`docs/BUILDER_PROMPT_WO5_H4.md`), resumed 23:40 after a clear: branch at 8614dd7, try 1 rerun cleanly with committed parameters (design A had finished, B was killed) | body-h4 | 3 thr / 4 GB |
-| 3 | sampled re-evaluation of T-M3/M3b/M3c policies + program/state MI (`docs/BUILDER_PROMPT_WO5_REEVAL.md`) | body-reeval | 2 thr / 4 GB |
+| 3 | DONE 2026-11-04 ~23:50, verified (JSON table recomputed, 34 tests pass), merged into body d1e6454 and keys-decide. Was: sampled re-evaluation of T-M3/M3b/M3c policies + program/state MI (`docs/BUILDER_PROMPT_WO5_REEVAL.md`) | body-reeval | 2 thr / 4 GB |
 body-fallback pushed 02b724b at 23:30 (previews, self-surprisal, mindState v2, brainDump, manifest fix); recording videos (hyst-wo3b2-rec1). Machine load ~111 at 23:30, mostly a Kabl factory_bank process. Agent 4 is blank (spare). Units are named `hyst-wo3b2-*` (fallback) and `hyst-wo5-*`.
 
 **When each reports:** verify (below), merge into body, push. For body-fallback also the v47 cmp (it touches crates/ and mindState). Then
@@ -116,6 +116,8 @@ within ~30 min that the branch exists and has a first commit (the fallback produ
 only result files: the argmax bug was visible in identical program counts across different rewards. (4) GitHub had server errors; origin is now
 HTTPS with the gh credential helper (repo-local config); SSH publickey failed. (5) A shared CARGO_TARGET_DIR gave stale compile errors: use a
 fresh one for verification. (6) `tm3_world` patches `core.N`/`core_b7.BLOCK` on import: run its tests in their own process.
+
+**Hourly wakeup:** session cron e1eec50b at :23 (set 2026-11-04 23:40, dies with the session; recreate after restart).
 
 **Wakeups:** set a session cron after restart, e.g. hourly at :23: check agents/branches/units/uptime, resume stalled builders, hand dead ones
 to blank agents, verify finished ones.
