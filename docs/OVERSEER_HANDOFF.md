@@ -119,7 +119,7 @@ fresh one for verification. (6) `tm3_world` patches `core.N`/`core_b7.BLOCK` on 
 
 **2026-11-05 ~00:30:** planner answered WO5 = BRAIN_SPEC 7.17 (body 1f8915c). Work order 6 prompts on body: `docs/BUILDER_PROMPT_WO6_H4DIAG.md` (agent 2),
 `_WO6_M3D_RELAUNCH.md` (agent 1; agent 1 had already relaunched by itself at 00:16 as `hyst-wo5-m3d-grid`, sequential lambdas, 8 threads, 9 GB cap, anon ~1 GB),
-`_WO6_HEXAGON.md` (agent 5: fallback on six arms + self-surprisal lane). Not sent yet: waiting for the user's go. H4 both tries fail T1b; diagnostic per 7.17.1 decides closure.
+`_WO6_TUNING.md` (agent 5: one-arm tuning loop, fast re-render of a song or a 20 s window, + self-surprisal lane). **User correction 2026-11-05: the installation is ONE arm; ensemble out of scope for good** (7.17.4 rewritten, plan §10). Not sent yet: waiting for the user's go. H4 both tries fail T1b; diagnostic per 7.17.1 decides closure.
 
 **Hourly wakeup:** session cron e1eec50b at :23 (set 2026-11-04 23:40, dies with the session; recreate after restart).
 
