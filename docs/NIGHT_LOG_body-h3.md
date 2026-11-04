@@ -25,3 +25,10 @@
 - 2026-11-04 TRY 1 PARAMETERS (written before the run): k = 64, tau = 0.05 (H2 try 1's); blend training: lr 0.05, 400 steps, a initial 8, b initial 0.5 (all four layers), seed 0, AdamW as train.make_optimizer,
   20 warm-up steps, clip 1, flat-loss stop 600 s; cortex stage as above; eval 32 draws seed 991 as in H2. Try 2 may change only the training of a and b (lr, steps, initial b; initial a is outside that list
   and stays 8) and k / tau, named before the run. Bar: T1a + T1b of 7.10 R3. Runs one design at a time (4 threads, 5 GB cap; one run peaks near 2.4 GB).
+- 2026-11-04 TRY 1 RESULT (k 64, tau 0.05, blend lr 0.05, 400 steps planned, a0 8, b0 0.5; cortex stage per design as stated). Ratio repeat / first (needs <= 0.5), A | B | C: **0.921 | 0.681 | 0.520**, T1b fails
+  on all three. Cortex-only (w = 0, the frozen toy cortex): 0.881 | 0.656 | 0.566. Blend before its training (a 8, b 0.5): 0.904 | 0.801 | 0.817. T1a passes on all three: source share 0.812 | 0.830 | 0.955;
+  recognition median vs p95 of the non-repeat frames 0.853 vs 0.808 | 0.543 vs 0.463 | 0.314 vs 0.220. Learned a (L1..L4) A [7.4, 8.8, 18.8, 6.7], B [8.9, 22.8, 20.2, 22.5], C [7.3, 8.4, 18.8, 21.7];
+  b A [0.993, 0.905, 0.801, 1.365], B [1.338, 0.539, 0.425, 0.422], C [0.745, 0.304, 0.158, 0.161]. Logs /secondary/hyst-data/brain/h3/try1_{A,B,C}.log. Oracle (H2's runs, same toy): 0.327 | 0.440 | 0.348.
+  Reading, numbers only: the retrieval is right (T1a), the trained blend is no better than cortex-only on A and B and 0.046 better on C; the toy cortex already reaches 0.57-0.88 without the hippocampus,
+  and the recognition gap between repeat and non-repeat frames is small on A (0.853 vs 0.808).
+- 2026-11-04 TRY 2 CHANGE (written before the run; only the training of a and b): lr 0.1, 1,500 steps planned (flat-loss stop 600 s as before), b initial 0.8; k 64, tau 0.05, a initial 8 and the cortex unchanged.
