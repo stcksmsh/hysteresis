@@ -83,43 +83,42 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## Where things stand (2026-11-03, after the planner's new plan)
+## Where things stand (2026-11-05 ~00:00)
 
-**New direction (user, 2026-11-03): `docs/BODY_BRAIN_PLAN.md` is the work order.** It wins over NEXT_DECODER's next steps. Goal: a scaled
-human brain + body that drives itself (cortex = B7 epoch 6, frozen; MuJoCo body; cerebellum; spinal oscillators; basal ganglia/dopamine via
-PPO; monitor B5). The authoring tool is the last-resort fallback only. Order: Z -> M0 -> M2 -> M1 -> T-M3 -> M3 -> M4; H1 and B5 in parallel.
+**Plan:** `docs/BODY_BRAIN_PLAN.md` version 2 plus the dated rulings in `docs/BRAIN_SPEC.md` §7.11–7.16 (read 7.14, 7.15, 7.16 first:
+they replace parts of the plan). Branch of record: `body` (pushed); `keys-decide` = body + overseer docs. Never master.
 
-- **Branch `body`** (cut from keys-decide, which = b7 + docs; pushed). keys-decide is fast-forwarded to it. Holds the plan, `scripts/compute/`
-  (test_compute 12/12 pass), BRAIN_SPEC §7.11 (B7 close-out: round 2 not taken, epoch 6 is the cortex of record, warm-start LR rule).
-- **Kaggle:** user `kostavukicevic`, token in `~/.kaggle/access_token` (600); CLI 2.2.5 needs `six`. Auth tested OK. Weekly quota seen by the user 2026-11-03: GPU 30 h, TPU 20 h; AI credit $10/day, $100/month (not in the plan; unused).
-- **Spare fresh agents 3, 4, 5** (spawned 2026-11-03 22:30): for handing over a builder that gets high context, not for parallel work.
-- **23:40: M3c verified and merged (10c7fd7, with body-m3b). Brief docs/PLANNER_BRIEF_WO4_RESULTS.md sent (H3, M3c, argmax correction, 3 questions). Hourly wakeup cron 4d39f8d7 (:23). Running: agent 5 fallback only. Blank: agents 1-4.**
-- **2026-11-04 19:36 laptop powered off (logind "System is powering down", lid closed); back 23:05. All sessions restarted fresh; overseer crons lost.** M3c finished before (body-m3c 99e03eb: toy fails twice, (a) ~0 both tries; NOT yet verified/merged). Fallback order (agent 5) had produced nothing (no branch): re-sent to the new agent 5 at 23:20. **Suspected bug, all of T-M3/M3b/M3c:** evaluate() uses argmax program selection (deterministic=True) while training samples (~90 switches/min, entropy ~1.5 nats); the identical 8/1432 counts are an eval artifact, so "selection collapsed" in the WO2 brief is likely wrong. To report to the planner.
-- **H3 DONE and verified 2026-11-04 19:15, merged (04102e8):** T1b fails both tries (A/B/C try1 0.921/0.681/0.520, try2 0.921/0.699/0.552; cortex-only 0.881/0.656/0.566; T1a passes all). Hippocampus stays off. Citation kNN-LM not verified. Agent 2 free.
-- **Work order 4 (pivot, 2026-11-04 ~18:00):** BRAIN_SPEC 7.15 (H3 blend memory, M3c legibility reward; M3/M3b retired). Agent 4: M3b stopped, then docs/BUILDER_PROMPT_WO4_M3C.md (body-m3c, 10 threads/12 GB). Agent 2: docs/BUILDER_PROMPT_WO4_H3.md (body-h3, 4 threads/5 GB). Agent 5: fallback order stands + previz videos addendum (body-fallback, 6 threads/6 GB). Crons: one-shot 23:15 (409a5a51), hourly backup 00:26-09:26 on 11-05 (4cdddb2b). Spares: 3, 1.
-- (superseded) **Work order 3 (2026-11-04 ~17:45):** rulings recorded as BRAIN_SPEC 7.14. Prompts docs/BUILDER_PROMPT_WO3_M3B.md (agent 4, branch body-m3b, M3b toy) and docs/BUILDER_PROMPT_WO3_FALLBACK.md (agent 5, branch body-fallback: authoring tool on B7 lanes, self-surprisal export, mindState v2, manifest.py fix, brainDump without crossings) SENT. Session crons in the overseer: one-shot 23:15 resume (00e35265), hourly backup 00:31-09:31 on 11-05 (77079255). If this session died, a new overseer must resume both builders by hand. Spare agents: 1, 2, 3 (used).
-- **Builder 1 track (agent 3, body-m1m3) DONE and verified 2026-11-04 ~17:30, merged (4b0fcbd):** K1 fails both rounds (v47 NLL); T-M3 fails twice on (c) (p 0.016, 0.90), selection collapsed to 1 program, movement mostly wrist roll; M3 stops per plan 6. v47 byte-identical rebuilt from the branch. Brief `docs/PLANNER_BRIEF_WO2_RESULTS.md` (6 questions) sent. Nothing running. Monitors/cron: none.
-- **Builder 2 (body-h2show) DONE and verified 2026-11-04 ~16:50, merged into body (8384ea3):** H2 fails both tries (ratios try1 1.000/0.810/0.769, try2 1.000/0.861/0.852; oracle 0.327/0.440/0.348; frozen-H1 1.000/0.856/1.054), hippocampus closed for this plan. brainDump for 3 danced songs (46/39/37 MB) in /secondary/hyst-data/brain/braindump/; per-layer coherence thresholds 0.145/0.205/0.141/0.165 committed 13:00:22 before the songs ran; crossings 0 (recomputed). mindState B7 lanes in /secondary/hyst-data/brain/mindstate/. 176 tests OK. Builder 1 track (agent 3) still running.
-- **Plan v2 + work order 2 (2026-11-04 ~12:30):** committed on body (bf38d65), BRAIN_SPEC 7.12. Prompts `docs/BUILDER_PROMPT_WO2_BODY.md` (branch body-m1m3: M1+K1, M3 bench, T-M3) and `docs/BUILDER_PROMPT_WO2_SHOW.md` (body-h2show: H2 toy, brainDump, B7 lanes in mindState). Plan-check brief `docs/PLANNER_BRIEF_PLAN_V2_CHECK.md` (8 items, defaults D1-D5 in the prompts). Rulings on the check recorded as BRAIN_SPEC 7.13 (6f414dd), prompts updated. SENT 2026-11-04 ~13:00 to agent 1 (body-m1m3) and agent 2 (body-h2show). 16:10: agent 1 ran out of context mid phase 5; body track handed to agent 3 (same worktree/branch). K1 round 1 FAIL (babbling +50 ms NLL vs ridge; v47 set all conditions). When both report: recompute and bring the work order's "what comes back" list.
-- **Remote switched to HTTPS** (repo config: origin=https, credential helper = gh). Plain `git push` works; GitHub had server errors 2026-11-04 ~11-13h, retry pushes.
-- **H1 DONE and verified 2026-11-04 11:30:** both tries fail T1a/T1b on A, B, C (ratios try1 1.084/0.790/0.962, try2 1.140/0.812/1.139; oracle 0.329). Hippocampus stays off; M4 dropped. Merged locally into body (7ce35ff), 162 tests OK. Brief `docs/PLANNER_BRIEF_H1_RESULTS.md`. Hourly cron deleted (both orders done).
-- **SSH push to GitHub fails since 2026-11-04 ~11:00** (publickey). Workaround that works: HTTPS with the gh login, `git -c credential.helper= -c "credential.helper=!gh auth git-credential" push https://github.com/stcksmsh/hysteresis.git BRANCH:BRANCH`. Give builders this line. All branches pushed 11:40.
-- **Z/M0/M2 DONE and verified 2026-11-04 10:05**, merged into body (948a6fa). Overseer reran: brain 155 OK (1 cuda skip), body 10 OK, compute 13 OK; bench results.json files match the log; M0 gravity torque recomputed independently (straight out shoulder 1.76 vs reported 1.75). Kaggle datasets `kostavukicevic/hyst-features` (5.8 GB, private) and `hyst-code` exist. Benchmarks: B7 train+ckpt 39.6 s/audio h laptop, 16.4 T4; forward 8.7 / 4.2; physics MuJoCo CPU laptop 2.24 M steps/s at 4,096 envs, MJX T4 2.77 M. Kaggle GPU used ~0.07 h.
-- **01:09 check (2026-11-04):** both builders stopped at the usage limit, partial; all Hysteresis agent sessions (1-5) GONE from ListAgents (closed), so no nudge possible. body-z 2329e0c: Z1, Z2 done; Z3 pack finished (3,176 feats in /secondary/hyst-data/pack/features, MANIFEST built, not verified, not uploaded); Z4, Z5 not started; M0, M2 partial (see its NIGHT_LOG). body-h1 3f7240c: try 1 A ratio 1.084, B 0.790, both fail T1a/T1b; C, oracle ref and try 2 not run. Nothing running (h1 units exit 1 = fail result, logs complete). Next: user restarts agents; resume prompts point at the branch NIGHT_LOGs.
-- **Usage limit:** at 85 % of the 5 h window at 22:30; resets about 00:30. A session-only cron in the overseer fires 00:47 to nudge stopped builders.
-- **Builder prompts SENT 2026-11-03 (agent 1 = Z/M0/M2, agent 2 = H1):** `docs/BUILDER_PROMPT_Z_M0_M2.md` (branch `body-z`; user tasks at top: Kaggle account, phone, token),
-  `docs/BUILDER_PROMPT_H1.md` (branch `body-h1`, toy only, 2 x 3 h). Send only when the user says, to the agent they name.
-- **Planner brief sent to the user:** `docs/PLANNER_BRIEF_BODY_PLAN_CHECK.md` (11 mismatches, 3 questions: implement mass, ±180° cap, B7 lane
-  export timing). Defaults are in the prompts. Waiting for the answer.
-- Nothing running. B7 results are in BRAIN_SPEC §7.11 and the plan §2/§10. `docs/BUILDER_PROMPT_AUTHORING.md` is obsolete (plan §0.2).
-- The planner's zip is at the repo root (`hysteresis_body_brain_2026-11-03.zip`, untracked); its content is committed on `body`.
+**Closed:** B7 (epoch 6 = cortex of record); H1, H2, H3 (all fail T1b; T1a passes from H2 on); M1/K1 (fails, claim forbidden; cerebellum usable
+as a mechanism); T-M3, M3b (retired), M3c (fails (a) twice). Results: briefs `docs/PLANNER_BRIEF_WO2_RESULTS.md`, `_WO4_RESULTS.md` (the
+latter corrects WO2: "selection collapse" was an argmax evaluation artefact).
 
-## Your first job
+**Running now (work order 5, sent 2026-11-04 ~23:55; all agents fresh after a power-off at 19:36):**
+| Agent | Order (prompt on origin/body) | Branch | Share |
+|---|---|---|---|
+| 5 | fallback: authoring tool on B7 lanes for the 3 danced songs + full-song previz videos + self-surprisal export + mindState v2 + manifest.py skip + brainDump without crossings (`docs/BUILDER_PROMPT_WO3_FALLBACK.md` + previz addendum; **priority on the machine**) | body-fallback (not pushed yet at 00:00) | 6 thr / 6 GB |
+| 1 | M3d toy, gradient through MJX (`docs/BUILDER_PROMPT_WO5_M3D.md`) | body-m3d | 8 thr / 10 GB |
+| 2 | H4 toy, uncertainty arbitration (`docs/BUILDER_PROMPT_WO5_H4.md`) | body-h4 | 3 thr / 4 GB |
+| 3 | sampled re-evaluation of T-M3/M3b/M3c policies + program/state MI (`docs/BUILDER_PROMPT_WO5_REEVAL.md`) | body-reeval | 2 thr / 4 GB |
+Agent 4 is blank (spare). Units are named `hyst-wo3b2-*` (fallback) and `hyst-wo5-*`.
 
-- When the user says go: send the two prompts. Verify each report as below, recomputing M0 numbers (sag, torque margins, CPU/MJX parity) and
-  benchmark numbers from the saved files.
-- Record the planner's answer to the plan-check brief as a dated note in BODY_BRAIN_PLAN or BRAIN_SPEC before any result it scores.
-- Report back to the planner after the first work order (OVERSEER_PROMPT_2026-11-03.md lists what it wants).
+**When each reports:** verify (below), merge into body, push. For body-fallback also the v47 cmp (it touches crates/ and mindState). Then
+the planner brief `docs/PLANNER_BRIEF_WO5_RESULTS.md` with: fallback preview/video paths, self-surprisal sizes, mindState v2 tests, v47 cmp;
+the re-evaluation table (both modes, MI); M3d (a)-(c) per try; H4 T1a/T1b per try; FOR USER items. If M3d fails, the self-driven body is closed;
+if H4 fails, memory is closed (both final items).
+
+**Open with the user:** the fallback videos to watch (artistic mapping is the user's, by eye; starting map `scripts/author/mappings/example-sketch.json`);
+the monitor build waits for the user's choice of the planner's mockups; Kaggle `manifest.py` fix is in the fallback order; the trace viewer
+`/secondary/hyst-data/brain/braindump/instant-crush.view.html` was never opened in a browser.
+
+**Overseer lessons from 2026-11-04:** (1) the laptop powers off when the lid closes or on battery; session crons die with the session; after any
+restart all agents are fresh and must be re-sent their orders from the prompt files plus their night logs. (2) After sending an order, check
+within ~30 min that the branch exists and has a first commit (the fallback produced nothing for hours unnoticed). (3) Read evaluation code, not
+only result files: the argmax bug was visible in identical program counts across different rewards. (4) GitHub had server errors; origin is now
+HTTPS with the gh credential helper (repo-local config); SSH publickey failed. (5) A shared CARGO_TARGET_DIR gave stale compile errors: use a
+fresh one for verification. (6) `tm3_world` patches `core.N`/`core_b7.BLOCK` on import: run its tests in their own process.
+
+**Wakeups:** set a session cron after restart, e.g. hourly at :23: check agents/branches/units/uptime, resume stalled builders, hand dead ones
+to blank agents, verify finished ones.
 
 ## When a builder says it finished
 
