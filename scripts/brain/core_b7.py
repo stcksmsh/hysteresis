@@ -251,15 +251,16 @@ class Core7(core.Core):
                     e = 0.5 * (lvp + out[i]["err"] ** 2 * torch.exp(-lvp) + math.log(2 * math.pi)).mean(-1)
                     s_t = s_t + e * ((n0[:, None] + idx[None]) >= 2 * hz - 1).float()
                     lv[j] = lv_all[:, -2 * hz:]
-                sn, an, amn, first = s_t.numpy(), a.numpy().copy(), am.numpy().copy(), (n0.numpy() == 0)
+                adev = a.device
+                sn, an, amn, first = s_t.cpu().numpy(), a.cpu().numpy().copy(), am.cpu().numpy().copy(), (n0.cpu().numpy() == 0)
                 ar = np.empty((B, Tb), np.float32)
                 for t in range(Tb):
                     sv = sn[:, t]
                     an = an + np.where(sv > an, ra, rd) * (sv - an)
                     amn = np.where(first & (t == 0), an, amn + rm * (an - amn))
                     ar[:, t] = an
-                a, am = torch.from_numpy(an.astype(np.float32)), torch.from_numpy(amn.astype(np.float32))
-                ar_l.append(torch.from_numpy(ar))
+                a, am = torch.from_numpy(an.astype(np.float32)).to(adev), torch.from_numpy(amn.astype(np.float32)).to(adev)
+                ar_l.append(torch.from_numpy(ar).to(adev))
             # four entries (one per 0.5 s), from the L3 + L4 modes at the tick frame and the raw features of the last 2 s
             h3, h4 = out[2]["h"], out[3]["h"]
             for i in range(0, Tb if hip else 0, TICK):

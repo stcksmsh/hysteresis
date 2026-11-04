@@ -35,7 +35,7 @@ def pack(manifest_path, stats_path, out, dtype="float16", slug=None, splits=None
     base = Path(manifest_path).resolve().parent
     stats = np.load(stats_path)
     mean = stats["mean"] if "mean" in stats else 0.0
-    std = stats["std"] if "std" in stats else 1.0
+    std = stats["std"] if "std" in stats else stats["sd"] if "sd" in stats else 1.0   # the corpus builder's file calls it `sd`
     new, max_err = [], 0.0
     for e in entries:
         if splits and e.get("split") not in splits:

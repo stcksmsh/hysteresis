@@ -6,7 +6,8 @@
 
 The folder holds kernel-metadata.json and run.py. On Kaggle, run.py:
   1. finds the code dataset (HYST_DATASET.json with name hyst-code) anywhere under /kaggle/input and unpacks
-     code.tar.gz into /tmp/repo (not into /kaggle/working, so code is not re-saved as output);
+     code.tar.gz into /tmp/repo (not into /kaggle/working, so code is not re-saved as output), or, when Kaggle has already unpacked
+     the archive, uses the unpacked code/ folder;
   2. optionally pip-installs extra packages (needs internet, i.e. a phone-verified Kaggle account);
   3. finds the data dataset (name hyst-features) the same way; its folder is passed as {DATA};
   4. if --prev-kernel was given, that kernel's saved output is attached as an input and its ckpt/ folder is passed as {PREV},
@@ -52,8 +53,12 @@ if code is None:
     sys.exit("hyst-code dataset not attached")
 repo = "/tmp/repo"
 os.makedirs(repo, exist_ok=True)
-with tarfile.open(os.path.join(code, "code.tar.gz")) as t:
-    t.extractall(repo)
+tar = os.path.join(code, "code.tar.gz")
+if os.path.exists(tar):
+    with tarfile.open(tar) as t:
+        t.extractall(repo)
+else:       # Kaggle unpacks an uploaded archive into a folder named after it (seen 2026-11-04: code/ holds the tree)
+    repo = os.path.join(code, "code")
 commit = open(os.path.join(code, "COMMIT")).read().strip()
 JOB["commit"] = commit
 if PIP:
