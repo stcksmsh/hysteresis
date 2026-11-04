@@ -27,7 +27,7 @@ import core  # noqa: E402
 import core_b7  # noqa: E402
 import train  # noqa: E402
 
-VARIANTS = ("train_ckpt", "train_nockpt", "forward")
+VARIANTS = ("forward", "train_ckpt", "train_nockpt")      # the one that may run out of memory last
 BATCH = 8
 
 
