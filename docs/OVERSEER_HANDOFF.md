@@ -48,6 +48,8 @@ You are the overseer for Hysteresis. You do not implement. You:
 
 ## Lessons (keep them)
 
+- **ONE arm, permanently (user, 2026-11-05).** Never write prompts, plans or briefs with multiple arms, hexagon or ensemble items, even if the planner asks; correct the planner instead.
+
 - **Every long job runs in its own memory cap.** Two ways:
   - `systemd-run --user --scope -p MemoryMax=20G -p MemorySwapMax=0 --unit=hyst-<name> bash script.sh`;
   - better, a detached service that survives every session: `systemd-run --user --unit=hyst-<name> -p MemoryMax=20G -p MemorySwapMax=0 /path/script.sh`.
@@ -119,7 +121,7 @@ fresh one for verification. (6) `tm3_world` patches `core.N`/`core_b7.BLOCK` on 
 
 **2026-11-05 ~00:30:** planner answered WO5 = BRAIN_SPEC 7.17 (body 1f8915c). Work order 6 prompts on body: `docs/BUILDER_PROMPT_WO6_H4DIAG.md` (agent 2),
 `_WO6_M3D_RELAUNCH.md` (agent 1; agent 1 had already relaunched by itself at 00:16 as `hyst-wo5-m3d-grid`, sequential lambdas, 8 threads, 9 GB cap, anon ~1 GB),
-`_WO6_TUNING.md` (agent 5: one-arm tuning loop, fast re-render of a song or a 20 s window, + self-surprisal lane). **User correction 2026-11-05: the installation is ONE arm; ensemble out of scope for good** (7.17.4 rewritten, plan §10). Not sent yet: waiting for the user's go. H4 both tries fail T1b; diagnostic per 7.17.1 decides closure.
+`_WO6_TUNING.md` (agent 5: one-arm tuning loop, fast re-render of a song or a 20 s window, + self-surprisal lane). **User correction 2026-11-05: the installation is ONE arm; ensemble out of scope for good** (7.17.4 rewritten, plan §10). Sent 2026-11-05 ~00:45 to agents 2 (H4 diag), 5 (tuning, branch body-tuning), 1 (M3d note), notify_when_idle on all three. AGENTS.md now opens with the one-arm rule (body, keys-decide, dance-checkpoint c9bbf3c). H4 both tries fail T1b; diagnostic per 7.17.1 decides closure.
 
 **Hourly wakeup:** session cron e1eec50b at :23 (set 2026-11-04 23:40, dies with the session; recreate after restart).
 
