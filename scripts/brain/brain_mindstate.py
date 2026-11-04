@@ -1,7 +1,7 @@
 """B7 lanes into `mindState` (work order 2, phase 3). For a song that already has a mindState (core-2b mood lanes, scripts/emotion/mindstate.py), run B7
 epoch 6 over it (braindump.run_song) and add an additive `brain` object INSIDE the mindState. mood.* stays as it was (energy from core-2b). The reserved
 bands / surprise / neuromod arrays stay empty: the Rust reader (hyst-compile/src/mind_state.rs, version 1) rejects anything else there and ignores unknown
-keys, so `brain` reads clean and the planner is untouched. Moving the lanes into the reserved names needs mindState version 2 and a Rust change (FOR USER).
+keys, so `brain` reads clean and the planner is untouched. `to_v2` / `--v2` moves the lanes into the reserved names (mindState version 2, hyst-compile mind_state.rs reads both versions).
 
 `brain` (mechanism names only; all lanes on 0.1 s bins, bin k = frames [10 k, 10 k + 10), stamped at frame 10 k + 9; null = undefined there):
   source                 "b7-epoch6"; hopSeconds 0.1
@@ -15,7 +15,6 @@ keys, so `brain` reads clean and the planner is untouched. Moving the lanes into
   gain, exponent         {L1..L4}: the 2 s block's gain 1 + w_g dev and |lambda| exponent
   selfSimilarity         braindump.py's lane (1 - max cosine against codes >= 17 s old), null until defined
   coherence              {L1..L4}: braindump.py's windowed phase order parameter, bin k = the window ending at frame 10 k + 9 (null before 1 s)
-  crossing               {thresholds, minLayers, times}: window-end times (s) where >= 3 layers exceed their own threshold
 """
 import argparse
 import json
@@ -40,7 +39,7 @@ def _lane(a, nd=5):
     return [None if not np.isfinite(v) else round(float(v), nd) for v in a]
 
 
-def brain_field(res, z, thresholds):
+def brain_field(res, z):
     """Per-frame run results (braindump.run_song) + the standardised features z (T, 44) -> the `brain` object."""
     T = len(z)
     nb = T // 10
@@ -55,7 +54,6 @@ def brain_field(res, z, thresholds):
     codes = F.normalize(torch.from_numpy(code).float() @ bd.projection(), dim=-1).numpy()
     ss = bd.selfsim_lane(codes, res["ticks"], T)[s]
     coh = bd.window_means(np.stack(res["coh"], 1))
-    cross = bd.crossings(coh, thresholds) if len(coh) else np.zeros(0, bool)
     cbin = np.full((nb, 4), np.nan, np.float32)
     k = np.arange(nb)
     ok = (k >= 9) & (k - 9 < len(coh))
@@ -73,8 +71,29 @@ def brain_field(res, z, thresholds):
         "exponent": per_layer(lambda i: res["expo"][i][blk]),
         "selfSimilarity": _lane(ss),
         "coherence": per_layer(lambda i: cbin[:, i]),
-        "crossing": {"thresholds": [float(t) for t in thresholds], "minLayers": bd.MIN_LAYERS, "times": [round((m + 10) / 10, 1) for m in np.flatnonzero(cross)]},
     }
+
+
+def to_v2(doc):
+    """A version-1 doc with a `brain` object -> a copy at mindState version 2: the reserved bands / surprise / neuromod arrays become objects of the B7
+    lanes (hyst-compile mind_state.rs reads them), `brain` is dropped, mood.* is untouched (energy from core-2b). Lane names (mechanism names only):
+      bands     power.L1..L4 (band power), coherence.L1..L4 (phase order parameter), selfSimilarity
+      surprise  L1..L4, total, smoothed (one-pole of total), slope30s, l4PredictedVariance
+      neuromod  arousalSignal, gain.L1..L4, exponent.L1..L4
+    All on 0.1 s bins (`brainHopSeconds`), null = undefined."""
+    doc = json.loads(json.dumps(doc))
+    ms = doc["mindState"]
+    if ms["version"] != 1 or "brain" not in ms:
+        raise ValueError("expected a version-1 mindState with a brain object")
+    b = ms.pop("brain")
+    ms["version"], ms["brainHopSeconds"] = 2, b["hopSeconds"]
+    ms["bands"] = {**{f"power.{n}": b["bandPower"][n] for n in LAYERS}, **{f"coherence.{n}": b["coherence"][n] for n in LAYERS},
+                   "selfSimilarity": b["selfSimilarity"]}
+    ms["surprise"] = {**b["surprisal"], "smoothed": b["smoothedSurprisal"], "slope30s": b["surprisalSlope30s"],
+                      "l4PredictedVariance": b["l4PredictedVariance"]}
+    ms["neuromod"] = {"arousalSignal": b["arousalSignal"], **{f"gain.{n}": b["gain"][n] for n in LAYERS},
+                      **{f"exponent.{n}": b["exponent"][n] for n in LAYERS}}
+    return doc
 
 
 def write_song(name, model, x, out=OUT):
@@ -85,7 +104,7 @@ def write_song(name, model, x, out=OUT):
     if ms["hopSeconds"] != 0.5:
         raise ValueError("mood.energy is expected at 0.5 s steps")
     res = bd.run_song(model, x)
-    ms["brain"] = brain_field(res, x[:, :core.FEAT], bd.load_thresholds())
+    ms["brain"] = brain_field(res, x[:, :core.FEAT])
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
     (out / f"mind-{name}.json").write_text(json.dumps(doc, separators=(",", ":")))
@@ -97,7 +116,14 @@ def main(argv=None):
     ap.add_argument("names", nargs="*")
     ap.add_argument("--out", default=str(OUT))
     ap.add_argument("--threads", type=int, default=6)
+    ap.add_argument("--v2", action="store_true", help="no model: convert <out>/mind-<name>.json to <out>/mind2-<name>.json (mindState version 2)")
     a = ap.parse_args(argv)
+    if a.v2:
+        for name in a.names or list(b2.SONG_FILES):
+            doc = to_v2(json.loads((Path(a.out) / f"mind-{name}.json").read_text()))
+            (Path(a.out) / f"mind2-{name}.json").write_text(json.dumps(doc, separators=(",", ":")))
+            print(name, doc["mindState"]["version"], flush=True)
+        return
     import torch
     torch.set_num_threads(a.threads)
     model, _ = train_b7.load_model7(bd.CKPT)

@@ -4,7 +4,7 @@
 Reads <dump>/<song>.braindump.{npz,json}, writes <dump>/<song>.view.html (data inlined) and symlinks the audio into <dump>/audio/. Serve the folder with
 scripts/author/serve.py (HTTP Range, so seeking works) and open <song>.view.html. Nothing derived from a song or its audio goes into git.
 Rows: an 8 s strip per layer (mean over modes of Re h at 100 Hz, ending at the playhead) and whole-song lines for surprisal per layer, arousal,
-self-similarity and cross-band coherence per layer (dashed = the layer's threshold, ticks = crossings). Click a whole-song row to seek. Playhead = audio.currentTime.
+self-similarity and cross-band coherence per layer (continuous traces, no marks). Click a whole-song row to seek. Playhead = audio.currentTime.
 """
 import argparse
 import json
@@ -46,9 +46,7 @@ function draw(){const w=W(),t=a.currentTime||0,dur=D.duration;g.clearRect(0,0,w,
    const sd=D.eegsd[r.i]*3;line(0,w,y,r.h,x.slice(s,n),-sd,sd,'#b9ccdc',j=>w-(n-s-j)/m*w)}
   else{const xs=r.k==='sur'?D.sur[r.i]:r.k==='aro'?D.aro:r.k==='ss'?D.ss:D.coh[r.i],hz=r.k==='coh'||r.k==='sur'||r.k==='aro'||r.k==='ss'?D.hz:10;
    const hi=r.k==='coh'?1:D.hi[r.k+(r.i===undefined?'':r.i)];
-   line(0,w,y,r.h,xs,0,hi,'#8aa2b8',j=>j/hz/dur*w);
-   if(r.k==='coh'){g.setLineDash([3,3]);g.strokeStyle='#3a4450';const ty=y+r.h-D.thr[r.i]*r.h;g.beginPath();g.moveTo(0,ty);g.lineTo(w,ty);g.stroke();g.setLineDash([]);
-    g.strokeStyle='#d8e6f2';for(const c of D.cross){const x=c/dur*w;g.beginPath();g.moveTo(x,y+r.h-5);g.lineTo(x,y+r.h);g.stroke()}}}
+   line(0,w,y,r.h,xs,0,hi,'#8aa2b8',j=>j/hz/dur*w);}
   if(r.k!=='eeg'){g.strokeStyle='#4a5866';g.beginPath();g.moveTo(px+.5,y);g.lineTo(px+.5,y+r.h);g.stroke()}
   y+=r.h+6}
  document.getElementById('t').textContent=t.toFixed(1)+' s';requestAnimationFrame(draw)}
@@ -73,8 +71,7 @@ def build(song, dump=bd.OUT, audio=None):
     data = {"duration": meta["duration_s"], "hz": bd.HZ, "eeg": [[round(float(v), 4) for v in eeg[:, i]] for i in range(4)],
             "eegsd": [float(eeg[:, i].std()) or 1.0 for i in range(4)],
             "sur": [lane10(sur[:, i]) for i in range(4)], "aro": lane10(aro), "ss": lane10(ss),
-            "coh": [lane10(f("coherence")[:, i]) for i in range(4)], "thr": meta["thresholds"],
-            "cross": [round((m + 10) / 10, 1) for m in np.flatnonzero(z["crossing"])],
+            "coh": [lane10(f("coherence")[:, i]) for i in range(4)],
             "hi": {**{f"sur{i}": pct(sur[:, i]) for i in range(4)}, "aro": pct(aro), "ss": 1.0}}
     # coherence is on its own 10 Hz axis; the page treats every row but the strips as hz = 30, so resample coherence to 30 Hz by hold
     n30 = len(aro)
