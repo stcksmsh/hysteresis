@@ -2,7 +2,7 @@
 
 ## MORNING SUMMARY (filled at the end; updated after every phase)
 
-- H4 toy: try 1 not recorded yet.
+- H4 toy try 1 (window 100, k 64, tau 0.05): T1a pass on A, B, C; T1b FAIL on all three (ratio repeat/first A 0.876, B 0.737, C 0.566; cortex-only 1.00; oracle 0.327|0.440|0.348). Try 2 (window 200) running.
 
 ## LOG
 
@@ -23,3 +23,7 @@
   Reported per design: T1a, T1b (ratio repeat / first over L1-L3), cortex-only (arbitration off, a real w = 0), mean w per layer inside the repeat (from its 2nd second) and outside it (from 17 s on).
   Oracle = H2's runs (0.327 | 0.440 | 0.348), same toy and evaluation, not rerun. Bar: T1a + T1b of 7.10 R3; two tries; try 2 may change only the window, to 200 frames.
   Disclosure: design A was run once as a smoke test of the runner (window 100, k 64, tau 0.05, the order's values) before this entry was written; the full try 1 below reruns all three designs (deterministic).
+- 2026-11-04 Try 1 rerun cleanly (A, B, C; earlier killed partial run kept as try1_killed_partial.log, A identical). Results in docs/h4_try1_results.jsonl.
+  T1a pass A/B/C; T1b fail A/B/C: ratios 0.8759 / 0.7369 / 0.5655 (cortex-only 1.0000 / 1.0000 / 1.0001). Mean w L1-L3,L4 inside repeat / outside from 17 s:
+  A 0.522 0.519 0.531 0.385 / 0.431 0.424 0.358 0.239; B 0.188 0.445 0.596 0.397 / 0.067 0.221 0.366 0.243; C 0.313 0.610 0.691 0.535 / 0.074 0.227 0.326 0.280.
+  Next: try 2, window 200 only.
