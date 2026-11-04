@@ -51,4 +51,18 @@ still requires the reserved arrays empty. `MindState::On(Mood)` gained `brain: O
 
 1. The mapping in the previews is `example-sketch.json`; tune by eye in the authoring page.
 2. Lane grouping in version 2 (which B7 lane sits under `bands`, `surprise` or `neuromod`) is my choice; the planner does not read them yet.
-3. Previz videos of the three previews: see the section below once rendered.
+3. Previz videos (below). Same example-sketch mapping, single arm; no claim about how they look.
+
+## Previz videos (7.15 addition)
+
+`scripts/author/record_ensemble.cjs PREVIEW.html AUDIO OUT.mp4` (drawn frame by frame with `window.__ENSEMBLE_PREVIEW__.draw`, no real time; derived
+from the music-arm `record-ensemble.cjs`, whole song, 1080p). Five Years uses `HYST_TEMPO_MAP=five-years.tempomap.json` (steady-grid score drawn at the audio's time).
+H.264 1920x1080 30 fps, original AAC copied unchanged (packet payload sha256 equal to the source m4a, checked for all three).
+
+| file (in `/secondary/hyst-data/brain/author/fallback/`) | frames | video s | audio s | bytes |
+|---|---|---|---|---|
+| `instant-crush-fallback.mp4` | 10195 | 339.833 | 339.824 | 143,364,351 |
+| `five-years-fallback.mp4` | 8513 | 283.767 | 283.753 | 126,692,844 |
+| `presence-fallback.mp4` | 8122 | 270.733 | 270.733 | 122,904,044 |
+
+Frame checked at 3 s of a 6 s test clip (arm, disc, floor, trail all drawn). Whole-song frames not inspected by eye.
