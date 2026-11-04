@@ -836,3 +836,32 @@ watchable arm exists either way.
   - **K3** "Its movement locks to the beat": reported, not required.
 - Wall wording: "It was rewarded for movement that shows what is inside it. Nobody designed how it moves."
 - **Retired:** the M3 and M3b reward designs. Their premise (prediction gain) fails because the cortex does not need a body to predict.
+
+### 7.16 Rulings on work order 4, 2026-11-04, via planner
+
+Binding. They answer `docs/PLANNER_BRIEF_WO4_RESULTS.md`.
+
+1. **Re-evaluation with sampled selection** is allowed as a measurement fix: no retraining, nothing tuned; both versions reported; both rounds
+   stand; no pass is claimed from it. Every M3-family policy also reports the mutual information between the chosen program and the brain state
+   (binned arousal and L3 phase), with a shuffle control. Near-uniform choice is not selection. **Recorded evaluation bug:** `tm3.py`
+   `evaluate()` used argmax over near-flat logits (`deterministic=True`), so the reported program counts, (d) and "selection collapse" described
+   the argmax, not the trained, sampled policy.
+2. **M3c is closed as defined (two tries).** New, final item for the self-driven body, **M3d**:
+   - Training by gradient, not RL: brain state → motor cortex → program mixture (Gumbel-softmax, temperature annealed) + modulation →
+     generators (with the L3 phase coupling) → MJX physics → descriptors (ported to JAX; parity test with Rust) → observer.
+   - Loss = observer decoding loss − λ·energy, with the inner-state targets z-scored within each episode (decode moment-to-moment changes, not
+     song identity).
+   - The observer is cross-fitted: trained on other episodes, frozen while it scores, refreshed each epoch.
+   - Toy: synthetic features with within-song state swings (cuts every 12 s; arousal and surprisal varying on a 1–4 s scale), so there is
+     something to read.
+   - Pass: (a) held-out-episode decoding beats a time-shuffled control, interval above 0; (b) RMS joint speed ≥ 10 °/s excluding the roll;
+     (c) program choice carries information about the state: MI above shuffle, p < 0.01.
+   - Two tries, 4 h box each. If M3d fails, the self-driven body is closed for this plan and the fallback mapping drives the arm for good.
+3. **H3 is closed.** New, final memory item, **H4**: uncertainty-based arbitration (after Daw, Niv & Dayan 2005; verify the citation).
+   - Per layer, each system (cortex, hippocampal replay) keeps a running mean squared prediction error over the last 1 s (fixed; try 2 may
+     change only this window, to 2 s).
+   - w = (1/e_hippo) / (1/e_hippo + 1/e_cortex); mean and variance blended as in H3.
+   - Nothing trained. H2's fixed sparse code and one-shot store; top-k pointer replay as before.
+   - Toy bar unchanged (T1a + T1b). If H4 fails, memory is closed for this plan.
+4. **Priority tonight:** the fallback order (authoring on B7 lanes + previz videos of the three songs) has priority on the machine; the M3d and H4
+   toys run after it, or in parallel within the thread caps.
