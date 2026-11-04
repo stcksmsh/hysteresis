@@ -13,7 +13,7 @@ NODE = r"""
 const A = require(process.argv[1] + "/author_core.cjs"), {exportTrack} = require(process.argv[1] + "/export_cli.cjs");
 const n = 200, ramp = (f) => Array.from({length: n}, (_, i) => f(i));
 const song = {name: "t", n_bins: n, duration: 20, arousal: ramp(i => i), tension: ramp(i => 200 - i), familiarity: ramp(i => (i % 10)),
-  surprisal_total: ramp(i => (i % 50 === 0 ? 30 : 1)), band_power: [ramp(i => i), ramp(i => i), ramp(i => i), ramp(i => i)],
+  surprisal_total: ramp(i => (i % 50 === 0 ? 30 : 1)), band_power: [ramp(i => i), ramp(i => i), ramp(i => i), ramp(i => i)], self_error: ramp(i => i % 7),
   mood_energy: Array.from({length: 40}, (_, i) => 0.3 + i / 100), phrases: [[0, 8], [8, 16], [16, 20]], beats: [0.5, 1, 1.5, 2]};
 const m = A.neutralMapping(); m.name = "fixture";
 m.weights[12][0] = 0.6; m.weights[1][1] = -0.5; m.weights[5][4] = 0.7;

@@ -34,8 +34,10 @@
   <label>name <input id="name" type="text" size="14"></label>
   <label>export <select id="gran"><option value="phrase">per phrase (D3 format)</option><option value="beat">per beat (experimental)</option></select></label>
   <button id="export">Export bodyTrack</button>
+  <button id="render" title="needs serve.py: re-render a 20 s window of the arm from the current mapping, starting at the playhead">Render 20 s at playhead</button>
   <span id="status"></span>
 </header>
+<video id="clip" controls hidden style="max-width:100%;max-height:60vh;display:block;margin:6px 12px"></video>
 <main>
   <div class="sp">
     <label>spike threshold</label><input id="thr" type="range" min="0" max="1" step="0.01" style="width:140px"><b id="thrv"></b>
@@ -185,6 +187,19 @@ $("export").addEventListener("click", () => {
   const track = A.bodyTrack(body, spans(kind), "authored-state", "authored:" + (mapping.name || "unnamed"));
   download(`${song.name}.bodytrack.${kind}.json`, { bodyTrack: track });
   say(`exported ${track.phrases.length} spans (${kind}); attach with scripts/author/attach.py to ${song.sidecar}`);
+});
+
+$("render").addEventListener("click", async () => {
+  const start = Math.max(0, Math.floor($("audio").currentTime || 0)), btn = $("render");
+  btn.disabled = true; say(`rendering ${song.name} ${start}-${start + 20} s ...`);
+  try {
+    const r = await fetch("/retune", { method: "POST", body: JSON.stringify({ song: song.name, mapping, start, duration: 20 }) });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || r.status);
+    const v = $("clip"); v.hidden = false; v.src = j.url + "?t=" + Date.now(); v.play().catch(() => {});
+    say(`rendered in ${j.seconds.toFixed(1)} s: ${j.url}`);
+  } catch (e) { say("render failed: " + e.message + " (page must be served by serve.py)"); }
+  btn.disabled = false;
 });
 
 buildMatrix(); syncControls(); setSong($("song").value);
