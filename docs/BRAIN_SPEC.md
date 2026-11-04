@@ -865,3 +865,25 @@ Binding. They answer `docs/PLANNER_BRIEF_WO4_RESULTS.md`.
    - Toy bar unchanged (T1a + T1b). If H4 fails, memory is closed for this plan.
 4. **Priority tonight:** the fallback order (authoring on B7 lanes + previz videos of the three songs) has priority on the machine; the M3d and H4
    toys run after it, or in parallel within the thread caps.
+
+### 7.17 Rulings on work order 5, 2026-11-05, via planner
+
+Binding. They answer `docs/PLANNER_BRIEF_WO5_RESULTS.md`.
+
+1. **H4: one diagnostic, no new try.**
+   - Check the retrieval top-k actually used against the spec: top-k = 4 sources. "k 64" is the sparse-code k, not the number of replayed
+     sources.
+   - Report, inside the repeat, the replay's own prediction error against the oracle replay's error, on the same frames.
+   - Explain the 1.000 cortex-only control (repeat and first errors identical on every design suggests a runner bug; H3's cortex-only control on
+     the same cortex files gave 0.881 | 0.656 | 0.566).
+   - If an implementation deviates from the spec, fix it and rerun; that rerun counts as the same try (bugs are not tries). If nothing deviates,
+     memory is closed for this plan, with the discrepancy recorded.
+2. **M3d:** a run killed for memory before any result is not a try. Relaunch with 3 runs × 6 GB; the 4 h box counts compute actually spent.
+3. **Sampled re-evaluation:** nothing reopens; both evaluation modes are recorded (table in the WO5 brief §1).
+4. **Fallback, next step (corrected by the user, 2026-11-05; supersedes the planner's first wording, which asked for six-arm hexagon wiring):**
+   the installation is ONE arm. No hexagon, no six-arm wiring; the ensemble is out of scope for good. The user judges the one-arm videos and
+   tunes the mapping by eye in the authoring tool; the builder supports that loop with a fast re-render of a whole song or of a 20 s window
+   from the current mapping. Version 47 `Off` stays byte-identical. Ensemble items are removed from the plan's later lists
+   (`docs/BODY_BRAIN_PLAN.md` §10).
+5. **Self-surprisal** is offered in the authoring tool as a mechanism-named lane ("cerebellum: prediction error of its own arm"), no claim.
+6. **mindState v2 grouping** (bands / surprise / neuromod) is accepted.

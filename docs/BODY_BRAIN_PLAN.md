@@ -215,7 +215,10 @@ remembers, surprised, expects, anticipates, familiar, dreams, wants, enjoys, lik
 
 A cortex retrain to close the gap with the user's B: each level predicting the level below literally; a learned
 hierarchical encoder for A; emotion as attractor basins in the slow layers; the hippocampal readout trained jointly.
-Then: lifetime learning and nightly consolidation; a live listening mode (compute already allows it); the ensemble.
+Then: lifetime learning and nightly consolidation; a live listening mode (compute already allows it).
+
+*Correction (user, 2026-11-05):* the installation is ONE arm. The ensemble (hexagon, six-arm wiring, multiple arms) is out of
+scope for good and was removed from this list (BRAIN_SPEC §7.17 point 4).
 
 ## 11. Order, and the unattended template
 
