@@ -73,10 +73,10 @@ def main():
     for i in range(a.iters):
         info, _ = tm3.iteration(run)
         log(f"{a.name} it {i + 1}/{a.iters} t {time.time() - t0:.0f}s " + json.dumps({k: (round(v, 4) if isinstance(v, float) else v) for k, v in info.items()}))
+    torch.save({"policy": run.pol.state_dict(), "relay": cortex.prop.state_dict()}, out / f"{a.name}.pt")
     res = tm3.evaluate(run, n_ep=a.eval_eps, secs=a.eval_secs)
     res.update({"name": a.name, "config": cfg.__dict__, "train_seconds": time.time() - t0})
     (out / f"{a.name}.result.json").write_text(json.dumps(res, indent=1))
-    torch.save({"policy": run.pol.state_dict(), "relay": cortex.prop.state_dict()}, out / f"{a.name}.pt")
     log(json.dumps({k: v for k, v in res.items() if k not in ("config",)}))
 
 
