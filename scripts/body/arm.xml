@@ -35,10 +35,10 @@
     </body>
   </worldbody>
   <actuator>
-    <position name="base_yaw" joint="base_yaw" kp="16.8564" kv="2.46895" forcerange="-2.94199 2.94199" forcelimited="true"/>
-    <position name="shoulder" joint="shoulder" kp="16.8564" kv="2.4689" forcerange="-2.94199 2.94199" forcelimited="true"/>
-    <position name="elbow" joint="elbow" kp="16.8564" kv="1.46537" forcerange="-2.94199 2.94199" forcelimited="true"/>
-    <position name="wrist_bend" joint="wrist_bend" kp="16.8564" kv="0.942238" forcerange="-2.94199 2.94199" forcelimited="true"/>
-    <position name="wrist_roll" joint="wrist_roll" kp="16.8564" kv="0.811014" forcerange="-2.94199 2.94199" forcelimited="true"/>
+    <position name="base_yaw" joint="base_yaw" kp="16.8564" kv="4.11491" forcerange="-2.94199 2.94199" forcelimited="true"/>
+    <position name="shoulder" joint="shoulder" kp="16.8564" kv="4.11483" forcerange="-2.94199 2.94199" forcelimited="true"/>
+    <position name="elbow" joint="elbow" kp="16.8564" kv="2.44229" forcerange="-2.94199 2.94199" forcelimited="true"/>
+    <position name="wrist_bend" joint="wrist_bend" kp="16.8564" kv="1.5704" forcerange="-2.94199 2.94199" forcelimited="true"/>
+    <position name="wrist_roll" joint="wrist_roll" kp="16.8564" kv="1.35169" forcerange="-2.94199 2.94199" forcelimited="true"/>
   </actuator>
 </mujoco>

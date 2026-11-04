@@ -30,7 +30,7 @@ GEAR = 345                         # 1:345
 ROTOR_KGM2 = 1e-7                  # ASSUMED motor rotor inertia (coreless DC class); reflected inertia = ROTOR * GEAR^2
 ARMATURE = ROTOR_KGM2 * GEAR ** 2
 KP = STALL_NM / math.radians(10.0)       # N.m/rad: full stall torque at 10 deg error (PROVISIONAL: the servo's own loop gains are not known)
-ZETA = 0.9
+ZETA = 1.5
 
 # ---- printed parts (BODY_NOTES.md) ----
 PLA = 1240.0                       # kg/m3

@@ -18,6 +18,7 @@ from arm_sim import swing_margin
 from make_arm import LIMITS, NEUTRAL_DEG, RANGE_DEG
 
 COUPLING = 0.25
+ACC_SHARE = 0.25     # measured: 0.7 let the shoulder reach 1.2 x its acceleration limit at 50 Hz (servo lag + gravity add to the target's own)
 F_MIN, F_MAX = 0.1, 4.0
 LAG_MAX = 0.5
 AMP_CAP_CONTINUOUS = 180.0
@@ -61,7 +62,7 @@ class CPG:
         # cap the frequency actually used so the oscillation stays under its share of speed and acceleration
         w = 2 * math.pi * (1 + COUPLING)
         with np.errstate(divide="ignore"):
-            f_cap = np.minimum(0.8 * V / np.maximum(amp, 1e-9) / w, np.sqrt(0.7 * A / np.maximum(amp, 1e-9)) / w)
+            f_cap = np.minimum(0.8 * V / np.maximum(amp, 1e-9) / w, np.sqrt(ACC_SHARE * A / np.maximum(amp, 1e-9)) / w)
         f = np.minimum(self.freq, f_cap)
         lead = np.concatenate([[0.0], self.phase[:-1] - 2 * math.pi * self.lag[1:]])
         pull = np.concatenate([[0.0], np.sin(lead[1:] - self.phase[1:])])
@@ -79,3 +80,34 @@ def random_commands(rng, freq=(0.1, 4.0), amp_frac=(0.0, 1.0), centre_box=None, 
         a = rng.uniform(*amp_frac, 5) * a_max
         if floor_margin_m is None or swing_margin(c, a) >= floor_margin_m:
             return rng.uniform(*freq, 5), a, c, rng.uniform(*lag, 5)
+
+
+# the envelope the check-csv run draws from: centres within +-45 deg (bends) / +-60 deg (base, roll) of neutral, amplitude up to 0.3 of the room,
+# frequency 0.1-0.8 Hz, every swept corner clear of the floor by 5 mm (the floor rule leaves only 30 mm at the column joint: arm_sim.floor_margin)
+CHECK_ENVELOPE = dict(freq=(0.1, 0.8), amp_frac=(0.0, 0.3), floor_margin_m=0.005,
+                      centre_box=(np.array(NEUTRAL_DEG) - [60, 45, 45, 45, 60], np.array(NEUTRAL_DEG) + [60, 45, 45, 45, 60]))
+
+
+def random_run(seed, secs=60.0, **kw):
+    """Random 10 Hz commands -> CPG -> ArmSim. -> (q (n, 5) degrees at 50 Hz from t = 0, power (steps,) W, targets (steps, 5) deg at 100 Hz)."""
+    import arm_sim
+    rng = np.random.default_rng(seed)
+    sim, gen, power, tgt = arm_sim.ArmSim(), CPG(), [], []
+    q = [np.array(NEUTRAL_DEG, float)]
+    for k in range(round(secs * 100)):
+        if k % 10 == 0:
+            gen.command(*random_commands(rng, **kw))
+        t = gen.step()
+        sim.step(t)
+        tgt.append(t)
+        power.append(sim.power_w)
+        if k % 2 == 1:
+            q.append(sim.q_deg.copy())
+    return np.array(q), np.array(power), np.array(tgt)
+
+
+if __name__ == "__main__":
+    import sys
+    import arm_sim
+    q, power, _ = random_run(int(sys.argv[1]) if len(sys.argv) > 1 else 0, **CHECK_ENVELOPE)
+    open(sys.argv[2] if len(sys.argv) > 2 else "m2_random.csv", "w").write(arm_sim.csv_text(q, name="m2_random"))
