@@ -880,7 +880,10 @@ Binding. They answer `docs/PLANNER_BRIEF_WO5_RESULTS.md`.
      memory is closed for this plan, with the discrepancy recorded.
 2. **M3d:** a run killed for memory before any result is not a try. Relaunch with 3 runs × 6 GB; the 4 h box counts compute actually spent.
 3. **Sampled re-evaluation:** nothing reopens; both evaluation modes are recorded (table in the WO5 brief §1).
-4. **Fallback, next step:** the user judges the one-arm videos and tunes the mapping by eye. Meanwhile the six-arm hexagon wiring is built: same
-   lanes, per-arm offsets or roles, whole-song videos of the three songs; version 47 `Off` stays byte-identical.
+4. **Fallback, next step (corrected by the user, 2026-11-05; supersedes the planner's first wording, which asked for six-arm hexagon wiring):**
+   the installation is ONE arm. No hexagon, no six-arm wiring; the ensemble is out of scope for good. The user judges the one-arm videos and
+   tunes the mapping by eye in the authoring tool; the builder supports that loop with a fast re-render of a whole song or of a 20 s window
+   from the current mapping. Version 47 `Off` stays byte-identical. Ensemble items are removed from the plan's later lists
+   (`docs/BODY_BRAIN_PLAN.md` §10).
 5. **Self-surprisal** is offered in the authoring tool as a mechanism-named lane ("cerebellum: prediction error of its own arm"), no claim.
 6. **mindState v2 grouping** (bands / surprise / neuromod) is accepted.
