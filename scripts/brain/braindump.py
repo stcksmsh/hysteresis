@@ -14,6 +14,8 @@ No claims; mechanism names only. Fixed here, before the danced songs are run (al
   selfsimilarity  1 - max cosine between the current code and the codes stored >= 17 s earlier. Code = a FIXED random projection (hippo_h2.SEED_H2) of
               [features pooled over the last 2 s, layer norm of the [Re, Im] modes of L3 and L4 at the tick frame] to 2,048 dimensions, L2-normalised, no
               sparsification, no centring, one per 0.5 s tick (frame 50 j); held between ticks; NaN until the first entry is 17 s old. Independent of H2.
+  layer_mean_re  per layer, the mean over the 256 modes of Re h at EVERY frame (100 Hz, (T, 4)): the trace the viewer draws as the layer's "EEG" strip. The
+              30 Hz mode grid cannot show L1's 8-20 Hz band without aliasing.
   coherence   per layer, the magnitude-weighted Kuramoto order parameter of the 256 mode phases at each frame, R = |sum h| / sum |h|, averaged over 1 s windows
               (100 frames) stepped every 0.1 s: (nw, 4) at 10 Hz, window m ends at frame 10 m + 100 (time (m + 10) / 10 s). A crossing = at least 3 of the 4
               layers above their own threshold in that window. Thresholds = the 99th percentile of each layer's windowed values over 20 training songs
@@ -141,7 +143,7 @@ def run_song(model, x, chunk=CHUNK):
     T = len(x)
     nl = len(core.BANDS)
     frames = sample_frames(T)
-    per = {k: [[] for _ in range(nl)] for k in ("mean", "logvar", "err", "coh", "pw", "modes", "expo", "gain")}
+    per = {k: [[] for _ in range(nl)] for k in ("mean", "logvar", "err", "coh", "pw", "lfp", "modes", "expo", "gain")}
     ticks, tick_state, arousal = [], [], []
     st = model.init_state(1)
     with torch.no_grad():
@@ -156,6 +158,7 @@ def run_song(model, x, chunk=CHUNK):
                     per[k][i].append(o[k][0].numpy())
                 per["coh"][i].append(order_parameter(h.numpy()))
                 per["pw"][i].append((h.real ** 2 + h.imag ** 2).mean(-1).numpy())
+                per["lfp"][i].append(h.real.mean(-1).numpy())
                 per["modes"][i].append(torch.view_as_real(h[sel]).numpy().astype(np.float16))
                 per["expo"][i].append(o["expo"][0].numpy())
                 per["gain"][i].append(1.0 + float(model.w_g[i]) * out[0]["dev"][0].numpy())
@@ -194,6 +197,7 @@ def export_arrays(res, z, thresholds):
         "selfsimilarity": f16(selfsim_lane(codes, res["ticks"], T)[frames]),
         "coherence": f16(coh),
         "crossing": cross,
+        "layer_mean_re": f16(np.stack(res["lfp"], 1)),
     }
     meta = {"frames": int(T), "duration_s": T / 100.0, "samples": int(len(frames)), "windows": int(len(coh)), "crossings": int(cross.sum()),
             "shapes": {k: list(v.shape) for k, v in arr.items()}}

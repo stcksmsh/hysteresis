@@ -22,6 +22,7 @@
     "exponent": {"shape": "(n, 4)", "dtype": "float16", "meaning": "clamp(1 + w_tau * dev, 0.1, 10) per layer for the 2 s block: the exponent applied to |lambda| of the layer's modes"},
     "selfsimilarity": {"shape": "(n,)", "dtype": "float16", "meaning": "1 - max cosine between the current 2,048-d code and the codes stored at least 17 s earlier. Code: a fixed random projection (seed 20261104) of [features pooled over 2 s, layer norm of [Re, Im] of the L3 and L4 modes], L2-normalised, no sparsification; one per 0.5 s; held between ticks; NaN until the first stored code is 17 s old"},
     "coherence": {"shape": "(nw, 4)", "dtype": "float16", "meaning": "per layer, the magnitude-weighted Kuramoto order parameter |sum h| / sum |h| of the 256 mode phases, per frame, averaged over 1 s windows stepped every 0.1 s"},
+    "layer_mean_re": {"shape": "(T, 4)", "dtype": "float16", "meaning": "per layer, the mean over its 256 modes of Re h at every frame (100 Hz, not the 30 Hz grid); the trace the viewer draws as the layer's strip"},
     "crossing": {"shape": "(nw,)", "dtype": "bool", "meaning": "at least 3 of the 4 layers' coherence values above their own threshold in that window; thresholds in the json and in braindump_thresholds.json"}
   },
   "thresholds": "each layer's 99th percentile of its windowed coherence over 20 training songs (fixed seed 20261104 for which songs; braindump_thresholds.json lists the song ids); fixed before the danced songs were run",
