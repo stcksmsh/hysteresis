@@ -24,3 +24,15 @@
   draws seed 991, 2 threads per run, three designs in parallel (6 threads), existing flat-loss stop (300 s without improvement) kept. Bar: T1a + T1b of BRAIN_SPEC 7.10 R3
   (T1b ratio repeat / first <= 0.5; T1a source share >= 0.5 and recognition median above the 95th percentile of the pre-repeat frames). Try 2 may change only k, the
   sparsity and tau.
+- 2026-11-04 Phases 2 and 3 done while try 1 ran (see below). Run-time notes: three parallel runs peak past the 6 GB cap (2.4 GB each), so runs go two at a time at 3 threads;
+  run_job's idle limit killed design C of try 1 after 1,800 s of silent logs (stdout goes to files); C was rerun alone from scratch with the idle limit at 10,800 s
+  (killed log kept as try1_h2_C.killed-idle.log). Nothing about the toy changed.
+- 2026-11-04 TRY 1 RESULT (k = 64, tau = 0.05; each stopped by the flat-loss rule at ~425-450 steps). Ratio repeat / first (<= 0.5 needed), A | B | C: 1.0004 | 0.810 | 0.769,
+  T1b fails on all three; retrieval off 1.000 | 1.000 | 0.999. T1a: A fail (source share 0.071, recognition median 0.833 vs p95 0.845), B fail (0.821, 0.257 vs 0.287),
+  C pass (0.853, 0.230 vs 0.228). The same model before training passes T1a on all three (share 1.0 | 0.96 | 0.96). Novelty lane (repeat-tick mean vs outside-tick mean):
+  A 0.163 vs 0.278, B 0.733 vs 0.792, C 0.753 vs 0.858 (lower inside the repeat in every design). Logs: /secondary/hyst-data/brain/h2/try1_h2_{A,B,C}.log.
+  Reading, numbers only: the codes retrieve the source before training and lose it as the model trains (its L3 + L4 state is part of the code), and the relay does not
+  turn a found source into lower error (ratio near 1).
+- 2026-11-04 TRY 2 CHANGE (written before the run; k, sparsity, tau only): k = 16 of 2,048 (0.8 %), tau = 0.02. Everything else as try 1. Reason (a reading, not tested):
+  non-repeat recognition after training is high (0.83-0.84 on A), so sparser codes and a sharper softmax lower the similarity of unrelated moments. Baselines on the same
+  toy, one run per design: `frozen` (H1 architecture, key / query / tau frozen at init) and `oracle` (true pointer), run after try 2.
