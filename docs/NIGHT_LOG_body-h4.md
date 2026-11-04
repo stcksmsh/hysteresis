@@ -2,7 +2,7 @@
 
 ## MORNING SUMMARY (filled at the end; updated after every phase)
 
-- H4 toy try 1 (window 100, k 64, tau 0.05): T1a pass on A, B, C; T1b FAIL on all three (ratio repeat/first A 0.876, B 0.737, C 0.566; cortex-only 1.00; oracle 0.327|0.440|0.348). Try 2 (window 200) running.
+- H4 toy try 1 (window 100, k 64, tau 0.05): T1a pass on A, B, C; T1b FAIL on all three (ratio repeat/first A 0.876, B 0.737, C 0.566; cortex-only 1.00; oracle 0.327|0.440|0.348). Try 2 (window 200): T1b FAIL on all three (0.878 / 0.709 / 0.572), T1a pass. Both tries failed: memory is closed for this plan (per the order).
 
 ## LOG
 
@@ -27,3 +27,5 @@
   T1a pass A/B/C; T1b fail A/B/C: ratios 0.8759 / 0.7369 / 0.5655 (cortex-only 1.0000 / 1.0000 / 1.0001). Mean w L1-L3,L4 inside repeat / outside from 17 s:
   A 0.522 0.519 0.531 0.385 / 0.431 0.424 0.358 0.239; B 0.188 0.445 0.596 0.397 / 0.067 0.221 0.366 0.243; C 0.313 0.610 0.691 0.535 / 0.074 0.227 0.326 0.280.
   Next: try 2, window 200 only.
+- 2026-11-04 Try 2 (window 200 only; results docs/h4_try2_results.jsonl). T1a pass A/B/C; T1b fail: ratios 0.8782 / 0.7091 / 0.5716 (cortex-only 1.0). Mean w inside repeat L1-L4: A 0.516 0.514 0.517 0.383; B 0.229 0.504 0.581 0.396; C 0.291 0.590 0.664 0.523; outside: A 0.432 0.424 0.360 0.238; B 0.071 0.248 0.369 0.242; C 0.076 0.230 0.330 0.281.
+  Both tries failed. Unit tests 10/10 pass. Citation Daw, Niv & Dayan 2005 not verified. FOR USER: none.
