@@ -1,0 +1,29 @@
+{
+  "name": "brainDump",
+  "version": 1,
+  "about": "Internal variables of B7 epoch 6 run over one song (scripts/brain/braindump.py). A data export; it licenses no sentence. Mechanism names only.",
+  "files": {
+    "<song>.braindump.npz": "compressed numpy archive, the arrays below",
+    "<song>.braindump.json": "the shapes, counts, thresholds, checkpoint and its sha256"
+  },
+  "timebase": {
+    "grid_hz": 30,
+    "sample_k_is_song_frame": "(10 k) // 3 at 100 Hz, time k / 30 s",
+    "block_lanes": "gain and exponent hold the value of the 2 s block (200 frames) the sample frame lies in",
+    "coherence_grid": "10 Hz, own axis: window m covers frames [10 m, 10 m + 100) and ends at time (m + 10) / 10 s"
+  },
+  "arrays": {
+    "modes": {"shape": "(n, 4, 256, 2)", "dtype": "float16", "meaning": "complex state h of the 256 modes of layers L1..L4, last axis [Re, Im]"},
+    "pred_mean": {"shape": "(n, 4, 44)", "dtype": "float16", "meaning": "each layer's predicted mean of the 44 standardised features for the window [t + h, t + 2h), made at the sample frame; h = 10, 50, 200, 800 frames"},
+    "target": {"shape": "(n, 4, 44)", "dtype": "float16", "meaning": "the actual mean of the features over that window, stamped on the frame the prediction was made; NaN where the window runs past the end of the song"},
+    "surprisal": {"shape": "(n, 4)", "dtype": "float16", "meaning": "mean over the 44 features of the Gaussian NLL (nats) of the prediction made at frame t - 2h + 1, stamped on frame t where its window completes; NaN before frame 2h - 1"},
+    "arousal": {"shape": "(n,)", "dtype": "float16", "meaning": "core_b7 arousal value: one-pole of the L1 + L2 surprisal, rise 1 s, decay 8 s"},
+    "gain": {"shape": "(n, 4)", "dtype": "float16", "meaning": "1 + w_g * dev, per layer, for the 2 s block; dev = arousal minus its 60 s running mean read at the block start"},
+    "exponent": {"shape": "(n, 4)", "dtype": "float16", "meaning": "clamp(1 + w_tau * dev, 0.1, 10) per layer for the 2 s block: the exponent applied to |lambda| of the layer's modes"},
+    "selfsimilarity": {"shape": "(n,)", "dtype": "float16", "meaning": "1 - max cosine between the current 2,048-d code and the codes stored at least 17 s earlier. Code: a fixed random projection (seed 20261104) of [features pooled over 2 s, layer norm of [Re, Im] of the L3 and L4 modes], L2-normalised, no sparsification; one per 0.5 s; held between ticks; NaN until the first stored code is 17 s old"},
+    "coherence": {"shape": "(nw, 4)", "dtype": "float16", "meaning": "per layer, the magnitude-weighted Kuramoto order parameter |sum h| / sum |h| of the 256 mode phases, per frame, averaged over 1 s windows stepped every 0.1 s"},
+    "crossing": {"shape": "(nw,)", "dtype": "bool", "meaning": "at least 3 of the 4 layers' coherence values above their own threshold in that window; thresholds in the json and in braindump_thresholds.json"}
+  },
+  "thresholds": "each layer's 99th percentile of its windowed coherence over 20 training songs (fixed seed 20261104 for which songs; braindump_thresholds.json lists the song ids); fixed before the danced songs were run",
+  "names": "files use 'self-similarity' and 'cross-band coherence' / 'phase order parameter' only"
+}

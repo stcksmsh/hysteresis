@@ -1,0 +1,9 @@
+{
+  "id": "h2-try1-h2",
+  "cmd": ["bash", "scripts/brain/h2_try.sh", "try1", "h2"],
+  "cwd": "{REPO}",
+  "env": {"OMP_NUM_THREADS": "2"},
+  "wall_limit_s": 10800,
+  "idle_limit_s": 1800,
+  "grace_s": 60
+}
