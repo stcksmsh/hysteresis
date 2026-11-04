@@ -365,6 +365,21 @@ def evaluate(run, n_ep=16, secs=120.0, skip=10.0, seed=999, surrogates=1000):
            "c_plv": obs_plv, "c_surrogate_mean": float(np.mean(sur)), "c_surrogate_max": float(np.max(sur)), "c_p": float(p), "c_pass": bool(p < 0.01),
            "programs_used": int((cnt > 0).sum()), "program_counts": cnt.tolist(), "switches_per_min": sw, "selection_entropy_nats": ent,
            "dominant_joints": dom}
+    # control for (a): the same music with the arm's proprioception shifted by half the episode (right movement statistics, wrong timing) against the
+    # arm at rest. If S_still - S_shifted is as large as S_still - S_moving, the gain is the relay preferring moving-arm input, not the movement helping.
+    with torch.no_grad():
+        F = torch.cat([r["f"] for r in rec], 1)
+        PR = torch.cat([r["prop"] for r in rec], 1)
+        x = W.cortex_input(F)
+        T = x.shape[1]
+        rows3 = torch.cat([x, x, x])
+        prop3 = torch.cat([PR, PR.roll(T // 2, 1), ev.still.expand(n_ep, T, 30)])
+        out, _ = ev.cortex(rows3, prop3, ev.cortex.core.init_state(3 * n_ep))
+        s3, _ = W.causal_surprisal(out, None, torch.zeros(3 * n_ep, dtype=torch.long))
+        s3 = s3[:, int(skip * 100):].mean(1).reshape(3, n_ep)
+    res["control_still_minus_moving"] = float((s3[2] - s3[0]).mean())
+    res["control_still_minus_shifted"] = float((s3[2] - s3[1]).mean())
+    res["control_shifted_minus_moving"] = float((s3[1] - s3[0]).mean())
     res["pass"] = res["a_pass"] and res["b_pass"] and res["c_pass"]
     return res
 

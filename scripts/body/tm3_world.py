@@ -227,6 +227,7 @@ class OnlineCerebellum:
         self.hist = self.hist[-(self.window + 10):]
         return err, nll
 
+    @torch.enable_grad()
     def learn(self):
         """One online gradient step on the stored window (training mode, zero start state, loss after the first CB.WARM steps)."""
         if len(self.hist) < CB.WARM + 30:
