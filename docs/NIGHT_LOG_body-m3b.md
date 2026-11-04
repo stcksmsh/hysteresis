@@ -4,7 +4,7 @@ Provisional servo model throughout: Feetech STS3215 12 V assumed (kp, rotor iner
 
 ## MORNING SUMMARY
 
-(in progress: code and unit tests done, calibration and grid next)
+Stopped by the overseer: M3b retired (user pivot 2026-11-04). Code and 10 unit tests done (commit d160afd); calibration done (R0 0.0417, LP0 0.0242, E0 0.1143; d_mean about 0 at init); grid started and stopped partway (4 of 36 finished), no setting chosen, no try run, no pass/fail claimed. Partial outputs: /secondary/hyst-data/body/m3b/g_*.
 
 ## Log
 
@@ -27,3 +27,6 @@ Stated before the first run:
   sequences (counts, entropy, switches, the 5 % rule); identity at step 0 (d exactly 0); roll absent from the relay input (changing only roll columns changes
   nothing, a non-roll column does); the shifted row equals the same episode's relay input delayed by the stated shift (block buffer vs `delay`); reward is 0 until
   the shifted row has history and non-zero after (non-zero relay); the entropy bonus changes the PPO gradient (ent 1 vs 0; ent 0 twice identical).
+
+### Stopped
+stopped by the overseer: M3b retired. Units hyst-wo3b1-grid and hyst-wo3b1-calib stopped; partial grid results left unanalysed.
