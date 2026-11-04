@@ -4,7 +4,8 @@
   const DT = 0.1; // all lanes are at 10 Hz; bin k is stamped 0.1 * (k + 1)
   const DIMS = ["curl_extension", "height", "arch", "time", "weight", "flow", "space", "succession_direction",
     "succession_delay", "initiation", "breath_depth", "breath_rate", "size", "energy", "rhythm"]; // body.rs PARAMS
-  const INPUTS = ["arousal", "tension", "familiarity", "surprisal", "spike", "band1", "band2", "band3", "band4", "energy"];
+  const INPUTS = ["arousal", "tension", "familiarity", "surprisal", "spike", "band1", "band2", "band3", "band4", "energy",
+    "self_prediction_error"]; // the last is "cerebellum: prediction error of its own arm" (scripts/body/selfsurprisal.py), added after the first ten
   const clamp01 = (x) => Math.min(1, Math.max(0, x));
 
   function neutralMapping() {
@@ -19,7 +20,12 @@
   }
 
   // The mapping must be exactly what the page edits: same inputs and dims in the same order, finite numbers.
+  const LEGACY_INPUTS = 10; // mappings saved before self_prediction_error existed: the first ten inputs, no 11th column
   function validateMapping(m) {
+    if (m && Array.isArray(m.inputs) && m.inputs.length === LEGACY_INPUTS && Array.isArray(m.weights) &&
+        m.inputs.every((v, i) => v === INPUTS[i]) && m.weights.every((r) => Array.isArray(r) && r.length === LEGACY_INPUTS)) {
+      m = Object.assign({}, m, { inputs: INPUTS.slice(), weights: m.weights.map((r) => r.concat([0])) });
+    }
     const same = (a, b) => Array.isArray(a) && a.length === b.length && a.every((v, i) => v === b[i]);
     const fin = (x) => typeof x === "number" && Number.isFinite(x);
     if (!m || m.version !== 1) throw new Error("mapping: version is not 1");
@@ -74,6 +80,7 @@
       band1: normalise(song.band_power[0]), band2: normalise(song.band_power[1]),
       band3: normalise(song.band_power[2]), band4: normalise(song.band_power[3]),
       energy: Float64Array.from(holdEnergy(song.mood_energy, n), clamp01),
+      self_prediction_error: normalise(song.self_error),
     };
   }
 

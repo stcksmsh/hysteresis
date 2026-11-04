@@ -98,3 +98,35 @@ test("mapping JSON round trip is exact and validation rejects bad files", () => 
     assert.throws(() => A.validateMapping(c));
   }
 });
+
+test("self_prediction_error is the 11th input and normalised like the others", () => {
+  assert.equal(A.INPUTS.length, 11);
+  assert.equal(A.INPUTS[10], "self_prediction_error");
+  const n = 101;
+  const song = {
+    n_bins: n, surprisal_total: ramp(n, (i) => i), arousal: ramp(n, () => 0), tension: ramp(n, () => 0), familiarity: ramp(n, () => 0),
+    band_power: [0, 1, 2, 3].map(() => ramp(n, () => 0)), mood_energy: [0.5, 0.5], self_error: ramp(n, (i) => 100 - i * 2),
+  };
+  const lanes = A.inputLanes(song, { threshold: 0.6, tau: 2 });
+  assert.equal(lanes.self_prediction_error.length, n);
+  assert.equal(lanes.self_prediction_error[0], 1);      // 100 is above the 95th percentile
+  assert.equal(lanes.self_prediction_error[100], 0);    // -100 is below the 5th
+  assert.ok(Math.abs(lanes.self_prediction_error[50] - 0.5) < 1e-9);
+  const m = A.neutralMapping();
+  m.weights[0][10] = 1; m.tau[0] = 0;
+  assert.equal(A.computeBody(m, lanes)[0][50], 1);      // 0.5 base + 0.5 lane
+});
+
+test("a mapping saved with the first ten inputs loads with a zero 11th column", () => {
+  const old = JSON.parse(JSON.stringify(A.neutralMapping()));
+  old.inputs = old.inputs.slice(0, 10);
+  old.weights = old.weights.map((r) => r.slice(0, 10));
+  old.weights[4][2] = -0.35;
+  const m = A.validateMapping(old);
+  assert.equal(m.inputs.length, 11);
+  assert.equal(m.weights[4][2], -0.35);
+  assert.ok(m.weights.every((r) => r.length === 11 && r[10] === 0));
+  assert.equal(old.inputs.length, 10);                  // the file's object is not changed
+  old.inputs[3] = "x";
+  assert.throws(() => A.validateMapping(old));          // a different ten is still rejected
+});
