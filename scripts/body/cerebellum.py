@@ -143,13 +143,25 @@ class Ridge:
     def __init__(self, alpha=1.0):
         self.alpha = alpha
 
-    def fit(self, X, Y, V):
-        x = X[V].astype(np.float64)
-        x = np.concatenate([x, np.ones((len(x), 1))], 1)
-        y = Y[V].reshape(len(x), -1).astype(np.float64)
-        A = x.T @ x + self.alpha * np.eye(x.shape[1])
-        self.W = np.linalg.solve(A, x.T @ y)
-        self.var = ((y - x @ self.W) ** 2).mean(0).reshape(len(HORIZONS), 15)
+    def fit(self, X, Y, V, step=50):
+        """Normal equations accumulated over blocks of `step` trajectories (bounded memory)."""
+        d = X.shape[-1] + 1
+        A, B, n = self.alpha * np.eye(d), np.zeros((d, len(HORIZONS) * 15)), 0
+        for i in range(0, len(X), step):
+            v = V[i: i + step]
+            x = np.concatenate([X[i: i + step][v].astype(np.float64), np.ones((int(v.sum()), 1))], 1)
+            y = Y[i: i + step][v].reshape(len(x), -1).astype(np.float64)
+            A += x.T @ x
+            B += x.T @ y
+        self.W = np.linalg.solve(A, B)
+        sse = np.zeros(len(HORIZONS) * 15)
+        for i in range(0, len(X), step):
+            v = V[i: i + step]
+            x = np.concatenate([X[i: i + step][v].astype(np.float64), np.ones((int(v.sum()), 1))], 1)
+            y = Y[i: i + step][v].reshape(len(x), -1).astype(np.float64)
+            sse += ((y - x @ self.W) ** 2).sum(0)
+            n += len(x)
+        self.var = (sse / n).reshape(len(HORIZONS), 15)
         return self
 
     def predict(self, X):
@@ -158,8 +170,30 @@ class Ridge:
         return (x @ self.W).reshape(n, T, len(HORIZONS), 15).astype(np.float32)
 
 
-def persistence_var(Y, V):
-    return (Y[V].astype(np.float64) ** 2).mean(0)          # (3, 15)
+def persistence_var(Y, V, step=50):
+    acc, n = np.zeros((len(HORIZONS), 15)), 0
+    for i in range(0, len(Y), step):
+        v = V[i: i + step]
+        acc += (Y[i: i + step][v].astype(np.float64) ** 2).sum(0)
+        n += int(v.sum())
+    return acc / n          # (3, 15)
+
+
+def save_bundle(path, net, st, ridge, pvar, hidden, layers, extra=None):
+    torch.save({"net": net.state_dict(), "hidden": hidden, "layers": layers, "stats": st.__dict__, "ridge_W": ridge.W, "ridge_var": ridge.var,
+                "ridge_alpha": ridge.alpha, "pvar": pvar, "extra": extra or {}}, path)
+
+
+def load_bundle(path):
+    b = torch.load(path, weights_only=False)
+    net = Cerebellum(b["hidden"], b["layers"])
+    net.load_state_dict(b["net"])
+    net.eval()
+    st = Stats.__new__(Stats)
+    st.__dict__.update(b["stats"])
+    ridge = Ridge(b["ridge_alpha"])
+    ridge.W, ridge.var = b["ridge_W"], b["ridge_var"]
+    return net, st, ridge, b["pvar"]
 
 
 def evaluate(net, X, Y, V, ridge, pvar, hnames=HNAMES):
