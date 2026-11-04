@@ -1,11 +1,27 @@
 # NIGHT LOG: work order 2, builder 2 (memory and show tracks), branch body-h2show
 
-## MORNING SUMMARY (filled at the end; updated after every phase)
+## MORNING SUMMARY (2026-11-04; phases 1-3 done, phase 4 built and syntax-checked only)
 
-- Phase 1 (H2 toy): not finished.
-- Phase 2 (brainDump): not started.
-- Phase 3 (B7 lanes into mindState): not started.
-- Phase 4 (trace viewer): not started.
+- **H2: FAIL after two tries. The hippocampus stays closed for this plan** (the work order's default). Ratio repeat / first (<= 0.5 needed), A iid | B levels+clock | C smooth:
+  try 1 (k 64, tau 0.05) 1.000 | 0.810 | 0.769; try 2 (k 16, tau 0.02) 1.000 | 0.861 | 0.852. Retrieval off: 1.000 everywhere. T1a (share in first S >= 0.5 and recognition median above the
+  p95 of the non-repeat frames): try 1 A fail (0.071; 0.833 vs 0.845), B fail (0.821; 0.257 vs 0.287), C pass (0.853; 0.230 vs 0.228); try 2 A fail (0.335; 0.807 vs 0.783), B fail
+  (0.835; 0.312 vs 0.341), C fail (0.750; 0.207 vs 0.222). Untrained H2 passes T1a on all three (1.0 | 0.96 | 0.96 in try 1).
+- **Baselines, same toy:** untrained-H1 keys (frozen key / query / tau, relay trains) ratio 1.000 | 0.856 | 1.054, T1a fail on all three (share 0.0 | 0.777 | 0.527). Oracle (true pointer) ratio
+  0.327 | 0.440 | 0.348, T1b pass on all three. So the relay uses a correct replay; no tried code (trained H1 keys, frozen H1 keys, H2 sparse codes) got a trained model to retrieve it.
+- **brainDump** (`scripts/brain/braindump.py`, schema `braindump.schema.json`): B7 epoch 6, 30 Hz, float16 `.npz` + json. Size per song: instant-crush 46.1 MB (340 s), five-years 38.6 MB (284 s),
+  presence 36.8 MB (271 s), in `/secondary/hyst-data/brain/braindump/`. Coherence thresholds (per layer L1..L4): 0.1454, 0.2046, 0.1408, 0.1654 = the 99th percentile of the windowed order
+  parameter over 20 training songs (seed 20261104; ids in `scripts/brain/braindump_thresholds.json`, committed before the danced songs ran). Crossings (>= 3 of 4 layers above own threshold):
+  0 of 53,177 windows on those 20 songs and 0 on each of the three danced songs. With 99th-percentile thresholds and a 3-of-4 rule a crossing is a very rare event; nothing was changed.
+- **B7 lanes in `mindState`:** `/secondary/hyst-data/brain/mindstate/mind-<song>.json` = the core-2b mind file with an additive `mindState.brain` object (0.1 s bins, mechanism names:
+  surprisal L1..L4 + total, smoothedSurprisal, arousalSignal, l4PredictedVariance, surprisalSlope30s, bandPower, gain, exponent, selfSimilarity, coherence, crossing). `mood.*` is unchanged
+  (verified equal to the input file). The authoring page now builds from these lanes (`scripts/author/build.py`).
+- **v47 check:** not run. No file the dance path reads was changed: `mind_state.rs` got one added test, the planner does not read mindState (D3), the compiler and `scripts/emotion/` are untouched;
+  the existing `mind_state` Rust tests pass (11). Say if the overseer wants `three.sh` run anyway.
+- **Tests:** `scripts/brain` 176 pass (1 skipped = cuda); `cargo test -p hyst-compile mind_state` 11 pass.
+- **FOR USER:** (1) the lanes sit in `mindState.brain`, not in the reserved `bands/surprise/neuromod` arrays: the version-1 Rust reader rejects anything non-empty there. Moving them needs mindState
+  version 2 and a Rust change; default taken: no Rust change. (2) The 3-of-4 coherence crossing never fires at the ruled thresholds. (3) The trace viewer (`braindump_view.py`) was built and its script
+  syntax-checked, not opened in a browser or looked at. (4) A and B of try 1 hit the flat-loss rule before 1,500 steps (as in H1); all runs did.
+- **Branch** `body-h2show`, data under `/secondary/hyst-data/brain/{h2,braindump,mindstate}/`. Nothing is running.
 
 ## LOG
 
@@ -36,3 +52,6 @@
 - 2026-11-04 TRY 2 CHANGE (written before the run; k, sparsity, tau only): k = 16 of 2,048 (0.8 %), tau = 0.02. Everything else as try 1. Reason (a reading, not tested):
   non-repeat recognition after training is high (0.83-0.84 on A), so sparser codes and a sharper softmax lower the similarity of unrelated moments. Baselines on the same
   toy, one run per design: `frozen` (H1 architecture, key / query / tau frozen at init) and `oracle` (true pointer), run after try 2.
+- 2026-11-04 TRY 2 RESULT and baselines: see the MORNING SUMMARY (logs try2_h2_*.log, base_frozen_*.log, base_oracle_*.log in /secondary/hyst-data/brain/h2/). DECISION: both tries failed; the hippocampus is
+  closed for this plan, as the order's default says.
+- 2026-11-04 Phase 2: thresholds fitted (3 min on 3 threads) and committed, then the three songs exported (22 s, 10 s, 8 s). Phase 3: `brain_mindstate.py`. Phase 4: `braindump_view.py` (not looked at).
