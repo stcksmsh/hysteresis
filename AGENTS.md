@@ -1,6 +1,14 @@
 # AGENTS.md — Hysteresis (native Rust rewrite)
 
-## Latest user priority — 2026-10-01 automatic interpretation + 3D ensemble
+## Current user rule — 2026-11-05: the installation is ONE arm
+
+The installation is a single servo arm. Never build, plan or propose multiple arms: no hexagon, no six-arm
+ring, no ensemble, no formations between arms. This is permanent and overrides every older section below
+that mentions several arms or an ensemble. The version 47 hexagon exports stay only as the byte-identical
+regression reference (`Off`). Current state and rules: `docs/OVERSEER_HANDOFF.md`, `docs/BRAIN_SPEC.md`
+§7.17 (branch `keys-decide`).
+
+## Earlier priority — 2026-10-01 automatic interpretation + 3D ensemble (superseded 2026-11-05: one arm only)
 
 Automatic musical interpretation is mandatory. Offline analysis must drive
 coherent choreography, musical memory and anticipation. The installation target
