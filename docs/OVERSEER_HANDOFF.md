@@ -117,6 +117,10 @@ only result files: the argmax bug was visible in identical program counts across
 HTTPS with the gh credential helper (repo-local config); SSH publickey failed. (5) A shared CARGO_TARGET_DIR gave stale compile errors: use a
 fresh one for verification. (6) `tm3_world` patches `core.N`/`core_b7.BLOCK` on import: run its tests in their own process.
 
+**2026-11-05 ~00:30:** planner answered WO5 = BRAIN_SPEC 7.17 (body 1f8915c). Work order 6 prompts on body: `docs/BUILDER_PROMPT_WO6_H4DIAG.md` (agent 2),
+`_WO6_M3D_RELAUNCH.md` (agent 1; agent 1 had already relaunched by itself at 00:16 as `hyst-wo5-m3d-grid`, sequential lambdas, 8 threads, 9 GB cap, anon ~1 GB),
+`_WO6_HEXAGON.md` (agent 5: fallback on six arms + self-surprisal lane). Not sent yet: waiting for the user's go. H4 both tries fail T1b; diagnostic per 7.17.1 decides closure.
+
 **Hourly wakeup:** session cron e1eec50b at :23 (set 2026-11-04 23:40, dies with the session; recreate after restart).
 
 **Wakeups:** set a session cron after restart, e.g. hourly at :23: check agents/branches/units/uptime, resume stalled builders, hand dead ones
