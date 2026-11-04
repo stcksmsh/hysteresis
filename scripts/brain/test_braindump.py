@@ -87,7 +87,7 @@ class TestRun(unittest.TestCase):
             model = core_b7.Core7(seed=0, phase=True, hippocampus=False, skip_taps=10).eval()
             x = np.random.default_rng(0).standard_normal((1300, 46)).astype(np.float32)
             res = bd.run_song(model, x, chunk=600)
-            arr, meta = bd.export_arrays(res, x[:, :core.FEAT], np.full(4, 0.5))
+            arr, meta = bd.export_arrays(res, x[:, :core.FEAT])
             n = len(bd.sample_frames(1300))
             self.assertEqual(arr["modes"].shape, (n, 4, core.N, 2))
             with torch.no_grad():
@@ -110,7 +110,7 @@ class TestRun(unittest.TestCase):
             model = core_b7.Core7(seed=0, phase=True, hippocampus=False, skip_taps=10).eval()
             x = np.random.default_rng(0).standard_normal((1300, 46)).astype(np.float32)
             res = bd.run_song(model, x)
-            f = bm.brain_field(res, x[:, :core.FEAT], np.full(4, 0.2))
+            f = bm.brain_field(res, x[:, :core.FEAT])
         nb = 130
         for k in ("smoothedSurprisal", "arousalSignal", "l4PredictedVariance", "surprisalSlope30s", "selfSimilarity"):
             self.assertEqual(len(f[k]), nb, k)
@@ -122,6 +122,18 @@ class TestRun(unittest.TestCase):
         self.assertIsNone(f["coherence"]["L1"][8])
         self.assertIsNotNone(f["coherence"]["L1"][9])
         json.dumps(f, allow_nan=False)                                  # strict JSON: no NaN anywhere
+        v1 = {"mindState": {"version": 1, "hopSeconds": 0.5, "bands": [], "surprise": [], "neuromod": [], "mood": {"energy": [0.5]}, "brain": f}}
+        v2 = bm.to_v2(v1)["mindState"]
+        self.assertEqual((v2["version"], v2["brainHopSeconds"], "brain" in v2), (2, 0.1, False))
+        self.assertEqual(v2["mood"], v1["mindState"]["mood"])
+        self.assertEqual(v2["bands"]["power.L3"], f["bandPower"]["L3"])
+        self.assertEqual(v2["surprise"]["total"], f["surprisal"]["total"])
+        self.assertEqual(v2["neuromod"]["gain.L2"], f["gain"]["L2"])
+        self.assertEqual(len(v2["bands"]) + len(v2["surprise"]) + len(v2["neuromod"]), 9 + 8 + 9)
+        self.assertEqual(v1["mindState"]["version"], 1)                 # the input is not changed
+        with self.assertRaises(ValueError):
+            bm.to_v2(bm.to_v2(v1))
+        json.dumps(v2, allow_nan=False)
 
 
 if __name__ == "__main__":
