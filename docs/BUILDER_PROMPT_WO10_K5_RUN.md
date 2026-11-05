@@ -27,11 +27,20 @@ slower; a large-batch GPU recipe would change training and is not allowed for th
 
 ## The work
 
-1. Launch try 1 exactly as committed: one full pass over the 15,624 windows in the fixed seeded order, checkpoint every 25 rounds, the
+1. Launch try 1 exactly as committed: one full pass over the 15,624 windows in the fixed seeded order, checkpoint after every round (1b), the
    early-stopping rule in your night log (validation every 200 rounds on the 217 validation windows, stop after two non-improving validations
    in a row). One detached capped service (`MemoryMax=8G`, `MemorySwapMax=0`, 6 threads), **mains power only**: the script pauses at the
    next checkpoint while `ADP1/online` = 0 and resumes when it is 1; it resumes from the last checkpoint after a kill or reboot (a wrapper
    relaunches it on the next session or by the overseer; write the exact relaunch command into the night log).
+1b. **Pause and stop at any moment without loss (user requirement).** The user may need the machine at any time. Provide and test:
+   - **pause** = `systemctl --user freeze <unit>` (instant, frees the CPU, keeps memory) and **continue** = `systemctl --user thaw <unit>`;
+     paused time does not count as compute spent;
+   - **stop** = `systemctl --user stop <unit>`: on SIGTERM the run finishes the current 16-window round (about 61 s), writes a checkpoint and
+     exits cleanly (set `TimeoutStopSec=180`); **start again** = one command that resumes from that checkpoint;
+   - checkpoint after **every** round (not every 25), written atomically (write to a temp file, then rename), keeping the previous one;
+   - a test: stop mid-run, start again, and the parameters after the next rounds are bit-identical to an uninterrupted run;
+   - the same for the K5 check (resume per scored policy and window) and the renders.
+   Put the four commands (pause, continue, stop, start again) at the top of the night log and in `scripts/body/K5_RUN.md`, in plain steps.
 2. Log compute actually spent (wall time with mains on, excluding pauses) against the 24 h box; stop at the box.
 3. Then the K5 check on `best.pkl` with `k5_eval.py` (trained, untrained, kappa 0; argmax pass/fail, sampled reported only; external and
    internal (a); per-song bootstrap over 357 songs × 10,000), chained in the same service.
