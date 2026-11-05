@@ -955,3 +955,23 @@ reported again)
 - Data lanes only (labelled, no claim): self-similarity, self-surprisal, per-layer synchrony.
 - The monitor shows only mechanisms in the loop plus labelled data lanes.
 - Provisional servo model stated in every body result. No spending. No attribution lines.
+
+### 7.20 Rulings on work order 8, 2026-11-05, via planner
+
+Binding. They answer `docs/PLANNER_BRIEF_WO8_RESULTS.md`. Set before any K5 result.
+
+1. **K5 compute:** no deliberately reduced try. One try = one full pass over the 15,624 training windows (early stopping on validation
+   allowed); compute box 24 h, counted as compute actually spent, resumable across sessions. This replaces the 8 h box of §7.19 A3.
+   Path: first a short Kaggle check (JAX GPU + MJX import, steps per second on a K5 window batch). If Kaggle projects faster than the laptop,
+   run there via run_job (free tier only); otherwise the laptop over several nights with checkpoint resume, on mains power.
+2. **Report-only toy ablations:** small copies retrained with one mechanism off each (closed-loop inputs, dopamine gating, internal observer;
+   phase coupling already done). Not a try, no effect on K5's pass. They decide wording: the monitor and story credit only mechanisms whose
+   removal lowers (a) with a paired interval above 0. Mechanisms that do not measurably matter stay in the machine (it is a scale human) but
+   are labelled "present", never "it uses X to ...".
+3. **Internal observer kept as fixed.** Claim wording if both pass K5: "It learned to move so that its inner state can be read from its body,
+   by you and by itself (both read the same joint positions)." The parenthesis is mandatory in the record; on the wall it may read "by you, and
+   by itself through its own sense of its joints."
+4. **Before K5 training:** run the frozen cerebellum continuously on 60 s episodes (not 12 s) and report its error over time; if the error
+   grows over the episode, report and stop for a ruling.
+5. **Recorded:** the arm's loop closes at block rate (the cortex decides every 0.5 s); the movement between decisions comes from the
+   generators and the coupling.
