@@ -68,6 +68,7 @@ def main():
     ap.add_argument("--modes", default="argmax,sample")
     ap.add_argument("--max-windows", type=int, help="test only: the first N check windows")
     a = ap.parse_args()
+    T.install_signals()
     out = Path(a.out)
     (out / "rollouts").mkdir(parents=True, exist_ok=True)
     t0 = time.time()
@@ -107,4 +108,8 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except T.Interrupted:
+        print("interrupted; finished batches are kept, rerun the same command to resume", flush=True)
+        sys.exit(0)

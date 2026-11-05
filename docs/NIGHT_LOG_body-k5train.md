@@ -1,4 +1,17 @@
-# Night log, builder (body-k5train), work order 9, the K5 trainer and the Kaggle check (2026-11-05)
+# Night log, builder (body-k5train), work orders 9 and 10
+
+## K5 RUN (WO10): THE FOUR COMMANDS (details: scripts/body/K5_RUN.md; run dir /secondary/hyst-data/body/k5/run1/; unit hyst-wo10-k5run)
+
+1. **Pause**: `systemctl --user freeze hyst-wo10-k5run`  (instant; paused time is not compute)
+2. **Continue**: `systemctl --user thaw hyst-wo10-k5run`
+3. **Stop**: `systemctl --user stop hyst-wo10-k5run`  (finishes the round in progress, ~60 s, checkpoints, exits 0)
+4. **Start again**: `/secondary/Programming/Github/Hysteresis/.claude/worktrees/body-k5train/scripts/body/k5_run.sh start`  (resumes from the last checkpoint; also the command after a reboot)
+
+Checkpoint after every round, atomic (temp file, fsync, rename; the previous kept as `ckpt.prev.pkl`). Mains only: waits on battery. Compute box 24 h (clock excludes pauses and battery waits).
+Tests (WO10 1b): `test_k5_run` (real units: start, freeze, thaw, stop, start again; interrupted vs uninterrupted agree to 1e-9; found max difference 4.0e-12), `test_k5_train` 9 OK (in-process resume bit-identical).
+**Finding**: two UNINTERRUPTED runs of the same command in separate processes give one of two reproducible results that differ by 4.0e-12 (float64 summation order in XLA CPU; alternates run to run on a quiet machine, same with PYTHONHASHSEED fixed). So bit-identity across processes is not available even without a stop; in one process a resume is bit-identical. FOR OVERSEER.
+
+# WO9: the K5 trainer and the Kaggle check (2026-11-05)
 
 Provisional servo model throughout: Feetech STS3215 12 V assumed. The installation is ONE arm. **K5 training was NOT launched.**
 
