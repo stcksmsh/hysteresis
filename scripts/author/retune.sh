@@ -26,6 +26,7 @@ node "$HERE/export_cli.cjs" "$MAP" "$A/data.json" "$SONG" phrase > "$W.bodytrack
 python3 "$HERE/attach.py" "$M/$SC" "$W.bodytrack.json" "$W.sidecar.json" > /dev/null; lap bodytrack
 (cd "$ROOT" && cargo build -q --release -p hyst-previz --example ensemble_preview); lap build
 "$CARGO_TARGET_DIR/release/examples/ensemble_preview" "$W.html" "../audio/$SONG.m4a" "$W.sidecar.json" --body layered --clock music > "$W.log" 2>&1; lap compile
+[ -z "${HTML_ONLY:-}" ] || { echo "$W.html"; exit 0; }  # page only, no render
 if [ -n "$START" ]; then
   [ -n "$DUR" ] || DUR=20
   [ "${FULL:-0}" = 1 ] || export HYST_FAST=1

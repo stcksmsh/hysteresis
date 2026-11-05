@@ -487,6 +487,24 @@ fn main() -> io::Result<()> {
         .replace('>', "\\u003e")
         .replace('&', "\\u0026");
     let html = include_str!("../src/ensemble.html")
+        // One arm: frame its whole reach envelope (see SOLO_TARGET/SOLO_FIT). The
+        // hexagon page keeps the original text, so its output is unchanged.
+        .replace(
+            "const target=solo?[0,0,0.3]:[0,0,0.25], up=[0,0,1];",
+            if score.placements.len() == 1 {
+                SOLO_TARGET
+            } else {
+                "const target=solo?[0,0,0.3]:[0,0,0.25], up=[0,0,1];"
+            },
+        )
+        .replace(
+            "const distance=solo?2.1:3.2+",
+            if score.placements.len() == 1 {
+                SOLO_FIT
+            } else {
+                "const distance=solo?2.1:3.2+"
+            },
+        )
         .replace("__DURATION__", &score.duration.to_string())
         .replace("__TRACK_URL_JSON__", &url_json)
         .replace("__ENSEMBLE_DATA__", &data_json);
@@ -504,3 +522,10 @@ fn main() -> io::Result<()> {
     );
     Ok(())
 }
+
+/// One-arm camera: aim at the middle of the reach envelope (sphere round the
+/// shoulder, hand plus implement at full stretch, clipped at the floor).
+const SOLO_TARGET: &str = "const reachM=data.rig.channels.reduce((s,c)=>s+Math.hypot(...c.linkM),0)+(data.rig.implement?data.rig.implement.radiusM:0.1)+0.05, shoulderZ=data.rig.channels[0].linkM[2], target=[0,0,shoulderZ+0.35*reachM], up=[0,0,1];";
+
+/// Back off until every envelope point projects inside the 1280x720 frame with a 40 px margin.
+const SOLO_FIT: &str = "const envelope=(()=>{const pts=[];for(let a=0;a<48;a++)for(let e=-1;e<=12;e++){const el=e<0?-Math.asin(Math.min(1,shoulderZ/reachM)):e/12*Math.PI/2,az=a*Math.PI/24;pts.push([reachM*Math.cos(el)*Math.cos(az),reachM*Math.cos(el)*Math.sin(az),shoulderZ+reachM*Math.sin(el)]);}return pts;})();\n  const fitDistance=(()=>{const sub=(a,b)=>a.map((v,i)=>v-b[i]),dot=(a,b)=>a.reduce((s,v,i)=>s+v*b[i],0),cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]],norm=a=>a.map(v=>v/Math.hypot(...a));for(let d=1;d<12;d+=0.02){const eye=[target[0]+d*Math.cos(pitch)*Math.cos(yaw),target[1]+d*Math.cos(pitch)*Math.sin(yaw),target[2]+d*Math.sin(pitch)],fw=norm(sub(target,eye)),rt=norm(cross(fw,up)),cu=cross(rt,fw);if(envelope.every(p=>{const v=sub(p,eye),dp=dot(v,fw),sc=1800/dp,x=640+dot(v,rt)*sc,y=315-dot(v,cu)*sc;return dp>0.1&&x>=40&&x<=1240&&y>=40&&y<=680;}))return d;}return 12;})();\n  const distance=solo?fitDistance:3.2+";
