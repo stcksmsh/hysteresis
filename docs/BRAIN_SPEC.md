@@ -975,3 +975,19 @@ Binding. They answer `docs/PLANNER_BRIEF_WO8_RESULTS.md`. Set before any K5 resu
    grows over the episode, report and stop for a ruling.
 5. **Recorded:** the arm's loop closes at block rate (the cortex decides every 0.5 s); the movement between decisions comes from the
    generators and the coupling.
+
+### 7.21 Rulings on work order 9, 2026-11-05, via planner
+
+Binding. They answer `docs/PLANNER_BRIEF_WO9_RESULTS.md`.
+
+1. **Ablation wording now: (a).** Closed-loop inputs, dopamine gating and the internal observer are "present". For the seed-2 runs (point 3)
+   the credit rule is fixed now, before they run: a mechanism is credited for a decoding (external or internal, each on its own) only if BOTH
+   seeds show the paired try1 − ablation interval above 0 for that decoding, argmax. Allowed wording when credited: internal → "its own reading
+   of its body depends on [mechanism]"; external → "[mechanism] makes its inner state easier to read from its movement". Otherwise "present".
+2. **Dopamine gating stays, as present,** whatever seed 2 shows (scale-human rule: real mechanisms stay even if they do not measurably help).
+   Never worded as helping. If both seeds show it measurably lowers decoding, record that fact plainly.
+3. **After K5:** seed 2 of try 1 and of A1, A2, A3, same recipe, on the laptop.
+4. **Keep M3e's recipe.** If K5 try 1 fails, any try-2 change is limited to what the failure names. A large-batch GPU recipe is allowed only as
+   engineering, and only if it first reproduces try 1's toy result within its intervals.
+5. **Recorded:** the cerebellum shows no state drift (open loop, 60 s, flat); its higher closed-loop error reflects the trained policy moving
+   outside the babbling distribution. The self-surprisal lane may show this on the monitor as data.
