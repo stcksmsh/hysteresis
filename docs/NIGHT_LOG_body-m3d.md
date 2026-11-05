@@ -54,7 +54,17 @@ Environments: `/secondary/hyst-env/brain` (torch, for the frozen toy cortex and 
 Provisional servo model: Feetech STS3215 12 V assumed.
 
 ### MORNING SUMMARY (WO7)
-Code done, tests pass (3 new). Run waiting for mains power (`ADP1/online` was 0 at launch); results not yet in.
+Controls done (unit hyst-wo7-m3d-controls-1100, wall 1,560 s, peak 12.8 GB per systemd; 13 tests OK). Held-out 16 episodes, 8 thr. Report only; no claim beyond the table.
+(a) mean gap [95 % CI] | (b) RMS deg/s | (c) MI nats (null mean), p:
+- trained, argmax: 0.688 [0.600, 0.791] | 33.0 | 0.536 (0.058), 0.001; sampled: 0.485 [0.420, 0.558] | 39.3 | 0.055 (0.018), 0.001
+- (i) untrained, argmax: 0.416 [0.335, 0.509] | 45.0 | 0.554 (0.124), 0.001; sampled: 0.227 [0.173, 0.280] | 44.8 | 0.017 (0.014), 0.163
+- (ii) trained, kappa 0, argmax: 0.669 [0.589, 0.757] | 39.5 | 0.536 (0.058), 0.001; sampled: 0.304 [0.256, 0.352] | 43.6 | 0.055 (0.018), 0.001
+- (iii) untrained, kappa = trained means, argmax: 0.430 [0.342, 0.538] | 38.5 | 0.554 (0.124), 0.001; sampled: 0.249 [0.196, 0.300] | 38.9 | 0.017 (0.014), 0.163
+Paired (a)_trained - (a)_control, mean [95 % CI], argmax | sampled:
+- vs (i): 0.272 [0.192, 0.356] | 0.258 [0.158, 0.365]
+- vs (ii): 0.019 [-0.022, 0.064] | 0.181 [0.133, 0.234]
+- vs (iii): 0.258 [0.156, 0.363] | 0.236 [0.141, 0.339]
+Trained argmax (a) is 0.688 here, 0.480 in try 1: the observer differs. Try 1's final observer was warm-started from group A's observer and trained on the last 4 epochs of training rollouts (soft Gumbel-softmax, policy still changing). Here a fresh observer is trained on 4 hard rollouts of the final policy in the scored mode. (b), (c) and kappa are identical to try 1 (33.0, MI 0.5364), so the policy and rollouts are the same; only the observer fit differs. Within this table all rows use the same procedure.
 
 ### Phase 1: code and launch
 `m3d_controls.py` (controls i, ii, iii, plus the trained policy rescored with the identical procedure), kappa override (`kappa_fix` key in the policy dict, `m3d_jax.motor_cortex`), per-episode gaps (`a_gaps`) added to `evaluate`'s result, tests `test_m3d.Controls`. Observer procedure: fresh observer, 600 steps, seed 999, trained on the 16 training episodes rolled out by the scored policy in the scored mode (4 rollouts, keys 100..103), try 1's standardisation. Trained kappa means from `try1/result.json`: 1.405 / 0.425 / 0.278 / 0.454 / 2.017 (identical in both modes).
