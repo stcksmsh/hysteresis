@@ -27,6 +27,15 @@ class Parity(unittest.TestCase):
         s = W.joint_stats(a, a)
         self.assertEqual(max(s["1s"]["max"]), 0.0)
 
+    def test_block_descriptors_full_60s(self):
+        q0 = m3d.start_poses(1, 5)
+        q = q0[:, None] + 5 * np.sin(np.arange(W.STEPS)[None, :, None] / 40.0 + np.arange(5))      # (1, 6000, 5)
+        d = W.block_descriptors(q, q0)
+        self.assertEqual(d.shape, (1, m3d.NB - m3d.VALID_FROM, 31))
+        self.assertTrue(np.isfinite(d).all())
+        # window of the last block is exactly the last 201 frames of the trajectory
+        self.assertTrue(np.allclose(d[0, -1], np.asarray(W.J.descriptors(W.J.window_frames(W.jnp.asarray(q[0, -201:]))))))
+
 
 if __name__ == "__main__":
     unittest.main()

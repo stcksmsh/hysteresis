@@ -87,7 +87,7 @@ def joint_stats(a, b):
 def block_descriptors(q, q0):
     """q (N, T, 5) deg -> (N, 116, 31) for blocks 4..119 as M3d computes them."""
     pad = np.concatenate([np.broadcast_to(q0[:, None], (len(q), 200, 5)), q], 1)
-    win = np.stack([pad[:, 50 * (b + 1):50 * (b + 1) + 201] for b in range(m3d.VALID_FROM, m3d.NB)], 1)       # (N, B, 201, 5)
+    win = np.stack([pad[:, 50 * (b + 1) - 1:50 * (b + 1) + 200] for b in range(m3d.VALID_FROM, m3d.NB)], 1)       # (N, B, 201, 5)
     f = jax.jit(jax.vmap(jax.vmap(lambda w: J.descriptors(J.window_frames(w)))))
     return np.asarray(f(jnp.asarray(win)))
 
@@ -127,12 +127,18 @@ def main():
     full = MA.final_xml()
     mfull = mujoco.MjModel.from_xml_string(full)
     print("iterations: mjx1", J.MODEL.opt.iterations, "full", mfull.opt.iterations, "solver", mfull.opt.solver, flush=True)
-    r = {"mujoco": run_mujoco(q0, tg)}
-    print("mujoco done", flush=True)
-    r["mjx1"] = run_mjx(J.MX, q0, tg)
-    print("mjx1 done", flush=True)
-    r["mjxfull"] = run_mjx(mjx.put_model(mfull), q0, tg)
-    print("mjxfull done", flush=True)
+    tf = out / "traj.npz"
+    if tf.exists():                                              # simulated trajectories are kept: a descriptor bug never forces a resimulation
+        z = np.load(tf)
+        r = {k: (z[f"{k}_q"].astype(float), z[f"{k}_qd"].astype(float)) for k in ("mujoco", "mjx1", "mjxfull")}
+    else:
+        r = {"mujoco": run_mujoco(q0, tg)}
+        print("mujoco done", flush=True)
+        r["mjx1"] = run_mjx(J.MX, q0, tg)
+        print("mjx1 done", flush=True)
+        r["mjxfull"] = run_mjx(mjx.put_model(mfull), q0, tg)
+        print("mjxfull done", flush=True)
+        np.savez_compressed(tf, tgt=tg, q0=q0, names=np.array(names), **{f"{k}_{n}": r[k][i] for k in r for i, n in enumerate(("q", "qd"))})
     D = {k: block_descriptors(v[0], q0) for k, v in r.items()}
     res = {"names": names, "iterations_full": int(mfull.opt.iterations), "solver": int(mfull.opt.solver)}
     for k in ("mjx1", "mjxfull"):
@@ -140,7 +146,6 @@ def main():
                                  "per_traj_q_max": np.abs(r[k][0] - r["mujoco"][0]).max((1, 2)).tolist()}
     res["mjx1_vs_mjxfull"] = {"q": joint_stats(r["mjx1"][0], r["mjxfull"][0]), "desc": desc_stats(D["mjx1"], D["mjxfull"])}
     (out / "parity.json").write_text(json.dumps(res, indent=1))
-    np.savez_compressed(out / "traj.npz", tgt=tg, q0=q0, **{f"{k}_q": v[0].astype(np.float32) for k, v in r.items()})
     print(json.dumps({k: res[k]["q"]["60s"] for k in res if k.endswith("mujoco")}), flush=True)
 
 
