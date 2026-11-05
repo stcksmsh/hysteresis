@@ -63,7 +63,7 @@ commit = open(os.path.join(code, "COMMIT")).read().strip()
 JOB["commit"] = commit
 if PIP:
     subprocess.run([sys.executable, "-m", "pip", "install", "-q", *PIP.split()], check=True)
-data = find("hyst-features") or ""
+data = find(JOB.get("data_name", "hyst-features")) or ""
 prev = find_prev_ckpt()
 job_path = "/tmp/job.json"
 json.dump(JOB, open(job_path, "w"))

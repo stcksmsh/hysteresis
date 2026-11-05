@@ -1,0 +1,10 @@
+{
+  "id": "k5-bench-001",
+  "cmd": ["python", "-u", "scripts/body/k5_bench.py", "run", "--out", "{OUT}", "--k5", "{DATA}", "--cb", "{DATA}/cb_r2.npz", "--rounds", "3", "--es", "16,64,256"],
+  "cwd": "{REPO}",
+  "data_name": "hyst-k5",
+  "wall_limit_s": 3000,
+  "idle_limit_s": 1500,
+  "progress_file": "{OUT}/results.json",
+  "grace_s": 30
+}
