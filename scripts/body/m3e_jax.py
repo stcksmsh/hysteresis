@@ -88,12 +88,14 @@ def init_carry(q0, C):
     c = J.init_carry(q0)
     q0 = jnp.asarray(q0, float)
     snap = jnp.concatenate([jnp.round(q0 / QUANT) * QUANT, jnp.zeros(10)])
-    return {**c, "cb": cb_init(q0), "snap": snap, "pbuf": jnp.broadcast_to(snap[:5], (200, 5)), "obs_prev": snap, "pred1": jnp.zeros(15), "feat": jnp.zeros(N_CB)}
+    return {**c, "cb": cb_init(q0), "snap": snap, "pbuf": jnp.broadcast_to(snap[:5], (200, 5)), "obs_prev": snap, "pred1": jnp.zeros(15), "lv1": jnp.zeros(15), "feat": jnp.zeros(N_CB)}
 
 
 def block_fn(C, P, mode, tau, carry, inp):
     """One 0.5 s block of one episode, closed loop. inp: x (16), phi0, om0, g (8). -> carry, out (as J.block_fn plus idesc (37), xin (41), feat (25))."""
-    xin = jnp.concatenate([inp["x"], carry["feat"]])
+    if "cb_reset" in inp:                                                                  # diagnostic only (WO9 Part 1): zero the cerebellum's GRU state at flagged blocks
+        carry = {**carry, "cb": {**carry["cb"], "h": carry["cb"]["h"] * (1.0 - inp["cb_reset"])}}
+    xin = jnp.concatenate([inp["x"], carry["feat"] * C.get("loop_gate", 1.0)])        # "loop_gate" 0.0 in C: the closed-loop inputs are cut (ablation A1); absent = 1
     logits, amod, kappa = J.motor_cortex(P, xin)
     pi = J.program_weights(logits, inp["g"], tau, mode)
     u = jnp.clip(pi @ jax.nn.sigmoid(P["theta"]) + J.MOD * jnp.tanh(amod), 0, 1).reshape(4, 5)
@@ -101,18 +103,20 @@ def block_fn(C, P, mode, tau, carry, inp):
 
     @jax.checkpoint
     def step(c, k):
-        d, tgt, tv, cs, cbs, snap, obs_prev, pred1 = c
+        d, tgt, tv, cs, cbs, snap, obs_prev, pred1, lv1 = c
         cs, t = J.cpg_step(cs, goal, inp["phi0"] + inp["om0"] * J.DT * (k + 1), kappa)
         obs = snap                                                                     # what the bus reports at this step: the previous step's state
-        cbs, mean, _ = cb_step(C, cbs, jax.lax.stop_gradient(obs), jax.lax.stop_gradient(t))
+        cbs, mean, lv = cb_step(C, cbs, jax.lax.stop_gradient(obs), jax.lax.stop_gradient(t))
         err = (obs - obs_prev) / C["dsd"][0] - pred1                                    # realised change over the last step minus the +10 ms prediction made then
+        e10 = err[:10]
+        nll = (0.5 * (lv1[:10] + e10 ** 2 / jnp.exp(lv1[:10]) + math.log(2 * math.pi))).mean()          # Gaussian NLL of that prediction (monitoring only, not an input)
         d, tgt, tv, p = J.arm_step(d, tgt, tv, t)
         new_snap = snap_of(d)
         pose = obs[:5] + mean[2, :5] * C["dsd"][2, :5]                                  # predicted position 100 ms ahead
-        return (d, tgt, tv, cs, cbs, new_snap, obs, mean[0]), (jnp.degrees(d.qpos), jnp.degrees(d.qvel), p, obs, pose, err)
+        return (d, tgt, tv, cs, cbs, new_snap, obs, mean[0], lv[0]), (jnp.degrees(d.qpos), jnp.degrees(d.qvel), p, obs, pose, err, (e10 ** 2).mean(), nll)
 
-    cin = (carry["d"], carry["tgt"], carry["tv"], carry["cs"], carry["cb"], carry["snap"], carry["obs_prev"], carry["pred1"])
-    (d, tgt, tv, cs, cbs, snap, obs_prev, pred1), (q, qd, p, obs, pose, err) = jax.lax.scan(step, cin, jnp.arange(J.BLOCK))
+    cin = (carry["d"], carry["tgt"], carry["tv"], carry["cs"], carry["cb"], carry["snap"], carry["obs_prev"], carry["pred1"], carry["lv1"])
+    (d, tgt, tv, cs, cbs, snap, obs_prev, pred1, lv1), (q, qd, p, obs, pose, err, cb_sq, cb_nll) = jax.lax.scan(step, cin, jnp.arange(J.BLOCK))
     full = jnp.concatenate([carry["buf"], q])
     pfull = jnp.concatenate([carry["pbuf"], obs[:, :5]])                               # quantised delayed positions, 100 Hz
     frames = J.window_frames(pfull[-201:])
@@ -121,8 +125,8 @@ def block_fn(C, P, mode, tau, carry, inp):
     prop = (obs[-1, :10] - C["omu"][:10]) / C["osd"][:10]
     pose_s = jax.lax.stop_gradient((pose[-1] - C["omu"][:5]) / C["osd"][:5])
     feat = jnp.clip(jnp.concatenate([prop, pose_s, jax.lax.stop_gradient(err[-1, :10])]), -8, 8)
-    out = {"desc": desc, "idesc": idesc, "logits": logits, "pi": pi, "kappa": kappa, "ms": (qd ** 2).mean(0), "energy": p.sum() * J.DT, "xin": xin, "feat": feat}
-    return {"d": d, "tgt": tgt, "tv": tv, "cs": cs, "buf": full[-200:], "cb": cbs, "snap": snap, "pbuf": pfull[-200:], "obs_prev": obs_prev, "pred1": pred1, "feat": feat}, out
+    out = {"desc": desc, "idesc": idesc, "logits": logits, "pi": pi, "kappa": kappa, "ms": (qd ** 2).mean(0), "energy": p.sum() * J.DT, "xin": xin, "feat": feat, "cb_sq": cb_sq.mean(), "cb_nll": cb_nll.mean()}
+    return {"d": d, "tgt": tgt, "tv": tv, "cs": cs, "buf": full[-200:], "cb": cbs, "snap": snap, "pbuf": pfull[-200:], "obs_prev": obs_prev, "pred1": pred1, "lv1": lv1, "feat": feat}, out
 
 
 def chunk(C, P, mode, tau, carry, inps):

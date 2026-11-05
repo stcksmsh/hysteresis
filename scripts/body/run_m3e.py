@@ -13,6 +13,7 @@ import time
 from pathlib import Path
 
 import jax
+import jax.numpy as jnp
 import numpy as np
 
 import m3e
@@ -29,6 +30,7 @@ def main():
     ap.add_argument("--chunk-blocks", type=int, default=8)
     ap.add_argument("--eval", choices=["tune", "held"], default="tune")
     ap.add_argument("--no-dopamine", action="store_true")
+    ap.add_argument("--ablate", choices=["none", "a1_closed_loop", "a2_gating", "a3_internal"], default="none", help="WO9 report-only ablations; none = try 1")
     a = ap.parse_args()
     out = Path(a.out)
     (out / "rollouts").mkdir(parents=True, exist_ok=True)
@@ -36,7 +38,9 @@ def main():
     log = lambda s: print(f"[{time.time() - t0:7.0f}s] {s}", flush=True)
     toy = m3e.ToyE(a.toy)
     C = M.load_cb()
-    tr = m3e.Trainer(toy, C, a.lam, a.lr, a.epochs, a.chunk_blocks, dopamine=not a.no_dopamine, log=log)
+    if a.ablate == "a1_closed_loop":
+        C = {**C, "loop_gate": jnp.asarray(0.0)}
+    tr = m3e.Trainer(toy, C, a.lam, a.lr, a.epochs, a.chunk_blocks, dopamine=not a.no_dopamine, log=log, gate=a.ablate != "a2_gating", internal=a.ablate != "a3_internal")
     ck = out / "ckpt.pkl"
     if ck.exists():
         tr.load(pickle.loads(ck.read_bytes()))
