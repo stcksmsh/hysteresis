@@ -4,7 +4,17 @@ Provisional servo model throughout: Feetech STS3215 12 V assumed. The installati
 
 ## MORNING SUMMARY
 
-(in progress: design committed; no recorded run yet)
+Provisional servo model: Feetech STS3215 12 V assumed. **Try 1 passes the argmax bar (external (a), (b), (c)); try 2 not run (rule).** Toy only; no claim beyond the toy bar. Chain 12:13-13:48 (about 1 h 36 m with grid, try 1, controls, 12 tests OK), unit hyst-wo8-m3e-chain-1213; peak memory not recorded (the unit exited before it was read; cap 14 GB).
+- Grid (tune, 12 epochs, argmax; ext a / int a / b): lam 0.03: 1.001 / 0.957 / 44.8; 0.3: 0.850 / 0.696 / 47.4; 3: 0.874 / 0.931 / 36.5. Rule -> lambda 0.03.
+- Try 1 (lam 0.03, lr 1e-3, 40 epochs, held-out 16 episodes). a = mean gap [95 % CI]:
+  - argmax: ext a 0.991 [0.871, 1.120]; int a 0.951 [0.859, 1.038]; b 48.8 deg/s; c MI 0.152 nats (null 0.032), p 0.001; kappa 0.39 / 0.31 / 2.88 / 0.27 / 0.83.
+  - sampled: ext a 0.846 [0.706, 0.994]; int a 0.839 [0.722, 0.964]; b 47.9; c MI 0.073 (null 0.021), p 0.001.
+- Controls (argmax | sampled; ext a, int a): (i) untrained 0.436 [0.326, 0.553], 0.307 [0.185, 0.436] | -0.050, -0.071 (c p 0.183 sampled); (ii) trained kappa 0 0.803 [0.685, 0.927], 0.757 [0.628, 0.890] | 0.612, 0.615; (iii) untrained kappa at trained means 0.464 [0.321, 0.619], 0.328 [0.189, 0.477] | -0.038, -0.034.
+- Paired (a)_trained - (a)_control, mean [95 % CI], ext | int. argmax: vs (i) 0.555 [0.400, 0.724] | 0.644 [0.513, 0.769]; vs (ii) 0.188 [0.084, 0.298] | 0.193 [0.051, 0.336]; vs (iii) 0.527 [0.327, 0.734] | 0.622 [0.488, 0.760]. Sampled: vs (i) 0.896 | 0.909; vs (ii) 0.234 [0.141, 0.338] | 0.223 [0.145, 0.304]; vs (iii) 0.884 | 0.872 (all intervals above 0).
+- Dopamine (kept, built cleanly): mean |delta| 0.651, sigma_delta 1.854, 1.6 % of blocks with |delta|/sigma >= 2 (rate multiplier at its 2.5 cap), 81.6 % below 0.5 sigma; training-mean rate multiplier about 1.0. Lane: `/secondary/hyst-data/body/m3e/dopamine_lane.npy` is in `try1/`.
+- Learned weight norms on the new cortex inputs (state inputs 8.00): proprioception 1.04, cerebellum pose 0.77, cerebellum error 1.11.
+- Caveats: the loop closes at block rate (cortex decides once per 0.5 s); the cerebellum's continuous run was checked for 12 s only against 60 s episodes; the internal observer sees the same positions as the external one (quantised, roll added), so the two decodings are not independent measures; (a) above 1.0 means the shifted-target loss exceeds the mean-predictor loss by more than the matched loss gain.
+- FOR USER: none. Data `/secondary/hyst-data/body/m3e/` (`chain.json`, `grid_*/`, `try1/`, `try1/controls/`, `unittest.log`).
 
 ## Design, stated before the first recorded run
 
