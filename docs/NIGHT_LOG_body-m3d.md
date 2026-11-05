@@ -49,5 +49,16 @@ Environments: `/secondary/hyst-env/brain` (torch, for the frozen toy cortex and 
 `chain_m3d.py` / `chain_m3d.sh`, one unit `hyst-wo5-m3d-chain-<HHMM>` (9 GB cap, 8 cores): waits for the running grid unit, finishes any missing grid cell, picks lambda by the rule stated above, runs try 1 (40 epochs, lr 1e-3, held-out episodes), and only if try 1 does not pass (a), (b) and (c) in the argmax mode runs try 2.
 **Try 2's one changed engineering setting, named before any run: policy learning rate 1e-3 -> 3e-3** (loss, bar, horizon 8 blocks, tau schedule, observer unchanged). Then the unit tests (`unittest.log`). Output in `/secondary/hyst-data/body/m3d/`: `chain.json` (summary and verdict), `chain.log`, `grid_*/`, `try1/`, `try2/`, `unittest.log`. To resume after an interruption run `bash scripts/body/chain_m3d.sh` again (finished steps are skipped, runs resume from their checkpoints).
 
+## Work order 7: M3d report-only controls (2026-11-05)
+
+Provisional servo model: Feetech STS3215 12 V assumed.
+
+### MORNING SUMMARY (WO7)
+Code done, tests pass (3 new). Run waiting for mains power (`ADP1/online` was 0 at launch); results not yet in.
+
+### Phase 1: code and launch
+`m3d_controls.py` (controls i, ii, iii, plus the trained policy rescored with the identical procedure), kappa override (`kappa_fix` key in the policy dict, `m3d_jax.motor_cortex`), per-episode gaps (`a_gaps`) added to `evaluate`'s result, tests `test_m3d.Controls`. Observer procedure: fresh observer, 600 steps, seed 999, trained on the 16 training episodes rolled out by the scored policy in the scored mode (4 rollouts, keys 100..103), try 1's standardisation. Trained kappa means from `try1/result.json`: 1.405 / 0.425 / 0.278 / 0.454 / 2.017 (identical in both modes).
+Launched `chain_controls.sh` (unit `hyst-wo7-m3d-controls-*`, 14 GB, 8 cores): waits for mains, runs controls, then the full test suite. Output `/secondary/hyst-data/body/m3d/controls/`.
+
 ### Phase 4: results
 Chain (unit hyst-wo5-m3d-chain-0027, 00:27-01:27) finished grid and try 1, wrote `chain.json` (verdict pass), then was OOM-killed at 01:27 in the unit-test step (9 GB cap). Tests rerun in `hyst-wo7-m3d-tests` (14 GB): see the summary. Nothing else was missing.
