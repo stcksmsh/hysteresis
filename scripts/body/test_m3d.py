@@ -76,7 +76,9 @@ class Body(unittest.TestCase):
             k1, k2 = jax.random.split(jax.random.fold_in(key, i))
             logits, g = jax.random.normal(k1, (8,)), jax.random.gumbel(k2, (8,))
             soft = np.asarray(J.gumbel_softmax(logits, g, 0.01))
-            self.assertGreater(soft.max(), 0.999)
+            s = np.sort(np.asarray(logits + g))
+            if s[-1] - s[-2] > 0.05:                                          # a gap under 0.05 is not 'low temperature' for tau = 0.01
+                self.assertGreater(soft.max(), 0.999)
             self.assertEqual(int(soft.argmax()), int(jnp.argmax(logits + g)))
             hard = np.asarray(J.program_weights(logits, g, 0.01, "sample"))
             self.assertEqual(sorted(hard.tolist()), [0.0] * 7 + [1.0])

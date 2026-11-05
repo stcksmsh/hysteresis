@@ -4,7 +4,15 @@ Provisional servo model throughout: Feetech STS3215 12 V assumed (kp, rotor iner
 
 ## MORNING SUMMARY
 
-In progress. Phase 1 (toy states and the differentiable body) done; lambda grid running; unit tests and tries to follow. Nothing here is a result yet.
+Provisional servo model: Feetech STS3215 12 V assumed. **Try 1 passes (a), (b), (c) in both choice modes on 16 held-out toy episodes; try 2 not run (rule).** Toy only; no real run; no claim beyond the toy bar.
+- Grid (tune episodes, 8, 12 epochs, argmax mode): lambda 0.03: (a) +0.437 [0.326, 0.553], (b) 48.8 deg/s; lambda 0.3: (a) +0.612 [0.509, 0.733], (b) 42.8; lambda 3: (a) +0.401 [0.281, 0.555], (b) 18.3. Rule (largest (a) among (b) passes): **lambda 0.3**, frozen.
+- Try 1 (lambda 0.3, lr 1e-3, 40 epochs, horizon 8 blocks, 1,558 s of training compute, 1,614 s with evaluation), held-out episodes, control = the same observer scored against targets circularly shifted by 4 s or more (20 shifts per episode):
+  - argmax: (a) +0.480 [0.422, 0.541] (matched loss 0.792; mean predictor 1.0), (b) 32.95 deg/s (per joint 23.8 / 9.6 / 42.8 / 43.1, roll 36.2), (c) MI 0.536 nats, null mean 0.057, p 0.001. Programs 1135/34/0/0/4/185/418/144 of 1,920 decisions (6 used).
+  - sampled: (a) +0.498 [0.418, 0.583] (matched 0.705), (b) 39.28 deg/s (27.7 / 13.4 / 33.4 / 64.1, roll 40.3), (c) MI 0.0552, null mean 0.0182, p 0.001; 8 programs used, 175-333 each.
+  - kappa (mean, rad/s, per joint) 1.41 / 0.42 / 0.28 / 0.45 / 2.02: the coupling is used (start 0.30).
+- Caveats, not tuned away: arousal and surprisal enter through arcsinh; the physics uses one solver iteration; the argmax program choice is concentrated (one program 59 %) while the sampled one is near uniform, so the sampled MI is small though significant; the observer sees true (unquantised) joint positions; the p floor of 1,000 shuffles is 0.001.
+- Tests: 10 in `test_m3d.py`. First full run (14 GB cap, 802 s): 9 pass, 1 fail (a test flaw: at tau 0.01 two near-tied samples are not low temperature); test fixed to require a 0.05 gap and rerun alone: OK. Peak memory of the tests unit 14.0 GB (cgroup MemoryPeak, includes file cache).
+- FOR USER: none. Data `/secondary/hyst-data/body/m3d/` (toy.npz, grid_*/, try1/, chain.json, unittest.log).
 
 ## Log
 
@@ -40,3 +48,6 @@ Environments: `/secondary/hyst-env/brain` (torch, for the frozen toy cortex and 
 ### Phase 3: chained, detached run (overseer: usage limit coming)
 `chain_m3d.py` / `chain_m3d.sh`, one unit `hyst-wo5-m3d-chain-<HHMM>` (9 GB cap, 8 cores): waits for the running grid unit, finishes any missing grid cell, picks lambda by the rule stated above, runs try 1 (40 epochs, lr 1e-3, held-out episodes), and only if try 1 does not pass (a), (b) and (c) in the argmax mode runs try 2.
 **Try 2's one changed engineering setting, named before any run: policy learning rate 1e-3 -> 3e-3** (loss, bar, horizon 8 blocks, tau schedule, observer unchanged). Then the unit tests (`unittest.log`). Output in `/secondary/hyst-data/body/m3d/`: `chain.json` (summary and verdict), `chain.log`, `grid_*/`, `try1/`, `try2/`, `unittest.log`. To resume after an interruption run `bash scripts/body/chain_m3d.sh` again (finished steps are skipped, runs resume from their checkpoints).
+
+### Phase 4: results
+Chain (unit hyst-wo5-m3d-chain-0027, 00:27-01:27) finished grid and try 1, wrote `chain.json` (verdict pass), then was OOM-killed at 01:27 in the unit-test step (9 GB cap). Tests rerun in `hyst-wo7-m3d-tests` (14 GB): see the summary. Nothing else was missing.
