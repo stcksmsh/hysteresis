@@ -133,6 +133,8 @@ fresh one for verification. (6) `tm3_world` patches `core.N`/`core_b7.BLOCK` on 
 
 **2026-11-05 ~11:20:** WO7 camera (agent 5) verified (v47 cmp 3/3 identical, hyst-compile 102 + hyst-output 18 tests, clippy/fmt clean, Presence 110 s frame inside) and merged; its 720p renders, agent 1's controls and agent 3's parity are all armed to start on mains power (laptop on battery since ~10:45).
 
+**2026-11-05 ~11:35:** WO7 parity (agent 3) verified (traj.npz recomputed: mjx1 vs MuJoCo max angle diff 7.2e-05 / 2.6e-03 / 2.8e-02 / 3.8e-03 / 3.6e-07 deg per joint, <= 6e-14 over the first 10 s, mjxfull 2.3e-13; 8 of 10 trajectories <= 1.1e-13, two diverge only at the elbow limit; tests 4 OK) and merged. Feeds K5 (7.18 point 2).
+
 **Hourly wakeup:** session cron f0f15a81 (fires ~:51 each hour after jitter; explicit resume/OOM-relaunch/handover prompt; dies with the session, recreate after restart). Claude-independent watchdog: systemd timer `hyst-overseer-watchdog.timer` every 15 min appends unit states, failures (oom-kill/exit-code), power and memory to `/secondary/hyst-data/overseer/watch.log` (script `watchdog.sh` there). Old handled failed units were reset-failed 2026-11-05 00:28, so any FAILED line after that is new. 00:25: builders 1, 2, 5 told to chain their remaining long runs into one detached service before the usage limit.
 
 **Wakeups:** set a session cron after restart, e.g. hourly at :23: check agents/branches/units/uptime, resume stalled builders, hand dead ones
