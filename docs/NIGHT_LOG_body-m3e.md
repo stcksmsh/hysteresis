@@ -22,3 +22,8 @@ Builds on M3d (`m3d*.py` unchanged; new behaviour in `m3e*.py`, `export_cb.py`, 
 8. Also reported: dopamine summary, norms of the learned weights per new input group (proprioception 10, cerebellum pose 5, cerebellum error 10), per-joint kappa.
 
 ## Log
+
+### Phase 1: code, tests, smoke, chain launch (2026-11-05)
+- Code: `export_cb.py`, `m3e_jax.py`, `m3e.py`, `run_m3e.py`, `m3e_controls.py`, `chain_m3e.py/.sh`, `test_m3e.py` (12 tests, all pass; cerebellum parity max abs 1.70e-4 against the 2e-4 tolerance).
+- Smoke (not a result; 1 epoch, lambda 0.3, tune episodes, unit hyst-wo8-m3e-smoke1): calibration E0 0.456 J/block, untrained RMS speed 65.1 (M3d: 0.476, 65.7: the zero-weight closed loop is inert at the start). Epoch 209 s including compile. Argmax tune: external (a) +0.793, internal (a) +0.639; sampled both negative. Dopamine after one epoch: mean |delta| 1.24, sigma 3.15, 3 % of blocks clipped. New-input weight norms after one epoch 0.16 / 0.10 / 0.15 (proprio / pose / error) against 7.9 for the state inputs. Nothing is concluded from it.
+- Launched `chain_m3e.sh` (unit hyst-wo8-m3e-chain-1213, 14 GB, 8 cores): grid, try 1, try 1 controls, try 2 (lr 3e-3) and controls only if try 1 fails the argmax external bar, then tests. Output `/secondary/hyst-data/body/m3e/` (`chain.json`, `grid_*/`, `try1/`, `try1/controls/`).
