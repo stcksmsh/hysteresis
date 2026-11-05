@@ -131,6 +131,8 @@ fresh one for verification. (6) `tm3_world` patches `core.N`/`core_b7.BLOCK` on 
 
 **2026-11-05 ~10:00:** planner answered WO6 = BRAIN_SPEC 7.18 (body da08b4e). Work order 7 prompts on body: `BUILDER_PROMPT_WO7_M3D_CONTROLS.md` (agent 1), `_WO7_PARITY.md` (agent 3, branch body-parity), `_WO7_CAMERA.md` (agent 5, body-tuning). The K5 real-run prompt is written after the controls report (7.18 point 2: controls first). Sent 2026-11-05 ~11:05 to fresh agents 1, 3, 5 (notify_when_idle). Hourly cron now 2a6f5721 (WO7 prompt).
 
+**2026-11-05 ~11:20:** WO7 camera (agent 5) verified (v47 cmp 3/3 identical, hyst-compile 102 + hyst-output 18 tests, clippy/fmt clean, Presence 110 s frame inside) and merged; its 720p renders, agent 1's controls and agent 3's parity are all armed to start on mains power (laptop on battery since ~10:45).
+
 **Hourly wakeup:** session cron f0f15a81 (fires ~:51 each hour after jitter; explicit resume/OOM-relaunch/handover prompt; dies with the session, recreate after restart). Claude-independent watchdog: systemd timer `hyst-overseer-watchdog.timer` every 15 min appends unit states, failures (oom-kill/exit-code), power and memory to `/secondary/hyst-data/overseer/watch.log` (script `watchdog.sh` there). Old handled failed units were reset-failed 2026-11-05 00:28, so any FAILED line after that is new. 00:25: builders 1, 2, 5 told to chain their remaining long runs into one detached service before the usage limit.
 
 **Wakeups:** set a session cron after restart, e.g. hourly at :23: check agents/branches/units/uptime, resume stalled builders, hand dead ones
