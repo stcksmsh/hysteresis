@@ -11,6 +11,10 @@ Checkpoint after every round, atomic (temp file, fsync, rename; the previous kep
 Tests (WO10 1b): `test_k5_run` (real units: start, freeze, thaw, stop, start again; interrupted vs uninterrupted agree to 1e-9; found max difference 4.0e-12), `test_k5_train` 9 OK (in-process resume bit-identical).
 **Finding**: two UNINTERRUPTED runs of the same command in separate processes give one of two reproducible results that differ by 4.0e-12 (float64 summation order in XLA CPU; alternates run to run on a quiet machine, same with PYTHONHASHSEED fixed). So bit-identity across processes is not available even without a stop; in one process a resume is bit-identical. FOR OVERSEER.
 
+## K5 validation curve (WO10)
+
+- round 200 (3,200 windows), compute 2.81 h: ext (a) 0.5585 [0.523, 0.595], int (a) 0.510, b 40.1 deg/s. Best so far.
+
 # WO9: the K5 trainer and the Kaggle check (2026-11-05)
 
 Provisional servo model throughout: Feetech STS3215 12 V assumed. The installation is ONE arm. **K5 training was NOT launched.**
