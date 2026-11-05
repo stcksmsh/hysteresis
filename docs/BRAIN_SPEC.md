@@ -887,3 +887,25 @@ Binding. They answer `docs/PLANNER_BRIEF_WO5_RESULTS.md`.
    (`docs/BODY_BRAIN_PLAN.md` §10).
 5. **Self-surprisal** is offered in the authoring tool as a mechanism-named lane ("cerebellum: prediction error of its own arm"), no claim.
 6. **mindState v2 grouping** (bands / surprise / neuromod) is accepted.
+
+### 7.18 Rulings on work order 6, 2026-11-05, via planner
+
+Binding. They answer `docs/PLANNER_BRIEF_WO6_RESULTS.md`.
+
+1. **M3d controls, report only** (same 16 held-out episodes, same observer procedure, no retraining, not a try):
+   (i) untrained motor cortex (initial weights, kappa as initialised); (ii) trained motor cortex with kappa forced to 0; (iii) untrained motor
+   cortex with kappa fixed at the trained per-joint means (isolates the phase coupling). Report (a), (b), (c) for each, plus
+   (a)_trained − (a)_control with a paired interval. The toy pass stands as written.
+   **Recorded design flaw (planner's):** the M3d toy bar could be met by any state-driven mapping.
+2. **The real M3d run (K5), fixed now, before it starts; it starts after the controls of point 1:**
+   - State: B7 epoch 6 lanes on training-artist songs; held-out songs for the check; the three danced songs for the user's eye.
+   - **K5 passes only if** held-out decoding beats BOTH the time-shifted control AND the untrained-policy control (paired per-song bootstrap
+     intervals above 0).
+   - The claim "it learned to move so that its inner state can be read from its body" needs both. If it beats only the shifted control, the
+     allowed wording is "its movement is driven by its inner state", with no "learned".
+   - Before training: an MJX one-iteration vs full-MuJoCo parity check on 60 s trajectories (report the joint differences).
+   - The fallback mapping's videos are kept as the comparison for the user's eye.
+3. **Memory is closed for this plan;** nothing from H1–H4 joins the arm. Corrected baselines: the true cortex-only control is 1.000 for H3 and
+   H4 (H3's reported 0.881 | 0.656 | 0.566 was a 50 % blend, mislabelled). The H4 diagnostic shows retrieval replaying wrong sources, so the
+   partial ratio drops are mostly averaging two noisy predictors, not recall.
+4. **Design fix:** camera framing. In Presence at 110 s the hand leaves the top edge of the view; widen or re-aim the camera for all renders.
