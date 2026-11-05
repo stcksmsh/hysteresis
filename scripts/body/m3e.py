@@ -148,10 +148,12 @@ def _critic_step(V, st, x, r, w):
     return V, st, l
 
 
-def rollout(fns, C, P, toy, idx, mode, key, chunk_blocks, seed_start):
-    """Full episodes, no gradient, hard choices. -> dict of numpy arrays (E, NB, ...)."""
+def rollout(fns, C, P, toy, idx, mode, key, chunk_blocks, seed_start, reset_every=None):
+    """Full episodes, no gradient, hard choices. -> dict of numpy arrays (E, NB, ...). reset_every (blocks): diagnostic, zero the cerebellum state every that many blocks."""
     n = len(range(*idx.indices(len(toy.y)))) if isinstance(idx, slice) else len(idx)
     inps = toy.inputs(idx, key)
+    if reset_every:
+        inps["cb_reset"] = jnp.asarray(np.broadcast_to((np.arange(NB) % reset_every == 0).astype(float), (n, NB)).copy())
     carry = jax.vmap(lambda q: M.init_carry(q, C))(jnp.asarray(m3d.start_poses(n, seed_start)))
     outs = []
     for c0 in range(0, NB, chunk_blocks):

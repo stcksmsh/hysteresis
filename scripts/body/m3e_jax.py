@@ -93,7 +93,9 @@ def init_carry(q0, C):
 
 def block_fn(C, P, mode, tau, carry, inp):
     """One 0.5 s block of one episode, closed loop. inp: x (16), phi0, om0, g (8). -> carry, out (as J.block_fn plus idesc (37), xin (41), feat (25))."""
-    xin = jnp.concatenate([inp["x"], carry["feat"] * C.get("loop_gate", 1.0)])         # "loop_gate" 0.0 in C: the closed-loop inputs are cut (ablation A1); absent = 1
+    if "cb_reset" in inp:                                                                  # diagnostic only (WO9 Part 1): zero the cerebellum's GRU state at flagged blocks
+        carry = {**carry, "cb": {**carry["cb"], "h": carry["cb"]["h"] * (1.0 - inp["cb_reset"])}}
+    xin = jnp.concatenate([inp["x"], carry["feat"] * C.get("loop_gate", 1.0)])        # "loop_gate" 0.0 in C: the closed-loop inputs are cut (ablation A1); absent = 1
     logits, amod, kappa = J.motor_cortex(P, xin)
     pi = J.program_weights(logits, inp["g"], tau, mode)
     u = jnp.clip(pi @ jax.nn.sigmoid(P["theta"]) + J.MOD * jnp.tanh(amod), 0, 1).reshape(4, 5)
