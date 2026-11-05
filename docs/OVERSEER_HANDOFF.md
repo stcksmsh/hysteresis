@@ -129,6 +129,8 @@ fresh one for verification. (6) `tm3_world` patches `core.N`/`core_b7.BLOCK` on 
 
 **2026-11-05 ~05:30:** M3d verified (test_m3d 10/10 rerun by overseer, numbers re-read from try1/result.json, no rules docs touched), merged body-m3d 3b8ef08. Try 1 passes the toy bar in both modes. Brief `docs/PLANNER_BRIEF_WO6_RESULTS.md` sent: Q1 report-only controls (untrained motor cortex, kappa = 0) before accepting; Q2 real M3d run after; Q3 memory closed + WO4 H3-control correction. All WO6 orders done; agents 1-5 idle.
 
+**2026-11-05 ~10:00:** planner answered WO6 = BRAIN_SPEC 7.18 (body da08b4e). Work order 7 prompts on body: `BUILDER_PROMPT_WO7_M3D_CONTROLS.md` (agent 1), `_WO7_PARITY.md` (agent 3, branch body-parity), `_WO7_CAMERA.md` (agent 5, body-tuning). The K5 real-run prompt is written after the controls report (7.18 point 2: controls first). Not sent until the user says.
+
 **Hourly wakeup:** session cron f0f15a81 (fires ~:51 each hour after jitter; explicit resume/OOM-relaunch/handover prompt; dies with the session, recreate after restart). Claude-independent watchdog: systemd timer `hyst-overseer-watchdog.timer` every 15 min appends unit states, failures (oom-kill/exit-code), power and memory to `/secondary/hyst-data/overseer/watch.log` (script `watchdog.sh` there). Old handled failed units were reset-failed 2026-11-05 00:28, so any FAILED line after that is new. 00:25: builders 1, 2, 5 told to chain their remaining long runs into one detached service before the usage limit.
 
 **Wakeups:** set a session cron after restart, e.g. hourly at :23: check agents/branches/units/uptime, resume stalled builders, hand dead ones
