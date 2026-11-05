@@ -218,12 +218,12 @@ def evaluate(fns, P, O, stats, toy, which, chunk_blocks, key_seed=7, start_seed=
         prog = r["pi"].argmax(-1)
         mi, p, null_mean = mi_with_shuffles(prog[:, 1:], ybins[:, :-1])
         cnt = np.bincount(prog.ravel(), minlength=J.K_PROG)
-        res[mode] = {"a_gap_mean": float(gaps.mean()), "a_ci": [lo, hi], "a_pass": bool(lo > 0), "matched_loss": float(matched.mean()),
+        res[mode] = {"a_gap_mean": float(gaps.mean()), "a_ci": [lo, hi], "a_pass": bool(lo > 0), "a_gaps": gaps.tolist(), "matched_loss": float(matched.mean()),
                      "b_rms_nonroll": float(np.sqrt(ms[..., NON_ROLL].mean())), "b_per_joint": np.sqrt(ms.mean((0, 1))).tolist(),
                      "b_pass": bool(np.sqrt(ms[..., NON_ROLL].mean()) >= 10.0),
                      "c_mi": mi, "c_p": p, "c_null_mean": null_mean, "c_pass": bool(p < 0.01), "program_counts": cnt.tolist(),
                      "programs_used": int((cnt > 0).sum()), "kappa_mean": r["kappa"].mean((0, 1)).tolist(), "energy_per_block": float(r["energy"].mean())}
-        log(f"eval {which} {mode}: " + str({k: (round(v, 4) if isinstance(v, float) else v) for k, v in res[mode].items() if k not in ("b_per_joint", "kappa_mean")}))
+        log(f"eval {which} {mode}: " + str({k: (round(v, 4) if isinstance(v, float) else v) for k, v in res[mode].items() if k not in ("b_per_joint", "kappa_mean", "a_gaps")}))
     return res
 
 
