@@ -48,6 +48,11 @@ You are the overseer for Hysteresis. You do not implement. You:
 
 ## Lessons (keep them)
 
+- **Overseer lessons 2026-11-05:** builders must push their branch before any long run (nudge within 45 min); a unit that "succeeds" can hide a
+  crashed step (read its log, not its status); verify by recomputing paired intervals from saved per-episode values; prompts reuse the header
+  block of the latest `docs/BUILDER_PROMPT_WO*.md` (replace the unit prefix); builders wait for mains power by an armed unit that polls
+  `/sys/class/power_supply/ADP1/online`; the user forgets the charger: PushNotification on power=0.
+
 - **ONE arm, permanently (user, 2026-11-05).** Never write prompts, plans or briefs with multiple arms, hexagon or ensemble items, even if the planner asks; correct the planner instead.
 
 - **Every long job runs in its own memory cap.** Two ways:
@@ -85,7 +90,51 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## Where things stand (2026-11-05 ~00:00)
+## Where things stand (2026-11-05 ~17:30, written before an overseer restart)
+
+**Goal (user, BRAIN_SPEC 7.19):** a scale human, ONE arm. The brain's own encodings (B7 epoch 6 lanes) drive it, no emotion decoding. It learns to
+move so that its inner state can be read from its body. Every mechanism shown or claimed is in the loop that moves the arm, or is a labelled data
+lane. ARGMAX mode for every claim (sampled reported only). The installation is ONE arm, permanently (no hexagon, no ensemble; v47 hexagon files
+are only the byte-identical regression reference).
+
+**Rules of record:** `docs/BRAIN_SPEC.md` §7.17–7.21 (read all five first; 7.19 = goal, K5 bar and claims; 7.20 = K5 compute and ablation
+wording; 7.21 = seed-2 credit rule). Branch of record `body`; `keys-decide` = body + overseer docs. Never master.
+
+**Done and merged (all verified by the overseer):**
+- Fallback (authoring tool on B7 lanes, one arm): tuning loop `scripts/author/retune.sh` + page button; camera frames the whole reach; whole-song
+  videos (720p in `/secondary/hyst-data/brain/author/tuning/720p-cam/`) sent to the user, **verdict and mapping tuning by eye still the user's**.
+- Memory closed (H1–H4). M3/M3b/M3c closed. M3d toy passed but its bar was met by an untrained mapping (planner's recorded flaw).
+- **M3e toy (closed loop + cerebellum inputs, dopamine gating, causal 30 s normalisation, internal observer): try 1 passes, argmax external
+  (a) 0.991, internal 0.951, beats untrained by 0.555 / 0.644 and kappa 0 by 0.188 / 0.193.** Ablations (one seed): none credited, all
+  "present". 60 s cerebellum: no state drift.
+- K5 data (`/secondary/hyst-data/body/k5/`: splits, B7 lanes, 15,624 train / 1,071 check windows), K5 trainer + eval (`scripts/body/k5_*.py`),
+  speed check: laptop 17.4 h per try (Kaggle T4 7.4x slower at this recipe).
+
+**Running now:**
+- **Agent 3: K5 try 1 on the laptop** (`docs/BUILDER_PROMPT_WO10_K5_RUN.md`, branch `body-k5train`, last pushed 2793701 at 16:10). At 17:30 it
+  was still testing pause/stop (units `hyst-wo10-k5test-*`), not launched; its K5 run units will be `hyst-wo10-*`, data
+  `/secondary/hyst-data/body/k5/run1/`. **User requirement:** pausable (`systemctl --user freeze/thaw <unit>`) and stoppable
+  (`systemctl --user stop`, graceful save) at any moment, resume without loss; commands in `scripts/body/K5_RUN.md` once agent 3 writes them.
+  **If the user paused or stopped it, do not restart it unless the user asks.** About 17 h of compute; mains power only. If agent 3 has not
+  launched by ~18:30, nudge it.
+- Agents 1, 2, 4, 5 idle.
+
+**Next, in order:**
+1. K5 finishes → verify (recompute the K5 table from saved per-song values; check `best.pkl` is what was scored; the verdict per 7.19 C with
+   the 7.20 point 3 wording), send the user the three danced-song videos from `best.pkl` next to the fallback ones, write
+   `docs/PLANNER_BRIEF_K5_RESULTS.md`.
+2. Then send agent 1 `docs/BUILDER_PROMPT_WO11_SEED2.md` (seed 2 of try 1 and A1–A3; never while K5 runs), apply the 7.21 credit rule.
+3. If K5 try 1 fails: try 2 may change only what the failure names (7.21 point 4).
+
+**Planner briefs:** WO5–WO9 sent and answered (7.17–7.21). No brief pending.
+
+**Hourly check:** session cron prompt (recreate after a restart with CronCreate, `23 * * * *`): check watch.log, units, branches, ListAgents;
+resume stalled builders ("Usage limit reset or stall ..."), relaunch OOM/crashed units with more memory (under 22 GB total), hand a dead
+builder's order to agent 2 then 4, verify finished work, PushNotification on battery. Claude-independent watchdog: systemd timer
+`hyst-overseer-watchdog.timer` every 15 min → `/secondary/hyst-data/overseer/watch.log` (script `watchdog.sh` there).
+
+### History of 2026-11-04/05 (dated notes, oldest first)
+
 
 **Plan:** `docs/BODY_BRAIN_PLAN.md` version 2 plus the dated rulings in `docs/BRAIN_SPEC.md` §7.11–7.16 (read 7.14, 7.15, 7.16 first:
 they replace parts of the plan). Branch of record: `body` (pushed); `keys-decide` = body + overseer docs. Never master.
@@ -172,14 +221,13 @@ to blank agents, verify finished ones.
 
 ## Open with the user
 
-- The planner's answer on B7 (above).
-- The B3 round-2 rulings text, if it exists.
-- The watch verdict on `$D/watch/`.
-- When to start the authoring tool. Also the blind second viewer (ruled as advice only, informal protocol in NEXT_DECODER §2): the user may bring someone in.
-- **Housekeeping, only when the user says:**
-  - deleting merged branches: py-analyze, d3-layered, a-spread, b-clock, b1-pulse, b2-core, author-map, b3-corpus, b3-train, b3-pac, b3-round2, b7;
-  - fast-forwarding master;
-  - the stale comments in `workspace.rs` and `lib.rs`.
+- The fallback videos (one arm, new camera): the user's verdict, and tuning the mapping by eye in the authoring tool.
+- The monitor build waits for the user's choice of the planner's mockups; it shows only mechanisms in the loop plus labelled data lanes (7.19 D).
+- The trace viewer `/secondary/hyst-data/brain/braindump/instant-crush.view.html` was never opened in a browser.
+- Kaggle large-batch recipe: only as engineering, only if it first reproduces the toy result (7.21 point 4).
+- **Housekeeping, only when the user says:** deleting merged branches (py-analyze, d3-layered, a-spread, b-clock, b1-pulse, b2-core, author-map,
+  b3-corpus, b3-train, b3-pac, b3-round2, b7, body-h1..h4, body-m1m3, body-m3b, body-m3c, body-z, body-h2show, body-reeval, body-fallback,
+  body-parity, body-k5data, body-tuning); fast-forwarding master; stale comments in `workspace.rs` and `lib.rs`.
 
 ## First reply
 
