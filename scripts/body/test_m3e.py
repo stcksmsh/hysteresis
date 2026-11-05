@@ -156,5 +156,60 @@ class ClosedLoop(unittest.TestCase):
         self.assertGreater(float(jnp.abs(g["w1"][16:26]).max()), 0.0)
 
 
+class Ablations(unittest.TestCase):
+    def test_defaults_reproduce_try1(self):
+        """Reference loss and gradient norm recorded with the try-1 code (before the ablation switches existed) at fixed inputs."""
+        ref = np.load(REF_LOSS)
+        l, gn = _loss_probe()
+        self.assertAlmostEqual(l, float(ref["loss"]), delta=1e-9 * abs(float(ref["loss"])))
+        self.assertAlmostEqual(gn, float(ref["gnorm"]), delta=1e-9 * float(ref["gnorm"]))
+
+    def test_switches_change_what_they_name(self):
+        ref = np.load(REF_LOSS)
+        l_noint, _ = _loss_probe(internal=False)
+        self.assertLess(l_noint, float(ref["loss"]) - 0.1)                                   # the internal decoding term is gone
+        l_open, _ = _loss_probe(loop_gate=0.0)
+        self.assertNotAlmostEqual(l_open, float(ref["loss"]), places=6)                       # cutting the loop changes the cortex (non-zero closed-loop weights)
+        l_g, gn_g = _loss_probe(gate=False)
+        self.assertAlmostEqual(l_g, float(ref["loss"]), delta=1e-9 * abs(float(ref["loss"])))   # gating acts on the update, not on the loss
+
+    def test_cerebellum_error_outputs_are_finite(self):
+        C = M.load_cb()
+        P = M.init_policy(jax.random.PRNGKey(0))
+        c = M.init_carry(np.array([0.0, -55.0, 35.0, 5.0, 0.0]), C)
+        inp = {"x": jnp.zeros(16), "phi0": 0.0, "om0": 0.0, "g": jnp.zeros(8)}
+        c, o = M.block_fn(C, P, "argmax", 0.0, c, inp)
+        c, o = M.block_fn(C, P, "argmax", 0.0, c, inp)
+        self.assertTrue(np.isfinite(float(o["cb_sq"])) and np.isfinite(float(o["cb_nll"])))
+
+
+REF_LOSS = "/secondary/hyst-data/body/m3e/ref_default_loss.npz"
+
+
+def _loss_probe(loop_gate=None, **flags):
+    """Loss and gradient norm of one 8-block chunk of 2 training episodes at fixed fake statistics: the try-1 default path (flags: Trainer's ablation switches)."""
+    import m3e
+    toy = m3e.ToyE("/secondary/hyst-data/body/m3d/toy.npz")
+    C = M.load_cb()
+    if loop_gate is not None:
+        C = {**C, "loop_gate": jnp.asarray(loop_gate)}
+    t = m3e.Trainer(toy, C, 0.03, 1e-3, 40, **flags)
+    fns = t.fns
+    idx = np.arange(2)
+    inps = toy.inputs(idx, jax.random.PRNGKey(3))
+    carry = jax.vmap(lambda q: M.init_carry(q, t.C))(jnp.asarray(m3e.m3d.start_poses(2, 100)))
+    # a nonzero closed-loop weight so the switch has something to cut
+    P = {**t.P, "w1": t.P["w1"].at[16:].set(0.05)}
+    S = dict(dmu=np.zeros(31), dsd=np.ones(31), imu=np.zeros(37), isd=np.ones(37))
+    (l, _), g = fns["loss"](P, t.obs["A"][0], t.obs["A"][1], carry, m3e.m3d.take(inps, 8, 16), jnp.asarray(toy.yz[idx])[:, 8:16], m3e.valid_mask(8, 8, 2), 0.5, 0.03, 1.0, S["dmu"], S["dsd"], S["imu"], S["isd"])
+    gn = float(jnp.sqrt(sum((x ** 2).sum() for x in jax.tree_util.tree_leaves(g))))
+    return float(l), gn
+
+
+def write_ref():
+    l, gn = _loss_probe()
+    np.savez(REF_LOSS, loss=l, gnorm=gn)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -124,7 +124,7 @@ def adam_step_mult(P, g, st, lr, mult, clip=1.0, b1=0.9, b2=0.999):
 
 
 # ---------------------------------------------------------------------------------------------------------------- jitted pieces
-def make_fns(C):
+def make_fns(C, internal=True):
     def loss_fn(P, Oe, Oi, carry, inps, yz, valid, tau, lam, e0, dmu, dsd, imu, isd):
         Oe, Oi = jax.lax.stop_gradient(Oe), jax.lax.stop_gradient(Oi)
         carry, o = M.chunk(C, P, "train", tau, carry, inps)
@@ -133,7 +133,7 @@ def make_fns(C):
         n = jnp.maximum(valid.sum(), 1.0)
         Le, Li = (de * valid).sum() / n, (di * valid).sum() / n
         en = (o["energy"] * valid).sum() / n / e0
-        return Le + Li + lam * en, (carry, {"dec_e": Le, "dec_i": Li, "en": en, "de": de, "xin": o["xin"], "desc": o["desc"], "idesc": o["idesc"], "ms": o["ms"], "pi": o["pi"], "kappa": o["kappa"]})
+        return Le + (Li if internal else 0.0) + lam * en, (carry, {"dec_e": Le, "dec_i": Li, "en": en, "de": de, "xin": o["xin"], "desc": o["desc"], "idesc": o["idesc"], "ms": o["ms"], "pi": o["pi"], "kappa": o["kappa"]})
 
     hard = {m: jax.jit(lambda P, carry, inps, m=m: M.chunk(C, P, m, 0.0, carry, inps)) for m in ("argmax", "sample")}
     return {"loss": jax.jit(jax.value_and_grad(loss_fn, has_aux=True)), "hard": hard}
@@ -225,9 +225,10 @@ def score_policy(fns, C, P, toy, stats, which, chunk_blocks, rolldir=None, name=
 
 # ---------------------------------------------------------------------------------------------------------------- training
 class Trainer:
-    def __init__(self, toy, C, lam, lr, epochs, chunk_blocks=8, seed=0, dopamine=True, log=print):
+    def __init__(self, toy, C, lam, lr, epochs, chunk_blocks=8, seed=0, dopamine=True, log=print, gate=True, internal=True):
         self.toy, self.C, self.lam, self.lr, self.epochs, self.cb, self.log, self.dopamine = toy, C, lam, lr, epochs, chunk_blocks, log, dopamine
-        self.fns = make_fns(C)
+        self.gate = gate                                  # False: the critic still trains but its delta does not scale the rate (ablation A2)
+        self.fns = make_fns(C, internal)                   # internal False: the internal decoding is not in the loss (ablation A3)
         key = jax.random.PRNGKey(seed)
         self.key, k1, k2, k3, k4, k5, k6 = jax.random.split(key, 7)
         self.P = M.init_policy(k1)
@@ -299,7 +300,7 @@ class Trainer:
                         Vp = np.asarray(critic_apply(self.V, x))
                         delta = (R - Vp)[:, mask]
                         sigma = self.sd.update(float((delta ** 2).mean()))
-                        mult = rate_multiplier(delta, sigma)
+                        mult = rate_multiplier(delta, sigma) if self.gate else 1.0
                         acc["absd"].append(float(np.abs(delta).mean()))
                         acc["clip"].append(float((np.abs(delta) / sigma >= 2.0).mean()))
                         w = jnp.asarray(np.broadcast_to(mask, R.shape).astype(float))
