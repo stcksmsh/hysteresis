@@ -121,6 +121,14 @@ class ClosedLoop(unittest.TestCase):
         for a, b in zip(out, ref):
             np.testing.assert_allclose(np.asarray(a), np.asarray(b), atol=1e-12)
 
+    def test_controls_initial_policy_is_the_trainers(self):
+        import m3e
+        import m3e_controls
+        from types import SimpleNamespace
+        t = m3e.Trainer(SimpleNamespace(n_train=16), M.load_cb(), 0.3, 1e-3, 1)
+        for a, b in zip(jax.tree_util.tree_leaves(m3e_controls.initial_policy()), jax.tree_util.tree_leaves(t.P)):
+            np.testing.assert_array_equal(np.asarray(a), np.asarray(b))
+
     def test_quantisation_is_straight_through(self):
         q = jnp.array([0.30, -41.37])
         v = M.quantise_st(q)
