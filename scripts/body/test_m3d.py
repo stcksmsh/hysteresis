@@ -150,5 +150,39 @@ class Statistics(unittest.TestCase):
         self.assertEqual(sorted(set(bins.ravel().tolist())), list(range(16)))
 
 
+class Controls(unittest.TestCase):
+    """WO7 controls: kappa override, the initial policy, the paired difference."""
+
+    def test_kappa_override(self):
+        import m3d_controls as C
+        P = J.init_policy(jax.random.PRNGKey(5))
+        x = jnp.linspace(-1, 1, J.D_IN)
+        plain = J.motor_cortex(P, x)
+        self.assertTrue((plain[2] > 0).all())
+        for fix in (np.zeros(5), np.array([1.41, 0.42, 0.28, 0.45, 2.02])):
+            lg, am, k = J.motor_cortex(C.with_kappa(P, fix), x)
+            np.testing.assert_array_equal(np.asarray(k), fix)
+            np.testing.assert_array_equal(np.asarray(lg), np.asarray(plain[0]))        # everything but kappa untouched
+            np.testing.assert_array_equal(np.asarray(am), np.asarray(plain[1]))
+        self.assertNotIn("kappa_fix", P)
+
+    def test_initial_policy_is_the_trainers(self):
+        import m3d_controls as C
+        from types import SimpleNamespace
+        t = m3d.Trainer(SimpleNamespace(n_train=16), 0.3, 1e-3, 1)
+        for a, b in zip(jax.tree_util.tree_leaves(C.initial_policy()), jax.tree_util.tree_leaves(t.P)):
+            np.testing.assert_array_equal(np.asarray(a), np.asarray(b))
+
+    def test_paired_difference(self):
+        import m3d_controls as C
+        ctrl = np.array([0.1, 0.2, 0.3, 0.4])
+        r = C.paired_difference(ctrl + 0.5, ctrl)
+        self.assertAlmostEqual(r["mean"], 0.5)
+        np.testing.assert_allclose(r["ci"], [0.5, 0.5])                 # constant difference: no spread although the episodes differ
+        r = C.paired_difference([1.0, -1.0, 1.0, -1.0], np.zeros(4))
+        self.assertAlmostEqual(r["mean"], 0.0)
+        self.assertTrue(r["ci"][0] < 0 < r["ci"][1])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -187,7 +187,8 @@ def init_policy(key, hidden=64):
 def motor_cortex(P, x):
     h = jnp.tanh(x @ P["w1"] + P["b1"])
     o = h @ P["w2"] + P["b2"]
-    return o[:K_PROG], o[K_PROG:K_PROG + 20], KAPPA_MAX * jax.nn.sigmoid(o[K_PROG + 20:])
+    kappa = P["kappa_fix"] if "kappa_fix" in P else KAPPA_MAX * jax.nn.sigmoid(o[K_PROG + 20:])     # "kappa_fix" (5,) rad/s: report-only control override (WO7)
+    return o[:K_PROG], o[K_PROG:K_PROG + 20], kappa
 
 
 def gumbel_softmax(logits, g, tau, hard=False):
