@@ -909,3 +909,49 @@ Binding. They answer `docs/PLANNER_BRIEF_WO6_RESULTS.md`.
    H4 (H3's reported 0.881 | 0.656 | 0.566 was a 50 % blend, mislabelled). The H4 diagnostic shows retrieval replaying wrong sources, so the
    partial ratio drops are mostly averaging two noisy predictors, not recall.
 4. **Design fix:** camera framing. In Presence at 110 s the hand leaves the top edge of the view; widen or re-aim the camera for all renders.
+
+### 7.19 Rulings and next order, 2026-11-05 (user + planner)
+
+Binding. They answer `docs/PLANNER_BRIEF_WO7_RESULTS.md`. Build in the order given.
+
+**Goal (user):** a scale human, one arm. The brain's own encodings drive it (no emotion decoding). It learns to move so that its inner state
+can be read from its body. Every mechanism shown or claimed must be in the loop that moves the arm, or be a labelled data lane.
+
+**A. Rulings on the WO7 brief**
+1. K5 bar as in 7.18 point 2 (beat both the time-shifted and the untrained-policy control). Wording rule: any "moves in time with its inner
+   rhythm" / phase-locking wording only if the trained policy also beats the kappa = 0 version, paired interval above 0, in the mode that runs.
+2. Mode, chosen by the user before any K5 result: **ARGMAX** (steady, state-driven selection). Every claim applies to argmax; sampled is
+   reported only. Reason: in the toy, argmax choice carries about 10× more information about the inner state (MI 0.536 vs 0.055 nats);
+   near-random switching reads as noise.
+3. K5 size: training on all training-artist songs except the validation artists (no held-out artist in training or tuning); 60 s windows; B7
+   epoch-6 lanes as the state. Check on all 357 held-out songs, three 60 s windows per song (starting at 25 %, 50 %, 75 %), per-song paired
+   bootstrap, 10,000 resamples. Two tries, 8 h box each, laptop; Kaggle via run_job if the projection exceeds 8 h.
+4. Every K5 number (trained and controls) uses the WO7 controls' observer procedure (fresh observer per scored policy, hard rollouts of the
+   fixed policy). Try 1's warm-started (a) = 0.480 is superseded.
+
+**B. Changes before the real run** (they change training, so first ONE toy rerun under the same toy bar, two tries, with the WO7 controls
+reported again)
+1. Closed loop: the motor cortex also receives proprioception (quantised, delayed 10 ms, roll included) and the cerebellum's predicted pose and
+   prediction error (K1 round-2 bundle, frozen). Zero-initialised input weights.
+2. Dopamine made real: a critic predicts the next 2 s of legibility from the motor cortex's input; δ = realised − predicted. |δ| scales the
+   learning rate of the basal-ganglia selection parameters: base rate × (0.5 + clip(|δ|/σ_δ, 0, 2)), σ_δ a running SD. Export δ as the
+   dopamine lane. If this cannot be built cleanly, dopamine is removed from the monitor and the story.
+3. Causal normalisation: all inner-state inputs and targets z-scored with running statistics over the past 30 s. No whole-episode statistics
+   anywhere in the arm's loop.
+4. Self-observer: a second observer inside the brain decodes the same inner-state targets from proprioception alone (quantised, delayed, roll
+   included), cross-fitted like the external one (which sees the 31 visible descriptors, no roll). Loss = external decoding loss + internal
+   decoding loss − λ·energy, equal weights, fixed now. Report both decodings and the WO7 controls for each.
+
+**C. Real run (after the toy rerun passes)**
+- As in A.3. The three danced songs rendered with the new camera, next to the fallback videos, for the user's eye.
+- Claims:
+  - external and internal both pass K5: "It learned to move so that both it and you can read its inner state from its body."
+  - only the external passes: "It learned to move so that its inner state can be read from its body."
+  - beats only the shifted control: "Its movement is driven by its inner state" (no "learned").
+- If the toy rerun or the real run fails twice: the authoring fallback drives the arm for good.
+
+**D. Standing**
+- Dropped and closed: hippocampus (H1–H4), B1 pulse, M3/M3b (prediction-gain reward), emotion decoding as driver, ignition events, the ensemble.
+- Data lanes only (labelled, no claim): self-similarity, self-surprisal, per-layer synchrony.
+- The monitor shows only mechanisms in the loop plus labelled data lanes.
+- Provisional servo model stated in every body result. No spending. No attribution lines.
