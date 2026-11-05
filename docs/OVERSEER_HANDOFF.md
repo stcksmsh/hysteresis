@@ -235,3 +235,10 @@ In a few lines:
 - the state you found: git, running units (`systemctl --user list-units | grep hyst`), what is merged;
 - what you are waiting for;
 - what you need from the user.
+
+**2026-11-05 ~17:15:** K5 try 1 LAUNCHED by agent 3 (unit `hyst-wo10-k5run`, 6 threads, 8 GB cap, data `/secondary/hyst-data/body/k5/run1/`,
+branch body-k5train 8092e21). Commands in `scripts/body/K5_RUN.md`: freeze/thaw/stop the unit; restart with
+`.claude/worktrees/body-k5train/scripts/body/k5_run.sh start` (also after a reboot). Stops at the 24 h compute box, then k5_eval on best.pkl.
+Deviation reported: cross-process runs differ by 4.0e-12 (XLA CPU float64 summation order); in-process resume bit-identical; test tolerance 1e-9.
+Agent 3 reports at each validation (first ~round 200, ~3.4 h compute) and at the end. Planner WO9 rulings already in 7.21 (user re-pasted, matches).
+Overseer watches with Monitor (watch_unit.sh), hourly cron at :23.
