@@ -242,3 +242,8 @@ branch body-k5train 8092e21). Commands in `scripts/body/K5_RUN.md`: freeze/thaw/
 Deviation reported: cross-process runs differ by 4.0e-12 (XLA CPU float64 summation order); in-process resume bit-identical; test tolerance 1e-9.
 Agent 3 reports at each validation (first ~round 200, ~3.4 h compute) and at the end. Planner WO9 rulings already in 7.21 (user re-pasted, matches).
 Overseer watches with Monitor (watch_unit.sh), hourly cron at :23.
+
+**2026-11-06 06:35:** K5 try 1 training pass complete (977/977 rounds, 13.15 h compute, early stop never fired). Validation ext (a) curve
+(rounds 200/400/600/800/977): 0.5585, 0.5441, 0.5744, 0.5962, 0.6335; int (a) 0.510, 0.470, 0.539, 0.597, 0.639. best.pkl = round 977.
+K5 check (1,071 windows; trained/untrained/kappa0; argmax+sampled) running in the same unit since 06:34. Next: verify per handoff step 1.
+Overseer watcher: job tmp k5watch.sh (polls progress.json; the old watch_unit.sh missed a log line once).
