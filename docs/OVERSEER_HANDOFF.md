@@ -148,6 +148,8 @@ they say so.
 
 **2026-11-06 ~18:30:** planner ruled on (e) = BRAIN_SPEC 7.25 (body f667d04): (e) replaced by (e'1) hand-acc p99 and (e'2) share hand speed > 1 m/s, each <= 1.25x v47 (limits computed by overseer: IC 5.320/0.01210, FY 5.182/0.00661, PR 7.501/0.01431, toy 6.001/0.01101; docs/hf_v47_eprime_reference.json); v2f and old-body normalisation confirmed; contact time reported. Overseer did not read grid (e') values before the ruling. Agent 2 told to select by 7.25 after the grid and continue to try 1, controls, ablations. Agent 1 idle.
 
+**2026-11-06 22:15:** WO13B grid done (5.5 h; epochs 62-130 s under load). Overseer re-read selection.json (22:09): eligible only j0.03/s0.01 (ext a 1.019, e'1 3.46, e'2 0.0094) and j0.03/s0.05 (0.994, 3.21, 0.0038); others fail (c) (p 0.022/0.016/0.098) or e'2 (j0.01/s0.05 0.0415). Selected j0.03/s0.01 by 7.25 rule - correct. Contact 0 except j0.01/s0.01 (0.94 %). Main stage unit hyst-wo13-m3f-main-2210 (try 1 + controls + ablations), ETA ~03:15. Risks: e'2 margin 15 %, (c).
+
 **Open overseer slip (FIXED 2026-11-06 ~11:55 with the user's OK; kept for the lesson):** on 2026-11-06 the overseer merged into body with `git checkout -B body` in a temp worktree; that
 moved the branch under the existing worktree `.claude/worktrees/body`, whose index/files are still at d5a1fae (8 staged files = the exact reverse
 of the K5 merge; no own changes). Fix: `git -C /secondary/Programming/Github/Hysteresis/.claude/worktrees/body reset --hard HEAD`
