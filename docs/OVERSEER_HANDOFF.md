@@ -130,7 +130,9 @@ they say so.
    rule. No second K5 seed unless wording needs it.
 3. K5-pass2 only if the user, after watching, wants better movement (7.22 point 3): separately labelled, own full K5 check, never replaces try 1.
 
-**Open overseer slip (needs the user's OK):** on 2026-11-06 the overseer merged into body with `git checkout -B body` in a temp worktree; that
+**2026-11-06 ~12:00:** user: two fresh agents available; Kabl work will share this machine, so WO12 and WO11 run SEQUENTIALLY (WO11 only after WO12 reports). WO12 prompt written and pushed: `docs/BUILDER_PROMPT_WO12_K5_VIDEOS.md` (body 6e65bdf), share 6 threads / 6 GB, branch `body-k5video`, for a fresh agent (pasted by the user; agents offline in ListAgents). Found: no joint-CSV renderer exists; WO12 step 3 asks for the smallest additive one, v47 cmp required. Body worktree index slip FIXED (user OK, reset --hard HEAD, clean).
+
+**Open overseer slip (FIXED 2026-11-06 ~11:55 with the user's OK; kept for the lesson):** on 2026-11-06 the overseer merged into body with `git checkout -B body` in a temp worktree; that
 moved the branch under the existing worktree `.claude/worktrees/body`, whose index/files are still at d5a1fae (8 staged files = the exact reverse
 of the K5 merge; no own changes). Fix: `git -C /secondary/Programming/Github/Hysteresis/.claude/worktrees/body reset --hard HEAD`
 (auto mode refused it; ask the user, or the user runs it with `!`). Origin is correct. Lesson: write to body in a detached temp worktree and
@@ -258,7 +260,6 @@ reset --hard HEAD`: ask the user (auto mode refused it). Lesson: merge into body
 ## Open with the user
 
 - **Go-ahead for work order 12 (K5 videos, 7.22 point 1), then WO11 seed 2.** Nothing starts before the user says so.
-- **The `.claude/worktrees/body` index fix** (see "Open overseer slip" above): needs the user's OK.
 - The fallback videos (one arm, new camera): the user's verdict, and tuning the mapping by eye in the authoring tool.
 - The monitor build waits for the user's choice of the planner's mockups; it shows only mechanisms in the loop plus labelled data lanes (7.19 D).
 - The trace viewer `/secondary/hyst-data/brain/braindump/instant-crush.view.html` was never opened in a browser.
