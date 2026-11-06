@@ -628,11 +628,18 @@ fn joint_csv_page(
         "duration": duration, "fps": fps, "frames": frames, "cues": [cue], "zones": [],
         "rig": rig, "placements": [placement]
     });
+    // A pose far below the floor (a hand more than 0.6 m under it) makes the page's floor glow
+    // radius negative and canvas refuses it; a file that breaks the floor rule must still draw,
+    // so this page keeps that radius at 0.05 m or more. The only change to the template.
     let html = page(
         &escape_json(&data)?,
         &escape_json(&serde_json::Value::String(track_url.to_string()))?,
         duration,
         true,
+    )
+    .replace(
+        "reach=pixels(.3+.5*hand[2],under[2])",
+        "reach=pixels(Math.max(.05,.3+.5*hand[2]),under[2])",
     );
     fs::write(output, html)?;
     println!(
