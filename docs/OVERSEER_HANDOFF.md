@@ -1,4 +1,4 @@
-# Overseer handoff — 2026-11-03
+# Overseer handoff — 2026-11-06
 
 This file is the overseer's whole state. The `/overseer` skill (`.claude/skills/overseer/SKILL.md` on this branch, the canonical copy) starts a new overseer from it and recreates the worktree if it is gone. To start one by hand, paste everything below the line into a fresh session.
 
@@ -90,48 +90,60 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## Where things stand (2026-11-05 ~17:30, written before an overseer restart)
+## Where things stand (2026-11-06 ~11:00, saved on the user's word: "don't start any work")
 
 **Goal (user, BRAIN_SPEC 7.19):** a scale human, ONE arm. The brain's own encodings (B7 epoch 6 lanes) drive it, no emotion decoding. It learns to
 move so that its inner state can be read from its body. Every mechanism shown or claimed is in the loop that moves the arm, or is a labelled data
 lane. ARGMAX mode for every claim (sampled reported only). The installation is ONE arm, permanently (no hexagon, no ensemble; v47 hexagon files
 are only the byte-identical regression reference).
 
-**Rules of record:** `docs/BRAIN_SPEC.md` §7.17–7.21 (read all five first; 7.19 = goal, K5 bar and claims; 7.20 = K5 compute and ablation
-wording; 7.21 = seed-2 credit rule). Branch of record `body`; `keys-decide` = body + overseer docs. Never master.
+**Rules of record:** `docs/BRAIN_SPEC.md` §7.17–7.22 (read all six first; 7.19 = goal, K5 bar and claims; 7.20 = K5 compute and ablation
+wording; 7.21 = seed-2 credit rule; **7.22 = K5 try 1 rulings, the current orders**). Branch of record `body` (origin 9f66459);
+`keys-decide` = body + overseer docs. Never master.
 
-**Done and merged (all verified by the overseer):**
-- Fallback (authoring tool on B7 lanes, one arm): tuning loop `scripts/author/retune.sh` + page button; camera frames the whole reach; whole-song
-  videos (720p in `/secondary/hyst-data/brain/author/tuning/720p-cam/`) sent to the user, **verdict and mapping tuning by eye still the user's**.
-- Memory closed (H1–H4). M3/M3b/M3c closed. M3d toy passed but its bar was met by an untrained mapping (planner's recorded flaw).
-- **M3e toy (closed loop + cerebellum inputs, dopamine gating, causal 30 s normalisation, internal observer): try 1 passes, argmax external
-  (a) 0.991, internal 0.951, beats untrained by 0.555 / 0.644 and kappa 0 by 0.188 / 0.193.** Ablations (one seed): none credited, all
-  "present". 60 s cerebellum: no state drift.
-- K5 data (`/secondary/hyst-data/body/k5/`: splits, B7 lanes, 15,624 train / 1,071 check windows), K5 trainer + eval (`scripts/body/k5_*.py`),
-  speed check: laptop 17.4 h per try (Kaggle T4 7.4x slower at this recipe).
+**K5 try 1: DONE, PASSES, verified, merged (body b74da7d, 7.22 recorded in 9f66459).**
+- One full pass, 977 rounds, 13.15 h of the 24 h box; early stop never fired; best.pkl = round 977. Validation ext (a) at rounds
+  200/400/600/800/977: 0.558, 0.544, 0.574, 0.596, 0.634 (still rising).
+- Check on 357 held-out songs, argmax: ext (a) 0.625 [0.603, 0.648], vs untrained +0.452 [0.435, 0.470], vs kappa 0 +0.086 [0.073, 0.099];
+  int 0.636 [0.613, 0.659], +0.496, +0.177. MI 0.037 (untrained 0.155). Overseer recomputed all paired per-song bootstraps from
+  `/secondary/hyst-data/body/k5/run1/eval/{trained,untrained,trained_kappa0}.json` (script was job-tmp `k5verify.py`: per_song lists, paired
+  difference, 10,000 resamples). Brief `docs/PLANNER_BRIEF_K5_RESULTS.md` sent and answered (= 7.22).
+- Licensed wording (7.22): "It learned to move so that its inner state can be read from its body, by you and by itself" (record: both read the
+  same joint positions); "it moves in time with its own inner rhythm". NO wording that its choice of movement follows its inner state.
+- Data: `/secondary/hyst-data/body/k5/run1/` (best.pkl, ckpt.pkl, progress.json, run.log, check.log, eval/). Run/check commands in
+  `scripts/body/K5_RUN.md` (`k5_run.sh start|check`). The check OOM'd once at 8 GB (trainer alive in the same cap); fixed (chain now exec()s).
 
-**Running now:**
-- **Agent 3: K5 try 1 on the laptop** (`docs/BUILDER_PROMPT_WO10_K5_RUN.md`, branch `body-k5train`, last pushed 2793701 at 16:10). At 17:30 it
-  was still testing pause/stop (units `hyst-wo10-k5test-*`), not launched; its K5 run units will be `hyst-wo10-*`, data
-  `/secondary/hyst-data/body/k5/run1/`. **User requirement:** pausable (`systemctl --user freeze/thaw <unit>`) and stoppable
-  (`systemctl --user stop`, graceful save) at any moment, resume without loss; commands in `scripts/body/K5_RUN.md` once agent 3 writes them.
-  **If the user paused or stopped it, do not restart it unless the user asks.** About 17 h of compute; mains power only. If agent 3 has not
-  launched by ~18:30, nudge it.
-- Agents 1, 2, 4, 5 idle.
+**Running now:** nothing. Agents 1–5 idle (agent 3 asked for a render order; not answered on purpose). User said: DON'T START ANY WORK until
+they say so.
 
-**Next, in order:**
-1. K5 finishes → verify (recompute the K5 table from saved per-song values; check `best.pkl` is what was scored; the verdict per 7.19 C with
-   the 7.20 point 3 wording), send the user the three danced-song videos from `best.pkl` next to the fallback ones, write
-   `docs/PLANNER_BRIEF_K5_RESULTS.md`.
-2. Then send agent 1 `docs/BUILDER_PROMPT_WO11_SEED2.md` (seed 2 of try 1 and A1–A3; never while K5 runs), apply the 7.21 credit rule.
-3. If K5 try 1 fails: try 2 may change only what the failure names (7.21 point 4).
+**Next, in order (only when the user says go):**
+1. **Work order 12: the video path (7.22 point 1), before seed 2.** Write `docs/BUILDER_PROMPT_WO12_K5_VIDEOS.md` (not written yet), for agent 3
+   (knows K5 code; branch e.g. `body-k5video` from body). Contents from agent 3's FOR OVERSEER: (1) export the three danced songs' B7 lanes in
+   K5 format (the danced songs are Instant Crush, Five Years, Presence; their fallback 720p videos are in
+   `/secondary/hyst-data/brain/author/tuning/720p-cam/`); (2) full-song rollout of best.pkl, carry kept continuously across the whole song
+   (no resets), 30 s causal normalisation running throughout, write the joint CSV (`arm_sim.csv_text` exists); (3) render with the one-arm
+   camera of the authoring tool (agent 5 built it in WO6/WO7 tuning: `scripts/author/retune.sh`; find the render entry point there and name
+   it in the prompt), next to the fallback videos; (4) report-only: external and internal (a) per 60 s segment across each song.
+   Pausable/stoppable runs, mains only, own memory cap, push before long runs. Verify: CSV durations = song durations, videos looked at,
+   720p copies < 30 MiB for SendUserFile.
+2. Then send agent 1 `docs/BUILDER_PROMPT_WO11_SEED2.md` as written (toy seeds only: seed 2 of M3e try 1 and A1–A3), apply the 7.21 credit
+   rule. No second K5 seed unless wording needs it.
+3. K5-pass2 only if the user, after watching, wants better movement (7.22 point 3): separately labelled, own full K5 check, never replaces try 1.
 
-**Planner briefs:** WO5–WO9 sent and answered (7.17–7.21). No brief pending.
+**Open overseer slip (needs the user's OK):** on 2026-11-06 the overseer merged into body with `git checkout -B body` in a temp worktree; that
+moved the branch under the existing worktree `.claude/worktrees/body`, whose index/files are still at d5a1fae (8 staged files = the exact reverse
+of the K5 merge; no own changes). Fix: `git -C /secondary/Programming/Github/Hysteresis/.claude/worktrees/body reset --hard HEAD`
+(auto mode refused it; ask the user, or the user runs it with `!`). Origin is correct. Lesson: write to body in a detached temp worktree and
+`git push origin HEAD:body` (done that way for 7.22), never `checkout -B body` elsewhere.
 
-**Hourly check:** session cron prompt (recreate after a restart with CronCreate, `23 * * * *`): check watch.log, units, branches, ListAgents;
-resume stalled builders ("Usage limit reset or stall ..."), relaunch OOM/crashed units with more memory (under 22 GB total), hand a dead
-builder's order to agent 2 then 4, verify finished work, PushNotification on battery. Claude-independent watchdog: systemd timer
-`hyst-overseer-watchdog.timer` every 15 min → `/secondary/hyst-data/overseer/watch.log` (script `watchdog.sh` there).
+**Planner briefs:** WO5–WO9 and K5_RESULTS sent and answered (7.17–7.22). No brief pending.
+
+**Watching:** overseer's K5 watcher was job-tmp `k5watch.sh` (polls progress.json; the generic `watch_unit.sh` once missed a line). Hourly
+session cron dies with the session; recreate (CronCreate `23 * * * *`) only when jobs run. Claude-independent watchdog: systemd timer
+`hyst-overseer-watchdog.timer` every 15 min → `/secondary/hyst-data/overseer/watch.log`.
+
+**User preferences this session:** ETAs (next milestone + finish, from live logs) on every progress update; compare new numbers to earlier
+ones when asked.
 
 ### History of 2026-11-04/05 (dated notes, oldest first)
 
@@ -207,35 +219,6 @@ fresh one for verification. (6) `tm3_world` patches `core.N`/`core_b7.BLOCK` on 
 **Wakeups:** set a session cron after restart, e.g. hourly at :23: check agents/branches/units/uptime, resume stalled builders, hand dead ones
 to blank agents, verify finished ones.
 
-## When a builder says it finished
-
-1. Check for new work: git log on the branch and on origin, the data folder, file times. A "finished" message can be stale.
-2. git diff. Rules documents are unchanged, unless the user approved a note.
-3. Run tests:
-   - `cd scripts/brain && /secondary/hyst-env/brain/bin/python -m unittest` (about 150 tests, about 3 min);
-   - for any Rust change: cargo test, clippy -D warnings and fmt --check on hyst-compile, hyst-output, hyst-previz and hyst-cli.
-4. If dance code changed: v47 Off must be byte-identical. Run `bash $D/tracker-scratch/newsong/three.sh TAG`, and cmp against `$D/hexagon-47.html`, `$D/five-years-hexagon.html` and `$D/presence-hexagon.html`.
-5. Recompute the key numbers yourself from the saved data. Never trust a report alone. Say plainly which numbers you could not recompute.
-6. Check media before the user sees it, and send it with SendUserFile.
-7. Merge into `keys-decide` and push.
-
-## Open with the user
-
-- The fallback videos (one arm, new camera): the user's verdict, and tuning the mapping by eye in the authoring tool.
-- The monitor build waits for the user's choice of the planner's mockups; it shows only mechanisms in the loop plus labelled data lanes (7.19 D).
-- The trace viewer `/secondary/hyst-data/brain/braindump/instant-crush.view.html` was never opened in a browser.
-- Kaggle large-batch recipe: only as engineering, only if it first reproduces the toy result (7.21 point 4).
-- **Housekeeping, only when the user says:** deleting merged branches (py-analyze, d3-layered, a-spread, b-clock, b1-pulse, b2-core, author-map,
-  b3-corpus, b3-train, b3-pac, b3-round2, b7, body-h1..h4, body-m1m3, body-m3b, body-m3c, body-z, body-h2show, body-reeval, body-fallback,
-  body-parity, body-k5data, body-tuning); fast-forwarding master; stale comments in `workspace.rs` and `lib.rs`.
-
-## First reply
-
-In a few lines:
-- the state you found: git, running units (`systemctl --user list-units | grep hyst`), what is merged;
-- what you are waiting for;
-- what you need from the user.
-
 **2026-11-05 ~17:15:** K5 try 1 LAUNCHED by agent 3 (unit `hyst-wo10-k5run`, 6 threads, 8 GB cap, data `/secondary/hyst-data/body/k5/run1/`,
 branch body-k5train 8092e21). Commands in `scripts/body/K5_RUN.md`: freeze/thaw/stop the unit; restart with
 `.claude/worktrees/body-k5train/scripts/body/k5_run.sh start` (also after a reboot). Stops at the 24 h compute box, then k5_eval on best.pkl.
@@ -257,3 +240,36 @@ best.pkl NOT possible yet (no full-song rollout path; question 1 in the brief). 
 Overseer slip: merging into body with `checkout -B body` in a temp worktree moved the branch under the existing `.claude/worktrees/body`
 worktree; its index/tree are still at d5a1fae (staged reverse of the merge, no own changes). Fix needs `git -C .claude/worktrees/body
 reset --hard HEAD`: ask the user (auto mode refused it). Lesson: merge into body inside the existing body worktree, never with -B elsewhere.
+
+**2026-11-06 ~11:00:** planner answered K5_RESULTS = BRAIN_SPEC 7.22 (body 9f66459): K5 passes recorded, licensed wording, no program-choice wording (MI 0.037 < untrained 0.155); video path (WO12) before seed 2; toy seeds only; try 1 stands, K5-pass2 only on the user's wish. User: save state, DON'T START ANY WORK. WO12 prompt not written yet.
+
+## When a builder says it finished
+
+1. Check for new work: git log on the branch and on origin, the data folder, file times. A "finished" message can be stale.
+2. git diff. Rules documents are unchanged, unless the user approved a note.
+3. Run tests:
+   - `cd scripts/brain && /secondary/hyst-env/brain/bin/python -m unittest` (about 150 tests, about 3 min);
+   - for any Rust change: cargo test, clippy -D warnings and fmt --check on hyst-compile, hyst-output, hyst-previz and hyst-cli.
+4. If dance code changed: v47 Off must be byte-identical. Run `bash $D/tracker-scratch/newsong/three.sh TAG`, and cmp against `$D/hexagon-47.html`, `$D/five-years-hexagon.html` and `$D/presence-hexagon.html`.
+5. Recompute the key numbers yourself from the saved data. Never trust a report alone. Say plainly which numbers you could not recompute.
+6. Check media before the user sees it, and send it with SendUserFile.
+7. Merge into `keys-decide` and push.
+
+## Open with the user
+
+- **Go-ahead for work order 12 (K5 videos, 7.22 point 1), then WO11 seed 2.** Nothing starts before the user says so.
+- **The `.claude/worktrees/body` index fix** (see "Open overseer slip" above): needs the user's OK.
+- The fallback videos (one arm, new camera): the user's verdict, and tuning the mapping by eye in the authoring tool.
+- The monitor build waits for the user's choice of the planner's mockups; it shows only mechanisms in the loop plus labelled data lanes (7.19 D).
+- The trace viewer `/secondary/hyst-data/brain/braindump/instant-crush.view.html` was never opened in a browser.
+- Kaggle large-batch recipe: only as engineering, only if it first reproduces the toy result (7.21 point 4).
+- **Housekeeping, only when the user says:** deleting merged branches (py-analyze, d3-layered, a-spread, b-clock, b1-pulse, b2-core, author-map,
+  b3-corpus, b3-train, b3-pac, b3-round2, b7, body-h1..h4, body-m1m3, body-m3b, body-m3c, body-z, body-h2show, body-reeval, body-fallback,
+  body-parity, body-k5data, body-tuning); fast-forwarding master; stale comments in `workspace.rs` and `lib.rs`.
+
+## First reply
+
+In a few lines:
+- the state you found: git, running units (`systemctl --user list-units | grep hyst`), what is merged;
+- what you are waiting for;
+- what you need from the user.
