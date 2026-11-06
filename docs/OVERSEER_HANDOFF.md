@@ -249,3 +249,11 @@ K5 check (1,071 windows; trained/untrained/kappa0; argmax+sampled) running in th
 Overseer watcher: job tmp k5watch.sh (polls progress.json; the old watch_unit.sh missed a log line once).
 
 **2026-11-06 07:25:** K5 check OOM-killed (hyst-wo10-k5run, 8 GB cap) during the kappa0 policy. best.pkl intact; eval/trained.json + untrained.json written. Agent 3 told to relaunch the check only (fresh unit, 14 GB), reuse cache only if resume-safe, reset-failed the old unit.
+
+**2026-11-06 ~08:00:** K5 try 1 DONE and verified (per-song paired bootstraps recomputed from eval/*.json, all match; best.pkl round 977
+was scored; test_k5_train OK). PASSES in argmax: ext 0.625 [0.603, 0.648], vs untrained +0.452, vs kappa0 +0.086; int 0.636, +0.496,
++0.177. Merged body-k5train e8cbba5 into body (b74da7d) and keys-decide. Brief `docs/PLANNER_BRIEF_K5_RESULTS.md` sent. Renders from
+best.pkl NOT possible yet (no full-song rollout path; question 1 in the brief). WO11 seed 2 waits for the user's word.
+Overseer slip: merging into body with `checkout -B body` in a temp worktree moved the branch under the existing `.claude/worktrees/body`
+worktree; its index/tree are still at d5a1fae (staged reverse of the merge, no own changes). Fix needs `git -C .claude/worktrees/body
+reset --hard HEAD`: ask the user (auto mode refused it). Lesson: merge into body inside the existing body worktree, never with -B elsewhere.
