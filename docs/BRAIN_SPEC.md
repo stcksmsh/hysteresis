@@ -1105,3 +1105,17 @@ Binding. They answer `docs/PLANNER_BRIEF_E_BAR.md`. Fixed before WO13B selects i
 4. **Confirmed:** frictionless table contact (v2f) is accepted, because the bar forbids touching the table anyway (check-csv floor margin);
    the time in contact per song (per episode on the toy) is reported. Normalising the jerk, hand-speed and jolt terms by the untrained
    policy's values on the OLD body is accepted as a fixed scale and recorded here.
+
+### 7.26 Pre-registered round-2 rule for K5-pass2, 2026-11-07, via the user
+
+Binding. Recorded before any K5-pass2 result.
+
+If K5-pass2 fails only on check-csv floor margin, (e'1) or (e'2), round 2 may change only the weights of the matching penalty terms
+(floor-margin / contact, hand-acceleration, hand-speed), each by a factor <= 3, chosen on the toy; nothing else changes. A failure of the K5
+decoding bar is handled as in 7.22 point 3 (changes limited to what the failure names).
+
+**Overseer note (2026-11-07, not a ruling):** the WO13B loss as built has penalty terms for hand speed, hand jolt, time near joint limits,
+jerk and program switches, and physical table contact (v2f), but no explicit floor-margin penalty and no hand-acceleration penalty. Under this
+rule a floor-margin or (e'1) failure would have no matching weight to scale unless such terms exist before pass2 starts. Question for the
+planner/user: add a floor-margin penalty (hinge on check-csv's margin) and a hand-acceleration penalty to pass2 now, at the toy's weight
+scale, so the rule has terms to act on.
