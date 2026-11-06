@@ -136,6 +136,8 @@ they say so.
 
 **2026-11-06 ~15:15:** WO11 DONE (agent 2 [4ae253], body-m3e 885a982), verified: paired try1-ablation intervals recomputed from a_gaps for both seeds (all match), diff = new files + run_m3e --seed (default 0 = try 1), tests 15 OK. Merged body 885a982, keys-decide. Verdict per 7.21: all three "present", none credited; dopamine not shown to lower. Seed-2 try 1 ext 0.763, int 0.602. Brief `docs/PLANNER_BRIEF_WO11_WO12_RESULTS.md` written and sent (Q1 record WO11, Q2 K5-pass2 floor/speed design, Q3 toy first, Q4 no 60 s wording). Agents 1 and 2 idle. Waiting: user verdict on videos, pass2 wish, planner answers.
 
+**2026-11-06 ~15:40:** planner answered WO11/WO12 = BRAIN_SPEC 7.23 (body 457b06f): WO11 recorded (none credited); K5-pass2 REQUIRED (floor plane at mount height with contact, self-collision, check-csv hand-speed/jolt soft penalties weighted like energy, rig joint ranges); pass2 bar = full K5 bar + check-csv passing on the three danced songs; order: M3e toy with new body (2 h) first, then pass2 (24 h box). Mount question asked to the user (plinth/table/hanging + height); default floor z = 0. K5-only 720p videos sent. Next: WO13 prompt (new body + toy), waiting on the user's mount answer / go.
+
 **Open overseer slip (FIXED 2026-11-06 ~11:55 with the user's OK; kept for the lesson):** on 2026-11-06 the overseer merged into body with `git checkout -B body` in a temp worktree; that
 moved the branch under the existing worktree `.claude/worktrees/body`, whose index/files are still at d5a1fae (8 staged files = the exact reverse
 of the K5 merge; no own changes). Fix: `git -C /secondary/Programming/Github/Hysteresis/.claude/worktrees/body reset --hard HEAD`
