@@ -29,6 +29,7 @@ def main():
     ap.add_argument("--epochs", type=int, default=40)
     ap.add_argument("--chunk-blocks", type=int, default=8)
     ap.add_argument("--eval", choices=["tune", "held"], default="tune")
+    ap.add_argument("--seed", type=int, default=0, help="Trainer seed (WO11: 1 = the second seed); 0 reproduces try 1")
     ap.add_argument("--no-dopamine", action="store_true")
     ap.add_argument("--ablate", choices=["none", "a1_closed_loop", "a2_gating", "a3_internal"], default="none", help="WO9 report-only ablations; none = try 1")
     a = ap.parse_args()
@@ -40,7 +41,7 @@ def main():
     C = M.load_cb()
     if a.ablate == "a1_closed_loop":
         C = {**C, "loop_gate": jnp.asarray(0.0)}
-    tr = m3e.Trainer(toy, C, a.lam, a.lr, a.epochs, a.chunk_blocks, dopamine=not a.no_dopamine, log=log, gate=a.ablate != "a2_gating", internal=a.ablate != "a3_internal")
+    tr = m3e.Trainer(toy, C, a.lam, a.lr, a.epochs, a.chunk_blocks, seed=a.seed, dopamine=not a.no_dopamine, log=log, gate=a.ablate != "a2_gating", internal=a.ablate != "a3_internal")
     ck = out / "ckpt.pkl"
     if ck.exists():
         tr.load(pickle.loads(ck.read_bytes()))
