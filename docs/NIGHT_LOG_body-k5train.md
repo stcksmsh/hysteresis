@@ -17,6 +17,7 @@ Tests (WO10 1b): `test_k5_run` (real units: start, freeze, thaw, stop, start aga
 - round 400, compute 5.51 h: ext (a) 0.5441 [0.509, 0.579], int (a) 0.470, b 41.5. Not above the best (bad 1).
 - round 600, compute 8.17 h: ext (a) 0.5744 [0.537, 0.611], int (a) 0.539, b 45.2. New best (bad 0).
 - round 800, compute 10.80 h: ext (a) 0.5962 [0.559, 0.634], int (a) 0.597, b 46.5. New best (bad 0).
+- round 977 (end of the pass), compute 13.15 h: ext (a) 0.6335. New best (bad 0). Pass complete, early stop never fired; best.pkl = round 977. K5 check started.
 
 # WO9: the K5 trainer and the Kaggle check (2026-11-05)
 
