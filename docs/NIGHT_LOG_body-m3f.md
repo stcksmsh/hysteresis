@@ -4,7 +4,7 @@ Provisional servo model throughout: Feetech STS3215 12 V assumed. The installati
 
 ## MORNING SUMMARY
 
-Started. Nothing run yet. Worktree `.claude/worktrees/body-m3f`, branch `body-m3f` from origin/body 90607c5. Order: `docs/BUILDER_PROMPT_WO13B_M3F_TOY.md`.
+Status 2026-11-07: grid done (6 points, tune), selected jerk weight 0.03 / switch cost 0.01 by the 7.25 rule (table in Phase 2); try 1 on the held-out episodes, controls and the ablations of changes 1-4 are running next as one unit (`chain_wo13.sh main 0.03 0.01`). Body is v2f (frictionless contact; FOR USER: friction is off). Contact cost 39.4 / 91.3 / 62.9 s per epoch (old body / v2 / v2f), pass2 upper bounds 30.6 h / 21.1 h. Worktree `.claude/worktrees/body-m3f`, branch `body-m3f` from origin/body 90607c5. Order: `docs/BUILDER_PROMPT_WO13B_M3F_TOY.md`.
 Plan: (1) new body in `make_arm_v2.py` + MJX contact cost measured and pass2 projected; (2) movement switches 1-4 in new files `m3f_jax.py`, `m3f.py`; (3) grid on tune; (4) try 1 held-out; (5) ablations. Old paths untouched (test: M3e try 1 first epoch unchanged).
 FOR USER: none.
 
@@ -16,3 +16,18 @@ Design numbers fixed before any recorded run: lambda 0.03, lr 1e-3, 40 epochs, s
 Contact cost, steady epoch on the 16 training episodes, 8 threads (first epoch of a process about 210 s with compile): M3e try 1 old body 39.4 s (its history, epochs 1-39); "v2" (condim 3) 91.3 s; "v2" with all four movement switches 91.3 s; "v2f" (frictionless, condim 1) 62.9 s. Ratios 2.32 / 1.60. K5-pass2 projection from K5 try 1's 61.1 s x 977 rounds = 13.15 h: 30.6 h (v2), 21.1 h (v2f), both upper bounds (they scale the whole round). Reported to the overseer.
 DEVIATION (approved by the overseer): the default body is v2f, frictionless table and self contacts. Reason: a passing policy keeps 5-11 cm clearance (check-csv), so contact only ever acts as a stop. FOR USER: friction is off.
 Observation: on v2 the untrained policy shows contact jerk spikes (mean squared jerk 1.07e9 deg2/s6 on the calibration episodes against about 2e6 on v1 in the first blocks). Overseer ruling: the jerk, hand-speed and jolt terms (and the limit cost) are divided by the untrained policy's value on the OLD body (v1, same calibration episodes), not on the new one. Both values are logged at calibration.
+
+### Phase 2: grid on the tune episodes and selection (2026-11-06 to 07)
+Unit `hyst-wo13-m3f-grid-1627`, six points in sequence, body v2f, switches 2-4 on, lambda 0.03, lr 1e-3, 40 epochs, Trainer seed 0, tune episodes, argmax; finished cleanly (unit Result=success, no traceback in the err log). Wall time about 5.5 h: the epochs ran 62-130 s because other jobs loaded the same cores (load average 23-26 at times), against the 62 s measured on a quiet machine.
+Bar, BRAIN_SPEC 7.25: toy bar = external (a) interval above 0, (b) >= 10 deg/s, (c) p < 0.01; (e'1) mean over episodes of hand-acceleration p99 <= 6.001 m/s2; (e'2) mean share of time with hand speed > 1 m/s <= 0.01101. Hand = last point of the rig FK (checked equal to `arm_sim.fk`), 50 Hz, `np.gradient`. Rule: highest external (a) among points passing all of it; ties (equal at 3 decimals) to the smaller weights. (e) and the geometric table-contact share are reported.
+| jerk w | switch w | ext (a) [95 %] | int (a) | (b) | (c) MI, p | programs | (e'1) | (e'2) | (e) | contact | bar | (e') | eligible |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 0.01 | 0.01 | 1.389 [1.159, 1.626] | 1.409 | 40.3 | 0.038, 0.022 | 6 | 2.469 | 0.00083 | 0.00021 | 0.0094 | fails (c) | pass | no |
+| 0.01 | 0.05 | 1.359 [1.120, 1.650] | 1.431 | 51.1 | 0.024, 0.002 | 4 | 3.763 | 0.04150 | 0.00011 | 0 | pass | fails (e'2) | no |
+| 0.03 | 0.01 | 1.019 [0.862, 1.171] | 1.093 | 53.3 | 0.159, 0.001 | 5 | 3.460 | 0.00938 | 0.00012 | 0 | pass | pass | yes |
+| 0.03 | 0.05 | 0.994 [0.741, 1.244] | 1.049 | 50.7 | 0.140, 0.001 | 6 | 3.208 | 0.00383 | 0.00031 | 0 | pass | pass | yes |
+| 0.1 | 0.01 | 1.419 [1.204, 1.647] | 1.510 | 45.7 | 0.010, 0.016 | 3 | 2.910 | 0.00633 | 0.00008 | 0 | fails (c) | pass | no |
+| 0.1 | 0.05 | 1.148 [0.970, 1.356] | 1.326 | 50.6 | 0.026, 0.098 | 5 | 3.220 | 0.00758 | 0.00017 | 0 | fails (c) | pass | no |
+Contact is the share of time the realised pose overlaps the table plane. Table in full: `/secondary/hyst-data/body/m3f/selection.json`.
+**Selected point (stated before the held-out run): jerk weight 0.03, switch cost 0.01** (highest external (a) among the two eligible points, 1.019 against 0.994). Seed stays 0; lambda 0.03; lr 1e-3; 40 epochs; body v2f. Two points have a higher external (a) but fail (c) or (e'2). Observation, not a claim: the three points that fail (c) have p 0.016-0.098 with MI 0.026-0.04, in the range of M3e's weaker decoders; (c) is the component most at risk on the held-out run.
+Who read (e') before ruling 7.25: this builder computed the first grid point's values (acceleration p99 2.50 m/s2, fast-hand share 0.0008, with its own earlier acceleration definition, a central second difference) after the overseer asked for them to be recorded and before 7.25 arrived, and wrote them in a status line to the user; this builder did not select, and computed no (e') value for any other point until after 7.25 and the reference file had arrived (np.gradient definition, which gives 2.47 and 0.00083 for that first point). I do not know whether anyone else read them.
