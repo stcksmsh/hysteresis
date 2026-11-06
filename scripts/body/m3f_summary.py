@@ -1,5 +1,5 @@
 """WO13B summary: /secondary/hyst-data/body/m3f/summary.json from the grid (tune), try 1 (held-out) with controls and breaches, and the four ablations of movement changes 1-4 (report only):
-(a) external and internal, (e), and the paired try 1 - ablation differences (per episode, 95 % bootstrap, 10,000 resamples) for (a) and (e). Argmax carries the bar; sampled is reported.
+(a) external and internal, (e'1), (e'2), (e), table contact, and the paired try 1 - ablation differences (per episode, 95 % bootstrap, 10,000 resamples) for (a), (e'1), (e'2), (e) and contact. Argmax carries the bar; sampled is reported.
 Provisional servo model (Feetech STS3215 12 V assumed)."""
 import json
 from pathlib import Path
@@ -16,7 +16,8 @@ def row(r):
     for m in ("argmax", "sample"):
         x = r[m]
         s[m] = {"ext_a": x["ext"]["a_gap_mean"], "ext_ci": x["ext"]["a_ci"], "ext_pass": x["ext"]["a_pass"], "int_a": x["int"]["a_gap_mean"], "int_ci": x["int"]["a_ci"], "int_pass": x["int"]["a_pass"],
-                "b": x["b_rms_nonroll"], "b_pass": x["b_pass"], "c_mi": x["c_mi"], "c_p": x["c_p"], "c_pass": x["c_pass"], "programs_used": x["programs_used"], "e": x["e"]["mean"], "kappa_mean": x["kappa_mean"]}
+                "b": x["b_rms_nonroll"], "b_pass": x["b_pass"], "c_mi": x["c_mi"], "c_p": x["c_p"], "c_pass": x["c_pass"], "programs_used": x["programs_used"], "e": x["e"]["mean"], "eprime1_acc_p99": x.get("eprime", {}).get("acc_p99_mean"), "eprime2_fast": x.get("eprime", {}).get("fast_mean"),
+                "contact_share": x.get("eprime", {}).get("contact_mean"), "contact_s_mean": x.get("eprime", {}).get("contact_s_mean"), "kappa_mean": x["kappa_mean"]}
     return s
 
 
@@ -37,10 +38,12 @@ def main():
             if not p.exists():
                 continue
             r = json.loads(p.read_text())["result"]
-            e1 = {m: t["result"][m]["e"]["per_episode"] for m in t["result"]}
             out["ablations"][n] = {"label": label, "scores": row(r), "breaches": {m: r[m]["breaches"] for m in ("argmax", "sample")},
                                    "paired_try1_minus_ablation": {m: {"ext_a": K.paired_difference(t["result"][m]["ext"]["a_gaps"], r[m]["ext"]["a_gaps"]), "int_a": K.paired_difference(t["result"][m]["int"]["a_gaps"], r[m]["int"]["a_gaps"]),
-                                                                      "e": K.paired_difference(e1[m], r[m]["e"]["per_episode"])} for m in ("argmax", "sample")}}
+                                                                      "e": K.paired_difference(t["result"][m]["e"]["per_episode"], r[m]["e"]["per_episode"]),
+                                                                      "eprime1": K.paired_difference(t["result"][m]["eprime"]["acc_p99"], r[m]["eprime"]["acc_p99"]),
+                                                                      "eprime2": K.paired_difference(t["result"][m]["eprime"]["fast"], r[m]["eprime"]["fast"]),
+                                                                      "contact": K.paired_difference(t["result"][m]["eprime"]["contact"], r[m]["eprime"]["contact"])} for m in ("argmax", "sample")}}
             for m in out["ablations"][n]["paired_try1_minus_ablation"].values():
                 for v in m.values():
                     v.pop("per_episode", None)

@@ -107,11 +107,12 @@ def score_policy(fns, cfg, C, P, toy, stats, which, chunk_blocks, rolldir=None, 
         Oe, Oi = fresh_observers(cfg, rolls[:4], yz_tr, stats)
         res[mode] = m3e.score_rollouts(rolls[4], Oe, Oi, stats, toy, which)
         res[mode]["e"] = R.hf_share_rollout(rolls[4]["q"])
+        res[mode]["eprime"] = R.eprime_rollout(rolls[4]["q"])
         res[mode]["breaches"] = R.breaches(rolls[4]["q"])
         keep[mode] = (Oe, Oi, rolls[4])
         s = res[mode]
         log(f"score {name} {which} {mode}: ext a {s['ext']['a_gap_mean']:.3f} {np.round(s['ext']['a_ci'], 3).tolist()} | int a {s['int']['a_gap_mean']:.3f} {np.round(s['int']['a_ci'], 3).tolist()} | "
-            f"b {s['b_rms_nonroll']:.1f} | c MI {s['c_mi']:.4f} p {s['c_p']:.4f} | programs {s['programs_used']} | e {s['e']['mean']:.4f}")
+            f"b {s['b_rms_nonroll']:.1f} | c MI {s['c_mi']:.4f} p {s['c_p']:.4f} | programs {s['programs_used']} | e {s['e']['mean']:.4f} | e'1 {s['eprime']['acc_p99_mean']:.2f} e'2 {s['eprime']['fast_mean']:.4f} contact {s['eprime']['contact_mean']:.4f}")
     return res, keep
 
 
