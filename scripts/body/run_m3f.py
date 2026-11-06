@@ -20,7 +20,7 @@ import m3f
 
 def build(a, toy, C, log):
     cfg = {"body": a.body, "obs_lp": not a.no_obs_lp, "phase_lp": not a.no_phase_lp, "xfade": not a.no_xfade}
-    opts = {"internal": True, "pen": a.body == "v2" and not a.no_pen, "jerk": a.w_jerk > 0, "sw": a.w_switch > 0 and cfg["xfade"]}
+    opts = {"internal": True, "pen": a.body != "v1" and not a.no_pen, "jerk": a.w_jerk > 0, "sw": a.w_switch > 0 and cfg["xfade"]}
     tr = m3f.Trainer(toy, C, cfg, a.lam, a.lr, a.epochs, a.chunk_blocks, seed=a.seed, dopamine=True, log=log, opts=opts, w_jerk=a.w_jerk, w_sw=a.w_switch)
     return cfg, tr
 
@@ -33,7 +33,7 @@ def add_args(ap):
     ap.add_argument("--chunk-blocks", type=int, default=8)
     ap.add_argument("--eval", choices=["tune", "held"], default="tune")
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--body", choices=["v1", "v2"], default="v2")
+    ap.add_argument("--body", choices=["v1", "v2", "v2f"], default="v2f")
     ap.add_argument("--w-jerk", type=float, default=0.0)
     ap.add_argument("--w-switch", type=float, default=0.0)
     ap.add_argument("--no-obs-lp", action="store_true")
@@ -74,7 +74,7 @@ def main():
             log("stopped early (timing run)")
             return 0
     res, keep = m3f.score_policy(tr.fns, cfg, C, tr.P, toy, tr.stats, a.eval, a.chunk_blocks, rolldir=str(out / "rollouts"), name="trained", log=log)
-    summary = {"args": vars(a), "cfg": cfg, "opts": tr.opts, "eval_set": a.eval, "hist": tr.hist, "e0": tr.e0, "nrm": tr.nrm, "raw0": tr.raw0, "result": res, "input_group_norms": m3e.input_group_norms(tr.P)}
+    summary = {"args": vars(a), "cfg": cfg, "opts": tr.opts, "eval_set": a.eval, "hist": tr.hist, "e0": tr.e0, "nrm": tr.nrm, "raw0_old_body": tr.raw0, "raw_this_body": tr.raw_new, "result": res, "input_group_norms": m3e.input_group_norms(tr.P)}
     (out / "result.json").write_text(json.dumps(summary, indent=1))
     log("done")
 

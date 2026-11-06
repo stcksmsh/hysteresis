@@ -120,7 +120,7 @@ class Trainer(m3e.Trainer):
     """m3e.Trainer on cfg. opts: internal, pen, jerk, sw (loss terms), w_jerk, w_sw."""
 
     def __init__(self, toy, C, cfg, lam, lr, epochs, chunk_blocks=8, seed=0, dopamine=True, log=print, opts=None, w_jerk=0.0, w_sw=0.0):
-        opts = {"internal": True, "pen": cfg["body"] == "v2", "jerk": False, "sw": False, **(opts or {})}
+        opts = {"internal": True, "pen": cfg["body"] != "v1", "jerk": False, "sw": False, **(opts or {})}
         self.cfg, self.opts, self.w = cfg, opts, {"jerk": w_jerk, "sw": w_sw}
         self.toy, self.C, self.lam, self.lr, self.epochs, self.cb, self.log, self.dopamine, self.gate = toy, C, lam, lr, epochs, chunk_blocks, log, dopamine, True
         self.fns = make_fns(C, cfg, opts)
@@ -154,13 +154,20 @@ class Trainer(m3e.Trainer):
         d, i = cat("desc", F.n_desc(self.cfg)), cat("idesc", F.n_idesc(self.cfg))
         self.stats = {"dmu": d.mean(0), "dsd": d.std(0) + 1e-9, "imu": i.mean(0), "isd": i.std(0) + 1e-9}
         self.e0 = float(np.mean([rs[g]["energy"][:, VALID_FROM:].mean() for g in rs]))
-        raw = {k: float(np.mean([rs[g][k][:, VALID_FROM:].mean() for g in rs])) for k in ("hand_v", "jolt", "lim", "jerk")}
+        mean_raw = lambda r: {k: float(np.mean([r[g][k][:, VALID_FROM:].mean() for g in r])) for k in ("hand_v", "jolt", "lim", "jerk")}
+        raw_new = mean_raw(rs)
+        if self.cfg["body"] == "v1":
+            raw = raw_new
+        else:                                         # overseer ruling: divide by the untrained policy's value on the OLD body (same episodes, same switches), not on the contact body
+            cfg1 = {**self.cfg, "body": "v1"}
+            fns1 = make_fns(self.C, cfg1, self.opts)
+            raw = mean_raw({g: rollout(fns1, cfg1, self.C, self.P, self.toy, idx, "argmax", jax.random.PRNGKey(11), self.cb, 100) for g, idx in self.groups.items()})
         self.nrm = {k: max(v, FLOORS[k]) for k, v in raw.items()}
-        self.raw0 = raw
+        self.raw0, self.raw_new = raw, raw_new
         for g in "AB":
             self.data[g].append(self._collect(g, rs[g]["desc"], rs[g]["idesc"]))
         self._refresh(400)
-        self.log(f"calibration: E0 {self.e0:.5f} J/block, untrained RMS speed {np.sqrt(np.concatenate([rs[g]['ms'] for g in rs]).mean()):.1f}; untrained penalty values {raw}, divisors {self.nrm}")
+        self.log(f"calibration: E0 {self.e0:.5f} J/block, untrained RMS speed {np.sqrt(np.concatenate([rs[g]['ms'] for g in rs]).mean()):.1f}; untrained penalty values old body {raw}, this body {raw_new}, divisors (old body, floored) {self.nrm}")
 
     def run_epoch(self):
         t0 = time.time()
@@ -218,9 +225,9 @@ class Trainer(m3e.Trainer):
 
     def state(self):
         s = super().state()
-        s["nrm"], s["raw0"] = self.nrm, self.raw0
+        s["nrm"], s["raw0"], s["raw_new"] = self.nrm, self.raw0, self.raw_new
         return s
 
     def load(self, s):
         super().load(s)
-        self.nrm, self.raw0 = s["nrm"], s["raw0"]
+        self.nrm, self.raw0, self.raw_new = s["nrm"], s["raw0"], s["raw_new"]

@@ -17,7 +17,7 @@ LIMIT_MARGIN_DEG = 10.0  # BRAIN_SPEC 7.24: a small cost within this angle of an
 TABLE_Z = 0.0
 
 
-def xml_v2(kv=None, table=True, self_collision=True):
+def xml_v2(kv=None, table=True, self_collision=True, condim=3):
     xml = MA.build_xml(kv) if kv is not None else MA.final_xml()
     n = [0]
 
@@ -35,4 +35,6 @@ def xml_v2(kv=None, table=True, self_collision=True):
     xml = xml.replace('<site name="hand"', sphere + '\n                  <site name="hand"', 1)
     if table:
         xml = xml.replace("<worldbody>", f'<worldbody>\n    <geom name="table" type="plane" size="2 2 0.1" pos="0 0 {TABLE_Z}" contype="1" conaffinity="0" rgba="0.4 0.4 0.4 1"/>', 1)
+    if condim != 3:                                                  # frictionless contacts (condim 1): one constraint row per contact instead of four
+        xml = re.sub(r'(<geom [^>]*contype="[1-4]"[^>]*?)(/?>)', lambda m: m.group(1) + f' condim="{condim}"' + m.group(2), xml)
     return xml

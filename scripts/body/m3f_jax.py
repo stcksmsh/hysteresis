@@ -56,20 +56,20 @@ def n_idesc(cfg):
 
 
 # ---------------------------------------------------------------------------------------------------------------- the two bodies
-def _model_v2(iterations=1):
-    m = mujoco.MjModel.from_xml_string(V2.xml_v2())
+def _model_v2(iterations=1, condim=3):
+    m = mujoco.MjModel.from_xml_string(V2.xml_v2(condim=condim))
     m.opt.iterations = iterations                      # one Newton iteration, as the M3d body (MJX differentiates one solver iteration, not the while_loop)
     return m
 
 
-MODEL2 = _model_v2()
-MX2 = mjx.put_model(MODEL2)
+MODELS = {"v2": _model_v2(), "v2f": _model_v2(condim=1)}              # v2f: frictionless contacts (cheaper constraint solve)
+MX = {k: mjx.put_model(m) for k, m in MODELS.items()}
 
 
 def arm_init(cfg, q_deg):
     if cfg["body"] == "v1":
         return J.arm_init(q_deg)
-    d = mjx.make_data(MODEL2)
+    d = mjx.make_data(MODELS[cfg["body"]])
     q = jnp.radians(jnp.asarray(q_deg, float))
     return d.replace(qpos=q, ctrl=q), jnp.asarray(q_deg, float), jnp.zeros(5)
 
@@ -88,7 +88,7 @@ def arm_step(cfg, d, tgt, tv, target_deg):
 
     def sub(c, _):
         dd, p = c
-        dd = mjx.step(MX2, dd)
+        dd = mjx.step(MX[cfg["body"]], dd)
         return (dd, p + jnp.abs(dd.actuator_force * dd.qvel).sum()), None
     (d, p), _ = jax.lax.scan(sub, (d, 0.0), None, length=J.SUB)
     return d, tgt, tv, p / J.SUB

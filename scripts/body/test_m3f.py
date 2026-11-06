@@ -53,6 +53,13 @@ class Body(unittest.TestCase):
         self.assertLess(np.degrees(d2.qpos)[1], 60.0)             # and the shoulder did not reach the commanded 100 deg
         self.assertGreater(d2.ncon, 0)
 
+    def test_frictionless_body_also_stops_the_arm(self):
+        d2, low2 = drive(mujoco.MjModel.from_xml_string(V2.xml_v2(condim=1)), [0, 100, 0, 0, 0])
+        self.assertGreater(low2, -0.02)
+        self.assertLess(np.degrees(d2.qpos)[1], 60.0)
+        m = mujoco.MjModel.from_xml_string(V2.xml_v2(condim=1))
+        self.assertTrue(all(m.geom_condim[g] == 1 for g in range(m.ngeom) if m.geom_contype[g] or m.geom_conaffinity[g]))
+
     def test_self_intersecting_pose_collides(self):
         m = mujoco.MjModel.from_xml_string(V2.xml_v2(table=False))
         d = mujoco.MjData(m)
