@@ -1,0 +1,50 @@
+{
+ "instant-crush.k5.csv": {
+  "rows": 16976,
+  "seconds": 339.5,
+  "rows_with_any_breach": 16038,
+  "by_kind_rows": {
+   "joint position": 238,
+   "base_yaw speed": 52,
+   "shoulder acceleration": 38,
+   "wrist_roll speed": 1,
+   "floor margin": 15795,
+   "hand speed": 1510,
+   "hand jolt": 24
+  },
+  "worst_floor_margin_m": -0.7190807371426804,
+  "max_hand_mps": 2.3983599744633652,
+  "max_hand_jolt": 10.875483063762074
+ },
+ "five-years.k5.csv": {
+  "rows": 14176,
+  "seconds": 283.5,
+  "rows_with_any_breach": 13012,
+  "by_kind_rows": {
+   "base_yaw speed": 74,
+   "shoulder acceleration": 19,
+   "floor margin": 12911,
+   "hand speed": 955,
+   "hand jolt": 32
+  },
+  "worst_floor_margin_m": -0.6695567595049838,
+  "max_hand_mps": 1.986504033536343,
+  "max_hand_jolt": 10.689454021567846
+ },
+ "presence.k5.csv": {
+  "rows": 13526,
+  "seconds": 270.5,
+  "rows_with_any_breach": 13134,
+  "by_kind_rows": {
+   "base_yaw speed": 78,
+   "shoulder acceleration": 35,
+   "wrist_roll speed": 28,
+   "floor margin": 13075,
+   "hand speed": 988,
+   "hand jolt": 46
+  },
+  "worst_floor_margin_m": -0.7154719035613286,
+  "max_hand_mps": 2.289019729805224,
+  "max_hand_jolt": 11.643926480780669
+ }
+}
