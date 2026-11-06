@@ -206,9 +206,28 @@ class Report(unittest.TestCase):
         dive[..., 1] = 100.0
         self.assertEqual(R.breaches(dive)["floor_m"]["episodes_with_breach"], 1)
 
-    def test_hf_share_matches_reference_if_present(self):
-        if not os.path.exists(os.path.join(os.path.dirname(__file__), "hf_share.py")):
-            self.skipTest("hf_share.py (work order 13A) not merged yet")
+    def test_hf_share_matches_reference(self):
+        import hf_share
+        q = np.stack([np.cumsum(np.random.default_rng(3).normal(0, 1.0, 600), 0)] * 5, 1)
+        q = np.tile(q, (10, 1))[:6000]                                                            # 60 s at 100 Hz
+        self.assertAlmostEqual(R.eprime_rollout(q.reshape(1, 120, 50, 5))["e"][0], hf_share.hf_share(q[::2], 50.0), places=12)
+
+    def test_fk_points_match_arm_sim_fk(self):
+        import arm_sim
+        q = np.random.default_rng(1).uniform(-110, 110, (20, 5))
+        got = R.fk_points(q)
+        for i in range(20):
+            self.assertTrue(np.allclose(got[i], arm_sim.fk(q[i]), atol=1e-9))
+
+    def test_hand_metrics(self):
+        t = np.arange(500) / 50.0
+        still = np.tile(np.array(MA.NEUTRAL_DEG), (500, 1))
+        m = R.hand_metrics(still)
+        self.assertEqual((m["acc_p99"], m["fast"], m["contact"]), (0.0, 0.0, 0.0))
+        shake = still + np.stack([0 * t, 0 * t, 20 * np.sin(2 * np.pi * 3.0 * t), 0 * t, 0 * t], 1)    # elbow shaken at 3 Hz
+        self.assertGreater(R.hand_metrics(shake)["acc_p99"], 6.0)
+        down = np.tile(np.array([0.0, 100.0, 0.0, 0.0, 0.0]), (500, 1))                            # arm pointing down: through the table
+        self.assertEqual(R.hand_metrics(down)["contact"], 1.0)
 
 
 class FirstEpoch(unittest.TestCase):
