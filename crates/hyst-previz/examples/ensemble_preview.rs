@@ -1,4 +1,4 @@
-//! cargo run -p hyst-previz --example ensemble_preview -- output.html track-url sidecar.json [--score score.json] [--rig rig.json] [--groove-only] [--no-reuse] [--zone x0,y0,z0,x1,y1,z1] [--workspace off|rehearsed|schematic] [--body off|layered] [--clock v47|music]
+//! cargo run -p hyst-previz --example ensemble_preview -- output.html track-url sidecar.json [--score score.json] [--rig rig.json] [--groove-only] [--no-reuse] [--zone x0,y0,z0,x1,y1,z1] [--workspace off|rehearsed|schematic] [--body off|layered] [--clock v47|music] [--joint-csv FILE]
 use std::{env, fs, io, path::PathBuf};
 
 use hyst_compile::director::workspace::{BasinKind, Workspace, WorkspaceMode};
@@ -262,6 +262,7 @@ fn usage() -> &'static str {
      --body MODE      off (default) or layered: body vectors from the sidecar's bodyTrack set the quality; one arm only; prints limits and clock lag to stderr\n\
      --clock MODE     v47 (default) or music: figures keep the music's timing, one over a limit is drawn smaller, the clock re-syncs at each phrase edge; one arm only\n\
      --figures        accepted and ignored; the figure planner is the only mode\n\
+     --joint-csv FILE draw the one arm from a 50 Hz joint CSV (`hyst check-csv` format) instead of a compiled score; SIDECAR.json is then not given; same page, camera and rig\n\
      Audio starts only after Play. Score and arm trajectories resolve offline for deterministic seek."
 }
 
@@ -272,6 +273,7 @@ fn main() -> io::Result<()> {
     let mut rig_path = None;
     let mut zones = Vec::new();
     let mut implement = None;
+    let mut joint_csv: Option<PathBuf> = None;
     let (mut ring, mut clearance) = ((1usize, 0.0f64), 0.1f64);
     let mut config = hyst_compile::CompileConfig::default();
     while let Some(arg) = args.next() {
@@ -339,6 +341,12 @@ fn main() -> io::Result<()> {
                 }
             }
             "--figures" => {}
+            "--joint-csv" => {
+                joint_csv = Some(PathBuf::from(
+                    args.next()
+                        .ok_or_else(|| io::Error::other("--joint-csv requires a path"))?,
+                ))
+            }
             "--zone" => {
                 let raw = args
                     .next()
@@ -377,11 +385,14 @@ fn main() -> io::Result<()> {
             _ => positional.push(arg),
         }
     }
-    if positional.len() != 3 {
+    if positional.len() != if joint_csv.is_some() { 2 } else { 3 } {
         return Err(io::Error::other(usage()));
     }
     let output = PathBuf::from(&positional[0]);
     let track_url = &positional[1];
+    if let Some(csv) = joint_csv {
+        return joint_csv_page(&output, track_url, &csv, implement);
+    }
     let sidecar = fs::read_to_string(&positional[2])?;
     let mut rig: hyst_compile::ensemble::Rig = match rig_path {
         Some(path) => serde_json::from_str(&fs::read_to_string(path)?)?,
@@ -486,28 +497,12 @@ fn main() -> io::Result<()> {
         .replace('<', "\\u003c")
         .replace('>', "\\u003e")
         .replace('&', "\\u0026");
-    let html = include_str!("../src/ensemble.html")
-        // One arm: frame its whole reach envelope (see SOLO_TARGET/SOLO_FIT). The
-        // hexagon page keeps the original text, so its output is unchanged.
-        .replace(
-            "const target=solo?[0,0,0.3]:[0,0,0.25], up=[0,0,1];",
-            if score.placements.len() == 1 {
-                SOLO_TARGET
-            } else {
-                "const target=solo?[0,0,0.3]:[0,0,0.25], up=[0,0,1];"
-            },
-        )
-        .replace(
-            "const distance=solo?2.1:3.2+",
-            if score.placements.len() == 1 {
-                SOLO_FIT
-            } else {
-                "const distance=solo?2.1:3.2+"
-            },
-        )
-        .replace("__DURATION__", &score.duration.to_string())
-        .replace("__TRACK_URL_JSON__", &url_json)
-        .replace("__ENSEMBLE_DATA__", &data_json);
+    let html = page(
+        &data_json,
+        &url_json,
+        score.duration,
+        score.placements.len() == 1,
+    );
     if let Some(path) = score_output {
         fs::write(path, serde_json::to_vec_pretty(&score)?)?;
     }
@@ -520,6 +515,123 @@ fn main() -> io::Result<()> {
         score.duration,
         output.display()
     );
+    Ok(())
+}
+
+/// The page text for one score's data. One arm: frame its whole reach envelope (see
+/// SOLO_TARGET/SOLO_FIT). The hexagon page keeps the original text, so its output is unchanged.
+fn page(data_json: &str, url_json: &str, duration: f64, solo: bool) -> String {
+    include_str!("../src/ensemble.html")
+        .replace(
+            "const target=solo?[0,0,0.3]:[0,0,0.25], up=[0,0,1];",
+            if solo {
+                SOLO_TARGET
+            } else {
+                "const target=solo?[0,0,0.3]:[0,0,0.25], up=[0,0,1];"
+            },
+        )
+        .replace(
+            "const distance=solo?2.1:3.2+",
+            if solo {
+                SOLO_FIT
+            } else {
+                "const distance=solo?2.1:3.2+"
+            },
+        )
+        .replace("__DURATION__", &duration.to_string())
+        .replace("__TRACK_URL_JSON__", url_json)
+        .replace("__ENSEMBLE_DATA__", data_json)
+}
+
+fn escape_json(v: &serde_json::Value) -> io::Result<String> {
+    Ok(serde_json::to_string(v)?
+        .replace('<', "\\u003c")
+        .replace('>', "\\u003e")
+        .replace('&', "\\u0026"))
+}
+
+/// `--joint-csv`: the one-arm page drawn from a 50 Hz joint CSV (the `hyst check-csv` format)
+/// instead of a compiled score. Same page text, camera, rig geometry from the file's header and
+/// default implement; joints are interpolated linearly to 60 fps and run through the same
+/// forward kinematics as `EnsembleScore::sample`. The single cue only labels the page.
+fn joint_csv_page(
+    output: &std::path::Path,
+    track_url: &str,
+    csv: &std::path::Path,
+    implement: Option<hyst_compile::ensemble::Implement>,
+) -> io::Result<()> {
+    use hyst_compile::ensemble::{forward_kinematics, Placement, Rig};
+    let text = fs::read_to_string(csv)?;
+    let (mut hz, mut rig, mut placement) = (None, None, None);
+    let mut rows: Vec<[f64; 5]> = Vec::new();
+    for (n, line) in text.lines().enumerate() {
+        let bad = |what: &str| io::Error::other(format!("{}: line {}: {what}", csv.display(), n + 1));
+        if let Some(rest) = line.strip_prefix('#') {
+            let rest = rest.trim();
+            if let Some(v) = rest.strip_prefix("hz:") {
+                hz = Some(v.trim().parse::<f64>().map_err(|_| bad("bad hz"))?);
+            } else if let Some(v) = rest.strip_prefix("rig_json:") {
+                rig = Some(serde_json::from_str::<Rig>(v.trim()).map_err(|e| bad(&e.to_string()))?);
+            } else if let Some(v) = rest.strip_prefix("placement_json:") {
+                placement =
+                    Some(serde_json::from_str::<Placement>(v.trim()).map_err(|e| bad(&e.to_string()))?);
+            }
+        } else if !line.starts_with("time_s") {
+            let cells: Vec<f64> = line
+                .split(',')
+                .map(|c| c.trim().parse::<f64>().ok().filter(|v| v.is_finite()))
+                .collect::<Option<_>>()
+                .ok_or_else(|| bad("not a finite number"))?;
+            let row: [f64; 6] = cells.try_into().map_err(|_| bad("expected 6 cells"))?;
+            rows.push([row[1], row[2], row[3], row[4], row[5]]);
+        }
+    }
+    let (hz, mut rig, placement) = (
+        hz.ok_or_else(|| io::Error::other("missing '# hz:' header"))?,
+        rig.ok_or_else(|| io::Error::other("missing '# rig_json:' header"))?,
+        placement.ok_or_else(|| io::Error::other("missing '# placement_json:' header"))?,
+    );
+    if !(hz > 0.0) || rig.channels.len() != 5 || rows.len() < 2 {
+        return Err(io::Error::other("need hz > 0, a five-axis rig and two rows"));
+    }
+    // The file's rig has no implement: use the one of the compiled pages (or --implement).
+    rig.implement = implement.unwrap_or_else(|| Rig::illustrative_five_axis().implement);
+    let duration = (rows.len() - 1) as f64 / hz;
+    let fps: f64 = 60.0;
+    let mut frames = Vec::new();
+    for i in 0..=(duration * fps).ceil() as usize {
+        let pos = (i as f64 / fps).min(duration) * hz;
+        let lo = (pos.floor() as usize).min(rows.len() - 1);
+        let hi = (lo + 1).min(rows.len() - 1);
+        let a = pos - lo as f64;
+        let q: Vec<f64> = (0..5)
+            .map(|j| rows[lo][j] + (rows[hi][j] - rows[lo][j]) * a)
+            .collect();
+        let points: Vec<_> = forward_kinematics(&rig, &placement, &q)
+            .map_err(io::Error::other)?
+            .iter()
+            .map(|p| p.map(|v| (v * 10_000.0).round() / 10_000.0))
+            .collect();
+        let turns = [q[0], q[4]].map(|v| (v * 100.0).round() / 100.0);
+        frames.push(serde_json::json!([[points], 0, [turns]]));
+    }
+    let cue = serde_json::json!({
+        "start": 0.0, "end": duration, "character": "K5 policy", "formation": "joint CSV",
+        "reason": format!("Joint angles from {}", csv.file_name().map_or(String::new(), |n| n.to_string_lossy().into_owned())),
+        "recallFrom": null, "anticipation": null, "sourceActivity": [0.0, 0.0, 0.0, 0.0], "confidence": 0.0
+    });
+    let data = serde_json::json!({
+        "duration": duration, "fps": fps, "frames": frames, "cues": [cue], "zones": [],
+        "rig": rig, "placements": [placement]
+    });
+    let html = page(
+        &escape_json(&data)?,
+        &escape_json(&serde_json::Value::String(track_url.to_string()))?,
+        duration,
+        true,
+    );
+    fs::write(output, html)?;
+    println!("1 arm, {} rows, {duration:.2}s → {}", rows.len(), output.display());
     Ok(())
 }
 
