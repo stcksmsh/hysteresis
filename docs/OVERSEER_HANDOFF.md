@@ -247,3 +247,5 @@ Overseer watches with Monitor (watch_unit.sh), hourly cron at :23.
 (rounds 200/400/600/800/977): 0.5585, 0.5441, 0.5744, 0.5962, 0.6335; int (a) 0.510, 0.470, 0.539, 0.597, 0.639. best.pkl = round 977.
 K5 check (1,071 windows; trained/untrained/kappa0; argmax+sampled) running in the same unit since 06:34. Next: verify per handoff step 1.
 Overseer watcher: job tmp k5watch.sh (polls progress.json; the old watch_unit.sh missed a log line once).
+
+**2026-11-06 07:25:** K5 check OOM-killed (hyst-wo10-k5run, 8 GB cap) during the kappa0 policy. best.pkl intact; eval/trained.json + untrained.json written. Agent 3 told to relaunch the check only (fresh unit, 14 GB), reuse cache only if resume-safe, reset-failed the old unit.
