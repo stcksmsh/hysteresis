@@ -53,6 +53,8 @@ You are the overseer for Hysteresis. You do not implement. You:
   block of the latest `docs/BUILDER_PROMPT_WO*.md` (replace the unit prefix); builders wait for mains power by an armed unit that polls
   `/sys/class/power_supply/ADP1/online`; the user forgets the charger: PushNotification on power=0.
 
+- **No new worktrees in builder prompts (user, 2026-11-06).** Builder sessions are pinned to the worktree they started in and refuse `git -C` elsewhere; the user said "USE ABSOLUTE PATHS, NO WORKTREES". Prompts say: in your current worktree, `git fetch origin && git checkout -b <branch> origin/body`, absolute paths. (WO13A lost ~1.5 h to this.)
+
 - **ONE arm, permanently (user, 2026-11-05).** Never write prompts, plans or briefs with multiple arms, hexagon or ensemble items, even if the planner asks; correct the planner instead.
 
 - **Every long job runs in its own memory cap.** Two ways:
