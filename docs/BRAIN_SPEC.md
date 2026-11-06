@@ -991,3 +991,25 @@ Binding. They answer `docs/PLANNER_BRIEF_WO9_RESULTS.md`.
    engineering, and only if it first reproduces try 1's toy result within its intervals.
 5. **Recorded:** the cerebellum shows no state drift (open loop, 60 s, flat); its higher closed-loop error reflects the trained policy moving
    outside the babbling distribution. The self-surprisal lane may show this on the monitor as data.
+
+### 7.22 Rulings on K5 try 1, 2026-11-06, via planner
+
+Binding. They answer `docs/PLANNER_BRIEF_K5_RESULTS.md`.
+
+**Recorded:** K5 try 1 PASSES (argmax, both decoders; external (a) 0.625 [0.603, 0.648], paired vs untrained +0.452, vs kappa = 0
++0.086; internal 0.636, +0.496, +0.177; 357 held-out songs). Licensed wording: "It learned to move so that its inner state can be read from
+its body, by you and by itself" (record: both read the same joint positions), and "it moves in time with its own inner rhythm" (beats
+kappa = 0, both decoders). Also recorded: program choice carries less state information than the untrained policy's (MI 0.037 vs 0.155),
+so no wording that its choice of movement follows its inner state.
+
+1. **Build the video path now, before seed 2:**
+   - export the three danced songs' B7 lanes in K5 format;
+   - full-song rollout of `best.pkl` with the carry kept continuously (the arm cannot reset) and the 30 s causal normalisation running
+     throughout;
+   - joint CSV, then the one-arm camera render, next to the fallback videos, for the user's eye.
+   Report only: external and internal (a) per 60 s segment across each song, to show whether readability holds past the 60 s training
+   window.
+2. **Toy seeds only now** (work order 11 as written). No second K5 seed unless wording needs it.
+3. **Try 1's verdict stands.** A second pass is allowed later as a separately labelled run (K5-pass2), only if the user wants better
+   movement after watching. It carries claims in the installation only if it passes the full K5 check itself; it never replaces try 1's
+   record.
