@@ -4,7 +4,7 @@ Provisional servo model (Feetech STS3215 12 V assumed). One arm. Branch `body-k5
 
 ## MORNING SUMMARY
 
-Status: steps 1, 2 and 4 done and tested; step 3 (render) running or finished, see "Render status" at the bottom of this section.
+Status: all four steps done. Nine videos exist, branch pushed.
 
 **Paths** (all under `/secondary/hyst-data/body/k5/danced/`)
 - Lanes: `lanes/<song>.npz` (K5 keys: frames, y, phi_end, omega, s10, arousal_b7, power10), 3 songs.
@@ -68,7 +68,9 @@ All 16 segments are above 0 in both decoders (lowest: instant-crush 0-60, ext 0.
 - Look at the videos beside the fallback; the check-csv floor/hand-speed refusals above mean this policy's pose is not yet something a real arm may play: the K5 training has no floor or hand-speed term. A K5-pass2 would need one (spec 7.22 point 3); not my decision.
 - Joint trajectories and per-block state are saved for the three songs if anyone wants to plot them.
 
-**Render status**: see the end of the log.
+**Render (step 3), done.** Under `video/`: three `-k5.mp4` (1080p, original AAC copied), three `-k5-720p.mp4` (28.5-28.8 MB), three `-side-by-side-720p.mp4` (28.5-28.6 MB; limit 30 MiB = 31.46 MB). Durations (s), audio / k5 / k5-720p / side-by-side: instant-crush 339.824 / 339.833 / 339.833 / 339.824; five-years 283.753 / 283.767 / 283.771 / 283.767; presence 270.733 / 270.733 / 270.744 / 270.733 (all within one video frame of the audio).
+Frames looked at (`video/frames/`, 960 px): start (1 s), middle, end (audio end - 1 s), and the time of the largest summed joint speed (instant-crush 17.5 s, five-years 159.3 s, presence 21.1 s). What is in them, no judgement: the dark stage with the pedestal and base disc, the grey arm and the mirror-ball hand, a coloured ribbon behind the hand, small light shards on the floor, the caption `1 arm · joint CSV · K5 policy` and `Score <t>s`. At the start frame of instant-crush the arm stands bent up from the pedestal with the hand above it; in the max-motion frames (instant-crush 17.6 s, presence 21.1 s) the upper link runs sideways and the forearm points down with the hand below the pedestal's plane at the end of a long looping ribbon; the five-years middle frame and the instant-crush end frame show the hand low next to the pedestal. This matches the floor breaches counted by check-csv.
+Extra deviation 6: the first full render stopped at ~frame 8300 of instant-crush (`createRadialGradient` r1 < 0): the page's floor-glow radius `.3+.5*hand_z` goes negative when the hand is more than 0.6 m below the floor, which this CSV does (worst -0.72 m). `--joint-csv` pages now use `Math.max(.05, ...)` for that one radius (the only template change; hexagon and one-arm compiled pages keep the original text; v47 `cmp` re-run after the change: identical; fmt, clippy, tests re-run: clean).
 
 ## Phase log
 
@@ -76,4 +78,4 @@ All 16 segments are above 0 in both decoders (lowest: instant-crush 0-60, ext 0.
 - 2026-11-06 phase 2 (rollout, tests): committed.
 - 2026-11-06 phase 3 (Rust `--joint-csv`, v47 cmp, tests): committed. A 20 s test render (instant-crush 60-80 s, 1280x720) works; its frames show the page with the arm on its pedestal, a trail ribbon and the mirror shards.
 - 2026-11-06 phase 4 (segments): committed.
-- Phase 5 (full renders, `k5_render.sh`, unit `hyst-wo12-render`): started; resume with `systemd-run --user --unit=hyst-wo12-render2 -p MemoryMax=6G -p MemorySwapMax=0 -p CPUQuota=600% bash scripts/body/k5_render.sh` (finished files are kept). Pause `systemctl --user freeze hyst-wo12-render`, stop `systemctl --user stop hyst-wo12-render`.
+- Phase 5 (full renders, `k5_render.sh`, units `hyst-wo12-render`, then `-render3` after the radius fix): done; resume with `systemd-run --user --unit=hyst-wo12-render2 -p MemoryMax=6G -p MemorySwapMax=0 -p CPUQuota=600% bash scripts/body/k5_render.sh` (finished files are kept). Pause `systemctl --user freeze hyst-wo12-render`, stop `systemctl --user stop hyst-wo12-render`.
