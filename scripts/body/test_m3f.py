@@ -63,14 +63,14 @@ class Body(unittest.TestCase):
     def test_self_intersecting_pose_collides(self):
         m = mujoco.MjModel.from_xml_string(V2.xml_v2(table=False))
         d = mujoco.MjData(m)
-        rng = np.random.default_rng(0)
-        found = 0
-        for _ in range(400):
-            q = np.array([rng.uniform(-180, 180), *rng.uniform(-110, 110, 3), 0.0])
-            d.qpos[:] = np.radians(q)
-            mujoco.mj_forward(m, d)
-            found += int(d.ncon > 0)
-        self.assertGreater(found, 0)
+        d.qpos[:] = np.radians([0, 0, 110, 110, 0])               # shoulder up, elbow and wrist folded fully: the mirror ball pushes into the base column
+        mujoco.mj_forward(m, d)
+        self.assertGreater(d.ncon, 0)
+        d.qpos[:] = np.radians(MA.NEUTRAL_DEG)
+        mujoco.mj_forward(m, d)
+        self.assertEqual(d.ncon, 0)
+        d.qpos[:] = np.radians([0, 0, 110, 110, 0])
+        mujoco.mj_forward(m, d)
         m1 = mujoco.MjModel.from_xml_string(MA.final_xml())
         d1 = mujoco.MjData(m1)
         d1.qpos[:] = d.qpos
@@ -101,7 +101,7 @@ class Penalties(unittest.TestCase):
         self.assertAlmostEqual(float(F.penalties(full)["lim"]), 1.0 / 3.0 * 0.9, places=6)            # shoulder alone: (109 - 100) / 10 over 3 bends
         fast = jnp.asarray(np.cumsum(np.full((60, 5), 3.0), 0))                                      # 300 deg/s on every joint
         self.assertGreater(float(F.penalties(fast)["hand_v"]), 0.0)
-        wob = jnp.asarray(np.stack([np.where(np.arange(60) % 2 == 0, 0.0, 40.0)] * 5, 1))             # alternating positions: hand speed alternates, large jolt
+        wob = jnp.asarray(np.stack([np.where(np.arange(60) < 30, 0.0, 40.0)] * 5, 1))                  # still, then a 40 deg step: a hand-speed spike, large jolt
         self.assertGreater(float(F.penalties(wob)["jolt"]), 0.0)
 
 
@@ -184,10 +184,10 @@ class Switches(unittest.TestCase):
         self.assertTrue(np.all(o["tv"] >= 0) and np.all(o["tv"] <= 1.0 + 1e-9))
 
     def test_switches_independent(self):
-        base = self.run_chunk(OFF)["q"]
+        base = self.run_chunk(OFF, nb=20)["q"]                      # 20 blocks: the toy's state input is zero before block 8, so the programs only change after it
         for sw in ("phase_lp", "xfade"):
-            self.assertFalse(np.array_equal(self.run_chunk({**OFF, sw: True})["q"], base), sw)
-        self.assertTrue(np.array_equal(self.run_chunk({**OFF, "obs_lp": True})["q"], base))
+            self.assertFalse(np.array_equal(self.run_chunk({**OFF, sw: True}, nb=20)["q"], base), sw)
+        self.assertTrue(np.array_equal(self.run_chunk({**OFF, "obs_lp": True}, nb=20)["q"], base))
 
 
 class Report(unittest.TestCase):
