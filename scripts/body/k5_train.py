@@ -378,9 +378,8 @@ def main():
     why = K5Run(a.out, a.k5, round_windows=a.round_windows, log=log, windows=w).run(a.max_rounds)
     if why == "done" and not a.no_chain:
         log("training finished; running the K5 check on best.pkl")
-        rc = subprocess.run([sys.executable, "-u", str(Path(__file__).with_name("k5_eval.py")), "--policy", str(Path(a.out) / "best.pkl"), "--out", str(Path(a.out) / "eval"), "--k5", a.k5]).returncode
-        log(f"k5_eval exit {rc}")
-        return rc
+        sys.stdout.flush()
+        os.execv(sys.executable, [sys.executable, "-u", str(Path(__file__).with_name("k5_eval.py")), "--policy", str(Path(a.out) / "best.pkl"), "--out", str(Path(a.out) / "eval"), "--k5", a.k5])      # replaces this process: the trainer's memory is freed (a subprocess of the 13 h trainer hit the 8 GB cap in WO10)
     return 0
 
 

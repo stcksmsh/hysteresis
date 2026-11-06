@@ -15,6 +15,10 @@ case "$1" in
     systemd-run --user --unit="$UNIT" -p MemoryMax=8G -p MemorySwapMax=0 -p CPUQuota=600% -p TimeoutStopSec=180 --working-directory="$HERE" \
       -E OMP_NUM_THREADS=6 -E PYTHONHASHSEED=0 -E PYTHONPATH="$HERE" \
       bash -c "exec /secondary/hyst-env/body/bin/python -u k5_train.py --out '$OUT' $K5_ARGS >> '$OUT/run.log' 2>&1" ;;
+  check)    # only the K5 check on best.pkl (unit hyst-wo10-k5check, 14 GB), resume-safe: finished policies and finished rollout batches are reused
+    systemd-run --user --unit="${K5_CHECK_UNIT:-hyst-wo10-k5check}" -p MemoryMax=14G -p MemorySwapMax=0 -p CPUQuota=600% -p TimeoutStopSec=180 --working-directory="$HERE" \
+      -E OMP_NUM_THREADS=6 -E PYTHONHASHSEED=0 -E PYTHONPATH="$HERE" \
+      bash -c "exec /secondary/hyst-env/body/bin/python -u k5_eval.py --policy '$OUT/best.pkl' --out '$OUT/eval' >> '$OUT/check.log' 2>&1" ;;
   pause)    systemctl --user freeze "$UNIT" ;;
   continue) systemctl --user thaw "$UNIT" ;;
   stop)     systemctl --user stop "$UNIT" ;;
