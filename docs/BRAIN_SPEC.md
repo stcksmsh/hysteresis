@@ -1077,3 +1077,31 @@ reports a per-change ablation of movement changes 1-4 on (e), report only.
   the six arms (all six reported). The toy's (e) compares the mean over its held-out episodes with the mean of v47's three per-song values.
 - Toy grid selection rule (fixed before the grid runs): among grid points that pass the toy bar and (e) on the tune episodes, take the one
   with the highest external (a); ties go to the smaller weights. Try 2 only if try 1 fails, changing only what the failure names (7.21 point 4).
+
+### 7.25 Rulings on bar (e), 2026-11-06, via planner
+
+Binding. They answer `docs/PLANNER_BRIEF_E_BAR.md`. Fixed before WO13B selects its grid point.
+
+1. **(e) is replaced by (e'), two parts, both relative to v47 (mean of its six arms) on the same songs:**
+   - (e'1) hand-acceleration p99 per song <= 1.25 x v47's;
+   - (e'2) share of time with hand speed > 1 m/s per song <= 1.25 x v47's.
+   Toy: the episode mean <= 1.25 x the mean of v47's three per-song values. (e) stays reported.
+   **Recorded:** (e) as the planner defined it passed the motion it was meant to stop (K5 try 1: 0.00266 vs limit 0.00371); the flicks are
+   hand-space throws, not joint tremor. WO13B's grid selection rule uses (e') in place of (e).
+   **Measurement (overseer, as in the brief):** hand position by forward kinematics of the CSV rig (`arm_sim.fk`, last point), 50 Hz,
+   central differences (`np.gradient`) for velocity and acceleration, norms in m/s and m/s2. **Limits** (overseer's computation from the
+   v47 per-arm CSVs; values in `docs/hf_v47_eprime_reference.json`):
+   | | v47 acc p99 | limit (e'1) | v47 share > 1 m/s | limit (e'2) |
+   |---|---|---|---|---|
+   | Instant Crush | 4.256 | 5.320 | 0.00968 | 0.01210 |
+   | Five Years | 4.145 | 5.182 | 0.00529 | 0.00661 |
+   | Presence | 6.001 | 7.501 | 0.01145 | 0.01431 |
+   | toy (mean of the three) | 4.801 | 6.001 | 0.00881 | 0.01101 |
+   (The brief's rounded Five Years limit 5.19 is 5.182 when computed from unrounded values; the computed value applies.)
+   **Record:** the overseer did not read any of the grid's (e') values before this ruling; WO13B was told on 2026-11-06 ~18:15 to record them
+   and not to select until this ruling (to be confirmed by WO13B's own log).
+2. **v47 stays the reference.**
+3. **Report-only ablation** of movement changes 1-4 on (e'1) and (e'2), with (e) reported too.
+4. **Confirmed:** frictionless table contact (v2f) is accepted, because the bar forbids touching the table anyway (check-csv floor margin);
+   the time in contact per song (per episode on the toy) is reported. Normalising the jerk, hand-speed and jolt terms by the untrained
+   policy's values on the OLD body is accepted as a fixed scale and recorded here.
