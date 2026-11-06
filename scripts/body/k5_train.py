@@ -13,13 +13,21 @@ EARLY STOPPING RULE (fixed before any run): every VAL_EVERY = 200 rounds (3,200 
 72 validation artists, one window each, starting at 50 % of the song, moved back to fit) in ARGMAX mode with the WO7 observer procedure (a fresh external and internal observer trained on
 4 rollouts of 16 seeded training windows, 600 steps, seed 999); the validation figure is the mean external (a) gap. best.pkl = the policy with the highest figure. Stop when two validations in
 a row fail to beat the best (strictly higher). The policy that K5 scores is best.pkl. A pass that completes without stopping ends with the final validation. Held-out artists are never read here.
-Checkpoint (ckpt.pkl, atomic) every CKPT_EVERY = 25 rounds (400 windows) and after every validation; the validation history and the best figure are in it.
+Checkpoint (ckpt.pkl, written to a temp file, fsynced and renamed; the previous one kept as ckpt.prev.pkl) after EVERY round and after every validation; the validation history, the best figure,
+the compute spent and the done flag are in it. WO10 pause / stop rules: SIGTERM finishes the current round (about 61 s), writes the checkpoint and exits 0; during a validation or the K5 check it
+stops after the current 64-window batch (finished batches are kept; an unfinished validation is simply run again on resume). `systemctl --user freeze` stops the process; the compute clock
+counts a second only when it ticked within 3 s, so frozen time and time on battery are not counted. While ADP1/online = 0 the run waits (after the round's checkpoint). Compute box
+BOX_H = 24 h of that clock; the run stops at it. After the pass (or an early stop, or the box) the K5 check runs on best.pkl (k5_eval.py) unless --no-chain.
 """
 import argparse
 import json
 import math
+import os
 import pickle
+import signal
+import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -35,11 +43,70 @@ import m3e_jax as M
 K5 = Path("/secondary/hyst-data/body/k5")
 SEED = 20261106
 ROUND = 16
-VAL_EVERY, CKPT_EVERY, PATIENCE = 200, 25, 2
+VAL_EVERY, PATIENCE = 200, 2
+BOX_H = 24.0
+ONLINE = Path('/sys/class/power_supply/ADP1/online')
 LAM, LR = 0.03, 1e-3
 NB = m3d.NB
 N_OBS_WINDOWS = 16
 EVAL_BATCH = 64
+
+
+# ---------------------------------------------------------------------------------------------------------------- stop, pause, mains, compute clock
+class Interrupted(Exception):
+    pass
+
+
+STOP = threading.Event()
+
+
+def install_signals():
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        signal.signal(sig, lambda *a: STOP.set())
+
+
+def check():
+    if STOP.is_set():
+        raise Interrupted()
+
+
+def online():
+    try:
+        return ONLINE.read_text().strip() == "1"
+    except OSError:
+        return True                                                   # no battery/adapter file: a desktop
+
+
+def wait_mains(log=print, clock=None):
+    if online():
+        return
+    log("on battery: waiting for mains (not counted as compute)")
+    if clock:
+        clock.on = False
+    while not online():
+        check()
+        time.sleep(20)
+    log("mains is back")
+    if clock:
+        clock.on = True
+
+
+class Clock:
+    """Compute spent, seconds: a daemon thread adds each 1 s tick that really took under 3 s while `on`. A frozen cgroup (systemctl freeze) or a suspended machine shows up as one long gap
+    and adds nothing; time waiting for mains has `on` False."""
+
+    def __init__(self, spent=0.0):
+        self.spent, self.on = float(spent), True
+        threading.Thread(target=self._tick, daemon=True).start()
+
+    def _tick(self):
+        last = time.monotonic()
+        while True:
+            time.sleep(1.0)
+            now = time.monotonic()
+            if self.on and now - last < 3.0:
+                self.spent += now - last
+            last = now
 
 
 # ---------------------------------------------------------------------------------------------------------------- windows
@@ -122,14 +189,19 @@ def should_stop(vals, patience=PATIENCE):
 
 
 # ---------------------------------------------------------------------------------------------------------------- scoring on windows (WO7 observer procedure)
-def rollout_batched(fns, C, P, toy, sl, mode, key, seed, batch=None, cb=8):
+def rollout_batched(fns, C, P, toy, sl, mode, key, seed, batch=None, cb=8, cache=None):
     """m3e.rollout over the windows toy.sets[...] slice `sl` in batches of `batch` (the last one padded by repeating its final window, then trimmed). Same start poses for every
     window of the set (seeded by `seed`), Gumbel noise folded per batch. -> dict of arrays (E, NB, ...)."""
-    batch = batch or EVAL_BATCH
     ids = np.arange(*sl.indices(len(toy.y)))
+    batch = min(batch or EVAL_BATCH, len(ids))
     poses = m3d.start_poses(len(ids), seed)
     outs = []
     for i0 in range(0, len(ids), batch):
+        f = None if cache is None else Path(f"{cache}_b{i0}.npz")
+        if f is not None and f.exists():                                # a finished batch of an interrupted scoring is kept (bit-identical on rerun)
+            d = np.load(f)
+            outs.append({k: d[k] for k in d.files})
+            continue
         sub = ids[i0:i0 + batch]
         n = len(sub)
         sub = np.concatenate([sub, np.repeat(sub[-1:], batch - n)]) if n < batch else sub
@@ -141,6 +213,11 @@ def rollout_batched(fns, C, P, toy, sl, mode, key, seed, batch=None, cb=8):
             carry, o = fns["hard"][mode](P, carry, m3d.take(inps, c0, c0 + cb))
             chunks.append(o)
         outs.append({k: np.concatenate([np.asarray(o[k]) for o in chunks], 1)[:n] for k in chunks[0]})
+        if f is not None:
+            np.savez(str(f) + ".tmp.npz", **outs[-1])
+            os.replace(str(f) + ".tmp.npz", f)
+        check()                                                         # SIGTERM stops here, after a whole batch
+        wait_mains()
     return {k: np.concatenate([o[k] for o in outs]) for k in outs[0]}
 
 
@@ -152,15 +229,8 @@ def score_modes(fns, C, P, stats, combo, modes=("argmax",), rolldir=None, name="
     for mode in modes:
         rolls = []
         for k, (sl, key, seed) in enumerate([(combo.sets["train"], 100 + k, 100) for k in range(4)] + [(combo.sets["eval"], 7, 4242)]):
-            f = None if rolldir is None else Path(rolldir) / f"{name}_{mode}_{k}.npz"
-            if f is not None and f.exists():
-                d = np.load(f)
-                rolls.append({x: d[x] for x in d.files})
-                continue
-            r = rollout_batched(fns, C, P, combo, sl, mode, jax.random.PRNGKey(key), seed)
-            if f is not None:
-                np.savez(f, **r)
-            rolls.append(r)
+            cache = None if rolldir is None else str(Path(rolldir) / f"{name}_{mode}_{k}")
+            rolls.append(rollout_batched(fns, C, P, combo, sl, mode, jax.random.PRNGKey(key), seed, cache=cache))
         Oe, Oi = m3e.fresh_observers(rolls[:4], yz_tr, stats)
         res[mode] = m3e.score_rollouts(rolls[4], Oe, Oi, stats, combo, "eval")
         s = res[mode]
@@ -192,24 +262,43 @@ class K5Run:
     def ckpt(self):
         return self.out / "ckpt.pkl"
 
+    @property
+    def prev(self):
+        return self.out / "ckpt.prev.pkl"
+
+    def _read_ckpt(self):
+        for p in (self.ckpt, self.prev):                       # a kill between the two renames leaves only the previous one
+            if p.exists():
+                try:
+                    return pickle.loads(p.read_bytes())
+                except Exception as e:                         # truncated file: fall back to the previous checkpoint
+                    self.log(f"checkpoint {p.name} unreadable ({e!r}); trying the previous one")
+        return None
+
     def load_or_calibrate(self):
-        if self.ckpt.exists():
-            d = pickle.loads(self.ckpt.read_bytes())
+        d = self._read_ckpt()
+        if d is not None:
             self.tr.load(d["trainer"])
             for st in (self.tr.st, self.tr.vst):                       # Trainer.load turns the Adam step count into a JAX array; as a Python int (what a fresh run has) b1 ** t rounds identically
                 st["t"] = int(st["t"])
             self.extra = d["extra"]
-            self.log(f"resumed at round {self.tr.epoch} of {self.R}")
+            self.log(f"resumed at round {self.tr.epoch} of {self.R}, {self.extra.get('spent_s', 0) / 3600:.2f} h of compute spent")
         else:
             self.set_groups(self._calib)
             self.tr.calibrate()
 
     def save(self):
+        self.extra["spent_s"] = self.clock.spent
         tmp = self.out / "ckpt.pkl.tmp"
-        tmp.write_bytes(pickle.dumps({"trainer": self.tr.state(), "extra": self.extra}))
-        tmp.replace(self.ckpt)
+        with open(tmp, "wb") as f:
+            f.write(pickle.dumps({"trainer": self.tr.state(), "extra": self.extra}))
+            f.flush()
+            os.fsync(f.fileno())
+        if self.ckpt.exists():
+            os.replace(self.ckpt, self.prev)
+        os.replace(tmp, self.ckpt)
         (self.out / "progress.json").write_text(json.dumps({"round": self.tr.epoch, "of": self.R, "windows_done": min(self.tr.epoch * self.rw, len(self.order)), "val": self.extra["val"],
-                                                          "hist": self.tr.hist[-1] if self.tr.hist else None}))
+                                                          "spent_h": self.clock.spent / 3600, "done": self.extra.get("done"), "hist": self.tr.hist[-1] if self.tr.hist else None}))
 
     def one_round(self):
         r = self.tr.epoch
@@ -224,28 +313,52 @@ class K5Run:
         combo = combine(self._obs, self._val)
         res = score_modes(self.tr.fns, self.C, self.tr.P, self.tr.stats, combo, ("argmax",), None, f"val{self.tr.epoch}", self.log)["argmax"]
         v = res["ext"]["a_gap_mean"]
-        self.extra["val"].append({"round": self.tr.epoch, "ext_a": v, "int_a": res["int"]["a_gap_mean"], "b": res["b_rms_nonroll"]})
+        self.extra["val"].append({"round": self.tr.epoch, "ext_a": v, "int_a": res["int"]["a_gap_mean"], "b": res["b_rms_nonroll"], "spent_h": self.clock.spent / 3600})
         if self.extra["best"] is None or v > self.extra["best"]:
             self.extra["best"], self.extra["bad"] = v, 0
-            (self.out / "best.pkl.tmp").write_bytes(pickle.dumps({"P": jax.tree_util.tree_map(np.asarray, self.tr.P), "stats": self.tr.stats, "round": self.tr.epoch, "val": v}))
-            (self.out / "best.pkl.tmp").replace(self.out / "best.pkl")
+            with open(self.out / "best.pkl.tmp", "wb") as f:
+                f.write(pickle.dumps({"P": jax.tree_util.tree_map(np.asarray, self.tr.P), "stats": self.tr.stats, "round": self.tr.epoch, "val": v}))
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(self.out / "best.pkl.tmp", self.out / "best.pkl")
         else:
             self.extra["bad"] += 1
         self.extra["stopped"] = should_stop([x["ext_a"] for x in self.extra["val"]])
-        self.log(f"validation at round {self.tr.epoch}: ext a {v:.4f}, best {self.extra['best']:.4f}, bad {self.extra['bad']}, stop {self.extra['stopped']}")
+        self.log(f"validation at round {self.tr.epoch}: ext a {v:.4f}, best {self.extra['best']:.4f}, bad {self.extra['bad']}, stop {self.extra['stopped']}, compute {self.clock.spent / 3600:.2f} h")
+
+    def maybe_validate(self):
+        r = self.tr.epoch
+        if r > 0 and (r % VAL_EVERY == 0 or r == self.R) and not any(v["round"] == r for v in self.extra["val"]):     # also after a resume that interrupted the validation
+            self.validate()
+            self.save()
 
     def run(self, max_rounds=None):
+        """-> 'done' (pass finished, early stop or box), 'max_rounds', or 'stopped' (SIGTERM). The checkpoint is current in every case."""
         self.load_or_calibrate()
+        self.clock = Clock(self.extra.get("spent_s", 0.0))
         t0 = time.time()
-        while self.tr.epoch < self.R and not self.extra["stopped"] and (max_rounds is None or self.tr.epoch < max_rounds):
-            self.one_round()
-            r = self.tr.epoch
-            if r % VAL_EVERY == 0 or r == self.R:
-                self.validate()
-            if r % CKPT_EVERY == 0 or r == self.R or self.extra["stopped"]:
-                self.save()
+        why = "stopped"
+        try:
+            self.save()
+            self.maybe_validate()
+            while True:
+                if self.tr.epoch >= self.R or self.extra["stopped"] or self.clock.spent >= BOX_H * 3600:
+                    self.extra["done"] = "pass complete" if self.tr.epoch >= self.R else "early stop" if self.extra["stopped"] else "compute box"
+                    why = "done"
+                    break
+                if max_rounds is not None and self.tr.epoch >= max_rounds:
+                    why = "max_rounds"
+                    break
+                check()
+                wait_mains(self.log, self.clock)
+                self.one_round()
+                self.save()                                              # every round
+                self.maybe_validate()
+        except Interrupted:
+            why = "stopped"
         self.save()
-        self.log(f"stopped at round {self.tr.epoch} of {self.R} ({'early stop' if self.extra['stopped'] else 'pass complete' if self.tr.epoch >= self.R else 'max rounds'}), {time.time() - t0:.0f} s this run")
+        self.log(f"{why} at round {self.tr.epoch} of {self.R}, {self.clock.spent / 3600:.2f} h compute spent, {time.time() - t0:.0f} s this run")
+        return why
 
 
 def main():
@@ -253,9 +366,21 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--k5", default=str(K5))
     ap.add_argument("--max-rounds", type=int)
+    ap.add_argument("--limit-windows", type=int, help="test only: use the first N windows of windows.json")
+    ap.add_argument("--round-windows", type=int, default=ROUND, help="test only")
+    ap.add_argument("--no-chain", action="store_true", help="do not run the K5 check after training")
     a = ap.parse_args()
+    install_signals()
     t0 = time.time()
-    K5Run(a.out, a.k5, log=lambda s: print(f"[{time.time() - t0:7.0f}s] {s}", flush=True)).run(a.max_rounds)
+    log = lambda s: print(f"[{time.time() - t0:7.0f}s] {s}", flush=True)
+    wait_mains(log)
+    w = None if a.limit_windows is None else json.loads((Path(a.k5) / "windows.json").read_text())["train"][:a.limit_windows]
+    why = K5Run(a.out, a.k5, round_windows=a.round_windows, log=log, windows=w).run(a.max_rounds)
+    if why == "done" and not a.no_chain:
+        log("training finished; running the K5 check on best.pkl")
+        sys.stdout.flush()
+        os.execv(sys.executable, [sys.executable, "-u", str(Path(__file__).with_name("k5_eval.py")), "--policy", str(Path(a.out) / "best.pkl"), "--out", str(Path(a.out) / "eval"), "--k5", a.k5])      # replaces this process: the trainer's memory is freed (a subprocess of the 13 h trainer hit the 8 GB cap in WO10)
+    return 0
 
 
 if __name__ == "__main__":

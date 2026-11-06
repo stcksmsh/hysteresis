@@ -1,4 +1,44 @@
-# Night log, builder (body-k5train), work order 9, the K5 trainer and the Kaggle check (2026-11-05)
+# Night log, builder (body-k5train), work orders 9 and 10
+
+## K5 RUN (WO10): THE FOUR COMMANDS (details: scripts/body/K5_RUN.md; run dir /secondary/hyst-data/body/k5/run1/; unit hyst-wo10-k5run)
+
+1. **Pause**: `systemctl --user freeze hyst-wo10-k5run`  (instant; paused time is not compute)
+2. **Continue**: `systemctl --user thaw hyst-wo10-k5run`
+3. **Stop**: `systemctl --user stop hyst-wo10-k5run`  (finishes the round in progress, ~60 s, checkpoints, exits 0)
+4. **Start again**: `/secondary/Programming/Github/Hysteresis/.claude/worktrees/body-k5train/scripts/body/k5_run.sh start`  (resumes from the last checkpoint; also the command after a reboot)
+
+Checkpoint after every round, atomic (temp file, fsync, rename; the previous kept as `ckpt.prev.pkl`). Mains only: waits on battery. Compute box 24 h (clock excludes pauses and battery waits).
+Tests (WO10 1b): `test_k5_run` (real units: start, freeze, thaw, stop, start again; interrupted vs uninterrupted agree to 1e-9; found max difference 4.0e-12), `test_k5_train` 9 OK (in-process resume bit-identical).
+**Finding**: two UNINTERRUPTED runs of the same command in separate processes give one of two reproducible results that differ by 4.0e-12 (float64 summation order in XLA CPU; alternates run to run on a quiet machine, same with PYTHONHASHSEED fixed). So bit-identity across processes is not available even without a stop; in one process a resume is bit-identical. FOR OVERSEER.
+
+## K5 RESULT, try 1 (WO10; provisional servo model: Feetech STS3215 12 V assumed; one arm)
+
+Training: one full pass, 977 rounds (15,624 windows), **13.15 h of compute** (box 24 h), early stop never fired, best.pkl = round 977. Validation curve (217 validation windows, argmax, ext (a)): 0.5585, 0.5441, 0.5744, 0.5962, 0.6335 at rounds 200, 400, 600, 800, 977.
+K5 check on best.pkl: 1,071 windows of the 357 held-out songs (73 artists), WO7 observer procedure, per-song gaps, bootstrap over 357 songs x 10,000, argmax = pass/fail:
+
+| argmax | (a) mean [95 % CI] | paired vs untrained | paired vs kappa 0 |
+|---|---|---|---|
+| external | 0.625 [0.603, 0.648] | 0.452 [0.435, 0.470] | 0.086 [0.073, 0.098] |
+| internal | 0.636 [0.613, 0.658] | 0.496 [0.477, 0.515] | 0.177 [0.164, 0.190] |
+
+Sampled (reported only): external 0.643 [0.620, 0.666], paired vs untrained 0.742, vs kappa 0 0.134; internal 0.658 [0.635, 0.680], 0.757, 0.207 (all intervals above 0). (b) RMS joint speed 49.3 deg/s; (c) MI 0.037 nats, p 0.001 (floor of 1,000 shuffles). Trained per-joint kappa means 1.51 / 2.80 / 3.71 / 3.61 / 1.33 rad/s. Controls: untrained policy external (a) 0.173 [0.162, 0.184] (sampled -0.098), trained with kappa 0: 0.540 [0.522, 0.558] (sampled 0.509).
+**Verdict per 7.18 point 2 / 7.19 C / 7.20 point 3:** K5 passes in argmax for the external decoder (beats the time-shifted control and the untrained policy) and the internal decoder passes the same two tests. The phase-coupling wording is allowed: trained beats the kappa = 0 version, paired interval above 0, in argmax. Allowed claim wording: "It learned to move so that its inner state can be read from its body, by you and by itself (both read the same joint positions)."
+Caveats (not tuned away): both observers read the same joint positions, so the two decodings are not independent; (a) is a gap against time-shifted targets, not an absolute accuracy; MI is small; the arm's loop closes at block rate; one try only.
+Files: `/secondary/hyst-data/body/k5/run1/` (`best.pkl`, `ckpt.pkl`, `run.log`, `check.log`, `eval/summary.json`, per-policy jsons, rollouts); copies `docs/k5_run1_check_summary.json`, `docs/k5_run1_progress.json`.
+
+**The K5 check was OOM-killed once** (07:25, 8 GB cap): the 13 h trainer process stayed alive while the check ran as its subprocess. The check was relaunched alone (`k5_run.sh check`, unit hyst-wo10-k5check, 14 GB, 633 s), reusing the finished trained/untrained results and the cached rollout batches; the rescoring of the kappa-0 argmax rollouts from cache gave the same numbers as the killed run's own score (0.540 [0.522, 0.558], int 0.458, b 43.5). Equality with a from-scratch run is not claimed beyond the 4e-12 cross-process noise. The chain now `exec`s into the check so the trainer's memory is freed.
+
+**Renders (step 5): not done, FOR OVERSEER.** No path from a trained policy to the three danced songs exists in the repo: (1) the danced songs' B7 lanes in the K5 format (`y`, `phi_end`, `omega`; the songs are 200-340 s and the policy was trained on 60 s windows with 30 s causal normalisation, so a whole-song rollout needs a chunked rollout with the carry kept) are not exported; (2) there is no script that rolls the policy over a full song and writes the joint CSV (`arm_sim.csv_text` exists); (3) the one-arm camera (7.18 point 4) and the render of a CSV with it sit outside the files I own. Needed: an order for (1)+(2) in my files, and the camera/render entry point name.
+
+## K5 validation curve (WO10)
+
+- round 200 (3,200 windows), compute 2.81 h: ext (a) 0.5585 [0.523, 0.595], int (a) 0.510, b 40.1 deg/s. Best so far.
+- round 400, compute 5.51 h: ext (a) 0.5441 [0.509, 0.579], int (a) 0.470, b 41.5. Not above the best (bad 1).
+- round 600, compute 8.17 h: ext (a) 0.5744 [0.537, 0.611], int (a) 0.539, b 45.2. New best (bad 0).
+- round 800, compute 10.80 h: ext (a) 0.5962 [0.559, 0.634], int (a) 0.597, b 46.5. New best (bad 0).
+- round 977 (end of the pass), compute 13.15 h: ext (a) 0.6335. New best (bad 0). Pass complete, early stop never fired; best.pkl = round 977. K5 check started.
+
+# WO9: the K5 trainer and the Kaggle check (2026-11-05)
 
 Provisional servo model throughout: Feetech STS3215 12 V assumed. The installation is ONE arm. **K5 training was NOT launched.**
 
