@@ -80,3 +80,17 @@ Provisional servo model: Feetech STS3215 12 V assumed. Rules written before the 
 - Scoring: argmax for pass/fail, sampled (`sample` in the json) reported only; external and internal (a), (b), (c); paired (a)_try1seed2 - (a)_ablation seed 2, 10,000 resamples (`m3e_ablate2.py`, same `paired_difference` as WO9).
 - Verdict rule (BRAIN_SPEC 7.21 point 1): credited for a decoding (ext, int separately) only if the argmax paired interval is above 0 in BOTH seeds; else "present". Dopamine fact (7.21 point 2): reported as lowering a decoding only if the argmax paired try1 - A2 interval is below 0 (upper end < 0) in both seeds. Try 1 run-to-run spread: seed 1 minus seed 2 mean (a) and its paired interval.
 - Launch: unit hyst-wo11-m3e-chain-1251 (14 GB, 8 cores, mains power), `chain_wo11.sh`; order try 1, A1, A2, A3, report, 15 tests. Output `/secondary/hyst-data/body/m3e/seed2/`. Dry run of the report logic on seed-1 data reproduces WO9's A2 paired numbers (-0.086 / -0.085). Results below when finished.
+
+### WO11 result (2026-11-06)
+Unit hyst-wo11-m3e-chain-1251, 12:51-14:51 (about 2 h for try 1, A1, A2, A3, report and 15 tests OK, `seed2/unittest.log`); peak memory not recorded (cap 14 GB). Data `/secondary/hyst-data/body/m3e/seed2/` (`summary.json`). Seed 2 = Trainer seed 1; everything else as WO8/WO9. All four seed-2 runs pass the argmax bar (ext and int (a), (b), (c)).
+Try 1 seed 2 (argmax | sample): ext (a) 0.763 [0.646, 0.877] | 0.350; int 0.602 [0.494, 0.705] | 0.315; b 43.6 | 42.2; c MI 0.269 | 0.044, p 0.001 both. Seed 1 was ext 0.991, int 0.951.
+Run-to-run spread, try 1 seed 1 minus seed 2 (paired per episode, 95 %): argmax ext 0.229 [0.098, 0.362], int 0.348 [0.252, 0.447]; sample ext 0.496 [0.377, 0.618], int 0.523 [0.409, 0.636]. The spread is larger than most WO9 paired differences.
+Ablations seed 2 (argmax ext a / int a / b | sample ext a): A1 0.819 / 0.598 / 39.4 | 0.631; A2 0.639 / 0.603 / 39.9 | 0.411; A3 0.963 / 0.766 / 42.0 | 0.918.
+Paired try 1 - ablation, seed 2 [seed 1 from WO9], argmax, mean [95 %]:
+- A1 closed loop off: ext -0.057 [-0.142, 0.028] [0.097 [-0.042, 0.232]]; int 0.004 [-0.074, 0.076] [0.213 [0.078, 0.352]].
+- A2 gating off: ext 0.124 [0.034, 0.212] [-0.086 [-0.209, 0.044]]; int -0.000 [-0.100, 0.109] [-0.085 [-0.166, -0.006]].
+- A3 internal observer off: ext -0.200 [-0.298, -0.099] [0.112 [-0.019, 0.254]]; int -0.164 [-0.264, -0.058] [0.279 [0.159, 0.408]].
+Sampled paired (seed 2): A1 ext -0.281, int -0.206; A2 ext -0.061, int -0.085; A3 ext -0.567, int -0.407 (A1, A3 intervals below 0).
+**Verdicts (7.21 point 1, both seeds argmax above 0): closed-loop inputs, dopamine gating and the internal observer are "present" for both decodings; none credited.** The seed-2 sign of A1 and A3 is opposite to seed 1 (the ablated runs read higher than try 1 on seed 2).
+**Dopamine fact (7.21 point 2): not shown.** Both seeds show a lower decoding only if the paired interval is below 0 in both: seed 1 internal only (-0.085 [-0.166, -0.006]), seed 2 neither (ext +0.124 above 0). So gating is not recorded as lowering decoding; it stays "present".
+Caveats: two seeds only; the paired intervals cover the 16 held-out episodes, not training variation, and the try 1 spread (up to 0.35) shows training variation is as large as the effects tested; the ablated runs share Trainer seed with their try 1 but not data order beyond that.
