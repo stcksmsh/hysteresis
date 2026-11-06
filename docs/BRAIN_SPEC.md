@@ -1035,3 +1035,45 @@ Binding. They answer `docs/PLANNER_BRIEF_WO11_WO12_RESULTS.md`.
 4. **No "holds past 60 s" wording;** the per-60 s readability stays report-only.
 5. **Mount:** the user is asked whether the arm stands on a plinth, on a table, or hangs, and at what height; this sets the floor plane.
    Until answered, the floor is at the base's mounting plane (z = 0, the plane `score_csv.rs` already uses).
+
+### 7.24 User verdict on K5 try 1 videos and K5-pass2 design, 2026-11-06, via planner
+
+Binding. Set before any pass2 or new-toy result. It replaces the body section of 7.23 point 2 (the 7.23 bar and order stay, extended below).
+
+**User verdict on the K5 try 1 videos:** "something musical, but spastic" (frequent flicking, jittering, stuttering), and the arm goes
+straight down through the base. **Mount:** the arm stands on a table or pillar.
+
+**Body (K5-pass2 and the new toy):**
+- a table plane at the base's mounting plane (z = 0, the plane `score_csv.rs` uses), with contact;
+- self-collision on (all links, base column, mirror ball);
+- joint ranges as in the rig;
+- a small cost for time spent within 10 deg of any joint limit;
+- check-csv's hand-speed and jolt limits as soft penalties.
+
+**Movement (human motor-control principles; design choices, set before results):**
+1. Minimum-jerk cost: mean squared joint jerk in the loss (after Flash & Hogan 1985, "The coordination of arm movements: an experimentally
+   confirmed mathematical model", J. Neurosci. 5(7): 1688-1703). Weight set on the toy only.
+2. Observers read at human perceptual speed: descriptors computed on joint trajectories low-passed at 10 Hz, and the jerk-based descriptors
+   removed from both observers' inputs.
+3. Stable phase coupling: the L3 phase estimate low-passed (tau 0.2 s), and the coupling strength multiplied by the L3 order parameter
+   (magnitude-weighted), so a weak or incoherent beat band pulls nothing. kappa stays learned.
+4. Program crossfade: a switch blends the old and new programs' generator settings over 0.75 s, plus a switch cost in the loss (weight from
+   the toy grid).
+
+**New bar component (e), for the toy and for pass2:** the share of joint-velocity power above 3 Hz (non-roll joints, per song) is <= 1.25 x
+v47's share on the same three danced songs. v47's value is measured and recorded before any pass2 result.
+
+**Order:** (i) the M3e toy with the new body and the movement changes (same toy bar plus (e); two tries; WO7 controls reported); (ii) pass2,
+with the full K5 bar plus check-csv passing plus (e) on the three danced songs; then videos for the user's eye next to v47 and the fallback.
+
+**Recorded as untested:** the jitter diagnosis (legibility rewarding fast features, no jerk cost, phase jumps, instant switches). The toy
+reports a per-change ablation of movement changes 1-4 on (e), report only.
+
+**Overseer's operational defaults (2026-11-06, not planner rulings; to be confirmed or corrected by the planner):**
+- (e) measurement: joint velocity by central difference of the 50 Hz joint CSV (pass2, v47) or of the 100 Hz trajectory resampled to 50 Hz
+  (toy); Welch power spectrum, 4 s Hann segments, 50 % overlap, mean removed; share = power above 3 Hz / power above 0 Hz, summed over the
+  four non-roll joints (base_yaw, shoulder, elbow, wrist_bend) of one song (or one toy episode).
+- v47 reference: the v47 Off hexagon score of each danced song, exported per arm with `hyst score-csv`; the per-song value is the mean over
+  the six arms (all six reported). The toy's (e) compares the mean over its held-out episodes with the mean of v47's three per-song values.
+- Toy grid selection rule (fixed before the grid runs): among grid points that pass the toy bar and (e) on the tune episodes, take the one
+  with the highest external (a); ties go to the smaller weights. Try 2 only if try 1 fails, changing only what the failure names (7.21 point 4).
