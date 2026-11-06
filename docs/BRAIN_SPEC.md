@@ -1013,3 +1013,25 @@ so no wording that its choice of movement follows its inner state.
 3. **Try 1's verdict stands.** A second pass is allowed later as a separately labelled run (K5-pass2), only if the user wants better
    movement after watching. It carries claims in the installation only if it passes the full K5 check itself; it never replaces try 1's
    record.
+
+### 7.23 Rulings on work orders 11 and 12, 2026-11-06, via planner
+
+Binding. They answer `docs/PLANNER_BRIEF_WO11_WO12_RESULTS.md`.
+
+1. **WO11 recorded:** closed-loop inputs, dopamine gating and the internal observer are all "present"; none is credited for either decoding;
+   dopamine is not shown to lower decoding. The run-to-run spread (up to 0.35) is as large as the ablation effects. No third seed.
+2. **K5-pass2 is required for the installation**, not optional: a policy that cannot be played on the real arm cannot run there. Body model
+   (option (a), extended):
+   - a MuJoCo floor plane at the real mount height, with contact; self-collision on (links, base column, mirror ball);
+   - check-csv's hand-speed and jolt limits as soft penalties, weighted like the energy term;
+   - joint ranges as in the rig.
+
+   **Recorded as a body-model flaw (planner's and builder's):** M0 had no floor and no contact. Try 1's record and wording stand as results
+   about the floor-less simulated body.
+
+   **K5-pass2 bar** = the full K5 bar (both controls, argmax, both decoders) PLUS `hyst check-csv` passing on the full-length rollouts of the
+   three danced songs. Only a policy meeting both runs on the real arm and carries the wall wording.
+3. **Order:** first the M3e toy with the new body (about 2 h, same toy bar), then K5-pass2 (one pass, 24 h compute box, laptop).
+4. **No "holds past 60 s" wording;** the per-60 s readability stays report-only.
+5. **Mount:** the user is asked whether the arm stands on a plinth, on a table, or hangs, and at what height; this sets the floor plane.
+   Until answered, the floor is at the base's mounting plane (z = 0, the plane `score_csv.rs` already uses).
