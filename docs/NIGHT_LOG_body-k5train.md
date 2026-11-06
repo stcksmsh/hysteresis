@@ -16,6 +16,7 @@ Tests (WO10 1b): `test_k5_run` (real units: start, freeze, thaw, stop, start aga
 - round 200 (3,200 windows), compute 2.81 h: ext (a) 0.5585 [0.523, 0.595], int (a) 0.510, b 40.1 deg/s. Best so far.
 - round 400, compute 5.51 h: ext (a) 0.5441 [0.509, 0.579], int (a) 0.470, b 41.5. Not above the best (bad 1).
 - round 600, compute 8.17 h: ext (a) 0.5744 [0.537, 0.611], int (a) 0.539, b 45.2. New best (bad 0).
+- round 800, compute 10.80 h: ext (a) 0.5962 [0.559, 0.634], int (a) 0.597, b 46.5. New best (bad 0).
 
 # WO9: the K5 trainer and the Kaggle check (2026-11-05)
 
