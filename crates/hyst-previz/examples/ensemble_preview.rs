@@ -342,10 +342,10 @@ fn main() -> io::Result<()> {
             }
             "--figures" => {}
             "--joint-csv" => {
-                joint_csv = Some(PathBuf::from(
-                    args.next()
-                        .ok_or_else(|| io::Error::other("--joint-csv requires a path"))?,
-                ))
+                joint_csv =
+                    Some(PathBuf::from(args.next().ok_or_else(|| {
+                        io::Error::other("--joint-csv requires a path")
+                    })?))
             }
             "--zone" => {
                 let raw = args
@@ -565,7 +565,8 @@ fn joint_csv_page(
     let (mut hz, mut rig, mut placement) = (None, None, None);
     let mut rows: Vec<[f64; 5]> = Vec::new();
     for (n, line) in text.lines().enumerate() {
-        let bad = |what: &str| io::Error::other(format!("{}: line {}: {what}", csv.display(), n + 1));
+        let bad =
+            |what: &str| io::Error::other(format!("{}: line {}: {what}", csv.display(), n + 1));
         if let Some(rest) = line.strip_prefix('#') {
             let rest = rest.trim();
             if let Some(v) = rest.strip_prefix("hz:") {
@@ -573,8 +574,9 @@ fn joint_csv_page(
             } else if let Some(v) = rest.strip_prefix("rig_json:") {
                 rig = Some(serde_json::from_str::<Rig>(v.trim()).map_err(|e| bad(&e.to_string()))?);
             } else if let Some(v) = rest.strip_prefix("placement_json:") {
-                placement =
-                    Some(serde_json::from_str::<Placement>(v.trim()).map_err(|e| bad(&e.to_string()))?);
+                placement = Some(
+                    serde_json::from_str::<Placement>(v.trim()).map_err(|e| bad(&e.to_string()))?,
+                );
             }
         } else if !line.starts_with("time_s") {
             let cells: Vec<f64> = line
@@ -591,8 +593,10 @@ fn joint_csv_page(
         rig.ok_or_else(|| io::Error::other("missing '# rig_json:' header"))?,
         placement.ok_or_else(|| io::Error::other("missing '# placement_json:' header"))?,
     );
-    if !(hz > 0.0) || rig.channels.len() != 5 || rows.len() < 2 {
-        return Err(io::Error::other("need hz > 0, a five-axis rig and two rows"));
+    if !hz.is_finite() || hz <= 0.0 || rig.channels.len() != 5 || rows.len() < 2 {
+        return Err(io::Error::other(
+            "need hz > 0, a five-axis rig and two rows",
+        ));
     }
     // The file's rig has no implement: use the one of the compiled pages (or --implement).
     rig.implement = implement.unwrap_or_else(|| Rig::illustrative_five_axis().implement);
@@ -631,7 +635,11 @@ fn joint_csv_page(
         true,
     );
     fs::write(output, html)?;
-    println!("1 arm, {} rows, {duration:.2}s → {}", rows.len(), output.display());
+    println!(
+        "1 arm, {} rows, {duration:.2}s → {}",
+        rows.len(),
+        output.display()
+    );
     Ok(())
 }
 
