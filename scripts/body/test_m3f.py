@@ -1,0 +1,222 @@
+"""Tests for the M3f body, penalties, movement switches and old-path identity (work order 13B). Provisional servo model (Feetech STS3215 12 V assumed).
+
+    python -m unittest -v test_m3f        # from scripts/body, brain env; the first-epoch test (`FirstEpoch`) takes about 5 minutes
+"""
+import json
+import os
+import unittest
+
+import jax
+import jax.numpy as jnp
+import mujoco
+import numpy as np
+
+import m3d
+import m3e
+import m3e_jax as M
+import m3f
+import m3f_jax as F
+import m3f_report as R
+import make_arm as MA
+import make_arm_v2 as V2
+
+TOY = "/secondary/hyst-data/body/m3d/toy.npz"
+OFF = dict(body="v1", obs_lp=False, phase_lp=False, xfade=False)
+
+
+def drive(model, target, secs=3.0):
+    """Start at neutral, ramp the servo targets to `target` over half the time, hold. -> (data, lowest point-z over the run)."""
+    d = mujoco.MjData(model)
+    q0 = np.array(MA.NEUTRAL_DEG, float)
+    d.qpos[:] = np.radians(q0)
+    mujoco.mj_forward(model, d)
+    n = int(secs / model.opt.timestep)
+    low = 1e9
+    for k in range(n):
+        a = min(1.0, k / (n * 0.5))
+        d.ctrl[:] = np.radians(q0 + a * (np.array(target, float) - q0))
+        mujoco.mj_step(model, d)
+        low = min(low, R.fk_points(np.degrees(d.qpos)[None])[0, 1:5, 2].min())
+    return d, low
+
+
+class Body(unittest.TestCase):
+    def test_mass_unchanged(self):
+        self.assertAlmostEqual(mujoco.MjModel.from_xml_string(MA.final_xml()).body_mass.sum(), mujoco.MjModel.from_xml_string(V2.xml_v2()).body_mass.sum(), places=12)
+
+    def test_pose_through_table_is_pushed_out(self):
+        tgt = [0, 100, 0, 0, 0]                                   # the arm points down at the table
+        _, low1 = drive(mujoco.MjModel.from_xml_string(MA.final_xml()), tgt)
+        d2, low2 = drive(mujoco.MjModel.from_xml_string(V2.xml_v2()), tgt)
+        self.assertLess(low1, -0.15)                              # the old body goes through the plane z = 0
+        self.assertGreater(low2, -0.02)                           # the new one rests on it (link-axis points; the capsule surface touches at +0.01)
+        self.assertLess(np.degrees(d2.qpos)[1], 60.0)             # and the shoulder did not reach the commanded 100 deg
+        self.assertGreater(d2.ncon, 0)
+
+    def test_self_intersecting_pose_collides(self):
+        m = mujoco.MjModel.from_xml_string(V2.xml_v2(table=False))
+        d = mujoco.MjData(m)
+        rng = np.random.default_rng(0)
+        found = 0
+        for _ in range(400):
+            q = np.array([rng.uniform(-180, 180), *rng.uniform(-110, 110, 3), 0.0])
+            d.qpos[:] = np.radians(q)
+            mujoco.mj_forward(m, d)
+            found += int(d.ncon > 0)
+        self.assertGreater(found, 0)
+        m1 = mujoco.MjModel.from_xml_string(MA.final_xml())
+        d1 = mujoco.MjData(m1)
+        d1.qpos[:] = d.qpos
+        mujoco.mj_forward(m1, d1)
+        self.assertEqual(d1.ncon, 0)                              # the old body never collides with itself
+
+    def test_neutral_pose_has_no_contact(self):
+        m = mujoco.MjModel.from_xml_string(V2.xml_v2())
+        d = mujoco.MjData(m)
+        d.qpos[:] = np.radians(MA.NEUTRAL_DEG)
+        mujoco.mj_forward(m, d)
+        self.assertEqual(d.ncon, 0)
+
+
+class Penalties(unittest.TestCase):
+    def test_zero_inside_the_limits(self):
+        t = np.linspace(0, 1, 60)[:, None]
+        full = jnp.asarray(np.array(MA.NEUTRAL_DEG)[None] + 5.0 * np.sin(2 * np.pi * 0.5 * t) * np.array([1, 1, 1, 1, 1]))   # slow, small, well inside +-100 deg
+        full = jnp.concatenate([full, full[-1:] * 0 + full[-1:]])[:60]
+        p = F.penalties(full)
+        self.assertEqual(float(p["lim"]), 0.0)
+        self.assertEqual(float(p["hand_v"]), 0.0)
+        self.assertEqual(float(p["jolt"]), 0.0)
+        self.assertGreater(float(p["jerk"]), 0.0)
+
+    def test_positive_outside(self):
+        full = jnp.tile(jnp.asarray([0.0, 109.0, 0.0, 0.0, 0.0]), (60, 1))
+        self.assertAlmostEqual(float(F.penalties(full)["lim"]), 1.0 / 3.0 * 0.9, places=6)            # shoulder alone: (109 - 100) / 10 over 3 bends
+        fast = jnp.asarray(np.cumsum(np.full((60, 5), 3.0), 0))                                      # 300 deg/s on every joint
+        self.assertGreater(float(F.penalties(fast)["hand_v"]), 0.0)
+        wob = jnp.asarray(np.stack([np.where(np.arange(60) % 2 == 0, 0.0, 40.0)] * 5, 1))             # alternating positions: hand speed alternates, large jolt
+        self.assertGreater(float(F.penalties(wob)["jolt"]), 0.0)
+
+
+class Switches(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.toy = m3f.ToyF(TOY)
+        cls.C = M.load_cb()
+        cls.P = M.init_policy(jax.random.PRNGKey(0))
+
+    def run_chunk(self, cfg, P=None, nb=8, idx=np.arange(0, 2)):
+        chunk = jax.jit(F.make_chunk(cfg), static_argnums=(2,))
+        inps = self.toy.inputs(idx, jax.random.PRNGKey(1))
+        carry = jax.vmap(lambda q: F.init_carry(cfg, q, self.C))(jnp.asarray(m3d.start_poses(len(idx), 5)))
+        _, o = chunk(self.C, self.P if P is None else P, "argmax", 0.0, carry, m3d.take(inps, 0, nb))
+        return {k: np.asarray(v) for k, v in o.items()}
+
+    def test_old_path_identity(self):
+        """body v1 with every switch off is m3e_jax.chunk: every shared output equal bit for bit."""
+        idx = np.arange(0, 2)
+        inps = self.toy.inputs(idx, jax.random.PRNGKey(1))
+        c0 = jax.vmap(lambda q: M.init_carry(q, self.C))(jnp.asarray(m3d.start_poses(2, 5)))
+        _, old = jax.jit(M.chunk, static_argnums=(2,))(self.C, self.P, "argmax", 0.0, c0, m3d.take(inps, 0, 8))
+        new = self.run_chunk(OFF)
+        for k in old:
+            self.assertTrue(np.array_equal(np.asarray(old[k]), new[k]), k)
+
+    def test_observer_inputs(self):
+        on = self.run_chunk({**OFF, "obs_lp": True})
+        off = self.run_chunk(OFF)
+        self.assertEqual(on["desc"].shape[-1], 23)
+        self.assertEqual(on["idesc"].shape[-1], 27)
+        self.assertEqual(off["desc"].shape[-1], 31)
+        self.assertTrue(np.array_equal(on["q"], off["q"]))                       # the low-pass is on the observers' input only, not on the motion
+        keep = np.array([i for i in range(31) if i not in F.JERK_E])
+        self.assertFalse(np.allclose(on["desc"], off["desc"][..., keep]))        # the descriptors are computed on the filtered trajectory
+
+    def test_lowpass_response(self):
+        t = np.arange(400) / 100.0
+        lp = lambda f: np.asarray(F.lowpass(jnp.asarray(np.sin(2 * np.pi * f * t)[:, None] * np.ones((1, 5)))))[200:, 0]
+        self.assertGreater(np.abs(lp(2.0)).max(), 0.95)
+        self.assertLess(np.abs(lp(30.0)).max(), 0.12)
+
+    def test_phase_filter_smooths_a_jump(self):
+        z, ph = jnp.zeros(2), []
+        zh = jnp.asarray(0.0)
+        for k in range(40):
+            raw = 0.0 if k < 20 else np.pi                                         # a phase jump of pi at step 20
+            z, p = F.phase_filter(z, zh, jnp.asarray(raw), jnp.asarray(0.0))
+            zh = jnp.asarray(1.0)
+            ph.append(float(p))
+        steps = np.abs(np.diff(np.unwrap(ph)))
+        self.assertLess(steps[19], 0.6 * np.pi)                                    # the raw phase jumped pi in one step; the filtered one moves less
+        self.assertAlmostEqual(float(np.cos(ph[-1])), -1.0, places=1)              # and it gets there
+
+    def test_order_parameter_scales_coupling(self):
+        on = self.run_chunk({**OFF, "phase_lp": True})
+        self.assertTrue(np.all(on["kappa"] <= 2 * np.pi * self.toy.R.max() + 1e-9))
+        P0 = {**self.P, "kappa_fix": jnp.zeros(5)}
+        a, b = self.run_chunk({**OFF, "phase_lp": True}, P0), self.run_chunk({**OFF, "phase_lp": True}, P0)
+        self.assertTrue(np.array_equal(a["q"], b["q"]))
+        # with kappa = 0 the phase filter changes the drive only through the filtered phase; with R = 0 and learned kappa the coupling is exactly absent:
+        idx = np.arange(0, 2)
+        cfg = {**OFF, "phase_lp": True}
+        chunk = jax.jit(F.make_chunk(cfg), static_argnums=(2,))
+        inps = self.toy.inputs(idx, jax.random.PRNGKey(1))
+        inps = {**inps, "R": jnp.zeros_like(inps["R"])}
+        carry = jax.vmap(lambda q: F.init_carry(cfg, q, self.C))(jnp.asarray(m3d.start_poses(2, 5)))
+        _, o0 = chunk(self.C, self.P, "argmax", 0.0, carry, m3d.take(inps, 0, 8))
+        _, o1 = chunk(self.C, P0, "argmax", 0.0, carry, m3d.take(inps, 0, 8))
+        self.assertTrue(np.array_equal(np.asarray(o0["q"]), np.asarray(o1["q"])))
+
+    def test_crossfade_ramp(self):
+        u0, u1 = jnp.zeros((4, 5)), jnp.ones((4, 5))
+        self.assertAlmostEqual(float(F.xfade_u(u0, u1, 0)[0, 0]), 1 / 75, places=9)
+        self.assertAlmostEqual(float(F.xfade_u(u0, u1, 49)[0, 0]), 50 / 75, places=9)         # the ramp is cut by the next block
+        self.assertAlmostEqual(float(F.xfade_u(u0, u1, 74)[0, 0]), 1.0, places=9)
+        o = self.run_chunk({**OFF, "xfade": True})
+        self.assertEqual(float(o["tv"][0, 0]), 0.0)                                           # no switch cost before the first choice
+        self.assertTrue(np.all(o["tv"] >= 0) and np.all(o["tv"] <= 1.0 + 1e-9))
+
+    def test_switches_independent(self):
+        base = self.run_chunk(OFF)["q"]
+        for sw in ("phase_lp", "xfade"):
+            self.assertFalse(np.array_equal(self.run_chunk({**OFF, sw: True})["q"], base), sw)
+        self.assertTrue(np.array_equal(self.run_chunk({**OFF, "obs_lp": True})["q"], base))
+
+
+class Report(unittest.TestCase):
+    def test_hf_share_separates_slow_and_fast(self):
+        t = np.arange(3000) / 50.0
+        slow = np.stack([20 * np.sin(2 * np.pi * 0.5 * t)] * 5, 1)
+        fast = np.stack([2 * np.sin(2 * np.pi * 8.0 * t)] * 5, 1)
+        self.assertLess(R.hf_share_q50(slow), 0.01)
+        self.assertGreater(R.hf_share_q50(fast), 0.95)
+
+    def test_breaches_flag_a_dive_and_pass_a_calm_pose(self):
+        calm = np.tile(np.array(MA.NEUTRAL_DEG), (1, 60, 50, 1))
+        b = R.breaches(calm)
+        self.assertTrue(all(v["episodes_with_breach"] == 0 for v in b.values()), b)
+        dive = calm.copy()
+        dive[..., 1] = 100.0
+        self.assertEqual(R.breaches(dive)["floor_m"]["episodes_with_breach"], 1)
+
+    def test_hf_share_matches_reference_if_present(self):
+        if not os.path.exists(os.path.join(os.path.dirname(__file__), "hf_share.py")):
+            self.skipTest("hf_share.py (work order 13A) not merged yet")
+
+
+class FirstEpoch(unittest.TestCase):
+    """M3e try 1's first epoch is reproduced by m3f.Trainer with body v1 and every new thing off (~5 min). Compares the stored epoch-0 record of try 1."""
+
+    def test_first_epoch_matches_try1(self):
+        ref = json.load(open("/secondary/hyst-data/body/m3e/try1/result.json"))["hist"][0]
+        toy = m3f.ToyF(TOY)
+        C = M.load_cb()
+        tr = m3f.Trainer(toy, C, OFF, 0.03, 1e-3, 40, 8, seed=0, log=lambda s: None, opts={"pen": False})
+        tr.calibrate()
+        rec = tr.run_epoch()
+        for k in ("dec_e", "dec_i", "energy_rel", "rms_speed", "kappa_mean", "rate_mult", "abs_delta", "clip_share", "critic_loss", "sigma_delta"):
+            self.assertAlmostEqual(rec[k], ref[k], delta=1e-6 * max(1.0, abs(ref[k])), msg=k)
+
+
+if __name__ == "__main__":
+    unittest.main()
