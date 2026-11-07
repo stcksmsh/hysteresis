@@ -59,8 +59,8 @@ def n_idesc(cfg):
 
 
 # ---------------------------------------------------------------------------------------------------------------- the two bodies
-def _model_v2(iterations=1, condim=3):
-    m = mujoco.MjModel.from_xml_string(V2.xml_v2(condim=condim))
+def _model_v2(iterations=1, condim=3, table_z=V2.TABLE_Z):
+    m = mujoco.MjModel.from_xml_string(V2.xml_v2(condim=condim, table_z=table_z))
     m.opt.iterations = iterations                      # one Newton iteration, as the M3d body (MJX differentiates one solver iteration, not the while_loop)
     return m
 
