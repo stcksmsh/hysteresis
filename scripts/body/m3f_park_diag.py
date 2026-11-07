@@ -21,15 +21,42 @@ STEPS_BLOCK = 50
 SEED_ROOT = "/secondary/hyst-data/body/m3f/rerun3"
 TOY = "/secondary/hyst-data/body/m3d/toy.npz"
 N_PERM = 2000
+BOUNDARY, BOUNDARY_TOL = 109.5, 1.0   # WO16b: holds within 1 deg of the target-clip boundary
+STALL_NM = 30 * 0.0980665             # make_arm.STALL_NM (provisional Feetech STS3215 12 V stall torque, 2.94 N.m); the position actuators clip to +-this (forcerange)
+KP_NM_RAD = STALL_NM / np.radians(10.0)    # make_arm.KP: full stall torque at 10 deg error
+
+
+def replay_5deg(cfg, qpose, tgt_pose, j, side, secs=2.0):
+    """Plain MuJoCo (the body of cfg; soft joint limits, no hard stop) from the hold pose, joint j's servo target 5 deg inside the stop vs the target held in the run: the joint's end position
+    (signed, stop at +110) and mean actuator torque over the last 0.5 s. Shows whether the servo can hold the joint off the stop against gravity."""
+    import mujoco
+    import m3f_jax as F
+    m = F.body_model(cfg)[0]
+    out = {}
+    for name, tj in (("target_inside_by_5deg", side * (STOP - 5.0)), ("as_run_target", float(tgt_pose[j]))):
+        d = mujoco.MjData(m)
+        d.qpos[:] = np.radians(qpose)
+        ctrl = np.radians(np.asarray(tgt_pose, float))
+        ctrl[j] = np.radians(tj)
+        d.ctrl[:] = ctrl
+        mujoco.mj_forward(m, d)
+        n, tail = int(secs / m.opt.timestep), int(0.5 / m.opt.timestep)
+        f = []
+        for k in range(n):
+            mujoco.mj_step(m, d)
+            if k >= n - tail:
+                f.append(d.actuator_force[j])
+        out[name] = {"target_deg": float(side * tj), "end_q_deg": float(side * np.degrees(d.qpos[j])), "mean_actuator_Nm_last_0.5s": float(side * np.mean(f))}
+    return out
 
 
 # ---------------------------------------------------------------------------------------------------------------- holds
-def find_holds(q):
+def find_holds(q, at=STOP, tol=TOL_DEG):
     """q (E, T, 5) deg -> list of dicts (episode, joint, side, start, end) with start/end in control steps (end exclusive)."""
     out = []
     for e in range(q.shape[0]):
         for j, name in JOINTS.items():
-            on = np.abs(np.abs(q[e, :, j]) - STOP) < TOL_DEG
+            on = np.abs(np.abs(q[e, :, j]) - at) < tol
             i, T = 0, len(on)
             while i < T:
                 if not on[i]:
@@ -184,8 +211,15 @@ def analyse_seed(seed, root):
     inside = valid_blocks & hb_full
     rng = np.random.default_rng(0)
 
-    per = []
-    for h in holds:
+    # WO16b H1b: the motor cortex's own outputs per block (recomputed from the saved inputs xin; u = clip(pi @ sigmoid(theta) + MOD tanh(amod), 0, 1), rows (freq, amp, centre, lag) x 5 joints)
+    Pj = jax.tree_util.tree_map(jnp.asarray, ck["P"])
+    _, amod_all, _ = jax.vmap(jax.vmap(lambda x: J.motor_cortex(Pj, x)))(jnp.asarray(saved["xin"]))
+    amod_all = np.asarray(amod_all)
+    u_pre = (np.asarray(pi) @ (1.0 / (1.0 + np.exp(-np.asarray(ck["P"]["theta"]))))) + J.MOD * np.tanh(amod_all)          # (E, NB, 20) before the clip to [0, 1]
+    u_pre = u_pre.reshape(E, NB, 4, 5)
+    u_clip = np.clip(u_pre, 0.0, 1.0)
+
+    def row_of(h):
         e, j, s, en, sd_ = h["episode"], h["joint"], h["start"], h["end"], h["side"]
         sl = slice(s, en)
         n = en - s
@@ -228,7 +262,37 @@ def analyse_seed(seed, root):
                         "arousal_mean": float(y[e, bl, 0].mean()), "surprisal_mean": float(y[e, bl, 1].mean()), "L3_R_mean": float(R[e, bl].mean())}
         # 6. observer
         row["observer"] = {nm: {"loss_mean": float(matched[nm][e, bl].mean()), "gap_mean": float(gap[nm][e, bl].mean())} for nm in pred}
-        per.append(row)
+        # 7. (WO16b H7) torque / gravity. actuator_force = joint torque in N.m (position actuator, gear 1, clipped to +-STALL_NM by forcerange); qfrc_bias = gravity + velocity terms (gravity torque on the joint = -qfrc_bias);
+        #    qfrc_constraint = joint-limit + contact force; all read from the substep just integrated, averaged over the 5 substeps (actmax = max |actuator_force| over them). Signed so that the stop is at +.
+        tq = {}
+        for jj, nm in ((j, "held_joint"), (1, "shoulder")):
+            a, am_, bi, co = sd_ * g("act")[e, sl, jj], g("actmax")[e, sl, jj], -sd_ * g("bias")[e, sl, jj], sd_ * g("con")[e, sl, jj]
+            tq[nm] = {"actuator_Nm": stats(a), "share_actuator_at_stall": float((am_ >= STALL_NM * (1 - 1e-3)).mean()), "share_mean_actuator_ge_98pct_stall": float((np.abs(a) >= 0.98 * STALL_NM).mean()),
+                      "gravity_torque_toward_stop_Nm": stats(bi), "share_gravity_toward_stop": float((bi > 0).mean()), "constraint_torque_Nm": stats(co),
+                      "gravity_droop_deg_equiv_kp": float(bi.mean() / KP_NM_RAD * 180.0 / np.pi)}
+        row["torque"] = tq
+        row["torque"]["replay_held_5deg_inside"] = replay_5deg(cfg, q[e, (s + en) // 2], tgt[e, (s + en) // 2], j, sd_)
+        # 3b. (WO16b H1b) the motor cortex's outputs for the held joint on the blocks wholly inside the stretch
+        uc, ua = u_pre[e, bl, 2, j], u_pre[e, bl, 1, j]
+        near = lambda u: ((np.clip(u, 0, 1) <= 0.02) | (np.clip(u, 0, 1) >= 0.98))
+        row["network"] = {"n_blocks": b1 - b0,
+                          "centre_u_preclip": stats(uc), "amp_u_preclip": stats(ua),
+                          "share_centre_u_within_2pct_of_bound": float(near(uc).mean()), "share_amp_u_within_2pct_of_bound": float(near(ua).mean()),
+                          "share_centre_u_preclip_outside_0_1": float(((uc < 0) | (uc > 1)).mean()), "share_amp_u_preclip_outside_0_1": float(((ua < 0) | (ua > 1)).mean()),
+                          "share_centre_u_at_hold_side_bound": float(((np.clip(uc, 0, 1) <= 0.02) if sd_ < 0 else (np.clip(uc, 0, 1) >= 0.98)).mean()),
+                          "centre_amod_tanh_abs_mean": float(np.abs(np.tanh(amod_all[e, bl, 10 + j])).mean()), "share_centre_amod_tanh_abs_gt_0.98": float((np.abs(np.tanh(amod_all[e, bl, 10 + j])) > 0.98).mean()),
+                          "centre_prototype_u_mean": float((np.asarray(pi)[e, bl] @ (1.0 / (1.0 + np.exp(-np.asarray(ck["P"]["theta"]))))).reshape(-1, 4, 5)[:, 2, j].mean())}
+        return row
+    per = [row_of(h) for h in holds]
+    bholds_all = find_holds(q, BOUNDARY, BOUNDARY_TOL)
+    stopmask = {(h["episode"], h["joint"]): h for h in holds}
+    bholds = []
+    for h in bholds_all:
+        on_stop = np.abs(np.abs(q[h["episode"], h["start"]:h["end"], h["joint"]]) - STOP) < TOL_DEG
+        h["share_on_stop"] = float(on_stop.mean())
+        if h["share_on_stop"] < 0.5:                                # boundary-only: not (mostly) a stop hold
+            bholds.append(h)
+    per_b = [row_of(h) for h in bholds]
 
     # pooled
     tot = sum(r["duration_s"] for r in per)
@@ -287,7 +351,35 @@ def analyse_seed(seed, root):
     pooled["observer"] = ob
     # share of time on a stop, per joint (all episodes), for reference
     pooled["time_on_stop_share"] = {nm: float((np.abs(np.abs(q[..., j]) - STOP) < TOL_DEG).mean()) for j, nm in JOINTS.items()}
-    return {"holds": per, "pooled": pooled}
+    def tq_pool(rows, tot_):
+        wm = lambda f: float(sum(f(r) * r["duration_s"] for r in rows) / tot_) if tot_ else None
+        o = {}
+        for nm in ("held_joint", "shoulder"):
+            o[nm] = {"share_actuator_at_stall": wm(lambda r, nm=nm: r["torque"][nm]["share_actuator_at_stall"]), "share_mean_actuator_ge_98pct_stall": wm(lambda r, nm=nm: r["torque"][nm]["share_mean_actuator_ge_98pct_stall"]),
+                     "actuator_Nm_mean": wm(lambda r, nm=nm: r["torque"][nm]["actuator_Nm"]["mean"]), "share_gravity_toward_stop": wm(lambda r, nm=nm: r["torque"][nm]["share_gravity_toward_stop"]),
+                     "gravity_toward_stop_Nm_mean": wm(lambda r, nm=nm: r["torque"][nm]["gravity_torque_toward_stop_Nm"]["mean"]), "constraint_Nm_mean": wm(lambda r, nm=nm: r["torque"][nm]["constraint_torque_Nm"]["mean"]),
+                     "gravity_droop_deg_equiv_kp_mean": wm(lambda r, nm=nm: r["torque"][nm]["gravity_droop_deg_equiv_kp"])}
+        for k in ("target_inside_by_5deg", "as_run_target"):
+            e_ = [r["torque"]["replay_held_5deg_inside"][k]["end_q_deg"] for r in rows]
+            o["replay_" + k] = {"end_q_deg_mean": float(np.mean(e_)), "end_q_deg_min": float(np.min(e_)), "end_q_deg_max": float(np.max(e_)),
+                                "share_end_within_1deg_of_target": float(np.mean([abs(r["torque"]["replay_held_5deg_inside"][k]["end_q_deg"] - r["torque"]["replay_held_5deg_inside"][k]["target_deg"]) < 1.0 for r in rows]))}
+        return o
+
+    def net_pool(rows, tot_):
+        wm = lambda f: float(sum(f(r) * r["duration_s"] for r in rows) / tot_) if tot_ else None
+        return {k: wm(lambda r, k=k: r["network"][k]) for k in ("share_centre_u_within_2pct_of_bound", "share_amp_u_within_2pct_of_bound", "share_centre_u_preclip_outside_0_1", "share_amp_u_preclip_outside_0_1",
+                                                                  "share_centre_u_at_hold_side_bound", "share_centre_amod_tanh_abs_gt_0.98", "centre_prototype_u_mean")}
+    pooled["torque"] = tq_pool(per, tot)
+    pooled["network"] = net_pool(per, tot)
+    tot_b = sum(r["duration_s"] for r in per_b)
+    wmb = lambda f: float(sum(f(r) * r["duration_s"] for r in per_b) / tot_b) if tot_b else None
+    bpool = {"n_holds": len(per_b), "total_hold_s": tot_b, "n_all_within_1deg_of_109.5": len(bholds_all), "per_joint_s": {nm: float(sum(r["duration_s"] for r in per_b if r["name"] == nm)) for nm in JOINTS.values()},
+             "share_pre_at_or_beyond_clip_bound_109.5": wmb(lambda r: r["clip"]["share_pre_at_or_beyond_clip_bound_109.5"]), "share_held_target_on_clip_bound": wmb(lambda r: r["clip"]["share_held_target_on_clip_bound"]),
+             "amp_eff_deg_mean": wmb(lambda r: r["clip"]["amp_eff_deg"]["mean"]), "share_steps_with_hit": wmb(lambda r: r["endstop"]["share_steps_with_hit"]),
+             "any_contact_share": wmb(lambda r: r["contact"]["any_share"]), "share_on_stop_mean": float(np.mean([h["share_on_stop"] for h in bholds])) if bholds else None}
+    if per_b:
+        bpool["torque"], bpool["network"] = tq_pool(per_b, tot_b), net_pool(per_b, tot_b)
+    return {"holds": per, "pooled": pooled, "boundary_holds": per_b, "boundary_pooled": bpool}
 
 
 def m3d_obs_apply(O, x):
@@ -324,6 +416,20 @@ def verdicts(S):
                      f"seed {s} ext {obs[s]['ext_loss']['diff']:+.3f} (p {obs[s]['ext_loss']['perm_p']:.3f}), int {obs[s]['int_loss']['diff']:+.3f} (p {obs[s]['int_loss']['perm_p']:.3f}), "
                      f"predict-mean baseline {obs[s]['baseline_loss_predict_mean']['diff']:+.3f}; shuffle gap ext {obs[s]['ext_gap']['diff']:+.3f} (p {obs[s]['ext_gap']['perm_p']:.2f}), "
                      f"int {obs[s]['int_gap']['diff']:+.3f} (p {obs[s]['int_gap']['perm_p']:.2f})" for s in obs)}
+    n1 = w(lambda p: p["network"]["share_centre_u_within_2pct_of_bound"])
+    n1c = w(lambda p: p["network"]["share_centre_u_preclip_outside_0_1"])
+    n1a = w(lambda p: p["network"]["share_amp_u_within_2pct_of_bound"])
+    out["H1b"] = {"supported": bool(n1 > 0.5), "number": f"motor-cortex centre output u[2, joint] (u = clip(pi @ sigmoid(theta) + 0.2 tanh(amod[10 + joint]), 0, 1), bounds [0, 1], pre-clip range [-0.2, 1.2]) within 2 % of a bound for {100 * n1:.1f} % of hold blocks "
+                  f"(at the hold-side bound {100 * w(lambda p: p['network']['share_centre_u_at_hold_side_bound']):.1f} %, pre-clip outside [0, 1] {100 * n1c:.1f} %, tanh(amod) saturated > 0.98 {100 * w(lambda p: p['network']['share_centre_amod_tanh_abs_gt_0.98']):.1f} %, "
+                  f"prototype-only u mean {w(lambda p: p['network']['centre_prototype_u_mean']):.3f}); amplitude output u[1, joint] within 2 % of a bound {100 * n1a:.1f} %"}
+    t = {k: w(lambda p, k=k: p["torque"]["held_joint"][k]) for k in ("share_actuator_at_stall", "share_gravity_toward_stop", "gravity_toward_stop_Nm_mean", "actuator_Nm_mean", "gravity_droop_deg_equiv_kp_mean", "constraint_Nm_mean")}
+    ts = w(lambda p: p["torque"]["shoulder"]["share_actuator_at_stall"])
+    rin = {s: pooled[s]["torque"]["replay_target_inside_by_5deg"] for s in pooled}
+    grav = bool(t["share_gravity_toward_stop"] > 0.5 and t["gravity_droop_deg_equiv_kp_mean"] > 0.5)
+    out["H7"] = {"supported": bool(t["share_actuator_at_stall"] > 0.5), "gravity_pushes_into_stop": grav,
+                 "number": f"held-joint actuator torque (mean {t['actuator_Nm_mean']:+.2f} N.m, stop-positive) at the {STALL_NM:.2f} N.m stall for {100 * t['share_actuator_at_stall']:.1f} % of hold time (shoulder {100 * ts:.1f} %); gravity torque on the held joint points into the stop "
+                           f"{100 * t['share_gravity_toward_stop']:.1f} % of the time, mean {t['gravity_toward_stop_Nm_mean']:+.2f} N.m = {t['gravity_droop_deg_equiv_kp_mean']:+.1f} deg servo droop at kp {KP_NM_RAD:.1f} N.m/rad (the clipped target is 0.5 deg inside the stop); constraint torque {t['constraint_Nm_mean']:+.3f} N.m; "
+                           "replay in plain MuJoCo with the target 5 deg inside the stop ends at " + ", ".join(f"seed {s} mean {rin[s]['end_q_deg_mean']:.1f} deg (min {rin[s]['end_q_deg_min']:.1f}, {100 * rin[s]['share_end_within_1deg_of_target']:.0f} % of holds within 1 deg of the 105 deg target)" for s in rin)}
     return out
 
 

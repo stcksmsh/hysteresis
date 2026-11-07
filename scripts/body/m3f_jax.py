@@ -176,7 +176,7 @@ def arm_step_diag(cfg, d, tgt, tv, target_deg):
     cats = jnp.arange(len(CONTACT_CATS))
 
     def sub(c, _):
-        dd, p, hits, cf, cn = c
+        dd, p, hits, cf, cn, tq = c
         dd = mjx.step(mx, dd)
         hit = jnp.zeros(5)
         if cfg.get("clip"):
@@ -190,10 +190,12 @@ def arm_step_diag(cfg, d, tgt, tv, target_deg):
         sel = (ci[None, :] == cats[:, None]) & act[None, :]
         cf = jnp.maximum(cf, jnp.where(sel, f[None, :], 0.0).max(1))
         cn = jnp.maximum(cn, sel.sum(1).astype(float))
-        return (dd, p + jnp.abs(dd.actuator_force * dd.qvel).sum(), hits + hit, cf, cn), None
+        tq = (tq[0] + dd.actuator_force, tq[1] + dd.qfrc_bias, tq[2] + dd.qfrc_constraint, jnp.maximum(tq[3], jnp.abs(dd.actuator_force)))      # forces of the substep just integrated (read at its start state)
+        return (dd, p + jnp.abs(dd.actuator_force * dd.qvel).sum(), hits + hit, cf, cn, tq), None
     z5 = jnp.zeros(len(CONTACT_CATS))
-    (d, p, hits, cf, cn), _ = jax.lax.scan(sub, (d, 0.0, jnp.zeros(5), z5, z5), None, length=J.SUB)
-    return d, tgt, tv, p / J.SUB, {"hits": hits, "cf": cf, "cn": cn, "tgt_hit": ((tgt <= lo) | (tgt >= hi)).astype(float)}
+    (d, p, hits, cf, cn, tq), _ = jax.lax.scan(sub, (d, 0.0, jnp.zeros(5), z5, z5, (jnp.zeros(5),) * 4), None, length=J.SUB)
+    return d, tgt, tv, p / J.SUB, {"hits": hits, "cf": cf, "cn": cn, "tgt_hit": ((tgt <= lo) | (tgt >= hi)).astype(float),
+                           "act": tq[0] / J.SUB, "bias": tq[1] / J.SUB, "con": tq[2] / J.SUB, "actmax": tq[3]}
 
 
 # ---------------------------------------------------------------------------------------------------------------- pieces

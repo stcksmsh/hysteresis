@@ -45,7 +45,7 @@ class Diag(unittest.TestCase):
         for k in a:
             self.assertTrue(np.array_equal(a[k], b[k]), k)
         extra = sorted(k for k in b if k not in a)
-        self.assertEqual(extra, sorted("dg_" + k for k in ("hits", "cf", "cn", "tgt_hit", "t_pre", "centre", "amp", "phase", "freq", "tgt")))
+        self.assertEqual(extra, sorted("dg_" + k for k in ("hits", "cf", "cn", "tgt_hit", "act", "bias", "con", "actmax", "t_pre", "centre", "amp", "phase", "freq", "tgt")))
         self.assertEqual(b["dg_t_pre"].shape, (2, 8, 50, 5))
         self.assertEqual(b["dg_cf"].shape, (2, 8, 50, len(F.CONTACT_CATS)))
         self.assertTrue((b["dg_hits"] >= 0).all() and (b["dg_hits"] <= F.J.SUB).all())
