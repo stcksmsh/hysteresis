@@ -1196,3 +1196,12 @@ the limit-proximity term and too small to act.
    training epoch <= 1.25x WO14A's (62 s) and the pass2 projection <= 30 h. **Only if a check fails: option 4** = plane at 0.055 m with the
    default contact, plus a contact-force hinge (normal force on the table above the settled-resting force, normalised by the arm's weight,
    weight 1); gate unchanged. Options "accept breaches as an exception" rejected (they accept breaches by design).
+8. **Seeds, self-contacts and launch hold (user, 2026-11-07).** As built, `--contact-tc` sets the time constant on every collision geom, so
+   self-contacts are stiffer too; **accepted** (the stability and cost checks measured this build). Seed 0 passed the gate (ext 0.739,
+   int 0.839, (b) 30.2, (e'1) 2.33, (e'2) 0.0002, floor breaches 0 of 16) but in argmax trained - kappa0 = -0.036 [-0.086, 0.014] ext,
+   -0.047 int (it would not license the inner-rhythm wording, 7.19 A.1), elbow within 2 deg of a limit 48.5 % and wrist 60.0 % of the time,
+   one program 79 % of blocks. **The pass2 auto-launch of 7.30.3 is held:** seed 1 and its controls run as planned; then 60 s clips (the
+   one-arm camera) of seed 0 and seed 1 on two held-out toy episodes, plus one danced-song-length rollout if cheap, with per seed: time at
+   the end stops per joint, programs used, trained - kappa0. Then stop and ask; pass2 does not launch until the user has seen the clips.
+   **Reading recorded as untested:** under the jerk, speed and floor costs, parking against the end stops may have become a cheap rest (zero
+   speed, no energy, no jerk) that the limit-proximity cost does not outweigh.
