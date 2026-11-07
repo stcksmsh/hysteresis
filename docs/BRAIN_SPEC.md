@@ -1119,3 +1119,21 @@ jerk and program switches, and physical table contact (v2f), but no explicit flo
 rule a floor-margin or (e'1) failure would have no matching weight to scale unless such terms exist before pass2 starts. Question for the
 planner/user: add a floor-margin penalty (hinge on check-csv's margin) and a hand-acceleration penalty to pass2 now, at the toy's weight
 scale, so the rule has terms to act on.
+
+### 7.27 Rulings on work order 13, 2026-11-07, via planner
+
+Binding. They answer `docs/PLANNER_BRIEF_WO13_RESULTS.md`. Set before any K5-pass2 result.
+
+1. **Two hinges added now:** a floor-margin penalty (below check-csv's floor margin: points 1-4 clear z = 0 by 0.05 m, the hand by 0.11 m)
+   and a hand-acceleration penalty (above 4.8 m/s2, v47's mean p99 level). Same normalisation scheme as the hand-speed hinge, weight 1 each,
+   fixed now. Toy try 1 is rerun with them (an engineering rerun under the same bar plus (e'), not a new try); the WO7 controls are reported
+   again. These are the terms §7.26 may scale in round 2.
+2. **Hard clip** of the commanded targets to the rig range for every ranged joint (a body-model fix). Report the share of time each joint
+   sits within 2 deg of a limit; shoulder parking at its limit is a look the user judges by eye, not a bar.
+3. **Changes 3 and 4 stay as designed.** Recorded: as built, they raise hand acceleration on the toy (one seed; removing either lowers
+   (e'1) by 0.64-0.88 m/s2). Revisit only if pass2 fails (e'1) or (e'2).
+4. **(e'2)'s 3 % margin** is noted as the main risk.
+5. **Pass2 compute box: 30 h of compute actually spent, resumable.** Launch without asking if the timed projection is <= 30 h; ask only
+   above that.
+
+**Recorded (ablation finding, WO13B):** with the observer low-pass off, the arm lies on the table 92.6 % of the time.
