@@ -1205,3 +1205,37 @@ the limit-proximity term and too small to act.
    the end stops per joint, programs used, trained - kappa0. Then stop and ask; pass2 does not launch until the user has seen the clips.
    **Reading recorded as untested:** under the jerk, speed and floor costs, parking against the end stops may have become a cheap rest (zero
    speed, no energy, no jerk) that the limit-proximity cost does not outweigh.
+9. **User verdict on the WO15B clips (2026-11-07; toy held-out episodes 0 and 1, 60 s, silent, seed 0 left, seed 1 right).** Verbatim:
+   "Video 1: the left one is mostly stuck in a single 'bowed down' position with the head close to the base and the arm slumped over for
+   the head to be there, its also more repetitive. The right one actually seems to be doing something, it looks alive and smooth, it has
+   variety and is overall decent. Video 2: The left is again stuck for a long period of time in the same pose (though the right also gets
+   stuck in that pose ~42s in and stays there until the end, for comparison left gets stuck at ~18 untill ~28, then ~29 untill ~45), as for
+   fluidity etc, I cant really tell, the left is only viable for first 15 and last 15 seconds (mostly) and the second has some strange
+   behaviour at the beginning, not as clear cut as vid 1."
+   Overseer, from the rollouts: the "bowed down" pose is the elbow held on its -110 deg stop (seed 0 ep 0: 9.3-24.6, 29.0-32.1, 40.7-45.1 s;
+   ep 1: 12.3-25.3, 31.2-44.1 s; seed 1 ep 1: 44.6-56.6 s). Pass2 stays held; the parking question goes to the planner.
+
+### 7.31 Rulings on work order 15, 2026-11-07, via planner
+
+Binding. They answer `docs/PLANNER_BRIEF_WO15_RESULTS.md`. Set before any further toy or K5-pass2 result.
+
+1. **Q1: diagnose the parked behaviour first.** No training, no new cost, no pass2 until the user has seen the diagnosis. From the saved
+   rerun3 rollouts (both seeds; re-simulating them deterministically with extra logging is allowed), every hold stretch >= 2 s at a stop
+   (those in the WO15 brief 2.4 plus any others), per stretch:
+   1. Clipping: the pre-clip commanded target, generator centre and amplitude for the held joint; the share of hold time where the
+      commanded target lies beyond the stop; whether the oscillator keeps swinging there.
+   2. Chosen stillness: whether commands sit inside the range with small amplitude (the policy asking to be still).
+   3. Contact: any self-contact (ball or links against the base column or other links) or table contact during the hold, with forces;
+      whether the arm rests on something.
+   4. End stop: end-stop events and velocity zeroing at hold onset and exit; whether the joint is pinned by repeated stop hits.
+   5. Brain side: the program chosen during holds vs outside, kappa, and the inner-state targets (arousal, surprisal, L3 order parameter)
+      during holds vs outside.
+   6. Observer: decoding (a) inside holds vs outside (is the parked pose an easy code?).
+   Then stop and report, with a one-line verdict per hypothesis (supported / not supported).
+2. **Q2: parking gate, adopted now for the next toy rerun whatever the fix:** per seed, no joint on a stop for more than 10 % of the time
+   and no single hold at a stop longer than 5 s, added to the 7.30.3 gate. Report-only: share of time on a stop per joint, longest
+   stop-hold, longest hold of ANY pose (hand speed < 2 cm/s).
+3. **Q3: (a).** Pass2's own kappa-0 control decides the inner-rhythm wording.
+4. **Q4: recorded** as written in the brief, plus: the user's verdict that seed 1, episode 0 "looks alive and smooth, has variety"; the
+   user's reading that the slump may be the arm trying to move but being clipped; untested planner note: a hard clip has zero gradient
+   beyond the limit, so if commands saturate, the limit-proximity cost alone may be too weak to pull the policy out.
