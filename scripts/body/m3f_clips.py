@@ -19,7 +19,7 @@ import numpy as np
 import arm_sim
 import m3d
 
-R3 = Path("/secondary/hyst-data/body/m3f/rerun3")
+R3 = Path(os.environ.get("M3F_CLIPS_ROOT", "/secondary/hyst-data/body/m3f/rerun3"))      # WO17: M3F_CLIPS_ROOT=.../rerun4
 OUT = R3 / "clips"
 ROOT = Path(__file__).resolve().parents[2]
 PREVIEW = Path("/secondary/hyst-data/cargo-target-wo12/release/examples/ensemble_preview")
@@ -77,7 +77,7 @@ def main():
             csv = OUT / "csv" / f"{name}.csv"
             q = np.load(R3 / f"seed{s}" / "try1" / "rollouts" / "trained_argmax_4.npz")["q"].reshape(16, -1, 5)[ep]
             rows = np.concatenate([starts[ep][None], q[1::2]])
-            csv.write_text(arm_sim.csv_text(rows, hz=50, name=f"m3f-rerun3-seed{s}-held{ep}"))
+            csv.write_text(arm_sim.csv_text(rows, hz=50, name=f"m3f-{R3.name}-seed{s}-held{ep}"))
             page = OUT / "work" / f"{name}.html"
             if not page.exists():
                 run(PREVIEW, page, "../audio/silent60.m4a", "--joint-csv", csv)
