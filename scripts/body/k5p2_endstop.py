@@ -73,5 +73,15 @@ def report(q, hz_list=(50, 100)):
     return out
 
 
+def at_limit_share(q):
+    """q (E, NB, 50, 5) deg -> per ranged joint, share of time at a range limit (|q - limit| <= EPS_DEG), mean over trajectories (7.30.4 asks for the shoulder)."""
+    q = np.asarray(q, float).reshape(len(q), -1, 5)
+    out = {}
+    for name, j in JOINTS.items():
+        lo, hi = MA.RANGE_DEG[j]
+        out[name] = float(((q[:, :, j] <= lo + EPS_DEG) | (q[:, :, j] >= hi - EPS_DEG)).mean())
+    return out
+
+
 def near_any(r):
     return bool(r["near"].any())
