@@ -110,7 +110,7 @@ def score_policy(fns, cfg, C, P, toy, stats, which, chunk_blocks, rolldir=None, 
         Oe, Oi = fresh_observers(cfg, rolls[:4], yz_tr, stats)
         res[mode] = m3e.score_rollouts(rolls[4], Oe, Oi, stats, toy, which)
         res[mode]["e"] = R.hf_share_rollout(rolls[4]["q"])
-        res[mode]["eprime"] = R.eprime_rollout(rolls[4]["q"])
+        res[mode]["eprime"] = R.eprime_rollout(rolls[4]["q"], cfg.get("plane"))
         res[mode]["breaches"] = R.breaches(rolls[4]["q"])
         res[mode]["near_limit"] = R.near_limit(rolls[4]["q"])
         keep[mode] = (Oe, Oi, rolls[4])
@@ -168,6 +168,8 @@ class Trainer(m3e.Trainer):
             fns1 = make_fns(self.C, cfg1, self.opts)
             raw = mean_raw({g: rollout(fns1, cfg1, self.C, self.P, self.toy, idx, "argmax", jax.random.PRNGKey(11), self.cb, 100) for g, idx in self.groups.items()})
         self.nrm = {k: max(v, FLOORS[k]) for k, v in raw.items()}
+        if self.cfg.get("plane") is not None:                      # WO15A: with the raised plane the floor hinge is divided by the fixed physical scale 0.05 m, not by an untrained value
+            self.nrm["floor"] = 0.05
         self.raw0, self.raw_new = raw, raw_new
         for g in "AB":
             self.data[g].append(self._collect(g, rs[g]["desc"], rs[g]["idesc"]))

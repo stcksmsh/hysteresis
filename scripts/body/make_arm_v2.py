@@ -15,6 +15,8 @@ import make_arm as MA
 DISC_M = 0.06            # score_csv.rs / body.rs DISC_M: the mirror ball's check disc
 LIMIT_MARGIN_DEG = 10.0  # BRAIN_SPEC 7.24: a small cost within this angle of any joint limit
 TABLE_Z = 0.0
+RAISED_PLANE_Z = 0.053   # = 0.05 + d, d = 0.003 m: the deepest sinking in the held-contact test at contact time constant 0.006 s was 2.876 mm (rerun3/plane_test_tc0.006.json), rounded up to the next mm (BRAIN_SPEC 7.30.6, 7.30.7)
+CONTACT_TC = 0.006       # WO15A (7.30.7): contact time constant (geom solref[0]) of the raised-plane body; MuJoCo's default is 0.02 s
 
 
 def xml_v2(kv=None, table=True, self_collision=True, condim=3, table_z=TABLE_Z):

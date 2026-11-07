@@ -47,7 +47,7 @@ def fk_points(q):
 TABLE_R_LINK, TABLE_R_BALL = 0.01, DISC_M
 
 
-def hand_metrics(q50):
+def hand_metrics(q50, plane=None):
     """BRAIN_SPEC 7.25 (e'): q50 (T, 5) deg at 50 Hz -> hand acceleration p99 (m/s2), share of time hand speed > 1 m/s, and the share of time the arm touches the table.
     Hand = last point of the rig's forward kinematics (same as arm_sim.fk); velocity and acceleration by np.gradient (x 50, x 50), norms. Contact (geometric, from the realised joint
     angles): a link capsule (r 0.01) or the ball (r 0.06) overlaps the plane z = 0: min z of the link end points p1..p4 minus 0.01, or p5 z minus 0.06, below 0."""
@@ -55,15 +55,18 @@ def hand_metrics(q50):
     h = P[:, 5]
     v = np.gradient(h, axis=0) * HZ
     a = np.gradient(v, axis=0) * HZ
-    touch = np.minimum(P[:, 1:5, 2].min(1) - TABLE_R_LINK, P[:, 5, 2] - TABLE_R_BALL) < 0
+    if plane is None:
+        touch = np.minimum(P[:, 1:5, 2].min(1) - TABLE_R_LINK, P[:, 5, 2] - TABLE_R_BALL) < 0
+    else:                                                          # raised plane: in contact = a surface within 1 mm above the plane or below it
+        touch = np.minimum(P[:, 1:5, 2].min(1) - TABLE_R_LINK - plane, P[:, 5, 2] - TABLE_R_BALL - plane) < 0.001
     return {"acc_p99": float(np.percentile(np.linalg.norm(a, axis=1), 99)), "fast": float((np.linalg.norm(v, axis=1) > 1.0).mean()), "contact": float(touch.mean())}
 
 
-def eprime_rollout(q):
+def eprime_rollout(q, plane=None):
     """q (E, NB, 50, 5) deg at 100 Hz -> per episode and mean of (e'1) acc_p99, (e'2) fast share, contact share (+ seconds), and (e) from hf_share.py."""
     import hf_share
     q = np.asarray(q).reshape(q.shape[0], -1, 5)[:, ::2]
-    rows = [hand_metrics(e) for e in q]
+    rows = [hand_metrics(e, plane) for e in q]
     out = {k: [r[k] for r in rows] for k in ("acc_p99", "fast", "contact")}
     out["contact_s"] = [c * len(q[0]) / HZ for c in out["contact"]]
     out["e"] = [hf_share.hf_share(e, float(HZ)) for e in q]

@@ -40,6 +40,7 @@ JERK_I = JERK_E + [35, 36]
 KEEP_E = np.array([i for i in range(J.N_DESC) if i not in JERK_E])
 KEEP_I = np.array([i for i in range(M.N_IDESC) if i not in JERK_I])
 BENDS = [1, 2, 3]
+LINK_R = 0.01                                        # capsule radius of the link geoms (make_arm_v2)
 FLOOR_M, DISC_M = 0.05, 0.06                         # check-csv floor rule (points 1-4 clear z = 0 by FLOOR_M, the hand by FLOOR_M + DISC_M)
 ACC_MPS2 = 4.8                                       # BRAIN_SPEC 7.27: hand-acceleration hinge threshold (v47's mean p99 level)
 CLIP_MARGIN_DEG = 0.5                                # hard clip: targets stop this far inside the range so the servo's droop and the soft joint limit cannot carry the joint past it
@@ -69,10 +70,28 @@ MODELS = {"v2": _model_v2(), "v2f": _model_v2(condim=1)}              # v2f: fri
 MX = {k: mjx.put_model(m) for k, m in MODELS.items()}
 
 
+_CACHE = {}
+
+
+def body_model(cfg):
+    """(MjModel, MJX model) of cfg's body. cfg keys "ctc" (contact time constant of every collision geom, s; absent = MuJoCo's default 0.02) and "plane" (table plane height, m; absent = 0)
+    build a variant lazily; absent both, the module-level models are used, exactly as before."""
+    ctc, plane = cfg.get("ctc"), cfg.get("plane")
+    if ctc is None and plane is None:
+        return MODELS[cfg["body"]], MX[cfg["body"]]
+    k = (cfg["body"], ctc, plane)
+    if k not in _CACHE:
+        m = _model_v2(condim=1 if cfg["body"] == "v2f" else 3, table_z=V2.TABLE_Z if plane is None else plane)
+        if ctc is not None:
+            m.geom_solref[:] = [ctc, 1.0]
+        _CACHE[k] = (m, mjx.put_model(m))
+    return _CACHE[k]
+
+
 def arm_init(cfg, q_deg):
     if cfg["body"] == "v1":
         return J.arm_init(q_deg)
-    d = mjx.make_data(MODELS[cfg["body"]])
+    d = mjx.make_data(body_model(cfg)[0])
     q = jnp.radians(jnp.asarray(q_deg, float))
     return d.replace(qpos=q, ctrl=q), jnp.asarray(q_deg, float), jnp.zeros(5)
 
@@ -92,10 +111,11 @@ def arm_step(cfg, d, tgt, tv, target_deg):
     d = d.replace(ctrl=jnp.radians(tgt))
 
     lo_r, hi_r = jnp.radians(J.SLO), jnp.radians(J.SHI)
+    mx = body_model(cfg)[1]
 
     def sub(c, _):
         dd, p = c
-        dd = mjx.step(MX[cfg["body"]], dd)
+        dd = mjx.step(mx, dd)
         if cfg.get("clip"):                                    # hard joint stop: the realised position never passes the range (contact and the soft limit cannot carry it past), outward speed zeroed
             qc = jnp.clip(dd.qpos, lo_r, hi_r)
             dd = dd.replace(qpos=qc, qvel=jnp.where(qc != dd.qpos, 0.0, dd.qvel))
@@ -143,7 +163,7 @@ def fk_all(q):
     return jnp.stack(pts, 1)
 
 
-def penalties(full):
+def penalties(full, plane=None):
     """full (>= 53, 5) deg at 100 Hz, the last 50 rows are the block -> dict jerk (mean squared 3rd difference, deg^2/s^6), hand_v and jolt (mean hinge over the check-csv limits on the
     50 Hz hand trajectory), lim (mean relu(|q| - 100 deg)/10 deg over the three bends and the 50 steps), floor (mean metres by which check-csv's floor margin is negative, 7.27),
     acc (mean m/s2 by which the 50 Hz hand acceleration exceeds ACC_MPS2, 7.27)."""
@@ -152,7 +172,10 @@ def penalties(full):
     hv = jnp.sqrt(((hp[1:] - hp[:-1]) ** 2).sum(-1) + 1e-18) * 50.0
     hj = jnp.abs(hv[1:] - hv[:-1]) * 50.0
     P = fk_all(full[-50:])
-    margin = jnp.minimum((P[:, 1:5, 2] - FLOOR_M).min(1), P[:, 5, 2] - FLOOR_M - DISC_M)               # check-csv's floor margin per control step
+    if plane is None:
+        margin = jnp.minimum((P[:, 1:5, 2] - FLOOR_M).min(1), P[:, 5, 2] - FLOOR_M - DISC_M)           # check-csv's floor margin per control step
+    else:                                                                                              # raised plane (WO15A): clearance of the capsule and ball surfaces above it
+        margin = jnp.minimum(P[:, 1:5, 2].min(1) - LINK_R - plane, P[:, 5, 2] - DISC_M - plane)
     ha = jnp.sqrt(((hp[2:] - 2 * hp[1:-1] + hp[:-2]) ** 2).sum(-1) + 1e-18) * 50.0 ** 2               # hand acceleration, central second difference at 50 Hz
     return {"floor": jax.nn.relu(-margin).mean(), "acc": jax.nn.relu(ha - ACC_MPS2).mean(), "jerk": (j3 ** 2).mean(), "hand_v": jax.nn.relu(hv - HAND_MPS).mean(), "jolt": jax.nn.relu(hj - JOLT_MPS2).mean(),
             "lim": (jax.nn.relu(jnp.abs(full[-50:, BENDS]) - LIM_DEG) / (110.0 - LIM_DEG)).mean()}
@@ -224,7 +247,7 @@ def make_block_fn(cfg):
         pose_s = jax.lax.stop_gradient((pose[-1] - C["omu"][:5]) / C["osd"][:5])
         feat = jnp.clip(jnp.concatenate([prop, pose_s, jax.lax.stop_gradient(err[-1, :10])]), -8, 8)
         # penalties and cost terms (computed always; the loss decides which to use)
-        pen = penalties(full)
+        pen = penalties(full, cfg.get("plane"))
         tv_pi = 0.5 * jnp.abs(pi - carry["pi_prev"]).sum() * carry["pi_has"]
         out = {"desc": desc, "idesc": idesc, "logits": logits, "pi": pi, "kappa": kappa, "ms": (qd ** 2).mean(0), "energy": p.sum() * J.DT, "xin": xin, "feat": feat,
                "cb_sq": cb_sq.mean(), "cb_nll": cb_nll.mean(), "q": q, **pen, "tv": tv_pi}
