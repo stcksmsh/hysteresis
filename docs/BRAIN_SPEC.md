@@ -1184,3 +1184,7 @@ the limit-proximity term and too small to act.
    verify). Then merge and launch pass2 without asking. If either seed fails: stop and report.
 4. **Q4: shoulder parking is report-only.** The pass2 report and videos show shoulder-at-limit time per song.
 5. **§7.26 round-2 scaling is relative to the weights in force at pass2 launch.**
+6. **Plane height (user, 2026-11-07, option A).** With the plane exactly at z = 0.05 the ball touches at check-csv's hand margin (0.11 m),
+   so soft-contact sinking would count as breaches. The plane is therefore at z = 0.05 + d, d = the deepest sinking in a held-contact test,
+   rounded up to the next mm, at most 5 mm; above 5 mm, stop and report. The floor hinge acts on the surfaces' sinking below the raised
+   plane, normalised by 0.05 m, weight 1. d and the resulting real-arm clearance are recorded in the hardware notes.
