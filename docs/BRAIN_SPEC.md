@@ -1239,3 +1239,12 @@ Binding. They answer `docs/PLANNER_BRIEF_WO15_RESULTS.md`. Set before any furthe
 4. **Q4: recorded** as written in the brief, plus: the user's verdict that seed 1, episode 0 "looks alive and smooth, has variety"; the
    user's reading that the slump may be the arm trying to move but being clipped; untested planner note: a hard clip has zero gradient
    beyond the limit, so if commands saturate, the limit-proximity cost alone may be too weak to pull the policy out.
+5. **Additions to 7.31.1 (user, 2026-11-07), received after WO16 had run; done as addendum WO16b.**
+   1. Step 1 also lists holds >= 2 s within 1 deg of the target-clip boundary (stop - CLIP_MARGIN_DEG), separately from holds on the stop
+      itself. In point 1 (clipping), "beyond the stop" means beyond the clip boundary.
+   2. **H7, torque saturation / gravity:** per hold, the actuator torque of the held joint and of the shoulder vs the provisional stall
+      torque (2.94 N m): share of hold time at saturation, and whether the joint is pushed into the stop by gravity rather than commanded
+      there.
+   3. **H1b, network saturation:** per hold, whether the motor cortex's centre and amplitude outputs for the held joint sit at their output
+      bounds (share of time within 2 % of a bound).
+   Verdict lines become H1, H1b, H2-H7.
