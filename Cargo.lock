@@ -668,6 +668,10 @@ version = "0.1.0"
 [[package]]
 name = "hyst-cli"
 version = "0.1.0"
+dependencies = [
+ "hyst-compile",
+ "serde_json",
+]
 
 [[package]]
 name = "hyst-compile"

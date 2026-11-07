@@ -2,8 +2,13 @@
 
 use serde::{Deserialize, Serialize};
 
+pub mod body;
+pub mod body_regions;
+pub mod body_track;
 pub mod director;
 pub mod ensemble;
+pub mod mind_state;
+pub mod score_csv;
 
 const Q_V: f64 = 1.875; // max derivative of 6t^5-15t^4+10t^3
 const Q_A: f64 = 5.773_502_691_896_258;
@@ -44,6 +49,12 @@ pub struct CompileConfig {
     /// blind side-by-side over 0 and 120; it about triples wrist travel, so
     /// lower it if real wrist or elbow servos cannot keep up.
     pub wrist_drag_degrees_per_mps: f64,
+    /// The feeling workspace (`docs/B_WORKSPACE.md`). Nothing reads it yet.
+    pub workspace: director::workspace::WorkspaceMode,
+    /// Body quality from the sidecar's `bodyTrack` (docs/NEXT_DECODER_THEN_BRAIN.md, D3).
+    pub body: body_track::BodyMode,
+    /// How the figure clock keeps time with the music (docs/NEXT_DECODER_THEN_BRAIN.md, part B).
+    pub clock: director::figures::ClockMode,
 }
 impl Default for CompileConfig {
     fn default() -> Self {
@@ -51,6 +62,9 @@ impl Default for CompileConfig {
             enable_hits: true,
             reuse_repeats: true,
             wrist_drag_degrees_per_mps: 240.0,
+            workspace: director::workspace::WorkspaceMode::Off,
+            body: body_track::BodyMode::Off,
+            clock: director::figures::ClockMode::V47,
         }
     }
 }

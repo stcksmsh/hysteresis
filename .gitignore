@@ -10,3 +10,5 @@ public/render-worker.js
 /target/
 crates/*/test-output/
 __pycache__/
+__pycache__/
+.pytest_cache/

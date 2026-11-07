@@ -1,0 +1,36 @@
+{
+ "host": "ThinkBook16",
+ "python": "3.12.3",
+ "jax": "0.12.0.1",
+ "backend": "cpu",
+ "devices": [
+  "cpu:0"
+ ],
+ "cpu_count": 20,
+ "x64": true,
+ "mujoco": "3.17.0",
+ "mjx_import": true,
+ "calibrate_s": 40.73204493522644,
+ "round_s_all": [
+  186.9588987827301,
+  61.020689725875854,
+  61.27503824234009
+ ],
+ "round_s_first_incl_compile": 186.9588987827301,
+ "round_s": 61.14786398410797,
+ "grad_step": {
+  "16": {
+   "s_per_step": 3.2019827365875244,
+   "steps_per_s": 0.31230649327789267,
+   "window_blocks_per_s": 39.97523113957026
+  }
+ },
+ "eval_s_per_window": 0.6008733436465263,
+ "observer_fit_s": 1.2698652744293213,
+ "projection_h": {
+  "pass_training": 16.594850864575967,
+  "validations_5": 0.23627121505431004,
+  "check_argmax_3_policies": 0.5693842585943639,
+  "one_try_pass_plus_check": 17.40050633822464
+ }
+}

@@ -31,6 +31,35 @@ Schema-4 (SSM/repetition map) isn't wired into `analyze.ts`'s CLI yet — call
 `computeSchema4Sidecar(decodeWavFile(path))` from `scripts/repetition.ts` directly (or add a
 `--repeats` flag following the `--stems` pattern) until it's promoted to a CLI flag.
 
+## Python analyzer (`analyze.py`, package `analyze/`)
+
+Port of `analyze.ts` and everything on its CLI path (`wav.ts`, `structure.ts`, `demucs.ts` and the
+`src/` DSP/brain modules they import), written so the TS tree can be retired. Same arguments,
+same JSON:
+
+```
+/secondary/hyst-env/analyze-py/bin/python scripts/analyze.py master.wav out.sidecar.json          # schema 3
+/secondary/hyst-env/analyze-py/bin/python scripts/analyze.py master.wav out.sidecar.json --stems  # + Demucs
+```
+
+- Environment: uv venv `/secondary/hyst-env/analyze-py` (numpy, pytest). Create with
+  `UV_CACHE_DIR=/secondary/hyst-env/uv-cache uv venv /secondary/hyst-env/analyze-py` and
+  `uv pip install --python /secondary/hyst-env/analyze-py/bin/python numpy pytest`.
+- `--stems` runs `python -m demucs -n htdemucs` with the interpreter in `$HYST_DEMUCS_PYTHON`
+  (default `/secondary/hyst-env/demucs/bin/python`), then computes `stemPresence` in the analyze env.
+- Files: `analyze/fftjs.py` (fft.js `realTransform` ported butterfly by butterfly, float64, batched
+  over frames), `dsp.py` (bands, centroid, flatness, flux, envelope, normalizer), `brain.py` (beat/bar
+  tracker, build/drop/break detectors, fullness/onset density, novelty ring), `structure.py`
+  (`analyze_mix`, `analyze_mix_detailed`, `compute_stem_presence`), `wav.py`, `demucs.py`,
+  `jsjson.py` (JSON.stringify-style number formatting).
+- Not ported: `ssm.ts`, `repetition.ts`, `render-video.ts`, the relays.
+- Tests: `/secondary/hyst-env/analyze-py/bin/python -m pytest scripts/analyze -q` (synthetic only).
+- Equivalence against the TS analyzer: `scripts/analyze/equiv/run_equiv.sh OUT NAME=WAV ...`
+  (needs `node_modules`; runs both, times them, compares with `equiv/compare.py`).
+  Rule and results: `docs/DANCE_HANDOFF.md`, entry 2026-10-23.
+- To switch `song.sh`: replace `npx tsx scripts/analyze.ts "$wav" "$D/$slug.sidecar.json"` by
+  `/secondary/hyst-env/analyze-py/bin/python scripts/analyze.py "$wav" "$D/$slug.sidecar.json"`.
+
 ## Schema 4 — what it adds and why
 
 Per `SINTEZA_OFFLINE_SSM.md` §1.5, the one thing nothing else in the pipeline produces: **the
