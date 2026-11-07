@@ -1137,3 +1137,32 @@ Binding. They answer `docs/PLANNER_BRIEF_WO13_RESULTS.md`. Set before any K5-pas
    above that.
 
 **Recorded (ablation finding, WO13B):** with the observer low-pass off, the arm lies on the table 92.6 % of the time.
+
+### 7.28 Ruling on the WO14A hard-clip deviation, 2026-11-07, via the user
+
+Binding. Set before any WO14A rerun or K5-pass2 result.
+
+1. **Hard end stop accepted as a body-model fix.** `--hard-clip` clips commanded targets 0.5 deg inside each ranged joint's range AND,
+   after every physics substep, clips joint positions to the range and sets a clipped joint's speed to 0. Reason (user): it matches the
+   real arm, whose servos get firmware angle limits at the same range (recorded for the hardware notes). Target clipping alone was not
+   enough: contact and the soft limit pushed joints past held targets (shoulder -110.1, elbow 110.71, wrist 111.13 deg).
+2. **Condition:** report the number of end-stop events per episode, and the hand acceleration and jerk in the 0.1 s around each event
+   (compared with the episode's overall values). Zeroing a speed is an impulse and must not create the throws (e'1) is meant to stop.
+3. **The limit-proximity cost stays**, so the policy keeps a gradient away from the stops.
+4. **Pass2 uses exactly the WO14A rerun's body and terms** (`--floor-acc-hinges`, `--hard-clip`).
+
+### 7.29 Ruling on the WO14A rerun, 2026-11-07, via the user
+
+Binding. Set before any K5-pass2 result and before the floor-weight toy rerun.
+
+WO14A (body-m3f bf4037d) passed every bar component plus (e') in argmax (ext 1.010, int 1.018, (e'1) 3.42, (e'2) 0.0091), but floor-margin
+breaches remained in 9 of 16 episodes (worst 0.051 m) with the floor hinge at weight 1.
+
+1. **End stops accepted as built; no change.** About 2.4 events per one-minute episode (elbow and shoulder). Pass2 reports end stops per
+   song: event counts, and hand acceleration and jerk within +-0.05 s of events against the episode, at 50 Hz and 100 Hz. At 100 Hz report
+   both methods: pooled over episodes (overseer) and per episode (builder). No bar uses the 100 Hz value.
+2. **Floor-margin hinge weight 3 (was 1)**, set now. The hand-acceleration hinge stays at weight 1.
+3. **One more engineering rerun of toy try 1** with weight 3: same bar plus (e'), WO7 controls, floor-margin breaches reported.
+   - Passes with floor-margin breaches in <= 2 of 16 episodes: merge, send the terms to pass2, launch pass2 without asking (30 h box, 7.27.5).
+   - Breaches in > 2 of 16 episodes, or any bar component fails: stop and report.
+4. **§7.26 round-2 scaling is relative to the new weights:** a factor <= 3 from floor weight 3 and acceleration weight 1.
