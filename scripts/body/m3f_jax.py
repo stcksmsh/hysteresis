@@ -126,6 +126,24 @@ def arm_step(cfg, d, tgt, tv, target_deg):
     return d, tgt, tv, p / J.SUB
 
 
+A_MIN_DEG = 10.0                                     # WO17 (BRAIN_SPEC 7.32.1): smallest bend amplitude the cap CHI - |centre| can leave, so bend centres stay within +-(110 - A_MIN_DEG)
+CLO_S = jnp.where(J.BEND, -(110.0 - A_MIN_DEG), J.CLO)
+CHI_S = jnp.where(J.BEND, 110.0 - A_MIN_DEG, J.CHI)
+
+
+def smooth_u(s):
+    """WO17: smooth strictly monotone map of the unclipped sum s into the open interval (0, 1): 0.5 + 0.5 tanh((s - 0.5) / 0.5), slope 1 at 0.5, derivative sech^2 > 0 everywhere. The sum itself lies in
+    (-0.2, 1.2) (sigmoid prototype + 0.2 tanh), so the outputs span (0.083, 0.917) and never reach a bound."""
+    return 0.5 + 0.5 * jnp.tanh((s - 0.5) / 0.5)
+
+
+def smooth_command(u):
+    """m3d_jax.to_command with the bend centres mapped into (-100, 100) (CLO_S/CHI_S); the amplitude cap CHI - |centre| of the spinal generator (physical, unchanged) is then >= 10 deg."""
+    centre = CLO_S + u[2] * (CHI_S - CLO_S)
+    a_max = jnp.where(J.BEND, J.CHI - jnp.abs(centre), J.cpg.AMP_CAP_CONTINUOUS)
+    return {"freq": J.cpg.F_MIN + u[0] * (J.cpg.F_MAX - J.cpg.F_MIN), "amp": u[1] * a_max, "centre": centre, "lag": u[3] * J.cpg.LAG_MAX}
+
+
 CONTACT_CATS = ("table", "ball_column", "ball_link", "link_column", "link_link")
 
 
@@ -273,11 +291,13 @@ def make_block_fn(cfg):
         xin = jnp.concatenate([inp["x"], carry["feat"] * C.get("loop_gate", 1.0)])
         logits, amod, kappa = J.motor_cortex(P, xin)
         pi = J.program_weights(logits, inp["g"], tau, mode)
-        u = jnp.clip(pi @ jax.nn.sigmoid(P["theta"]) + J.MOD * jnp.tanh(amod), 0, 1).reshape(4, 5)
+        s_ = pi @ jax.nn.sigmoid(P["theta"]) + J.MOD * jnp.tanh(amod)
+        u = (smooth_u(s_) if cfg.get("smooth_u") else jnp.clip(s_, 0, 1)).reshape(4, 5)        # WO17: --smooth-u replaces the hard clip to [0, 1] by a smooth strictly monotone map (the clip branch is the old expression)
+        to_cmd = (lambda uu: smooth_command(uu)) if cfg.get("smooth_u") else J.to_command
         if cfg["phase_lp"]:
             kappa = kappa * inp["R"]
         u_start = jnp.where(carry["u_has"] > 0, carry["u_eff"], u)
-        goal0 = J.to_command(u)
+        goal0 = to_cmd(u)
 
         @jax.checkpoint
         def step(c, k):
@@ -290,7 +310,7 @@ def make_block_fn(cfg):
                 phi = raw
             if cfg["xfade"]:
                 ue = xfade_u(u_start, u, k)
-                goal = J.to_command(ue)
+                goal = to_cmd(ue)
             else:
                 ue, goal = u, goal0
             cs, t = J.cpg_step(cs, goal, phi, kappa)
