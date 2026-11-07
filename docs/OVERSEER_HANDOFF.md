@@ -92,45 +92,40 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## Where things stand (2026-11-06 ~11:00, saved on the user's word: "don't start any work")
+## Where things stand (2026-11-07, saved before an overseer context clear)
 
-**Goal (user, BRAIN_SPEC 7.19):** a scale human, ONE arm. The brain's own encodings (B7 epoch 6 lanes) drive it, no emotion decoding. It learns to
-move so that its inner state can be read from its body. Every mechanism shown or claimed is in the loop that moves the arm, or is a labelled data
-lane. ARGMAX mode for every claim (sampled reported only). The installation is ONE arm, permanently (no hexagon, no ensemble; v47 hexagon files
-are only the byte-identical regression reference).
+**Goal (user, BRAIN_SPEC 7.19):** a scale human, ONE arm, driven by the brain's own encodings (B7 epoch 6 lanes); it learns to move so its
+inner state can be read from its body. ARGMAX for every claim. ONE arm permanently.
 
-**Rules of record:** `docs/BRAIN_SPEC.md` §7.17–7.22 (read all six first; 7.19 = goal, K5 bar and claims; 7.20 = K5 compute and ablation
-wording; 7.21 = seed-2 credit rule; **7.22 = K5 try 1 rulings, the current orders**). Branch of record `body` (origin 9f66459);
-`keys-decide` = body + overseer docs. Never master.
+**Rules of record:** `docs/BRAIN_SPEC.md` §7.17-7.27; read **7.22-7.27 first** (7.22 K5 try 1; 7.23 pass2 required; 7.24 user verdict
+"spastic" + pass2 body/movement design; 7.25 bar (e') hand-space; 7.26 pre-registered round-2 rule (user); 7.27 WO13 rulings: floor-margin and
+hand-acc hinges weight 1, hard clip, keep changes 3/4, **pass2 box 30 h, launch without asking if projection <= 30 h**). Branch of record
+`body` (origin f44a196 + prompts 819df88); `keys-decide` = body + overseer docs. Never master.
 
-**K5 try 1: DONE, PASSES, verified, merged (body b74da7d, 7.22 recorded in 9f66459).**
-- One full pass, 977 rounds, 13.15 h of the 24 h box; early stop never fired; best.pkl = round 977. Validation ext (a) at rounds
-  200/400/600/800/977: 0.558, 0.544, 0.574, 0.596, 0.634 (still rising).
-- Check on 357 held-out songs, argmax: ext (a) 0.625 [0.603, 0.648], vs untrained +0.452 [0.435, 0.470], vs kappa 0 +0.086 [0.073, 0.099];
-  int 0.636 [0.613, 0.659], +0.496, +0.177. MI 0.037 (untrained 0.155). Overseer recomputed all paired per-song bootstraps from
-  `/secondary/hyst-data/body/k5/run1/eval/{trained,untrained,trained_kappa0}.json` (script was job-tmp `k5verify.py`: per_song lists, paired
-  difference, 10,000 resamples). Brief `docs/PLANNER_BRIEF_K5_RESULTS.md` sent and answered (= 7.22).
-- Licensed wording (7.22): "It learned to move so that its inner state can be read from its body, by you and by itself" (record: both read the
-  same joint positions); "it moves in time with its own inner rhythm". NO wording that its choice of movement follows its inner state.
-- Data: `/secondary/hyst-data/body/k5/run1/` (best.pkl, ckpt.pkl, progress.json, run.log, check.log, eval/). Run/check commands in
-  `scripts/body/K5_RUN.md` (`k5_run.sh start|check`). The check OOM'd once at 8 GB (trainer alive in the same cap); fixed (chain now exec()s).
+**Done and merged since K5 try 1:** WO12 (K5 videos; arm through the floor, check-csv refuses), WO11 (seed 2: none credited), WO13A (hf_share +
+v47 refs), WO13B (new body v2f + movement changes; toy try 1 PASSES bar + (e'); controls above 0; changes 3/4 raise hand acc; floor margin
+broken in 5/16 episodes, shoulder parked 0.1 deg past limit 19 % of rows). Details in the dated notes below.
 
-**Running now:** nothing. Agents 1–5 idle (agent 3 asked for a render order; not answered on purpose). User said: DON'T START ANY WORK until
-they say so.
+**Running now (sent 2026-11-07, notify_when_idle on both):**
+- **Agent 2 [730780]** (not cleared, ~40 % context; built m3f): **WO14A** `docs/BUILDER_PROMPT_WO14A_TOY_RERUN.md` in worktree
+  `.claude/worktrees/body-m3f`, branch body-m3f, data `/secondary/hyst-data/body/m3f/rerun1/`, 8 thr / 14 GB. Adds the two §7.27 hinges + hard
+  clip (pushes code early), reruns toy try 1 (jerk 0.03, switch 0.01) + WO7 controls + per-joint time within 2 deg of a limit. ~1-1.5 h.
+- **Agent 1 [97e43a]** (freshly cleared): **WO14B** `docs/BUILDER_PROMPT_WO14B_K5_PASS2.md` in worktree `.claude/worktrees/body-k5video`,
+  new branch body-k5p2, data `/secondary/hyst-data/body/k5p2/`, 6 thr / 10 GB. Builds k5p2_train.py on M3f + the 14A terms, times 3 rounds,
+  **must NOT launch until the overseer tells it 14A's rerun passed and is merged**; then launches by itself if projection <= 30 h, reports each
+  validation, runs the check (full K5 bar + check-csv on 3 danced songs + (e'1)/(e'2) per song), then 3-panel videos (v47 | fallback | pass2).
 
-**Next, in order (only when the user says go):**
-1. **Work order 12: the video path (7.22 point 1), before seed 2.** Write `docs/BUILDER_PROMPT_WO12_K5_VIDEOS.md` (not written yet), for agent 3
-   (knows K5 code; branch e.g. `body-k5video` from body). Contents from agent 3's FOR OVERSEER: (1) export the three danced songs' B7 lanes in
-   K5 format (the danced songs are Instant Crush, Five Years, Presence; their fallback 720p videos are in
-   `/secondary/hyst-data/brain/author/tuning/720p-cam/`); (2) full-song rollout of best.pkl, carry kept continuously across the whole song
-   (no resets), 30 s causal normalisation running throughout, write the joint CSV (`arm_sim.csv_text` exists); (3) render with the one-arm
-   camera of the authoring tool (agent 5 built it in WO6/WO7 tuning: `scripts/author/retune.sh`; find the render entry point there and name
-   it in the prompt), next to the fallback videos; (4) report-only: external and internal (a) per 60 s segment across each song.
-   Pausable/stoppable runs, mains only, own memory cap, push before long runs. Verify: CSV durations = song durations, videos looked at,
-   720p copies < 30 MiB for SendUserFile.
-2. Then send agent 1 `docs/BUILDER_PROMPT_WO11_SEED2.md` as written (toy seeds only: seed 2 of M3e try 1 and A1–A3), apply the 7.21 credit
-   rule. No second K5 seed unless wording needs it.
-3. K5-pass2 only if the user, after watching, wants better movement (7.22 point 3): separately labelled, own full K5 check, never replaces try 1.
+**Next for the overseer:**
+1. Within ~30 min of sending: check both branches have a first push (body-m3f new commits; origin/body-k5p2 exists).
+2. When 14A reports: verify (three-dot diff vs body: new options only, old paths bit-identical; tests; recompute try-1 intervals, controls,
+   (e'1)/(e'2) means from `rerun1/.../result.json` per-episode values; check near-limit shares and clip max excess). If it passes: merge
+   body-m3f into body (detached temp worktree, `git push origin HEAD:body`), merge keys-decide, then **tell agent 1 to launch**. If it fails:
+   stop, brief the planner.
+3. During pass2: Monitor/hourly checks; report validations with ETAs; the run may take up to 30 h of compute.
+4. After the pass2 check: verify (recompute per-song bootstraps as for try 1, check-csv per song, (e') per song), send 720p videos, write the
+   planner brief. If it fails on floor margin / (e'1) / (e'2) only, §7.26 round-2 applies (weights x <= 3, chosen on the toy).
+
+**Machine:** Kabl jobs share it (the user prefers sequential Hysteresis work; 14A and 14B's build phase overlap is light). Mains power was on.
 
 **2026-11-06 ~12:00:** user: two fresh agents available; Kabl work will share this machine, so WO12 and WO11 run SEQUENTIALLY (WO11 only after WO12 reports). WO12 prompt written and pushed: `docs/BUILDER_PROMPT_WO12_K5_VIDEOS.md` (body 6e65bdf), share 6 threads / 6 GB, branch `body-k5video`, for a fresh agent (pasted by the user; agents offline in ListAgents). Found: no joint-CSV renderer exists; WO12 step 3 asks for the smallest additive one, v47 cmp required. Body worktree index slip FIXED (user OK, reset --hard HEAD, clean).
 
