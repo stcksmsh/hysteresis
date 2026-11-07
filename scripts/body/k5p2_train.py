@@ -26,9 +26,13 @@ import m3e_jax as M
 import m3f
 import m3f_jax as F
 
-CFG = dict(body="v2f", obs_lp=True, phase_lp=True, xfade=True, clip=True)      # clip = WO14A --hard-clip (7.28); needs m3f_jax from body-m3f
+import make_arm_v2 as V2
+
+assert V2.RAISED_PLANE_Z is not None
+# = run_m3f.py build() with --body v2f --hard-clip --floor-acc-hinges --contact-tc 0.006 --raised-plane --w-floor 1.0 (BRAIN_SPEC 7.30.8); the values come from agent 2's code
+CFG = dict(body="v2f", obs_lp=True, phase_lp=True, xfade=True, ctc=0.006, plane=V2.RAISED_PLANE_Z, clip=True)
 OPTS = {"internal": True, "pen": True, "jerk": True, "sw": True, "pen2": True}      # pen2 = --floor-acc-hinges (W_FLOOR = W_ACC = 1, 7.27)
-W_JERK, W_SWITCH = 0.03, 0.01
+W_JERK, W_SWITCH, W_FLOOR = 0.03, 0.01, 1.0
 T.BOX_H = 30.0
 NB = T.NB
 
@@ -113,7 +117,7 @@ def score_modes(fns, cfg, C, P, stats, combo, modes=("argmax",), rolldir=None, n
 
 
 class K5P2Run(T.K5Run):
-    def __init__(self, out, k5=T.K5, lam=T.LAM, lr=T.LR, round_windows=T.ROUND, log=print, windows=None, cfg=None, opts=None, w_jerk=W_JERK, w_sw=W_SWITCH):
+    def __init__(self, out, k5=T.K5, lam=T.LAM, lr=T.LR, round_windows=T.ROUND, log=print, windows=None, cfg=None, opts=None, w_jerk=W_JERK, w_sw=W_SWITCH, w_floor=W_FLOOR):
         self.cfg = cfg or CFG
         self.out, self.k5, self.log, self.rw = Path(out), Path(k5), log, round_windows
         self.out.mkdir(parents=True, exist_ok=True)
@@ -122,7 +126,7 @@ class K5P2Run(T.K5Run):
         self.R = -(-len(self.order) // self.rw)
         self.C = M.load_cb()
         calib = build_toy(self.k5, "train", T.obs_windows(self.order, round_windows))
-        self.tr = m3f.Trainer(calib, self.C, self.cfg, lam, lr, self.R, 8, dopamine=True, log=log, opts=opts or OPTS, w_jerk=w_jerk, w_sw=w_sw)
+        self.tr = m3f.Trainer(calib, self.C, self.cfg, lam, lr, self.R, 8, dopamine=True, log=log, opts=opts or OPTS, w_jerk=w_jerk, w_sw=w_sw, w_floor=w_floor)
         self.set_groups(calib)
         self.extra = {"val": [], "best": None, "bad": 0, "stopped": False}
         self._calib, self._val, self._obs = calib, None, None
