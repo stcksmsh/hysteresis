@@ -23,7 +23,7 @@ import m3e_jax as M
 import m3f_jax as F
 
 FLOORS = {"hand_v": 0.02, "jolt": 0.2, "lim": 0.005, "jerk": 1.0, "floor": 0.005, "acc": 0.05}       # the untrained values are floored at these before dividing (a zero denominator explodes)
-W_FLOOR, W_ACC = 1.0, 1.0       # the two 7.27 hinges' weights inside LAMBDA x (...): fixed, and the knobs BRAIN_SPEC 7.26 round 2 may scale by a factor <= 3 (pass2 only; not changed here)
+W_FLOOR, W_ACC = 1.0, 1.0       # the two 7.27 hinges' weights inside LAMBDA x (...): the knobs BRAIN_SPEC 7.26 round 2 may scale by a factor <= 3. W_FLOOR is the default of --w-floor (7.29: 3.0 for the WO14C rerun); W_ACC stays 1
 NB = m3d.NB
 VALID_FROM = m3e.VALID_FROM
 NON_ROLL = m3d.NON_ROLL
@@ -60,7 +60,7 @@ def make_fns(C, cfg, opts):
         terms = {"hand_v": mean(o["hand_v"]) / nrm["hand_v"], "jolt": mean(o["jolt"]) / nrm["jolt"], "lim": mean(o["lim"]) / nrm["lim"], "jerk": mean(o["jerk"]) / nrm["jerk"], "sw": mean(o["tv"]),
                  "floor": mean(o["floor"]) / nrm["floor"], "acc": mean(o["acc"]) / nrm["acc"]}
         pen = (terms["hand_v"] + terms["jolt"] + terms["lim"]) if opts["pen"] else 0.0
-        pen = pen + (W_FLOOR * terms["floor"] + W_ACC * terms["acc"] if opts.get("pen2") else 0.0)
+        pen = pen + (w["floor"] * terms["floor"] + W_ACC * terms["acc"] if opts.get("pen2") else 0.0)
         loss = Le + (Li if opts["internal"] else 0.0) + lam * (en + pen) + (w["jerk"] * terms["jerk"] if opts["jerk"] else 0.0) + (w["sw"] * terms["sw"] if opts["sw"] else 0.0)
         return loss, (carry, {"dec_e": Le, "dec_i": Li, "en": en, "de": de, "xin": o["xin"], "desc": o["desc"], "idesc": o["idesc"], "ms": o["ms"], "pi": o["pi"], "kappa": o["kappa"],
                               "terms": terms, "raw": {k: mean(o[k]) for k in ("jerk", "hand_v", "jolt", "lim", "tv", "floor", "acc")}})
@@ -124,9 +124,9 @@ def score_policy(fns, cfg, C, P, toy, stats, which, chunk_blocks, rolldir=None, 
 class Trainer(m3e.Trainer):
     """m3e.Trainer on cfg. opts: internal, pen, jerk, sw (loss terms), w_jerk, w_sw."""
 
-    def __init__(self, toy, C, cfg, lam, lr, epochs, chunk_blocks=8, seed=0, dopamine=True, log=print, opts=None, w_jerk=0.0, w_sw=0.0):
+    def __init__(self, toy, C, cfg, lam, lr, epochs, chunk_blocks=8, seed=0, dopamine=True, log=print, opts=None, w_jerk=0.0, w_sw=0.0, w_floor=W_FLOOR):
         opts = {"internal": True, "pen": cfg["body"] != "v1", "jerk": False, "sw": False, **(opts or {})}
-        self.cfg, self.opts, self.w = cfg, opts, {"jerk": w_jerk, "sw": w_sw}
+        self.cfg, self.opts, self.w = cfg, opts, {"jerk": w_jerk, "sw": w_sw, "floor": w_floor}
         self.toy, self.C, self.lam, self.lr, self.epochs, self.cb, self.log, self.dopamine, self.gate = toy, C, lam, lr, epochs, chunk_blocks, log, dopamine, True
         self.fns = make_fns(C, cfg, opts)
         key = jax.random.PRNGKey(seed)

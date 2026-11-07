@@ -23,7 +23,7 @@ def build(a, toy, C, log):
     if a.hard_clip:
         cfg["clip"] = True                                        # only added when asked, so earlier runs' cfg (and their checkpoints) are unchanged
     opts = {"internal": True, "pen": a.body != "v1" and not a.no_pen, "jerk": a.w_jerk > 0, "sw": a.w_switch > 0 and cfg["xfade"], "pen2": a.body != "v1" and a.floor_acc_hinges}
-    tr = m3f.Trainer(toy, C, cfg, a.lam, a.lr, a.epochs, a.chunk_blocks, seed=a.seed, dopamine=True, log=log, opts=opts, w_jerk=a.w_jerk, w_sw=a.w_switch)
+    tr = m3f.Trainer(toy, C, cfg, a.lam, a.lr, a.epochs, a.chunk_blocks, seed=a.seed, dopamine=True, log=log, opts=opts, w_jerk=a.w_jerk, w_sw=a.w_switch, w_floor=a.w_floor)
     return cfg, tr
 
 
@@ -43,6 +43,7 @@ def add_args(ap):
     ap.add_argument("--no-xfade", action="store_true")
     ap.add_argument("--no-pen", action="store_true")
     ap.add_argument("--floor-acc-hinges", action="store_true", help="BRAIN_SPEC 7.27 point 1: floor-margin and hand-acceleration hinges, weight 1 each (m3f.W_FLOOR, W_ACC)")
+    ap.add_argument("--w-floor", type=float, default=1.0, help="weight of the floor-margin hinge inside LAMBDA x (...) (BRAIN_SPEC 7.29: 3.0 for the WO14C rerun); the hand-acceleration hinge stays at m3f.W_ACC = 1")
     ap.add_argument("--hard-clip", action="store_true", help="BRAIN_SPEC 7.27 point 2: targets of every ranged joint clipped CLIP_MARGIN_DEG inside the range (new body only)")
     ap.add_argument("--max-epochs-now", type=int, default=0, help="stop after this many epochs of this call (0 = all; for timing)")
 

@@ -322,5 +322,44 @@ class FirstEpochM3f(unittest.TestCase):
             self.assertAlmostEqual(rec[k], ref[k], delta=1e-6 * max(1.0, abs(ref[k])), msg=k)
 
 
+
+class FirstEpochRerun1(unittest.TestCase):
+    """WO14A's rerun (hinges weight 1, hard stop) first epoch is reproduced by the default --w-floor (~5 min); weight 3 changes the loss (the floor term and the trained policy differ)."""
+
+    def trainer(self, **kw):
+        toy = m3f.ToyF(TOY)
+        cfg = {"body": "v2f", "obs_lp": True, "phase_lp": True, "xfade": True, "clip": True}
+        return m3f.Trainer(toy, M.load_cb(), cfg, 0.03, 1e-3, 40, 8, seed=0, log=lambda s: None, opts={"pen": True, "jerk": True, "sw": True, "pen2": True}, w_jerk=0.03, w_sw=0.01, **kw)
+
+    def test_default_weight_reproduces_wo14a_first_epoch(self):
+        ref = json.load(open("/secondary/hyst-data/body/m3f/rerun1/try1/result.json"))["hist"][0]
+        tr = self.trainer()
+        self.assertEqual(tr.w["floor"], 1.0)
+        tr.calibrate()
+        rec = tr.run_epoch()
+        for k in ("dec_e", "dec_i", "energy_rel", "rms_speed", "kappa_mean", "rate_mult", "abs_delta", "critic_loss", "hand_v", "jolt", "lim", "jerk", "tv", "floor", "acc"):
+            self.assertAlmostEqual(rec[k], ref[k], delta=1e-6 * max(1.0, abs(ref[k])), msg=k)
+
+    def test_weight_three_changes_the_loss_by_two_floor_terms(self):
+        tr = self.trainer()
+        tr.calibrate()
+        g = "A"
+        idx = tr.groups[g]
+        E = len(idx)
+        inps = tr.toy.inputs(idx, jax.random.PRNGKey(3))
+        yz = jnp.asarray(tr.toy.yz[idx])
+        carry = jax.vmap(lambda q: F.init_carry(tr.cfg, q, tr.C))(jnp.asarray(m3d.start_poses(E, 100)))
+        S = tr.stats
+        nrm = {k: jnp.asarray(v) for k, v in tr.nrm.items()}
+        out = []
+        for wf in (1.0, 3.0):
+            w = {"jerk": jnp.asarray(0.03), "sw": jnp.asarray(0.01), "floor": jnp.asarray(wf)}
+            (l, (_, aux)), _ = tr.fns["loss"](tr.P, tr.obs[g][0], tr.obs[g][1], carry, m3d.take(inps, 8, 16), yz[:, 8:16], m3e.valid_mask(8, 8, E), 1.0, 0.03, tr.e0, S["dmu"], S["dsd"], S["imu"], S["isd"], nrm, w)
+            out.append((float(l), float(aux["terms"]["floor"])))
+        self.assertAlmostEqual(out[1][1], out[0][1], places=12)                    # the floor term itself is the same
+        self.assertGreater(out[0][1], 0.0)
+        self.assertAlmostEqual(out[1][0] - out[0][0], 0.03 * 2.0 * out[0][1], places=9)     # LAMBDA x (3 - 1) x the floor term
+
+
 if __name__ == "__main__":
     unittest.main()
