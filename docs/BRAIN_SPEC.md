@@ -1150,3 +1150,19 @@ Binding. Set before any WO14A rerun or K5-pass2 result.
    (compared with the episode's overall values). Zeroing a speed is an impulse and must not create the throws (e'1) is meant to stop.
 3. **The limit-proximity cost stays**, so the policy keeps a gradient away from the stops.
 4. **Pass2 uses exactly the WO14A rerun's body and terms** (`--floor-acc-hinges`, `--hard-clip`).
+
+### 7.29 Ruling on the WO14A rerun, 2026-11-07, via the user
+
+Binding. Set before any K5-pass2 result and before the floor-weight toy rerun.
+
+WO14A (body-m3f bf4037d) passed every bar component plus (e') in argmax (ext 1.010, int 1.018, (e'1) 3.42, (e'2) 0.0091), but floor-margin
+breaches remained in 9 of 16 episodes (worst 0.051 m) with the floor hinge at weight 1.
+
+1. **End stops accepted as built; no change.** About 2.4 events per one-minute episode (elbow and shoulder). Pass2 reports end stops per
+   song: event counts, and hand acceleration and jerk within +-0.05 s of events against the episode, at 50 Hz and 100 Hz. At 100 Hz report
+   both methods: pooled over episodes (overseer) and per episode (builder). No bar uses the 100 Hz value.
+2. **Floor-margin hinge weight 3 (was 1)**, set now. The hand-acceleration hinge stays at weight 1.
+3. **One more engineering rerun of toy try 1** with weight 3: same bar plus (e'), WO7 controls, floor-margin breaches reported.
+   - Passes with floor-margin breaches in <= 2 of 16 episodes: merge, send the terms to pass2, launch pass2 without asking (30 h box, 7.27.5).
+   - Breaches in > 2 of 16 episodes, or any bar component fails: stop and report.
+4. **§7.26 round-2 scaling is relative to the new weights:** a factor <= 3 from floor weight 3 and acceleration weight 1.
