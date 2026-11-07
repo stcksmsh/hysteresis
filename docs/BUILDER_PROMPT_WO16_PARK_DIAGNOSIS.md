@@ -58,3 +58,18 @@ generators / CPG, kappa, programs, observers), `m3f_report.py`, `m3f_endstop.py`
 
 Re-simulation reproduces the saved rollouts (stated); every hold stretch has points 1-6; six verdict lines; tests for any new flag pass and
 the default paths stay bit-identical; branch pushed; report sent. Nothing trained, nothing launched.
+
+## Addendum WO16b (user, 2026-11-07; BRAIN_SPEC 7.31.5) — run after WO16, same rules (analysis only)
+
+Reuse the WO16 re-simulation; extend the default-off diag logging if needed (default path bit-identical, test it).
+1. **Clip-boundary holds:** also list every hold >= 2 s with a ranged joint within 1 deg of the target-clip boundary (110 -
+   CLIP_MARGIN_DEG = 109.5 deg), separately from the holds on the stop itself. In point 1 (clipping), report "beyond the stop" as beyond the
+   clip boundary (109.5).
+2. **H7, torque saturation / gravity:** per hold, the actuator torque (or force) of the held joint and of the shoulder vs the provisional
+   stall torque 2.94 N m: share of hold time at or above saturation (state how torque is read from MuJoCo: `actuator_force`, gear, limits),
+   and whether the joint is pushed into the stop by gravity rather than commanded there (e.g. the commanded target vs the stop, the sign
+   of the gravity torque `qfrc_bias` on that joint, and what the joint does if the command were held 5 deg inside: optional quick test).
+3. **H1b, network saturation:** per hold, whether the motor cortex's centre and amplitude outputs for the held joint sit at their output
+   bounds (share of hold time within 2 % of a bound; name the output and its bounds, e.g. u in [0, 1] before the prototype map).
+4. Verdict lines become H1, H1b, H2-H7 (one line each, supported / not supported, with the deciding number). Update `diag/summary.json`
+   and the night log; push; report; stop.
