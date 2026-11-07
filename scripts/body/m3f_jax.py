@@ -101,6 +101,8 @@ def arm_step(cfg, d, tgt, tv, target_deg):
     range of every ranged joint (the continuous joints stay unbounded), and after every physics substep the joint positions are clipped to the range itself (hard stop, outward speed zeroed)."""
     if cfg["body"] == "v1":
         return J.arm_step(d, tgt, tv, target_deg)
+    if cfg.get("diag"):                                        # WO16: same physics, plus a diagnostics dict as a fifth return value (default off; the default path below is untouched)
+        return arm_step_diag(cfg, d, tgt, tv, target_deg)
     lo, hi = (J.SLO + CLIP_MARGIN_DEG, J.SHI - CLIP_MARGIN_DEG) if cfg.get("clip") else (J.SLO, J.SHI)
     goal = jnp.clip(target_deg, lo, hi)
     e = goal - tgt
@@ -122,6 +124,76 @@ def arm_step(cfg, d, tgt, tv, target_deg):
         return (dd, p + jnp.abs(dd.actuator_force * dd.qvel).sum()), None
     (d, p), _ = jax.lax.scan(sub, (d, 0.0), None, length=J.SUB)
     return d, tgt, tv, p / J.SUB
+
+
+CONTACT_CATS = ("table", "ball_column", "ball_link", "link_column", "link_link")
+
+
+def _contact_cat_matrix(m):
+    """(ngeom, ngeom) int: index into CONTACT_CATS of a geom pair (-1 = a pair that cannot be in contact)."""
+    n = m.ngeom
+    kind = np.full(n, "link", dtype=object)
+    for g in range(n):
+        if m.geom_type[g] == mujoco.mjtGeom.mjGEOM_PLANE:
+            kind[g] = "table"
+        elif m.geom_type[g] == mujoco.mjtGeom.mjGEOM_SPHERE:
+            kind[g] = "ball"
+        elif m.geom_contype[g] == 4:
+            kind[g] = "column"
+    cat = -np.ones((n, n), int)
+    for a in range(n):
+        for b in range(n):
+            s = {kind[a], kind[b]}
+            if "table" in s:
+                cat[a, b] = 0
+            elif s == {"ball", "column"}:
+                cat[a, b] = 1
+            elif "ball" in s and "link" in s:
+                cat[a, b] = 2
+            elif s == {"link", "column"}:
+                cat[a, b] = 3
+            elif s == {"link"}:
+                cat[a, b] = 4
+    return cat
+
+
+def arm_step_diag(cfg, d, tgt, tv, target_deg):
+    """arm_step (same ops, same order) on the chosen body with a diagnostics dict: hits (5) substeps in which the hard stop acted on each joint, cf (5) the largest contact normal force (N)
+    of each CONTACT_CATS category over the substeps, cn (5) the largest number of active contacts of each category over the substeps, tgt_hit (5) the held target sat on the clip bound.
+    -> (d, tgt, tv, p, info)."""
+    lo, hi = (J.SLO + CLIP_MARGIN_DEG, J.SHI - CLIP_MARGIN_DEG) if cfg.get("clip") else (J.SLO, J.SHI)
+    goal = jnp.clip(target_deg, lo, hi)
+    e = goal - tgt
+    v_des = jnp.sign(e) * jnp.minimum(J.LIM_V, jnp.sqrt(2 * J.LIM_A * jnp.abs(e) + 1e-12))
+    v_des = jnp.where(jnp.abs(v_des) * J.DT > jnp.abs(e), e / J.DT, v_des)
+    tv = jnp.clip(tv + jnp.clip(v_des - tv, -J.LIM_A * J.DT, J.LIM_A * J.DT), -J.LIM_V, J.LIM_V)
+    tgt = jnp.clip(tgt + tv * J.DT, lo, hi)
+    d = d.replace(ctrl=jnp.radians(tgt))
+
+    lo_r, hi_r = jnp.radians(J.SLO), jnp.radians(J.SHI)
+    m, mx = body_model(cfg)
+    cat = jnp.asarray(_contact_cat_matrix(m))
+    cats = jnp.arange(len(CONTACT_CATS))
+
+    def sub(c, _):
+        dd, p, hits, cf, cn = c
+        dd = mjx.step(mx, dd)
+        hit = jnp.zeros(5)
+        if cfg.get("clip"):
+            qc = jnp.clip(dd.qpos, lo_r, hi_r)
+            hit = (qc != dd.qpos).astype(float)
+            dd = dd.replace(qpos=qc, qvel=jnp.where(qc != dd.qpos, 0.0, dd.qvel))
+        ct = dd.contact
+        ci = cat[ct.geom1, ct.geom2]
+        act = (ct.dist < 0) & (ci >= 0)
+        f = jnp.where(act & (ct.efc_address >= 0), dd.efc_force[jnp.maximum(ct.efc_address, 0)], 0.0)
+        sel = (ci[None, :] == cats[:, None]) & act[None, :]
+        cf = jnp.maximum(cf, jnp.where(sel, f[None, :], 0.0).max(1))
+        cn = jnp.maximum(cn, sel.sum(1).astype(float))
+        return (dd, p + jnp.abs(dd.actuator_force * dd.qvel).sum(), hits + hit, cf, cn), None
+    z5 = jnp.zeros(len(CONTACT_CATS))
+    (d, p, hits, cf, cn), _ = jax.lax.scan(sub, (d, 0.0, jnp.zeros(5), z5, z5), None, length=J.SUB)
+    return d, tgt, tv, p / J.SUB, {"hits": hits, "cf": cf, "cn": cn, "tgt_hit": ((tgt <= lo) | (tgt >= hi)).astype(float)}
 
 
 # ---------------------------------------------------------------------------------------------------------------- pieces
@@ -225,13 +297,18 @@ def make_block_fn(cfg):
             err = (obs - obs_prev) / C["dsd"][0] - pred1
             e10 = err[:10]
             nll = (0.5 * (lv1[:10] + e10 ** 2 / jnp.exp(lv1[:10]) + math.log(2 * math.pi))).mean()
-            d, tgt, tv, p = arm_step(cfg, d, tgt, tv, t)
+            if cfg.get("diag"):
+                d, tgt, tv, p, info = arm_step(cfg, d, tgt, tv, t)
+                dg = {**info, "t_pre": t, "centre": cs["centre"], "amp": cs["amp"], "phase": cs["phase"], "freq": cs["freq"], "tgt": tgt}
+            else:
+                d, tgt, tv, p = arm_step(cfg, d, tgt, tv, t)
+                dg = {}
             new_snap = M.snap_of(d)
             pose = obs[:5] + mean[2, :5] * C["dsd"][2, :5]
-            return (d, tgt, tv, cs, cbs, new_snap, obs, mean[0], lv[0], z, z_has), (jnp.degrees(d.qpos), jnp.degrees(d.qvel), p, obs, pose, err, (e10 ** 2).mean(), nll, ue)
+            return (d, tgt, tv, cs, cbs, new_snap, obs, mean[0], lv[0], z, z_has), (jnp.degrees(d.qpos), jnp.degrees(d.qvel), p, obs, pose, err, (e10 ** 2).mean(), nll, ue, dg)
 
         cin = (carry["d"], carry["tgt"], carry["tv"], carry["cs"], carry["cb"], carry["snap"], carry["obs_prev"], carry["pred1"], carry["lv1"], carry["z"], carry["z_has"])
-        (d, tgt, tv, cs, cbs, snap, obs_prev, pred1, lv1, z, z_has), (q, qd, p, obs, pose, err, cb_sq, cb_nll, ues) = jax.lax.scan(step, cin, jnp.arange(J.BLOCK))
+        (d, tgt, tv, cs, cbs, snap, obs_prev, pred1, lv1, z, z_has), (q, qd, p, obs, pose, err, cb_sq, cb_nll, ues, dgs) = jax.lax.scan(step, cin, jnp.arange(J.BLOCK))
         full = jnp.concatenate([carry["buf"], q])
         pfull = jnp.concatenate([carry["pbuf"], obs[:, :5]])
         if cfg["obs_lp"]:
@@ -251,6 +328,7 @@ def make_block_fn(cfg):
         tv_pi = 0.5 * jnp.abs(pi - carry["pi_prev"]).sum() * carry["pi_has"]
         out = {"desc": desc, "idesc": idesc, "logits": logits, "pi": pi, "kappa": kappa, "ms": (qd ** 2).mean(0), "energy": p.sum() * J.DT, "xin": xin, "feat": feat,
                "cb_sq": cb_sq.mean(), "cb_nll": cb_nll.mean(), "q": q, **pen, "tv": tv_pi}
+        out.update({"dg_" + k: v for k, v in dgs.items()})
         new = {"d": d, "tgt": tgt, "tv": tv, "cs": cs, "buf": full[-200:], "cb": cbs, "snap": snap, "pbuf": pfull[-200:], "obs_prev": obs_prev, "pred1": pred1, "lv1": lv1, "feat": feat,
                "u_eff": ues[-1], "u_has": jnp.asarray(1.0), "pi_prev": pi, "pi_has": jnp.asarray(1.0), "z": z, "z_has": z_has}
         return new, out
