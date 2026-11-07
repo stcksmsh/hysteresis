@@ -161,12 +161,15 @@ def analyse_seed(seed, root):
     for nm, O, key, mu, sd in (("ext", Oe, "desc", stats_["dmu"], stats_["dsd"]), ("int", Oi, "idesc", stats_["imu"], stats_["isd"])):
         pred[nm] = np.asarray(jax.vmap(jax.vmap(lambda x: m3d_obs_apply(O, x)))(jnp.asarray(m3d.std_desc(saved[key], mu, sd))))
     matched = {nm: ((pred[nm] - yz) ** 2).mean(-1) for nm in pred}                              # (E, NB)
-    shifted = {}
+    gap, base = {}, (yz ** 2).mean(-1)                           # per-block gap with the scoring run's own shifts (m3d.time_shuffled_gap: rng seed 0, 20 shifts per episode in [8, NB - 8]); base = loss of predicting the mean
     for nm in pred:
-        sh = [((pred[nm] - np.roll(yz, s, axis=1)) ** 2).mean(-1) for s in range(8, 28)]
-        shifted[nm] = np.mean(sh, 0)
-    gap = {nm: shifted[nm] - matched[nm] for nm in pred}
-    # the same gap numbers the scoring run reports (reproduces result.json: ext/int a_gap_mean)
+        rng_s = np.random.default_rng(0)
+        g_ = np.empty((E, NB))
+        for e in range(E):
+            ls = [((pred[nm][e] - np.roll(yz[e], int(rng_s.integers(8, NB - 8 + 1)), axis=0)) ** 2).mean(-1) for _ in range(20)]
+            g_[e] = np.mean(ls, 0) - matched[nm][e]
+        gap[nm] = g_
+    # mean over blocks >= EVAL_FROM = the scoring run's a_gap_mean (checked against result.json below)
     rep_gap = {nm: float(np.mean([gap[nm][e, m3e.EVAL_FROM:].mean() for e in range(E)])) for nm in pred}
     # programs' commanded centres (sigmoid(theta) -> centre) for the program table
     P = ck["P"]
@@ -193,7 +196,7 @@ def analyse_seed(seed, root):
         row["clip"] = {"t_pre_deg": stats(tp), "centre_deg": stats(ce), "amp_raw_deg": stats(am), "amp_eff_deg": stats(ae),
                        "share_pre_beyond_stop_110": float((tp >= STOP).mean()), "share_pre_at_or_beyond_clip_bound_109.5": float((tp >= CLIP_BOUND).mean()),
                        "share_held_target_on_clip_bound": float((tg >= CLIP_BOUND - 1e-6).mean()), "held_target_deg": stats(tg),
-                       "share_centre_at_or_beyond_clip_bound": float((ce >= CLIP_BOUND).mean()),
+                       "share_centre_at_or_beyond_clip_bound": float((ce >= CLIP_BOUND).mean()), "share_centre_on_generator_limit_110": float((ce >= STOP - 1e-3).mean()),
                        "t_pre_std_deg": float(tp.std()), "t_pre_peak_to_peak_deg": float(tp.max() - tp.min()),
                        "phase_advance_rad_per_s_mean": float(np.diff(ph).mean() * 100.0), "phase_advance_rad_per_s_min": float(np.diff(ph).min() * 100.0),
                        "share_pre_inside_range_below_109.5": float((tp < CLIP_BOUND).mean()),
@@ -231,7 +234,7 @@ def analyse_seed(seed, root):
     tot = sum(r["duration_s"] for r in per)
     wmean = lambda f: float(sum(f(r) * r["duration_s"] for r in per) / tot) if tot else None
     pooled = {"n_holds": len(per), "total_hold_s": tot, "per_joint_s": {nm: float(sum(r["duration_s"] for r in per if r["name"] == nm)) for nm in JOINTS.values()}}
-    pooled["clip"] = {k: wmean(lambda r, k=k: r["clip"][k]) for k in ("share_pre_beyond_stop_110", "share_pre_at_or_beyond_clip_bound_109.5", "share_held_target_on_clip_bound", "share_centre_at_or_beyond_clip_bound", "share_pre_inside_range_below_109.5")}
+    pooled["clip"] = {k: wmean(lambda r, k=k: r["clip"][k]) for k in ("share_pre_beyond_stop_110", "share_pre_at_or_beyond_clip_bound_109.5", "share_held_target_on_clip_bound", "share_centre_at_or_beyond_clip_bound", "share_centre_on_generator_limit_110", "share_pre_inside_range_below_109.5")}
     pooled["clip"]["amp_eff_deg_mean"] = wmean(lambda r: r["clip"]["amp_eff_deg"]["mean"])
     pooled["clip"]["t_pre_peak_to_peak_deg_mean"] = wmean(lambda r: r["clip"]["t_pre_peak_to_peak_deg"])
     pooled["clip"]["phase_advance_rad_per_s_mean"] = wmean(lambda r: r["clip"]["phase_advance_rad_per_s_mean"])
@@ -253,8 +256,6 @@ def analyse_seed(seed, root):
     brain = {"n_blocks_inside": int(inside.sum()), "n_blocks_outside": int(outside.sum())}
     for nm, vals in (("arousal", y[..., 0]), ("surprisal", y[..., 1]), ("L3_R", R), ("kappa_mean_over_joints", kappa.mean(-1))):
         brain[nm] = brain_block(vals, nm)
-    for j, nm in JOINTS.items():
-        pass
     brain["kappa_per_joint"] = {JOINTS.get(j, str(j)): brain_block(kappa[..., j], nm) for j in range(5) for nm in [str(j)]}
     onehot = np.eye(8)[prog]
     pin, pout = onehot[inside].mean(0), onehot[outside].mean(0)
@@ -262,8 +263,8 @@ def analyse_seed(seed, root):
     nullv = []
     for _ in range(N_PERM):
         m2 = np.stack([np.roll(hb_full[e], int(rng.integers(8, NB - 7))) for e in range(E)])
-        a, b = m2 & valid_blocks & ~(hb_any & ~hb_full & False), (~m2) & valid_blocks
-        nullv.append(0.5 * np.abs(onehot[a & valid_blocks].mean(0) - onehot[b].mean(0)).sum() if a.any() else 0.0)
+        a, b = m2 & valid_blocks, (~m2) & valid_blocks
+        nullv.append(0.5 * np.abs(onehot[a].mean(0) - onehot[b].mean(0)).sum() if a.any() else 0.0)
     brain["programs"] = {"inside_share": pin.tolist(), "outside_share": pout.tolist(), "tv_distance": float(tv_obs), "perm_p": float((np.sum(np.asarray(nullv) >= tv_obs) + 1) / (N_PERM + 1)),
                          "all_blocks_share": onehot[valid_blocks].mean(0).tolist()}
     if centre_cmd is not None:
@@ -277,6 +278,10 @@ def analyse_seed(seed, root):
         for what, arr in (("loss", matched[nm]), ("gap", gap[nm])):
             obs, p = perm_diff(arr, hb_full, valid_blocks & ~(hb_any & ~hb_full), rng)
             ob[f"{nm}_{what}"] = {"inside_mean": float(arr[inside].mean()), "outside_mean": float(arr[outside].mean()), "diff": float(obs), "perm_p": float(p)}
+    obs, p = perm_diff(base, hb_full, valid_blocks & ~(hb_any & ~hb_full), rng)
+    ob["baseline_loss_predict_mean"] = {"inside_mean": float(base[inside].mean()), "outside_mean": float(base[outside].mean()), "diff": float(obs), "perm_p": float(p)}
+    for nm in pred:
+        ob[f"{nm}_loss_over_baseline"] = {"inside": float(matched[nm][inside].mean() / base[inside].mean()), "outside": float(matched[nm][outside].mean() / base[outside].mean())}
     ob["scoring_gap_reproduced"] = rep_gap
     ob["scoring_gap_in_result_json"] = {"ext": res["result"]["argmax"]["ext"]["a_gap_mean"], "int": res["result"]["argmax"]["int"]["a_gap_mean"]}
     pooled["observer"] = ob
@@ -296,9 +301,12 @@ def verdicts(S):
     pooled = {s: S[s]["pooled"] for s in S}
     tot = sum(p["total_hold_s"] for p in pooled.values())
     w = lambda f: sum(f(p) * p["total_hold_s"] for p in pooled.values()) / tot
-    c1 = w(lambda p: p["clip"]["share_pre_beyond_stop_110"])
-    c1b = w(lambda p: p["clip"]["share_pre_at_or_beyond_clip_bound_109.5"])
-    out["H1"] = {"supported": bool(c1 > 0.5), "number": f"commanded pre-clip target beyond the 110 deg stop for {100 * c1:.1f} % of hold time ({100 * c1b:.1f} % at or beyond the 109.5 deg clip bound)"}
+    c1 = w(lambda p: p["clip"]["share_pre_at_or_beyond_clip_bound_109.5"])
+    c1c = w(lambda p: p["clip"]["share_centre_on_generator_limit_110"])
+    c1x = w(lambda p: p["clip"]["share_pre_beyond_stop_110"])
+    out["H1"] = {"supported": bool(c1 > 0.5), "number": f"commanded pre-clip target at or beyond the 109.5 deg clip bound for {100 * c1:.1f} % of hold time (generator centre on its own +-110 limit {100 * c1c:.1f} %; "
+                 f"the target exceeds 110.0 only {100 * c1x:.1f} % of the time, by float noise, and the clip removes at most 0.5 deg); generator amplitude mean {w(lambda p: p['clip']['amp_eff_deg_mean']):.2f} deg, "
+                 f"phase still advancing {w(lambda p: p['clip']['phase_advance_rad_per_s_mean']):.1f} rad/s"}
     c2 = w(lambda p: p["stillness"]["share_pre_inside_range_and_amp_eff_lt_5deg"])
     out["H2"] = {"supported": bool(c2 > 0.5), "number": f"{100 * c2:.1f} % of hold time with the commanded target inside the range (< 109.5) and generator amplitude < {AMP_STILL_DEG:.0f} deg"}
     c3 = w(lambda p: p["contact"]["any_share"])
@@ -306,12 +314,16 @@ def verdicts(S):
     c4 = w(lambda p: p["endstop"]["share_steps_with_hit"])
     out["H4"] = {"supported": bool(c4 > 0.5), "number": f"the hard stop acted in {100 * c4:.1f} % of the hold's control steps"}
     ps = {s: pooled[s]["brain"]["programs"]["perm_p"] for s in pooled}
-    out["H5"] = {"supported": bool(all(p < 0.01 for p in ps.values())), "number": "program distribution inside vs outside holds, TV distance " + ", ".join(
-        f"seed {s}: {pooled[s]['brain']['programs']['tv_distance']:.3f} (perm p {ps[s]:.4f})" for s in pooled)}
+    out["H5"] = {"supported": bool(all(p < 0.01 for p in ps.values())), "supported_per_seed": {s: bool(ps[s] < 0.01) for s in ps},
+                 "number": "program distribution inside vs outside holds, TV distance " + ", ".join(f"seed {s}: {pooled[s]['brain']['programs']['tv_distance']:.3f} (perm p {ps[s]:.4f})" for s in pooled)}
     obs = {s: pooled[s]["observer"] for s in pooled}
-    easy = all(obs[s][f"{nm}_loss"]["diff"] < 0 and obs[s][f"{nm}_loss"]["perm_p"] < 0.01 for s in obs for nm in ("ext", "int"))
-    out["H6"] = {"supported": bool(easy), "number": "decoder loss inside minus outside holds " + "; ".join(
-        f"seed {s} ext {obs[s]['ext_loss']['diff']:+.3f} (p {obs[s]['ext_loss']['perm_p']:.3f}), int {obs[s]['int_loss']['diff']:+.3f} (p {obs[s]['int_loss']['perm_p']:.3f})" for s in obs)}
+    lower = {s: bool(all(obs[s][f"{nm}_loss"]["diff"] < 0 and obs[s][f"{nm}_loss"]["perm_p"] < 0.01 for nm in ("ext", "int"))) for s in obs}
+    gapbig = {s: bool(all(obs[s][f"{nm}_gap"]["diff"] > 0 and obs[s][f"{nm}_gap"]["perm_p"] < 0.01 for nm in ("ext", "int"))) for s in obs}
+    out["H6"] = {"supported": bool(all(lower.values()) and all(gapbig.values())), "lower_loss_per_seed": lower, "larger_shuffle_gap_per_seed": gapbig,
+                 "number": "decoder loss inside minus outside holds " + "; ".join(
+                     f"seed {s} ext {obs[s]['ext_loss']['diff']:+.3f} (p {obs[s]['ext_loss']['perm_p']:.3f}), int {obs[s]['int_loss']['diff']:+.3f} (p {obs[s]['int_loss']['perm_p']:.3f}), "
+                     f"predict-mean baseline {obs[s]['baseline_loss_predict_mean']['diff']:+.3f}; shuffle gap ext {obs[s]['ext_gap']['diff']:+.3f} (p {obs[s]['ext_gap']['perm_p']:.2f}), "
+                     f"int {obs[s]['int_gap']['diff']:+.3f} (p {obs[s]['int_gap']['perm_p']:.2f})" for s in obs)}
     return out
 
 
