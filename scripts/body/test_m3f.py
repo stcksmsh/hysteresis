@@ -323,6 +323,81 @@ class FirstEpochM3f(unittest.TestCase):
 
 
 
+class RaisedPlane(unittest.TestCase):
+    """WO15A (BRAIN_SPEC 7.30.6-7): contact time constant option, raised plane, plane-aware floor hinge."""
+
+    PLANE = V2.RAISED_PLANE_Z
+
+    def cfg(self, **kw):
+        return {**OFF, "body": "v2f", "clip": True, "ctc": V2.CONTACT_TC, "plane": self.PLANE, **kw}
+
+    def test_options_absent_use_the_old_models(self):
+        cfg = {**OFF, "body": "v2f"}
+        self.assertIs(F.body_model(cfg)[0], F.MODELS["v2f"])
+        self.assertIs(F.body_model({**cfg, "clip": True})[1], F.MX["v2f"])
+
+    def test_contact_time_constant_applies_to_collision_geoms(self):
+        m = F.body_model(self.cfg())[0]
+        hit = [g for g in range(m.ngeom) if m.geom_contype[g] or m.geom_conaffinity[g]]
+        self.assertTrue(all(abs(m.geom_solref[g][0] - V2.CONTACT_TC) < 1e-12 for g in hit))
+        self.assertAlmostEqual(float(F.MODELS["v2f"].geom_solref[hit[0]][0]), 0.02)             # the default model is untouched
+        plane = [g for g in range(m.ngeom) if m.geom(g).name == "table"][0]
+        self.assertAlmostEqual(float(m.geom_pos[plane][2]), self.PLANE)
+
+    def test_base_column_does_not_collide_with_the_raised_plane(self):
+        m = F.body_model(self.cfg())[0]
+        plane = [g for g in range(m.ngeom) if m.geom(g).name == "table"][0]
+        collides = lambda g: bool((m.geom_contype[plane] & m.geom_conaffinity[g]) or (m.geom_contype[g] & m.geom_conaffinity[plane]))
+        column = [g for g in range(m.ngeom) if m.geom_contype[g] == 4][0]                          # the static base column (bits 4 / 2)
+        self.assertFalse(collides(column))
+        self.assertTrue(all(collides(g) for g in range(m.ngeom) if m.geom_contype[g] == 2))        # links and ball do
+        d = mujoco.MjData(m)
+        d.qpos[:] = np.radians(MA.NEUTRAL_DEG)
+        mujoco.mj_forward(m, d)
+        self.assertEqual(d.ncon, 0)                                                               # the column (z 0 to 0.08) crosses the plane height without contact
+
+    def test_floor_hinge_known_pose(self):
+        full = jnp.tile(jnp.zeros(5), (60, 1))                                                    # the arm straight along x at z = 0.08: the ball surface is at 0.02
+        self.assertAlmostEqual(float(F.penalties(full, self.PLANE)["floor"]), self.PLANE + 0.06 - 0.08, places=12)
+        self.assertEqual(float(F.penalties(jnp.tile(jnp.asarray(MA.NEUTRAL_DEG), (60, 1)), self.PLANE)["floor"]), 0.0)
+        rng = np.random.default_rng(2)
+        for _ in range(4):
+            q = np.array([0.0, *rng.uniform(-100, 100, 3), 0.0])
+            P = R.fk_points(q[None])[0]
+            c = min(P[1:5, 2].min() - 0.01 - self.PLANE, P[5, 2] - 0.06 - self.PLANE)
+            self.assertAlmostEqual(float(F.penalties(jnp.tile(jnp.asarray(q), (60, 1)), self.PLANE)["floor"]), max(0.0, -c), places=9)
+
+    def test_held_press_has_no_floor_margin_breach_and_is_stable(self):
+        cfg = self.cfg()
+        step = jax.jit(lambda d, tgt, tv, t: F.arm_step(cfg, d, tgt, tv, t))
+        for h in ([0.0, 150.0, 150.0, 150.0, 0.0], [0.0, 100.0, 100.0, 100.0, 0.0], [0.0, 45.0, 0.0, -30.0, 0.0], [0.0, 100.0, 0.0, 30.0, 0.0]):
+            d, tgt, tv = F.arm_init(cfg, np.array(MA.NEUTRAL_DEG, float))
+            qs = []
+            for _ in range(1000):
+                d, tgt, tv, _ = step(d, tgt, tv, jnp.asarray(h))
+                qs.append(np.degrees(np.asarray(d.qpos)))
+            qs = np.array(qs)
+            self.assertTrue(np.isfinite(qs).all())
+            b = R.breaches(qs.reshape(1, 20, 50, 5))
+            self.assertEqual(b["floor_m"]["episodes_with_breach"], 0, (h, b["floor_m"]))               # check-csv floor rule (0.05 / 0.11 m from z = 0) never broken
+            self.assertEqual(b["joint_range_deg"]["episodes_with_breach"], 0)
+            P = R.fk_points(qs)
+            self.assertLess(float(np.linalg.norm(np.diff(P[-101:, 5], axis=0), axis=1).mean() * 100.0), 0.01)    # settled hand speed < 0.01 m/s
+
+    def test_raised_plane_adversarial_has_no_breach(self):
+        cfg = self.cfg()
+        step = jax.jit(lambda d, tgt, tv, t: F.arm_step(cfg, d, tgt, tv, t))
+        d, tgt, tv = F.arm_init(cfg, np.array(MA.NEUTRAL_DEG, float))
+        rng = np.random.default_rng(0)
+        qs = []
+        for k in range(1500):
+            sgn = 1.0 if (k // 70) % 2 == 0 else -1.0
+            d, tgt, tv, _ = step(d, tgt, tv, jnp.asarray([0.0, sgn * 150.0, sgn * 150.0, sgn * 150.0, 0.0]) + rng.normal(0, 3.0, 5))
+            qs.append(np.degrees(np.asarray(d.qpos)))
+        b = R.breaches(np.array(qs).reshape(1, 30, 50, 5))
+        self.assertEqual(b["floor_m"]["episodes_with_breach"], 0, b["floor_m"])
+
+
 class FirstEpochRerun1(unittest.TestCase):
     """WO14A's rerun (hinges weight 1, hard stop) first epoch is reproduced by the default --w-floor (~5 min); weight 3 changes the loss (the floor term and the trained policy differ)."""
 
