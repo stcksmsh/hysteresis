@@ -28,6 +28,8 @@ You are the overseer for Hysteresis. You do not implement. You:
 
 ## How to write to the user
 
+- **Decisions go to the planner (user, 2026-11-08):** any design/rule choice becomes a paste-ready `docs/PLANNER_BRIEF_*.md` (options + recommendation), not a question to the user. Keep running work going if it already meets the rules.
+
 - Plain short sentences, with numbers.
 - Never say something improved or looks good; the user judges by eye.
 - Ask before artistic choices or rule changes the user has not made.
@@ -150,6 +152,8 @@ broken in 5/16 episodes, shoulder parked 0.1 deg past limit 19 % of rows). Detai
 **2026-11-08 ~00:45:** planner's reply to the WO16 brief = additions (7.31.5: clip-boundary holds, H1b, H7), run as WO16b (agent 2, body-m3f 595cf39), verified: additive default-off torque logging, test_m3f_park 6 OK, boundary census recomputed (seed 0 38 holds 549.5 s wrist; seed 1 17 holds 82.8 s). H1b yes (centre u at bound 0 in 99.8 % of hold blocks, zero-grad clip), H7 torque no / gravity yes (droop 1.5-1.6 deg > 0.5 clip margin). Follow-up brief `docs/PLANNER_BRIEF_WO16B_RESULTS.md` sent (Q1 smooth centre map into +-(110-A_min), A_min 10; Q2 all u rows; Q3 report-only; Q4 record). body-m3f NOT merged. Pass2 held.
 
 **2026-11-08 ~01:00:** planner answered WO16b = BRAIN_SPEC 7.32 (body 311e6d4): smooth map replaces every u clip (bend centres into +-100, A_min 10), gradient test; record chain + user's reading correct; two-seed toy rerun under 7.30.3 + 7.31.2 parking gate; BOTH PASS -> overseer verifies, merges body-m3f into body, tells agent 1 "launch" (pass2 options + --smooth-u), clips rendered in parallel; either fails -> stop, report with clips. WO17 prompt `docs/BUILDER_PROMPT_WO17_SMOOTH_U.md` sent to agent 2 (data m3f/rerun4/); agent 1 told to wire --smooth-u and wait for "launch".
+
+**2026-11-08 ~01:20:** WO17 code pushed (body-m3f 09a870f option+tests, 7d8dfdb chain/gate17); unit hyst-wo17-rerun4-0015 started on mains (user plugged in). Map u = 0.5+0.5 tanh((s-0.5)/0.5): over s in (-0.2,1.2) centres reach +-88.5 (not +-100). Question to planner `docs/PLANNER_BRIEF_WO17_MAP_SCALE.md` (recommend keep run, decide from result). Run continues with c = 0.5. Not yet verified by overseer: smooth tests, bit-identity (verify at gate).
 
 **Machine:** Kabl jobs share it (the user prefers sequential Hysteresis work; 14A and 14B's build phase overlap is light). Mains power was on.
 
