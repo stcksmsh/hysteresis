@@ -40,6 +40,9 @@ JERK_I = JERK_E + [35, 36]
 KEEP_E = np.array([i for i in range(J.N_DESC) if i not in JERK_E])
 KEEP_I = np.array([i for i in range(M.N_IDESC) if i not in JERK_I])
 BENDS = [1, 2, 3]
+FLOOR_M, DISC_M = 0.05, 0.06                         # check-csv floor rule (points 1-4 clear z = 0 by FLOOR_M, the hand by FLOOR_M + DISC_M)
+ACC_MPS2 = 4.8                                       # BRAIN_SPEC 7.27: hand-acceleration hinge threshold (v47's mean p99 level)
+CLIP_MARGIN_DEG = 0.5                                # hard clip: targets stop this far inside the range so the servo's droop and the soft joint limit cannot carry the joint past it
 DEFAULT = dict(body="v1", obs_lp=False, phase_lp=False, xfade=False)
 
 
@@ -75,20 +78,27 @@ def arm_init(cfg, q_deg):
 
 
 def arm_step(cfg, d, tgt, tv, target_deg):
-    """J.arm_step on the chosen body (v1: J.arm_step itself)."""
+    """J.arm_step on the chosen body (v1: J.arm_step itself). cfg["clip"] (default off, 7.27 point 2): the commanded target and the held target are clipped CLIP_MARGIN_DEG inside the
+    range of every ranged joint (the continuous joints stay unbounded), and after every physics substep the joint positions are clipped to the range itself (hard stop, outward speed zeroed)."""
     if cfg["body"] == "v1":
         return J.arm_step(d, tgt, tv, target_deg)
-    goal = jnp.clip(target_deg, J.SLO, J.SHI)
+    lo, hi = (J.SLO + CLIP_MARGIN_DEG, J.SHI - CLIP_MARGIN_DEG) if cfg.get("clip") else (J.SLO, J.SHI)
+    goal = jnp.clip(target_deg, lo, hi)
     e = goal - tgt
     v_des = jnp.sign(e) * jnp.minimum(J.LIM_V, jnp.sqrt(2 * J.LIM_A * jnp.abs(e) + 1e-12))
     v_des = jnp.where(jnp.abs(v_des) * J.DT > jnp.abs(e), e / J.DT, v_des)
     tv = jnp.clip(tv + jnp.clip(v_des - tv, -J.LIM_A * J.DT, J.LIM_A * J.DT), -J.LIM_V, J.LIM_V)
-    tgt = jnp.clip(tgt + tv * J.DT, J.SLO, J.SHI)
+    tgt = jnp.clip(tgt + tv * J.DT, lo, hi)
     d = d.replace(ctrl=jnp.radians(tgt))
+
+    lo_r, hi_r = jnp.radians(J.SLO), jnp.radians(J.SHI)
 
     def sub(c, _):
         dd, p = c
         dd = mjx.step(MX[cfg["body"]], dd)
+        if cfg.get("clip"):                                    # hard joint stop: the realised position never passes the range (contact and the soft limit cannot carry it past), outward speed zeroed
+            qc = jnp.clip(dd.qpos, lo_r, hi_r)
+            dd = dd.replace(qpos=qc, qvel=jnp.where(qc != dd.qpos, 0.0, dd.qvel))
         return (dd, p + jnp.abs(dd.actuator_force * dd.qvel).sum()), None
     (d, p), _ = jax.lax.scan(sub, (d, 0.0), None, length=J.SUB)
     return d, tgt, tv, p / J.SUB
@@ -121,14 +131,30 @@ def xfade_u(u_start, u, k):
     return u_start + jnp.minimum((k + 1) / XFADE_STEPS, 1.0) * (u - u_start)
 
 
+def fk_all(q):
+    """q (T, 5) deg -> (T, 6, 3): origin and the point after each joint's link (m3f_report.fk_points in JAX)."""
+    B = jnp.broadcast_to(jnp.eye(3), (q.shape[0], 3, 3))
+    p = jnp.zeros((q.shape[0], 3))
+    pts = [p]
+    for j in range(5):
+        B = B @ J._rot(J.AXES[j], q[:, j])
+        p = p + B @ J.LINKS[j]
+        pts.append(p)
+    return jnp.stack(pts, 1)
+
+
 def penalties(full):
     """full (>= 53, 5) deg at 100 Hz, the last 50 rows are the block -> dict jerk (mean squared 3rd difference, deg^2/s^6), hand_v and jolt (mean hinge over the check-csv limits on the
-    50 Hz hand trajectory), lim (mean relu(|q| - 100 deg)/10 deg over the three bends and the 50 steps)."""
+    50 Hz hand trajectory), lim (mean relu(|q| - 100 deg)/10 deg over the three bends and the 50 steps), floor (mean metres by which check-csv's floor margin is negative, 7.27),
+    acc (mean m/s2 by which the 50 Hz hand acceleration exceeds ACC_MPS2, 7.27)."""
     j3 = jnp.diff(full[-53:], n=3, axis=0) * 100.0 ** 3
     hp = J.hand_points(full[-51:])[::2]                                     # 26 points at 50 Hz, the last sample of the previous block first
     hv = jnp.sqrt(((hp[1:] - hp[:-1]) ** 2).sum(-1) + 1e-18) * 50.0
     hj = jnp.abs(hv[1:] - hv[:-1]) * 50.0
-    return {"jerk": (j3 ** 2).mean(), "hand_v": jax.nn.relu(hv - HAND_MPS).mean(), "jolt": jax.nn.relu(hj - JOLT_MPS2).mean(),
+    P = fk_all(full[-50:])
+    margin = jnp.minimum((P[:, 1:5, 2] - FLOOR_M).min(1), P[:, 5, 2] - FLOOR_M - DISC_M)               # check-csv's floor margin per control step
+    ha = jnp.sqrt(((hp[2:] - 2 * hp[1:-1] + hp[:-2]) ** 2).sum(-1) + 1e-18) * 50.0 ** 2               # hand acceleration, central second difference at 50 Hz
+    return {"floor": jax.nn.relu(-margin).mean(), "acc": jax.nn.relu(ha - ACC_MPS2).mean(), "jerk": (j3 ** 2).mean(), "hand_v": jax.nn.relu(hv - HAND_MPS).mean(), "jolt": jax.nn.relu(hj - JOLT_MPS2).mean(),
             "lim": (jax.nn.relu(jnp.abs(full[-50:, BENDS]) - LIM_DEG) / (110.0 - LIM_DEG)).mean()}
 
 

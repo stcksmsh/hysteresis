@@ -119,6 +119,11 @@ class Switches(unittest.TestCase):
         _, o = chunk(self.C, self.P if P is None else P, "argmax", 0.0, carry, m3d.take(inps, 0, nb))
         return {k: np.asarray(v) for k, v in o.items()}
 
+    @classmethod
+    def run_chunk_static(cls, cfg, nb=8, idx=np.arange(0, 2)):
+        cls.setUpClass()
+        return cls.run_chunk(cls, cfg, nb=nb, idx=idx)
+
     def test_old_path_identity(self):
         """body v1 with every switch off is m3e_jax.chunk: every shared output equal bit for bit."""
         idx = np.arange(0, 2)
@@ -241,6 +246,79 @@ class FirstEpoch(unittest.TestCase):
         tr.calibrate()
         rec = tr.run_epoch()
         for k in ("dec_e", "dec_i", "energy_rel", "rms_speed", "kappa_mean", "rate_mult", "abs_delta", "clip_share", "critic_loss", "sigma_delta"):
+            self.assertAlmostEqual(rec[k], ref[k], delta=1e-6 * max(1.0, abs(ref[k])), msg=k)
+
+
+class Hinges714(unittest.TestCase):
+    """BRAIN_SPEC 7.27: floor-margin and hand-acceleration hinges, hard clip of the targets."""
+
+    def test_floor_hinge(self):
+        calm = jnp.tile(jnp.asarray(MA.NEUTRAL_DEG), (60, 1))
+        self.assertEqual(float(F.penalties(calm)["floor"]), 0.0)
+        down = jnp.tile(jnp.asarray([0.0, 100.0, 0.0, 0.0, 0.0]), (60, 1))             # points under the plane
+        self.assertGreater(float(F.penalties(down)["floor"]), 0.1)
+
+    def test_floor_hinge_matches_report_margin(self):
+        rng = np.random.default_rng(5)
+        for _ in range(5):
+            q = np.array([0.0, *rng.uniform(-100, 100, 3), 0.0])
+            P = R.fk_points(q[None])[0]
+            margin = min(P[1:5, 2].min() - R.FLOOR_M, P[5, 2] - R.FLOOR_M - R.DISC_M)
+            self.assertAlmostEqual(float(F.penalties(jnp.tile(jnp.asarray(q), (60, 1)))["floor"]), max(0.0, -margin), places=9)
+
+    def test_acc_hinge(self):
+        t = np.arange(60) / 100.0
+        slow = np.array(MA.NEUTRAL_DEG)[None] + np.stack([0 * t, 0 * t, 2 * np.sin(2 * np.pi * 0.5 * t), 0 * t, 0 * t], 1)
+        self.assertEqual(float(F.penalties(jnp.asarray(slow))["acc"]), 0.0)
+        shake = np.array(MA.NEUTRAL_DEG)[None] + np.stack([0 * t, 0 * t, 25 * np.sin(2 * np.pi * 3.0 * t), 0 * t, 0 * t], 1)
+        self.assertGreater(float(F.penalties(jnp.asarray(shake))["acc"]), 0.0)
+
+    def drive_far(self, cfg, secs, flip=None, noise=0.0):
+        d, tgt, tv = F.arm_init(cfg, np.array(MA.NEUTRAL_DEG, float))
+        step = jax.jit(lambda d, tgt, tv, t: F.arm_step(cfg, d, tgt, tv, t))
+        rng = np.random.default_rng(0)
+        held_max, q_max = np.zeros(3), np.zeros(3)
+        for k in range(int(secs * 100)):
+            sgn = 1.0 if flip is None or (k // flip) % 2 == 0 else -1.0
+            t = jnp.asarray([0.0, sgn * 150.0, sgn * 150.0, sgn * 150.0, 0.0]) + rng.normal(0, noise, 5)
+            d, tgt, tv, _ = step(d, tgt, tv, t)
+            held_max = np.maximum(held_max, np.abs(np.asarray(tgt)[1:4]))
+            q_max = np.maximum(q_max, np.abs(np.degrees(np.asarray(d.qpos))[1:4]))
+        return held_max, q_max
+
+    def test_hard_clip_holds_the_target_inside_the_range(self):
+        on, off = {**OFF, "body": "v2f", "clip": True}, {**OFF, "body": "v2f"}
+        held_on, q_on = self.drive_far(on, 6.0)                       # a target 40 deg beyond every limit, held 6 s
+        held_off, q_off = self.drive_far(off, 6.0)
+        self.assertLessEqual(float(held_on.max()), 110.0 - F.CLIP_MARGIN_DEG + 1e-9)             # the held target stops CLIP_MARGIN_DEG inside the range
+        self.assertAlmostEqual(float(held_off.max()), 110.0, places=6)                           # without the option it stops at the range itself
+        print("hard clip, target 150 deg held 6 s: max |q| per bend", q_on.round(3), "(no clip:", q_off.round(3), ")")
+        self.assertLessEqual(float((q_on - 110.0).max()), 1e-9)       # and the joint does not pass the range (a held target beyond it: the wrist alone reaches 111.07 deg without the stop)
+
+    def test_hard_clip_adversarial_excess_is_zero(self):
+        _, q_on = self.drive_far({**OFF, "body": "v2f", "clip": True}, 15.0, flip=70, noise=3.0)
+        excess = q_on - 110.0
+        print("hard clip, adversarial episode (targets +-150 deg flipping every 0.7 s plus noise), max excess beyond +-110 deg per bend:", excess.round(6))
+        self.assertLessEqual(float(excess.max()), 1e-9)               # without the stop: 0.557 deg at the elbow, 1.072 deg at the wrist
+
+    def test_clip_off_by_default_and_identical(self):
+        a = Switches.run_chunk_static({**OFF, "body": "v2f"})
+        b = Switches.run_chunk_static({**OFF, "body": "v2f", "clip": False})
+        self.assertTrue(np.array_equal(a["q"], b["q"]))
+
+
+class FirstEpochM3f(unittest.TestCase):
+    """WO13B's try 1 (body v2f, switches 2-4, jerk 0.03, switch 0.01) first epoch is reproduced with the new options off (~5 min)."""
+
+    def test_first_epoch_matches_wo13b_try1(self):
+        ref = json.load(open("/secondary/hyst-data/body/m3f/try1/result.json"))["hist"][0]
+        toy = m3f.ToyF(TOY)
+        C = M.load_cb()
+        cfg = {"body": "v2f", "obs_lp": True, "phase_lp": True, "xfade": True}
+        tr = m3f.Trainer(toy, C, cfg, 0.03, 1e-3, 40, 8, seed=0, log=lambda s: None, opts={"pen": True, "jerk": True, "sw": True}, w_jerk=0.03, w_sw=0.01)
+        tr.calibrate()
+        rec = tr.run_epoch()
+        for k in ("dec_e", "dec_i", "energy_rel", "rms_speed", "kappa_mean", "rate_mult", "abs_delta", "clip_share", "critic_loss", "sigma_delta", "hand_v", "jolt", "lim", "jerk", "tv"):
             self.assertAlmostEqual(rec[k], ref[k], delta=1e-6 * max(1.0, abs(ref[k])), msg=k)
 
 

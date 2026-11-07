@@ -71,6 +71,19 @@ def eprime_rollout(q):
     return out
 
 
+def near_limit(q, deg=2.0):
+    """q (E, NB, 50, 5) deg at 100 Hz -> per ranged joint (shoulder, elbow, wrist_bend): share of time within `deg` of either limit (mean over episodes), the share beyond the limit itself, and
+    the largest excess beyond it (deg)."""
+    q = np.asarray(q).reshape(q.shape[0], -1, 5)
+    out = {}
+    for j, name in ((1, "shoulder"), (2, "elbow"), (3, "wrist_bend")):
+        lo, hi = MA.RANGE_DEG[j]
+        x = q[:, :, j]
+        out[name] = {"within": float(((x < lo + deg) | (x > hi - deg)).mean()), "beyond": float(((x < lo) | (x > hi)).mean()), "max_excess_deg": float(max((lo - x).max(), (x - hi).max(), 0.0)),
+                     "within_per_episode": ((x < lo + deg) | (x > hi - deg)).mean(1).tolist()}
+    return out
+
+
 def breaches(q):
     """q (E, NB, 50, 5) deg at 100 Hz -> per type: share of rows breaching (mean over episodes), episodes with any breach, worst excess."""
     q = np.asarray(q).reshape(q.shape[0], -1, 5)[:, ::2]
