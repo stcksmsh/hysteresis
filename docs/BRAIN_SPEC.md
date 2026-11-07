@@ -1205,3 +1205,12 @@ the limit-proximity term and too small to act.
    the end stops per joint, programs used, trained - kappa0. Then stop and ask; pass2 does not launch until the user has seen the clips.
    **Reading recorded as untested:** under the jerk, speed and floor costs, parking against the end stops may have become a cheap rest (zero
    speed, no energy, no jerk) that the limit-proximity cost does not outweigh.
+9. **User verdict on the WO15B clips (2026-11-07; toy held-out episodes 0 and 1, 60 s, silent, seed 0 left, seed 1 right).** Verbatim:
+   "Video 1: the left one is mostly stuck in a single 'bowed down' position with the head close to the base and the arm slumped over for
+   the head to be there, its also more repetitive. The right one actually seems to be doing something, it looks alive and smooth, it has
+   variety and is overall decent. Video 2: The left is again stuck for a long period of time in the same pose (though the right also gets
+   stuck in that pose ~42s in and stays there until the end, for comparison left gets stuck at ~18 untill ~28, then ~29 untill ~45), as for
+   fluidity etc, I cant really tell, the left is only viable for first 15 and last 15 seconds (mostly) and the second has some strange
+   behaviour at the beginning, not as clear cut as vid 1."
+   Overseer, from the rollouts: the "bowed down" pose is the elbow held on its -110 deg stop (seed 0 ep 0: 9.3-24.6, 29.0-32.1, 40.7-45.1 s;
+   ep 1: 12.3-25.3, 31.2-44.1 s; seed 1 ep 1: 44.6-56.6 s). Pass2 stays held; the parking question goes to the planner.
