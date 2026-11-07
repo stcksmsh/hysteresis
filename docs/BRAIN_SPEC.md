@@ -1248,3 +1248,20 @@ Binding. They answer `docs/PLANNER_BRIEF_WO15_RESULTS.md`. Set before any furthe
    3. **H1b, network saturation:** per hold, whether the motor cortex's centre and amplitude outputs for the held joint sit at their output
       bounds (share of time within 2 % of a bound).
    Verdict lines become H1, H1b, H2-H7.
+
+### 7.32 Rulings on work order 16b, 2026-11-08, via planner
+
+Binding. They answer `docs/PLANNER_BRIEF_WO16B_RESULTS.md`. Set before any further toy or K5-pass2 result.
+
+1. **Q1 (a): smooth centre map.** The centre output becomes a smooth (tanh/sigmoid) function of the unclipped sum, into +-(110 - A_min),
+   A_min = 10 deg for the three bend joints; no hard clip on the path. The end stop stays as the physical backstop.
+2. **Q2 (b): the same smooth map replaces every clipped u output** (bounds unchanged; A_min applies to centres only), so no output can hide
+   behind a zero-gradient clip. A unit test checks the gradient is non-zero at and beyond the old bounds.
+3. **Q3:** seed 0's program 2 report-only.
+4. **Recorded (Q4):** the WO16/WO16b verdicts (H1 yes, H1b yes, H2 no, H3 no, H4 yes, H5 seed 0 only, H6 no, H7 torque no / gravity yes)
+   and the chain: the centre output saturates at its clip, zero gradient, the amplitude cap goes to zero, gravity droop (1.5-1.6 deg)
+   carries the joint past the 0.5 deg clip margin onto the stop, where it is pinned. **The user's reading ("trying to do something but
+   clipped", 7.31.4) was correct.**
+5. **Then:** the two-seed toy rerun (seeds 0 and 1) under the 7.30.3 gate plus the 7.31.2 parking gate. **Both seeds pass: launch pass2
+   without asking, and render 60 s clips of both seeds (same episodes as WO15B) for the user in parallel.** Pass2 stays pausable; the user
+   may stop it after the clips. **Either seed fails: stop and report, with clips.**
