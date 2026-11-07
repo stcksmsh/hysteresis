@@ -1137,3 +1137,71 @@ Binding. They answer `docs/PLANNER_BRIEF_WO13_RESULTS.md`. Set before any K5-pas
    above that.
 
 **Recorded (ablation finding, WO13B):** with the observer low-pass off, the arm lies on the table 92.6 % of the time.
+
+### 7.28 Ruling on the WO14A hard-clip deviation, 2026-11-07, via the user
+
+Binding. Set before any WO14A rerun or K5-pass2 result.
+
+1. **Hard end stop accepted as a body-model fix.** `--hard-clip` clips commanded targets 0.5 deg inside each ranged joint's range AND,
+   after every physics substep, clips joint positions to the range and sets a clipped joint's speed to 0. Reason (user): it matches the
+   real arm, whose servos get firmware angle limits at the same range (recorded for the hardware notes). Target clipping alone was not
+   enough: contact and the soft limit pushed joints past held targets (shoulder -110.1, elbow 110.71, wrist 111.13 deg).
+2. **Condition:** report the number of end-stop events per episode, and the hand acceleration and jerk in the 0.1 s around each event
+   (compared with the episode's overall values). Zeroing a speed is an impulse and must not create the throws (e'1) is meant to stop.
+3. **The limit-proximity cost stays**, so the policy keeps a gradient away from the stops.
+4. **Pass2 uses exactly the WO14A rerun's body and terms** (`--floor-acc-hinges`, `--hard-clip`).
+
+### 7.29 Ruling on the WO14A rerun, 2026-11-07, via the user
+
+Binding. Set before any K5-pass2 result and before the floor-weight toy rerun.
+
+WO14A (body-m3f bf4037d) passed every bar component plus (e') in argmax (ext 1.010, int 1.018, (e'1) 3.42, (e'2) 0.0091), but floor-margin
+breaches remained in 9 of 16 episodes (worst 0.051 m) with the floor hinge at weight 1.
+
+1. **End stops accepted as built; no change.** About 2.4 events per one-minute episode (elbow and shoulder). Pass2 reports end stops per
+   song: event counts, and hand acceleration and jerk within +-0.05 s of events against the episode, at 50 Hz and 100 Hz. At 100 Hz report
+   both methods: pooled over episodes (overseer) and per episode (builder). No bar uses the 100 Hz value.
+2. **Floor-margin hinge weight 3 (was 1)**, set now. The hand-acceleration hinge stays at weight 1.
+3. **One more engineering rerun of toy try 1** with weight 3: same bar plus (e'), WO7 controls, floor-margin breaches reported.
+   - Passes with floor-margin breaches in <= 2 of 16 episodes: merge, send the terms to pass2, launch pass2 without asking (30 h box, 7.27.5).
+   - Breaches in > 2 of 16 episodes, or any bar component fails: stop and report.
+4. **§7.26 round-2 scaling is relative to the new weights:** a factor <= 3 from floor weight 3 and acceleration weight 1.
+
+### 7.30 Rulings on work order 14, 2026-11-07, via planner
+
+Binding. They answer `docs/PLANNER_BRIEF_WO14_RESULTS.md`. Set before any further toy or K5-pass2 result.
+
+Recorded (Q5): WO14A (weight 1, both hinges, hard end stop) passes the toy bar and (e'); WO14C (floor weight 3) fails (e'2) (0.0188 >
+0.0110) and the floor gate (11 of 16 episodes); the floor term as normalised (old-body untrained 0.117 m) is about 1,000 times smaller than
+the limit-proximity term and too small to act.
+
+1. **Q1: raised contact plane + renormalised floor hinge.** The table contact plane is raised to check-csv's floor margin (z = 0.05 m in
+   model terms, with the existing link radius 0.01 m and ball radius 0.06 m), so floor-margin breaches are physically impossible (a body-
+   model fix like the end stops; the real arm keeps a 5 cm clearance). The floor hinge is renormalised by the fixed physical scale 0.05 m,
+   weight 1, so it keeps the arm from resting on the raised plane. Time in contact is reported per episode.
+2. **Q2: two seeds (0 and 1), run one after the other; the gate applies to both.**
+3. **Q3: gate kept (7.29.3), per seed:** bar + (e') pass and floor-margin breaches in <= 2 of 16 episodes (expected 0 by construction;
+   verify). Then merge and launch pass2 without asking. If either seed fails: stop and report.
+4. **Q4: shoulder parking is report-only.** The pass2 report and videos show shoulder-at-limit time per song.
+5. **§7.26 round-2 scaling is relative to the weights in force at pass2 launch.**
+6. **Plane height (user, 2026-11-07, option A).** With the plane exactly at z = 0.05 the ball touches at check-csv's hand margin (0.11 m),
+   so soft-contact sinking would count as breaches. The plane is therefore at z = 0.05 + d, d = the deepest sinking in a held-contact test,
+   rounded up to the next mm, at most 5 mm; above 5 mm, stop and report. The floor hinge acts on the surfaces' sinking below the raised
+   plane, normalised by 0.05 m, weight 1. d and the resulting real-arm clearance are recorded in the hardware notes.
+7. **Contact stiffness (user, 2026-11-07).** WO15A step 1 measured d = 45 mm at MuJoCo's default contact time constant (solref 0.02 s;
+   fully folded arm pressing the ball: 44.2 mm peak, 39.9 mm settled), above the 5 mm cap. Probe: 0.01 / 0.006 / 0.004 s give 6.1 / 2.3 /
+   1.1 mm. **Decision: contact time constant 0.006 s on the table plane, d = the measured sinking rounded up to the next mm (about 3 mm)**,
+   after two checks (overseer's pass lines): (i) stability at the 2 ms step: no NaN, no growing sinking or oscillation in 10 s held
+   contact, settled hand speed < 0.01 m/s in every held pose, the adversarial sequence and one training epoch clean; (ii) cost: one
+   training epoch <= 1.25x WO14A's (62 s) and the pass2 projection <= 30 h. **Only if a check fails: option 4** = plane at 0.055 m with the
+   default contact, plus a contact-force hinge (normal force on the table above the settled-resting force, normalised by the arm's weight,
+   weight 1); gate unchanged. Options "accept breaches as an exception" rejected (they accept breaches by design).
+8. **Seeds, self-contacts and launch hold (user, 2026-11-07).** As built, `--contact-tc` sets the time constant on every collision geom, so
+   self-contacts are stiffer too; **accepted** (the stability and cost checks measured this build). Seed 0 passed the gate (ext 0.739,
+   int 0.839, (b) 30.2, (e'1) 2.33, (e'2) 0.0002, floor breaches 0 of 16) but in argmax trained - kappa0 = -0.036 [-0.086, 0.014] ext,
+   -0.047 int (it would not license the inner-rhythm wording, 7.19 A.1), elbow within 2 deg of a limit 48.5 % and wrist 60.0 % of the time,
+   one program 79 % of blocks. **The pass2 auto-launch of 7.30.3 is held:** seed 1 and its controls run as planned; then 60 s clips (the
+   one-arm camera) of seed 0 and seed 1 on two held-out toy episodes, plus one danced-song-length rollout if cheap, with per seed: time at
+   the end stops per joint, programs used, trained - kappa0. Then stop and ask; pass2 does not launch until the user has seen the clips.
+   **Reading recorded as untested:** under the jerk, speed and floor costs, parking against the end stops may have become a cheap rest (zero
+   speed, no energy, no jerk) that the limit-proximity cost does not outweigh.

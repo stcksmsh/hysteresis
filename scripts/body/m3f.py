@@ -22,7 +22,8 @@ import m3e
 import m3e_jax as M
 import m3f_jax as F
 
-FLOORS = {"hand_v": 0.02, "jolt": 0.2, "lim": 0.005, "jerk": 1.0}       # the untrained values are floored at these before dividing (a zero denominator explodes)
+FLOORS = {"hand_v": 0.02, "jolt": 0.2, "lim": 0.005, "jerk": 1.0, "floor": 0.005, "acc": 0.05}       # the untrained values are floored at these before dividing (a zero denominator explodes)
+W_FLOOR, W_ACC = 1.0, 1.0       # the two 7.27 hinges' weights inside LAMBDA x (...): the knobs BRAIN_SPEC 7.26 round 2 may scale by a factor <= 3. W_FLOOR is the default of --w-floor (7.29: 3.0 for the WO14C rerun); W_ACC stays 1
 NB = m3d.NB
 VALID_FROM = m3e.VALID_FROM
 NON_ROLL = m3d.NON_ROLL
@@ -56,11 +57,13 @@ def make_fns(C, cfg, opts):
         mean = lambda x: (x * valid).sum() / n
         Le, Li = mean(de), mean(di)
         en = mean(o["energy"]) / e0
-        terms = {"hand_v": mean(o["hand_v"]) / nrm["hand_v"], "jolt": mean(o["jolt"]) / nrm["jolt"], "lim": mean(o["lim"]) / nrm["lim"], "jerk": mean(o["jerk"]) / nrm["jerk"], "sw": mean(o["tv"])}
+        terms = {"hand_v": mean(o["hand_v"]) / nrm["hand_v"], "jolt": mean(o["jolt"]) / nrm["jolt"], "lim": mean(o["lim"]) / nrm["lim"], "jerk": mean(o["jerk"]) / nrm["jerk"], "sw": mean(o["tv"]),
+                 "floor": mean(o["floor"]) / nrm["floor"], "acc": mean(o["acc"]) / nrm["acc"]}
         pen = (terms["hand_v"] + terms["jolt"] + terms["lim"]) if opts["pen"] else 0.0
+        pen = pen + (w["floor"] * terms["floor"] + W_ACC * terms["acc"] if opts.get("pen2") else 0.0)
         loss = Le + (Li if opts["internal"] else 0.0) + lam * (en + pen) + (w["jerk"] * terms["jerk"] if opts["jerk"] else 0.0) + (w["sw"] * terms["sw"] if opts["sw"] else 0.0)
         return loss, (carry, {"dec_e": Le, "dec_i": Li, "en": en, "de": de, "xin": o["xin"], "desc": o["desc"], "idesc": o["idesc"], "ms": o["ms"], "pi": o["pi"], "kappa": o["kappa"],
-                              "terms": terms, "raw": {k: mean(o[k]) for k in ("jerk", "hand_v", "jolt", "lim", "tv")}})
+                              "terms": terms, "raw": {k: mean(o[k]) for k in ("jerk", "hand_v", "jolt", "lim", "tv", "floor", "acc")}})
 
     hard = {m: jax.jit(lambda P, carry, inps, m=m: chunk(C, P, m, 0.0, carry, inps)) for m in ("argmax", "sample")}
     return {"loss": jax.jit(jax.value_and_grad(loss_fn, has_aux=True)), "hard": hard}
@@ -107,8 +110,9 @@ def score_policy(fns, cfg, C, P, toy, stats, which, chunk_blocks, rolldir=None, 
         Oe, Oi = fresh_observers(cfg, rolls[:4], yz_tr, stats)
         res[mode] = m3e.score_rollouts(rolls[4], Oe, Oi, stats, toy, which)
         res[mode]["e"] = R.hf_share_rollout(rolls[4]["q"])
-        res[mode]["eprime"] = R.eprime_rollout(rolls[4]["q"])
+        res[mode]["eprime"] = R.eprime_rollout(rolls[4]["q"], cfg.get("plane"))
         res[mode]["breaches"] = R.breaches(rolls[4]["q"])
+        res[mode]["near_limit"] = R.near_limit(rolls[4]["q"])
         keep[mode] = (Oe, Oi, rolls[4])
         s = res[mode]
         log(f"score {name} {which} {mode}: ext a {s['ext']['a_gap_mean']:.3f} {np.round(s['ext']['a_ci'], 3).tolist()} | int a {s['int']['a_gap_mean']:.3f} {np.round(s['int']['a_ci'], 3).tolist()} | "
@@ -120,9 +124,9 @@ def score_policy(fns, cfg, C, P, toy, stats, which, chunk_blocks, rolldir=None, 
 class Trainer(m3e.Trainer):
     """m3e.Trainer on cfg. opts: internal, pen, jerk, sw (loss terms), w_jerk, w_sw."""
 
-    def __init__(self, toy, C, cfg, lam, lr, epochs, chunk_blocks=8, seed=0, dopamine=True, log=print, opts=None, w_jerk=0.0, w_sw=0.0):
+    def __init__(self, toy, C, cfg, lam, lr, epochs, chunk_blocks=8, seed=0, dopamine=True, log=print, opts=None, w_jerk=0.0, w_sw=0.0, w_floor=W_FLOOR):
         opts = {"internal": True, "pen": cfg["body"] != "v1", "jerk": False, "sw": False, **(opts or {})}
-        self.cfg, self.opts, self.w = cfg, opts, {"jerk": w_jerk, "sw": w_sw}
+        self.cfg, self.opts, self.w = cfg, opts, {"jerk": w_jerk, "sw": w_sw, "floor": w_floor}
         self.toy, self.C, self.lam, self.lr, self.epochs, self.cb, self.log, self.dopamine, self.gate = toy, C, lam, lr, epochs, chunk_blocks, log, dopamine, True
         self.fns = make_fns(C, cfg, opts)
         key = jax.random.PRNGKey(seed)
@@ -155,7 +159,7 @@ class Trainer(m3e.Trainer):
         d, i = cat("desc", F.n_desc(self.cfg)), cat("idesc", F.n_idesc(self.cfg))
         self.stats = {"dmu": d.mean(0), "dsd": d.std(0) + 1e-9, "imu": i.mean(0), "isd": i.std(0) + 1e-9}
         self.e0 = float(np.mean([rs[g]["energy"][:, VALID_FROM:].mean() for g in rs]))
-        mean_raw = lambda r: {k: float(np.mean([r[g][k][:, VALID_FROM:].mean() for g in r])) for k in ("hand_v", "jolt", "lim", "jerk")}
+        mean_raw = lambda r: {k: float(np.mean([r[g][k][:, VALID_FROM:].mean() for g in r])) for k in ("hand_v", "jolt", "lim", "jerk", "floor", "acc")}
         raw_new = mean_raw(rs)
         if self.cfg["body"] == "v1":
             raw = raw_new
@@ -164,6 +168,8 @@ class Trainer(m3e.Trainer):
             fns1 = make_fns(self.C, cfg1, self.opts)
             raw = mean_raw({g: rollout(fns1, cfg1, self.C, self.P, self.toy, idx, "argmax", jax.random.PRNGKey(11), self.cb, 100) for g, idx in self.groups.items()})
         self.nrm = {k: max(v, FLOORS[k]) for k, v in raw.items()}
+        if self.cfg.get("plane") is not None:                      # WO15A: with the raised plane the floor hinge is divided by the fixed physical scale 0.05 m, not by an untrained value
+            self.nrm["floor"] = 0.05
         self.raw0, self.raw_new = raw, raw_new
         for g in "AB":
             self.data[g].append(self._collect(g, rs[g]["desc"], rs[g]["idesc"]))
@@ -174,7 +180,7 @@ class Trainer(m3e.Trainer):
         t0 = time.time()
         tau = self.tau()
         S = self.stats
-        acc = {k: [] for k in ("dec_e", "dec_i", "en", "rms", "mult", "absd", "clip", "kap", "vloss", "hand_v", "jolt", "lim", "jerk", "tv")}
+        acc = {k: [] for k in ("dec_e", "dec_i", "en", "rms", "mult", "absd", "clip", "kap", "vloss", "hand_v", "jolt", "lim", "jerk", "tv", "floor", "acc")}
         nrm = {k: jnp.asarray(v) for k, v in self.nrm.items()}
         w = {k: jnp.asarray(v) for k, v in self.w.items()}
         for g in "AB":
@@ -209,7 +215,7 @@ class Trainer(m3e.Trainer):
                 if c0 >= VALID_FROM:
                     for k in ("dec_e", "dec_i", "en"):
                         acc[k].append(float(aux[k]))
-                    for k in ("hand_v", "jolt", "lim", "jerk", "tv"):
+                    for k in ("hand_v", "jolt", "lim", "jerk", "tv", "floor", "acc"):
                         acc[k].append(float(aux["raw"][k]))
                 acc["rms"].append(float(np.sqrt(np.asarray(aux["ms"])[..., NON_ROLL].mean())))
                 acc["kap"].append(np.asarray(aux["kappa"]).mean())
@@ -218,7 +224,7 @@ class Trainer(m3e.Trainer):
         mean = lambda k: float(np.mean(acc[k])) if acc[k] else None
         rec = {"epoch": self.epoch, "tau": tau, "dec_e": mean("dec_e"), "dec_i": mean("dec_i"), "energy_rel": mean("en"), "rms_speed": mean("rms"), "kappa_mean": mean("kap"),
                "rate_mult": mean("mult"), "abs_delta": mean("absd"), "clip_share": mean("clip"), "critic_loss": mean("vloss"), "sigma_delta": math.sqrt(self.sd.var) if self.sd.var else None,
-               "hand_v": mean("hand_v"), "jolt": mean("jolt"), "lim": mean("lim"), "jerk": mean("jerk"), "tv": mean("tv"), "secs": time.time() - t0}
+               "hand_v": mean("hand_v"), "jolt": mean("jolt"), "lim": mean("lim"), "jerk": mean("jerk"), "tv": mean("tv"), "floor": mean("floor"), "acc": mean("acc"), "secs": time.time() - t0}
         self.hist.append(rec)
         self.log("epoch " + str({k: (round(v, 4) if isinstance(v, float) else v) for k, v in rec.items()}))
         self.epoch += 1
