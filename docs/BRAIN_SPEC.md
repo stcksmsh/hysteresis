@@ -1265,3 +1265,8 @@ Binding. They answer `docs/PLANNER_BRIEF_WO16B_RESULTS.md`. Set before any furth
 5. **Then:** the two-seed toy rerun (seeds 0 and 1) under the 7.30.3 gate plus the 7.31.2 parking gate. **Both seeds pass: launch pass2
    without asking, and render 60 s clips of both seeds (same episodes as WO15B) for the user in parallel.** Pass2 stays pausable; the user
    may stop it after the clips. **Either seed fails: stop and report, with clips.**
+6. **Smooth-map scale (user, 2026-11-08, answering `docs/PLANNER_BRIEF_WO17_MAP_SCALE.md`): (c).** Keep u = 0.5 + 0.5 tanh((s - 0.5)/c)
+   with c = 0.5 and the running WO17. Recorded arithmetic: over the reachable sum s in (-0.2, 1.2), u spans 0.057-0.943, so bend centres
+   reach +-88.5 deg (not +-100) and about 6 % of each output's range is unreachable at each end; the full joint range is still reachable
+   through the amplitude (cap 110 - 88.5 = 21.5 deg). If both seeds pass both gates, pass2 launches with c = 0.5 as ruled. Revisit c = 0.35
+   only if the clips or a gate show the arm lacking range.
