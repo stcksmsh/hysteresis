@@ -1188,3 +1188,11 @@ the limit-proximity term and too small to act.
    so soft-contact sinking would count as breaches. The plane is therefore at z = 0.05 + d, d = the deepest sinking in a held-contact test,
    rounded up to the next mm, at most 5 mm; above 5 mm, stop and report. The floor hinge acts on the surfaces' sinking below the raised
    plane, normalised by 0.05 m, weight 1. d and the resulting real-arm clearance are recorded in the hardware notes.
+7. **Contact stiffness (user, 2026-11-07).** WO15A step 1 measured d = 45 mm at MuJoCo's default contact time constant (solref 0.02 s;
+   fully folded arm pressing the ball: 44.2 mm peak, 39.9 mm settled), above the 5 mm cap. Probe: 0.01 / 0.006 / 0.004 s give 6.1 / 2.3 /
+   1.1 mm. **Decision: contact time constant 0.006 s on the table plane, d = the measured sinking rounded up to the next mm (about 3 mm)**,
+   after two checks (overseer's pass lines): (i) stability at the 2 ms step: no NaN, no growing sinking or oscillation in 10 s held
+   contact, settled hand speed < 0.01 m/s in every held pose, the adversarial sequence and one training epoch clean; (ii) cost: one
+   training epoch <= 1.25x WO14A's (62 s) and the pass2 projection <= 30 h. **Only if a check fails: option 4** = plane at 0.055 m with the
+   default contact, plus a contact-force hinge (normal force on the table above the settled-resting force, normalised by the arm's weight,
+   weight 1); gate unchanged. Options "accept breaches as an exception" rejected (they accept breaches by design).
