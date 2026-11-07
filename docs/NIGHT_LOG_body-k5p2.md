@@ -2,7 +2,7 @@
 
 ## MORNING SUMMARY
 
-Phase 1 in progress (2026-11-07): trainer `scripts/body/k5p2_train.py` and tests `test_k5p2_train.py` written; tests running. Not launched; waiting for the overseer's word that 14A's toy rerun passed and is merged.
+Phase 1 done (2026-11-07): trainer `scripts/body/k5p2_train.py` and 3 tests pass (`/secondary/hyst-data/body/k5p2/unittest.log`, 1050 s). Not launched; waiting for the overseer to say 14A passed and is merged. Hinges and hard clip not yet in; timing, eval script, check and videos not started.
 
 ## Phase 1: trainer
 
