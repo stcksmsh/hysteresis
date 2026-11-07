@@ -26,8 +26,8 @@ import m3e_jax as M
 import m3f
 import m3f_jax as F
 
-CFG = dict(body="v2f", obs_lp=True, phase_lp=True, xfade=True)
-OPTS = {"internal": True, "pen": True, "jerk": True, "sw": True}
+CFG = dict(body="v2f", obs_lp=True, phase_lp=True, xfade=True, clip=True)      # clip = WO14A --hard-clip (7.28); needs m3f_jax from body-m3f
+OPTS = {"internal": True, "pen": True, "jerk": True, "sw": True, "pen2": True}      # pen2 = --floor-acc-hinges (W_FLOOR = W_ACC = 1, 7.27)
 W_JERK, W_SWITCH = 0.03, 0.01
 T.BOX_H = 30.0
 NB = T.NB
