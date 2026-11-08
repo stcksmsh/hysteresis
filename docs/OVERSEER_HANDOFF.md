@@ -113,6 +113,13 @@ r400 0.895/0.921, r600 0.913/0.931 (K5 try 1 at r600: 0.574/0.539). ~65 s/round 
   and to WATCH the training unit so it starts the check on best.pkl (6 thr / 14 GB, --working-directory) when it ends. Then videos.
 - Agent 2 [071001]: fresh, idle. Owes (optional, record only) WO17 `rerun4/summary.json` + night-log "Work order 17" section on body-m3f.
 
+**2026-11-08 21:17:** PASS2 TRAINING DONE (hyst-wo14-a2 success, 977/977, 17.50 h compute, 'pass complete'). Validation ext/int:
+r200 0.862/0.873, r400 0.895/0.921, r600 0.913/0.931 (BEST, best.pkl 13:47), r800 0.875/0.869, r977 0.784/0.880. Chain hyst-wo18-chain2
+started check -> songs -> summary -> render on best.pkl (r600); out /secondary/hyst-data/body/k5p2/check/, video .../video/, log .../chain.log.
+NEXT: when chain ends, verify (per-song paired bootstraps from eval JSON, check-csv per song, (e'1)/(e'2) per song vs
+docs/hf_v47_eprime_reference.json, kappa0 control for 7.31.3 wording), check media, send 720p three-panels, write PLANNER_BRIEF_PASS2_RESULTS.md.
+Note for the brief: validation peaked at r600 and fell at r800/r977 (ext 0.784 at the end).
+
 **2026-11-08 ~16:05 (overseer restarted 14:55):** agent 1 finished WO18 code (body-k5p2 fd54a20; EndToEnd test OK, 866 s, log
 `/secondary/hyst-data/body/k5p2/evaltest2.log`) and LAUNCHED the chain as unit `hyst-wo18-chain2` (`scripts/body/k5p2_chain.sh`, 14 GB cap,
 log `/secondary/hyst-data/body/k5p2/chain.log`). It polls until progress.json `done` is set AND hyst-wo14-a2 is inactive, then runs
