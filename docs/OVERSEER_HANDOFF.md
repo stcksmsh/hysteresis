@@ -113,6 +113,14 @@ r400 0.895/0.921, r600 0.913/0.931 (K5 try 1 at r600: 0.574/0.539). ~65 s/round 
   and to WATCH the training unit so it starts the check on best.pkl (6 thr / 14 GB, --working-directory) when it ends. Then videos.
 - Agent 2 [071001]: fresh, idle. Owes (optional, record only) WO17 `rerun4/summary.json` + night-log "Work order 17" section on body-m3f.
 
+**2026-11-08 ~16:05 (overseer restarted 14:55):** agent 1 finished WO18 code (body-k5p2 fd54a20; EndToEnd test OK, 866 s, log
+`/secondary/hyst-data/body/k5p2/evaltest2.log`) and LAUNCHED the chain as unit `hyst-wo18-chain2` (`scripts/body/k5p2_chain.sh`, 14 GB cap,
+log `/secondary/hyst-data/body/k5p2/chain.log`). It polls until progress.json `done` is set AND hyst-wo14-a2 is inactive, then runs
+k5p2_eval.py check/songs/summary (6 thr, cores 6-11, out `/secondary/hyst-data/body/k5p2/check/`) and k5p2_render.sh (videos
+`/secondary/hyst-data/body/k5p2/video/`, waits for mains). Read by overseer: correct. Caveat: if training crashes without `done`, the
+chain waits forever (the overseer watcher catches the unit end). Training round 705/977 at 16:05, ~81 s/round (load ~69, Kabl),
+round 800 validation ~18:15, training end ~22:20. Not yet verified by overseer: k5p2_eval.py content vs WO18 bar (do at the gate).
+
 **Merged:** body 9b73365 contains body-m3f (WO14A-WO17: hinges, end stop, raised plane 0.053, contact-tc 0.006, smooth u, diag tools,
 gates `m3f_gate17.py`). keys-decide merges body.
 
