@@ -8,7 +8,7 @@
 # Resume-safe: a finished file is kept. Waits while the machine is on battery. Run detached with absolute paths. K5P2_TEST="START DUR" renders only that window of the pass2 1080p step into $V/test/.
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd); ROOT=$(cd "$HERE/../.." && pwd)
-K=/secondary/hyst-data/body/k5p2/check/songs; V=/secondary/hyst-data/body/k5p2/video; A=/secondary/hyst-data/brain/author
+K=${K5P2_K:-/secondary/hyst-data/body/k5p2/check/songs}; V=${K5P2_V:-/secondary/hyst-data/body/k5p2/video}; A=/secondary/hyst-data/brain/author
 HF=/secondary/hyst-data/body/hf/v47
 FB=$A/tuning/720p-cam
 export PATH=/secondary/hyst-env/brain/bin:$PATH
