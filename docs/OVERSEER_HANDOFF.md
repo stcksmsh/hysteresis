@@ -165,6 +165,8 @@ broken in 5/16 episodes, shoulder parked 0.1 deg past limit 19 % of rows). Detai
 
 **2026-11-08 07:08:** pass2 (hyst-wo14-a2) validation round 200: ext 0.862, int 0.873, b 37.2, 3.37 h compute (K5 try 1 at 200: 0.559/0.510). Rounds ~59.5 s; training end ~20:00-21:00. Overseer watcher = background bash loop on progress.json val count / unit / power (re-arm after each event). User verdict on WO17 clips still pending.
 
+**2026-11-08 ~14:10:** pass2 round 606/977 (val 600: ext 0.913, int 0.931), end ~20:10. Builder sessions restarted ~13:54 (new refs agent 1 [9ae40e], agent 2 [071001], fresh). Agent 1 never wrote k5p2_eval.py / video scripts (worktree clean, pushed 53ff54e). WO18 prompt `docs/BUILDER_PROMPT_WO18_PASS2_CHECK.md` (body) written for fresh agent 1: build check + videos now, run on best.pkl when training ends. NOT SENT: waiting for user's word. Agent 2 still owes WO17 summary.json + night-log section (optional).
+
 **Machine:** Kabl jobs share it (the user prefers sequential Hysteresis work; 14A and 14B's build phase overlap is light). Mains power was on.
 
 **2026-11-06 ~12:00:** user: two fresh agents available; Kabl work will share this machine, so WO12 and WO11 run SEQUENTIALLY (WO11 only after WO12 reports). WO12 prompt written and pushed: `docs/BUILDER_PROMPT_WO12_K5_VIDEOS.md` (body 6e65bdf), share 6 threads / 6 GB, branch `body-k5video`, for a fresh agent (pasted by the user; agents offline in ListAgents). Found: no joint-CSV renderer exists; WO12 step 3 asks for the smallest additive one, v47 cmp required. Body worktree index slip FIXED (user OK, reset --hard HEAD, clean).
