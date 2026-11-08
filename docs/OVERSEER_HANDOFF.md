@@ -113,6 +113,14 @@ r400 0.895/0.921, r600 0.913/0.931 (K5 try 1 at r600: 0.574/0.539). ~65 s/round 
   and to WATCH the training unit so it starts the check on best.pkl (6 thr / 14 GB, --working-directory) when it ends. Then videos.
 - Agent 2 [071001]: fresh, idle. Owes (optional, record only) WO17 `rerun4/summary.json` + night-log "Work order 17" section on body-m3f.
 
+**2026-11-08 ~23:10:** WO18 check DONE; pass2 bar MET (builder), VERIFIED by overseer: paired per-song bootstraps recomputed (job tmp
+verify_p2.py logic: per-song mean of a_gaps over windows.json check songs, 10k resamples) match to 3 dp: ext 0.943 [0.911, 0.977], int 0.958;
+vs untrained +0.922/+0.926; vs kappa0 +0.025 [0.021, 0.030] / +0.019 [0.014, 0.023]. check-csv rerun by overseer: accepted x3. e' from CSVs
+(m3f_report.hand_metrics) match: e'1 2.13/2.14/2.11, e'2 0 all; contact 0; end stops 0. FINDINGS: ONE program (MI 0); hand speed max
+0.741 m/s in all songs (ceiling?); val dropped after r600. Instant Crush three-panel checked (frames 100/250 s, 339.82 s) and SENT to user.
+Brief `docs/PLANNER_BRIEF_PASS2_RESULTS.md` written (Q1-Q6). FY/PR videos rendering (chain hyst-wo18-chain2). NEXT: check + send FY/PR
+three-panels; send brief; verify body-k5p2 diff (new files only?) and merge into body + keys-decide; user verdict on videos.
+
 **2026-11-08 21:17:** PASS2 TRAINING DONE (hyst-wo14-a2 success, 977/977, 17.50 h compute, 'pass complete'). Validation ext/int:
 r200 0.862/0.873, r400 0.895/0.921, r600 0.913/0.931 (BEST, best.pkl 13:47), r800 0.875/0.869, r977 0.784/0.880. Chain hyst-wo18-chain2
 started check -> songs -> summary -> render on best.pkl (r600); out /secondary/hyst-data/body/k5p2/check/, video .../video/, log .../chain.log.
