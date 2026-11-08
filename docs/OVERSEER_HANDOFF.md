@@ -155,6 +155,8 @@ broken in 5/16 episodes, shoulder parked 0.1 deg past limit 19 % of rows). Detai
 
 **2026-11-08 ~01:20:** WO17 code pushed (body-m3f 09a870f option+tests, 7d8dfdb chain/gate17); unit hyst-wo17-rerun4-0015 started on mains (user plugged in). Map u = 0.5+0.5 tanh((s-0.5)/0.5): over s in (-0.2,1.2) centres reach +-88.5 (not +-100). Question to planner `docs/PLANNER_BRIEF_WO17_MAP_SCALE.md` (recommend keep run, decide from result). Run continues with c = 0.5. Not yet verified by overseer: smooth tests, bit-identity (verify at gate).
 
+**2026-11-08 ~01:50:** 7.32.6 recorded (c = 0.5 kept, user). WO17 seed 0 PASS both gates (overseer recomputed): ext 1.050, int 1.072, b 52.0, e'1 3.35, e'2 0.0067, floor 0/16, on-stop 0 % all joints, stop-hold 0 s, end stops 0, longest any-pose hold 0.02 s; programs 2 (84 %); vs kappa0 argmax ext +0.155 [0.06, 0.26], int +0.086 [0.003, 0.18] (both > 0). test_m3f_smooth 5 OK (overseer). Seed 1 running (~03:00). If seed 1 passes: merge body-m3f into body (detached temp worktree, push HEAD:body), tell agent 1 "launch".
+
 **Machine:** Kabl jobs share it (the user prefers sequential Hysteresis work; 14A and 14B's build phase overlap is light). Mains power was on.
 
 **2026-11-06 ~12:00:** user: two fresh agents available; Kabl work will share this machine, so WO12 and WO11 run SEQUENTIALLY (WO11 only after WO12 reports). WO12 prompt written and pushed: `docs/BUILDER_PROMPT_WO12_K5_VIDEOS.md` (body 6e65bdf), share 6 threads / 6 GB, branch `body-k5video`, for a fresh agent (pasted by the user; agents offline in ListAgents). Found: no joint-CSV renderer exists; WO12 step 3 asks for the smallest additive one, v47 cmp required. Body worktree index slip FIXED (user OK, reset --hard HEAD, clean).
