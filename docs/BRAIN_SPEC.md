@@ -1357,3 +1357,20 @@ rulings below bind).
   - accuracy = the mean over test clips. Report the mean over pairs with a 10,000-resample bootstrap over pairs, and a label-shuffled
     control (expected ~50 %).
 - **"v47 clearly higher":** v47 mean >= pass2 mean + 15 points, and the v47 interval's lower bound > the pass2 mean.
+
+### 7.35 Rulings on the Stage 1 toy, 2026-11-09, via planner (answering `docs/PLANNER_BRIEF_STAGE1_TOY.md`; toy rules `docs/STAGE1_RULES.md` on body-s1)
+
+1. **Q1 (a).** The arm (i) z-score time constant is scaled to 5 s on the 40 s toy songs: the same 1/8 of song length as pass2. Report the
+   surviving between-song sd of the slow dims under arm (i)'s target before the run.
+   **New arm (0), added before any run:** arm (i)'s target and observer, but with pass2's soft costs in place of the hinges (energy, jerk,
+   and hand-speed/jolt penalties as weighted terms, with no free interior). Same two seeds, same epochs. Arm (0) reproduces pass2's full
+   setting; arm (i) then isolates the cost change.
+2. **Q2 (a), plus MMD as a secondary column.** Collapse precondition, reported before any verdict: arm (0) OR arm (i) reaches a trained
+   between-song JS <= 1/3 of the untrained policy's, AND distinct postures <= 1/3 of the untrained policy's. If neither collapses, stop
+   and report; there is no verdict on (ii)-(iv). The verdict compares (ii)-(iv) against whichever of (0)/(i) collapses, and states which.
+   *Overseer note (not a ruling; the planner may amend): if both collapse, the reference is arm (i), since (ii)-(iv) are cumulative on
+   (i); arm (0) is reported alongside.*
+3. **Q3.** All three pre-run amendments are recorded: 1000 epochs per run; an epoch = 8 batches, each a random anchor song plus its 7
+   tempo- and gain-matched nearest train songs; and the builder's own L2 logistic regression. That regression gets a test against scipy's
+   optimiser (or a closed-form check on a separable toy, if scipy is absent).
+4. Stage 1 still waits for the Stage 0 report.
