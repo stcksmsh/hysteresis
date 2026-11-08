@@ -1291,3 +1291,10 @@ external (a) 0.943 [0.911, 0.977], internal 0.958 [0.924, 0.992]; vs untrained +
    / 0.869 (round 800) and 0.784 / 0.880 (round 977). Before any future long run, a report-only diagnosis of the late drop (e.g. tau
    schedule, learning-rate tail) is required.
 6. **Next:** wait for the user's verdict on the videos. Meanwhile the body-k5p2 code is verified and merged into body.
+7. **User verdict on the pass2 three-panel videos (user, 2026-11-08):** "The third video isn't good, it's the same exact shape of movement,
+   just repeated at different speeds/accelerations/etc, it's not conveying anything to me." So no public wording for pass2 (point 1).
+   Overseer measurement recorded (song CSVs, shoulder / elbow / wrist bend): pass2 visits 214 / 239 / 237 distinct 5-degree postures on
+   Instant Crush / Five Years / Presence vs v47 one arm 2,321 / 1,734 / 2,094 and K5 try 1 3,682 / 2,968 / 2,320; shoulder sd 3.0-3.3 deg
+   (v47 14-17); the bend-joint sd and range are nearly identical across the three songs (shape is song-independent; only timing and speed
+   vary). The readability bar (a) is met by timing and speed modulation of one fixed shape. Next step goes to the planner
+   (`docs/PLANNER_BRIEF_PASS2_VERDICT.md`).
