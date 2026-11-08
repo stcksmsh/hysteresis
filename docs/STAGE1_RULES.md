@@ -83,3 +83,10 @@ The 2AFC is reported for all arms as supporting evidence; it is not part of the 
 
 - The output gain G = 4 and the `sd floor` are scale choices of this toy, not derived. G matters for arm iii: with G = 1 a 1-Lipschitz observer could not decode unit-sd latents from a 0.6 m workspace at all.
 - Decoding D in arm i is measured on its own (within-song z-scored) target and therefore is not directly comparable with arms ii-iv; hence the common ridge probe as a secondary column.
+
+## 10. Amendments (before the run)
+
+- 2026-11-09 (after the smoke runs): **epoch = 8 batches, each batch an anchor song drawn at random (seeded) plus its 7 nearest train songs** by the matched distance of section 4 (replaces "one pass in anchor order";
+  arms share the draws for the same seed). Measured 0.4-0.55 s per epoch at 3 threads, so the budget is raised from 300 to **1000 epochs per run** (about 7-9 min per run, about 1.5 h for the 10 runs serial).
+- Arm i target note: the within-song causal z-score reduces, not erases, the between-song sd of the slow dims (measured 0.43 vs 0.99 for the per-song mean of z1, z2).
+- JS saturates near 1 for songs with disjoint hand regions (the untrained policy already gives about 0.9), so a 3x ratio needs arm i's trained value to be below about 0.33; the half-song control is reported next to it.
