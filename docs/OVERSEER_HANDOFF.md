@@ -113,7 +113,14 @@ r400 0.895/0.921, r600 0.913/0.931 (K5 try 1 at r600: 0.574/0.539). ~65 s/round 
   and to WATCH the training unit so it starts the check on best.pkl (6 thr / 14 GB, --working-directory) when it ends. Then videos.
 - Agent 2 [071001]: fresh, idle. Owes (optional, record only) WO17 `rerun4/summary.json` + night-log "Work order 17" section on body-m3f.
 
-**2026-11-09 ~00:15 — CURRENT:** NEW DIRECTION = BRAIN_SPEC 7.34 (user + planner; research doc `docs/RESEARCH_2026-11-08.md` reference
+**2026-11-09 ~01:00:** Stage 0 pass2 rollouts DONE (357 songs, 25 min, hyst-wo19-roll1); agent 1 measuring next. Tempo: omega-BPM
+disagreed with librosa on 20/20 -> librosa tempo for all (prompt's fallback; note: omega is not the beat tempo). Stage 1 toy built
+(agent 2, body-s1 8700c2b, 13 tests). Planner ruled on it = BRAIN_SPEC 7.35 (body 665eb4d): 5 s z-score; NEW arm (0) = arm (i) target with
+pass2 soft costs; collapse precondition ((0) or (i) JS and postures <= 1/3 untrained) else stop; MMD secondary; amendments recorded;
+logistic-regression test vs scipy (scipy IS in the body env). Rulings NOT yet sent to agent 2 (waiting for the user's word). Stage 1 run
+still waits for the Stage 0 report.
+
+**2026-11-09 ~00:15:** NEW DIRECTION = BRAIN_SPEC 7.34 (user + planner; research doc `docs/RESEARCH_2026-11-08.md` reference
 only). Diagnosis (untested): one shape because the target was low-dim/fast, 30 s within-song z-scoring hid song differences, costs priced
 variety. Stage 0 = analysis only (pass2 best.pkl r600 + v47 one arm): between-song JS (5 cm ball grid), postures >= 0.5 % dwell, shoulder sd,
 peak hand speed vs bound, program entropy, machine 2AFC on tempo-matched held-out pairs; expect pass2 <= 60 %, v47 clearly higher; pass2
