@@ -2,11 +2,12 @@
 (a) external and internal, (e'1), (e'2), (e), table contact, and the paired try 1 - ablation differences (per episode, 95 % bootstrap, 10,000 resamples) for (a), (e'1), (e'2), (e) and contact. Argmax carries the bar; sampled is reported.
 Provisional servo model (Feetech STS3215 12 V assumed)."""
 import json
+import sys
 from pathlib import Path
 
 import m3d_controls as K
 
-D = Path("/secondary/hyst-data/body/m3f")
+D = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("/secondary/hyst-data/body/m3f")     # optional: another run root (WO14A: .../m3f/rerun1)
 ABL = {"m1_no_jerk": "1 minimum-jerk cost off", "m2_no_obs_lp": "2 observer low-pass and jerk-descriptor removal off", "m3_no_phase_lp": "3 phase low-pass and order-parameter coupling off",
        "m4_no_xfade": "4 crossfade and switch cost off"}
 
@@ -29,7 +30,8 @@ def main():
     t1p = D / "try1" / "result.json"
     if t1p.exists():
         t = json.loads(t1p.read_text())
-        out["try1"] = {"args": t["args"], "scores": row(t["result"]), "breaches": {m: t["result"][m]["breaches"] for m in ("argmax", "sample")}, "raw0_old_body": t.get("raw0_old_body"), "raw_this_body": t.get("raw_this_body")}
+        out["try1"] = {"args": t["args"], "scores": row(t["result"]), "breaches": {m: t["result"][m]["breaches"] for m in ("argmax", "sample")}, "raw0_old_body": t.get("raw0_old_body"), "raw_this_body": t.get("raw_this_body"),
+                       "near_limit": {m: t["result"][m].get("near_limit") for m in ("argmax", "sample")}, "nrm": t.get("nrm"), "cfg": t.get("cfg"), "opts": t.get("opts")}
         cs = D / "try1" / "controls" / "summary.json"
         if cs.exists():
             out["try1"]["controls"] = json.loads(cs.read_text())
