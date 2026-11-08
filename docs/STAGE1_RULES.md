@@ -90,3 +90,19 @@ The 2AFC is reported for all arms as supporting evidence; it is not part of the 
   arms share the draws for the same seed). Measured 0.4-0.55 s per epoch at 3 threads, so the budget is raised from 300 to **1000 epochs per run** (about 7-9 min per run, about 1.5 h for the 10 runs serial).
 - Arm i target note: the within-song causal z-score reduces, not erases, the between-song sd of the slow dims (measured 0.43 vs 0.99 for the per-song mean of z1, z2).
 - JS saturates near 1 for songs with disjoint hand regions (the untrained policy already gives about 0.9), so a 3x ratio needs arm i's trained value to be below about 0.33; the half-song control is reported next to it.
+
+- **2026-11-09, planner rulings BRAIN_SPEC 7.35 (merged from origin/body), built and tested:**
+  1. **Arm (i) z-score time constant = 5 s** (1/8 of the 40 s song, as in pass2), for arms 0 and i and for the fast dims of ii-iv (`TAU_Z`). Surviving between-song sd of the per-song mean (train corpus, t >= 3 s):
+     under the arm i target z1 0.205, z2 0.190, bpm 0, log g 0 (the two constant dims are exactly 0 after a causal z-score, so unlearnable and carrying no information in arm i); under the arm ii-iv target 0.99, 0.99, 1, 1.
+     Within-song sd of z1, z2 in arm i's target: 0.74 (the drift, inflated by the 0.1-sd floor and the short window).
+  2. **New arm (0)**: arm i's target, observer and batches, but pass2's soft costs instead of the hinges and multipliers (no free interior, no dual ascent). Loss = dec + 0.03 * (E/E0 + H/H0 + J/J0 + L/L0) + 0.03 * K/K0,
+     the mapping of `m3f.py` (`lam * (en + hand_v + jolt + lim)`, `+ W_JERK * jerk`; LAM 0.03 and W_JERK 0.03 from `k5_train.py` / `k5p2_train.py`). Toy equivalents: E = mean squared joint velocity (rad^2/s^2, the energy proxy);
+     H = the hand-speed hinge (mean relu(|v|/1.2 - 1)); J ("jolt") = the jerk-envelope hinge of section 5; L = the limit-proximity hinge (joint-limit margin of section 5); K = the mean squared third difference of the joint angles (deg^2/s^6).
+     Each divided by its value for the untrained policy on the first 16 train songs (same init seed), floored at the `m3f.FLOORS` values (hand_v 0.02, jolt 0.2, lim 0.005, jerk 1.0, energy 1e-6), computed once at the start of the run
+     (`soft_norm`; measured 9.85, 0.206, 0.20, 0.005, 2.7e9 for seed 0). The pass2 switch, floor and acceleration terms have no toy counterpart and are omitted. Same 2 seeds, 1000 epochs: **12 runs** (0, i, ii, iii, iv(0.05), iv(0.5), each x 2).
+  3. **Collapse precondition, reported before any verdict**: arm 0 OR arm i reaches a trained between-song JS <= 1/3 of the untrained policy's AND distinct postures <= 1/3 of the untrained policy's (the untrained policy = the
+     seed's initial network, same held-out songs; stored as `untrained` in each result.json; a run collapses when both of its seeds do). If neither collapses: stop, no verdict on ii-iv. Otherwise the verdict's reference "(i)" of section 8 is the
+     collapsing arm (if both collapse: arm i, with arm 0 reported alongside), and the report states which.
+  4. **MMD** (RBF bandwidth 0.1 m, squared, whole-song hand positions every 4th step, median over song pairs, with the half-song control) is a secondary column (`mmd_between`, `mmd_half`); not part of the verdict.
+  5. Test of the own L2 logistic regression against scipy minimisers (BFGS and Nelder-Mead on the same objective, fixed data) added (`test_logreg_matches_scipy_minimiser`).
+  Smoke (2 epochs per arm, 3 threads): 0.46 / 0.42 / 0.40 / 0.64 / 0.68 s per epoch for arms 0, i, ii, iii, iv; 12 runs x 1000 epochs = 1.8 h serial at 3 threads.

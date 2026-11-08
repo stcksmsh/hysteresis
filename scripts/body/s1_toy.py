@@ -1,6 +1,6 @@
 """Stage 1 toy (work order 20). Definitions: docs/STAGE1_RULES.md. TOY ONLY: a 2-link planar arm, synthetic songs.
 
-    cd scripts/body && /secondary/hyst-env/body/bin/python -u s1_toy.py --arm iv --seed 0 --epochs 300 --lam 0.5 --out /secondary/hyst-data/body/s1/run_iv_0.5_s0
+    cd scripts/body && /secondary/hyst-env/body/bin/python -u s1_toy.py --arm iv --seed 0 --epochs 1000 --lam 0.5 --out /secondary/hyst-data/body/s1/run_iv_0.5_s0
     python s1_toy.py --smoke          # one epoch per arm, prints seconds per epoch and the projection
 """
 import argparse
@@ -23,7 +23,11 @@ SHIFT_MIN = 160
 WIN_C, SUB_C = 160, 4                   # contrastive window (8 s), motion subsample
 V_MAX, J_MAX, Q_MARGIN = 1.2, 400.0, 0.15
 GRID_N, GRID_LIM = 24, 0.6
-ARMS = ["i", "ii", "iii", "iv"]
+ARMS = ["0", "i", "ii", "iii", "iv"]
+LEVEL = {"0": 0, "i": 0, "ii": 1, "iii": 2, "iv": 3}   # cumulative level; arm 0 = arm i with pass2 soft costs instead of hinges
+TAU_Z = 5.0                                              # arm i z-score time constant (s), 1/8 of the song (BRAIN_SPEC 7.35)
+LAM_SOFT, W_JERK_SOFT = 0.03, 0.03                       # pass2: LAM, W_JERK
+SOFT_FLOORS = {"hand_v": 0.02, "jolt": 0.2, "lim": 0.005, "jerk": 1.0, "en": 1e-6}   # m3f.FLOORS
 
 
 # ----------------------------------------------------------------------------- songs
@@ -77,7 +81,7 @@ def corpus_stats(train_tgt):
     return flat.mean(0), flat.std(0)
 
 
-def causal_z(tgt, floor_sd, tau_s=30.0):
+def causal_z(tgt, floor_sd, tau_s=TAU_Z):
     """(S,T,8) -> causal EMA z-score within each song, bias corrected, sd floored at floor_sd (8,)."""
     a = np.exp(-DT / tau_s)
     S, n, D = tgt.shape
@@ -219,15 +223,26 @@ def hinges(q, hand):
 
 
 # ----------------------------------------------------------------------------- loss
-def loss_fn(params, mu, feats, tgt, starts, arm, lam):
+def soft_terms(q, hand, g):
+    """pass2-style terms on a batch (mean): energy proxy (mean squared joint velocity, rad^2/s^2), hand-speed hinge, jolt (jerk-envelope hinge), limit proximity, joint jerk (mean squared 3rd difference, deg^2/s^6)."""
+    qd = jnp.diff(q, axis=1) / DT
+    j3 = jnp.diff(q, n=3, axis=1) / DT ** 3 * (180 / np.pi)
+    return jnp.stack([jnp.mean(qd ** 2), g[0], g[1], g[2], jnp.mean(j3 ** 2)])
+
+
+def loss_fn(params, mu, feats, tgt, starts, arm, lam, nrm=None):
     """feats (B,T,5), tgt (B,T,8), starts (B,) contrastive window starts. -> loss, aux dict."""
     q = rollout(params["pol"], feats)
     hand = fk(q)
-    lip = arm >= 2
+    lip = arm >= 2        # arm = LEVEL
     pred = observer(params["obs"], windows(hand), lip)
     dec = jnp.mean((pred[:, T_FROM:] - tgt[:, T_FROM:]) ** 2)
     g = jnp.mean(hinges(q, hand), 0)
-    total = dec + jnp.sum(mu * g)
+    if nrm is not None:           # arm 0: pass2 soft costs, normalised by the untrained policy's values; no hinges, no multipliers
+        st = soft_terms(q, hand, g) / nrm
+        total = dec + LAM_SOFT * jnp.sum(st[:4]) + W_JERK_SOFT * st[4]
+    else:
+        total = dec + jnp.sum(mu * g)
     aux = {"dec": dec, "g": g, "nce": jnp.zeros(()), "logdet": jnp.zeros(())}
     if arm >= 1:
         sl = lambda x, s, n: jax.lax.dynamic_slice_in_dim(x, s, n, 0)
@@ -264,15 +279,27 @@ def nearest_batch(bpm, logg, anchor, B=8):
     return np.argsort(d)[:B]       # includes the anchor itself (distance 0)
 
 
+def soft_norm(params, tr, n=16):
+    """pass2 style: each soft term divided by its value for the UNTRAINED policy (first n train songs), floored (SOFT_FLOORS, copied from m3f.FLOORS)."""
+    f = jnp.asarray(tr["feats"][:n])
+    q = rollout(params["pol"], f); hand = fk(q)
+    v = np.asarray(soft_terms(q, hand, jnp.mean(hinges(q, hand), 0)))
+    fl = np.array([SOFT_FLOORS[k] for k in ("en", "hand_v", "jolt", "lim", "jerk")])
+    return jnp.asarray(np.maximum(v, fl))
+
+
 def train(arm, seed, epochs, lam=0.0, data=None, log=print, params=None):
     """arm in ARMS. data = dict(train corpus, tgt) -> returns params, history."""
-    ai = ARMS.index(arm)
+    ai = LEVEL[arm]
     tr = data["train"]; tgt = data["tgt_train"]
     params = init_params(seed) if params is None else params
     st = adam_init(params)
     mu = jnp.ones(3)
     rng = np.random.default_rng(10_000 + seed)
-    gradf = jax.jit(jax.value_and_grad(lambda p, m, f, t, s, l: loss_fn(p, m, f, t, s, ai, l), has_aux=True))
+    nrm = soft_norm(params, tr) if arm == "0" else None
+    if nrm is not None:
+        log(f"soft-cost normalisation (untrained policy): {np.round(np.asarray(nrm), 5).tolist()}")
+    gradf = jax.jit(jax.value_and_grad(lambda p, m, f, t, s, l: loss_fn(p, m, f, t, s, ai, l, nrm), has_aux=True))
     hist = []
     for ep in range(epochs):
         t0 = time.time(); acc = []
@@ -319,6 +346,18 @@ def between_song_js(hand):
     H = np.stack([hist2d(h) for h in hand])
     pairs = [js_div(H[i], H[j]) for i in range(len(H)) for j in range(i + 1, len(H))]
     half = [js_div(hist2d(h[:T // 2]), hist2d(h[T // 2:])) for h in hand]
+    return float(np.median(pairs)), float(np.median(half))
+
+
+def mmd_between(hand, bw=0.1, sub=4):
+    """RBF-kernel MMD^2 between whole-song hand-position samples (every `sub`-th step); median over song pairs and the half-song control (secondary column)."""
+    def k(a, b):
+        return np.exp(-((a[:, None] - b[None]) ** 2).sum(-1) / (2 * bw ** 2))
+    def mmd(a, b):
+        return k(a, a).mean() + k(b, b).mean() - 2 * k(a, b).mean()
+    X = hand[:, ::sub]
+    pairs = [mmd(X[i], X[j]) for i in range(len(X)) for j in range(i + 1, len(X))]
+    half = [mmd(x[:len(x) // 2], x[len(x) // 2:]) for x in X]
     return float(np.median(pairs)), float(np.median(half))
 
 
@@ -403,13 +442,14 @@ def two_afc(q, hand, bpm, n_boot=10_000, seed=0):
 
 def evaluate(params, arm, data, which="held"):
     """-> measures dict on the 'held' or 'val' split (rules section 7)."""
-    ai = ARMS.index(arm); lip = ai >= 2
+    lip = LEVEL[arm] >= 2
     c = data[which]
     q, hand = rollout_np(params, c["feats"])
     pred = observe_np(params, hand, lip)
     js, js_half = between_song_js(hand)
     D, ci = shifted_gap_D(pred, data["tgt_" + which])
-    res = {"js_between": js, "js_half": js_half, "js_ratio": js / max(js_half, 1e-12), "D": D, "D_ci": ci,
+    mm, mm_half = mmd_between(hand)
+    res = {"mmd_between": mm, "mmd_half": mm_half, "js_between": js, "js_half": js_half, "js_ratio": js / max(js_half, 1e-12), "D": D, "D_ci": ci,
            "distinct_postures": distinct_postures(hand), "peak_hand_speed": float(np.mean([np.linalg.norm(np.diff(h, axis=0), axis=1).max() / DT for h in hand])),
            "mean_dec_loss": float(np.mean((pred[:, T_FROM:] - data["tgt_" + which][:, T_FROM:]) ** 2))}
     if which == "held":
@@ -417,6 +457,12 @@ def evaluate(params, arm, data, which="held"):
         _, trh = rollout_np(params, data["train"]["feats"])
         res["D_common_probe"] = ridge_probe_D(trh, data["tgt_ii_train"], hand, data["tgt_ii_held"])
     return res
+
+
+def untrained_reference(seed, data, which="held"):
+    """Between-song JS and distinct postures of the untrained (initial) policy for this seed: the collapse precondition's denominators."""
+    _, hand = rollout_np(init_params(seed), data[which]["feats"])
+    return {"js_between": between_song_js(hand)[0], "distinct_postures": distinct_postures(hand)}
 
 
 def build_data():
@@ -430,7 +476,7 @@ def build_data():
 
 
 def arm_data(d, arm):
-    k = "tgt_i_" if arm == "i" else "tgt_ii_"
+    k = "tgt_i_" if arm in ("0", "i") else "tgt_ii_"
     out = dict(d)
     for nm in ("train", "val", "held"):
         out["tgt_" + nm] = d[k + nm]
@@ -446,7 +492,7 @@ def run(arm, seed, epochs, lam, out, data=None):
         print(s, flush=True); lf.write(s + "\n"); lf.flush()
     params, hist = train(arm, seed, epochs, lam, d, log)
     pickle.dump(jax.tree_util.tree_map(np.asarray, params), open(os.path.join(out, "params.pkl"), "wb"))
-    res = {"arm": arm, "seed": seed, "lam": lam, "epochs": epochs, "val": evaluate(params, arm, d, "val"), "held": evaluate(params, arm, d, "held"), "hist_tail": hist[-5:],
+    res = {"arm": arm, "seed": seed, "lam": lam, "epochs": epochs, "val": evaluate(params, arm, d, "val"), "held": evaluate(params, arm, d, "held"), "untrained": untrained_reference(seed, d), "hist_tail": hist[-5:],
            "sec_per_epoch": float(np.mean([h["sec"] for h in hist[1:]] or [hist[0]["sec"]]))}
     json.dump(res, open(os.path.join(out, "result.json"), "w"), indent=1)
     log(json.dumps({k: res["held"][k] for k in ("js_between", "js_half", "D", "distinct_postures")}))
@@ -457,7 +503,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--arm", choices=ARMS)
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--epochs", type=int, default=300)
+    ap.add_argument("--epochs", type=int, default=1000)
     ap.add_argument("--lam", type=float, default=0.0)
     ap.add_argument("--out")
     ap.add_argument("--smoke", action="store_true")
@@ -468,8 +514,8 @@ if __name__ == "__main__":
             r = run(arm, 0, 2, 0.5 if arm == "iv" else 0.0, f"/secondary/hyst-data/body/s1/smoke_{arm}", data)
             secs[arm] = r["sec_per_epoch"]
         print("sec/epoch", secs)
-        per_run = {k: v * 300 for k, v in secs.items()}
-        total = 2 * (per_run["i"] + per_run["ii"] + per_run["iii"] + 2 * per_run["iv"])
-        print(f"projection 300 epochs x 10 runs, serial at this thread count: {total / 3600:.1f} h")
+        per_run = {k: v * 1000 for k, v in secs.items()}
+        total = 2 * (per_run["0"] + per_run["i"] + per_run["ii"] + per_run["iii"] + 2 * per_run["iv"])
+        print(f"projection 1000 epochs x 12 runs, serial at this thread count: {total / 3600:.1f} h")
     else:
         run(a.arm, a.seed, a.epochs, a.lam, a.out)

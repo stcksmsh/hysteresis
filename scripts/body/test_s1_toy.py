@@ -66,7 +66,8 @@ class Pieces(unittest.TestCase):
         d = S.build_data()
         ti, tii = d["tgt_i_train"], d["tgt_ii_train"]
         sl = lambda t: t[:, S.T_FROM:, 4:6].mean(1).std(0).mean()          # between-song sd of the per-song mean of z1, z2
-        self.assertLess(sl(ti), 0.6 * sl(tii))     # measured 0.43 vs 0.99: reduced, not erased
+        print("surviving between-song sd of slow dims, arm i / arm ii target:", sl(ti), sl(tii))
+        self.assertLess(sl(ti), 0.6 * sl(tii))
 
     def test_arm_is_one_when_songs_equal_policy_zero(self):
         # a policy that ignores its input gives identical hands: between-song JS is 0 (and below the half-song control when moving)
@@ -80,6 +81,42 @@ class Pieces(unittest.TestCase):
         idx = S.nearest_batch(bpm, logg, 10)
         self.assertIn(10, idx)
         self.assertLess(np.ptp(bpm[idx]), 8)
+
+    def test_logreg_matches_scipy_minimiser(self):
+        from scipy.optimize import minimize
+        rng = np.random.default_rng(3)
+        X = np.vstack([rng.normal(0, 1, (30, 4)), rng.normal(1.0, 1, (30, 4))]); y = np.r_[np.zeros(30), np.ones(30)]
+        f = S.logreg(X, y, C=1.0)
+        mu, sd = X.mean(0), X.std(0) + 1e-8
+        Xs = (X - mu) / sd
+        obj = lambda wb: np.sum(np.logaddexp(0, Xs @ wb[:4] + wb[4]) - y * (Xs @ wb[:4] + wb[4])) + 0.5 * wb[:4] @ wb[:4]
+        r = minimize(obj, np.zeros(5), method="Nelder-Mead", options={"xatol": 1e-9, "fatol": 1e-12, "maxiter": 20000, "maxfev": 20000})
+        r2 = minimize(obj, np.zeros(5), method="BFGS", options={"gtol": 1e-9})     # numerical gradient: independent of my analytic one
+        ref = r2.x if r2.fun < r.fun else r.x
+        ours = f(X)
+        np.testing.assert_allclose(ours, Xs @ ref[:4] + ref[4], atol=2e-3)
+
+    def test_mmd_zero_for_same_and_positive_for_different(self):
+        a = np.random.default_rng(0).normal(0, .1, (3, S.T, 2)); a[2] += 0.4
+        m, mh = S.mmd_between(a)
+        self.assertGreater(m, 5 * mh)
+        same = np.tile(a[:1], (3, 1, 1))
+        self.assertAlmostEqual(S.mmd_between(same)[0], 0.0, places=9)
+
+    def test_soft_costs_normalised_to_one_at_untrained(self):
+        d = S.build_data(); p = S.init_params(0)
+        nrm = S.soft_norm(p, d["train"])
+        f = jnp.asarray(d["train"]["feats"][:16]); q = S.rollout(p["pol"], f); h = S.fk(q)
+        st = np.asarray(S.soft_terms(q, h, jnp.mean(S.hinges(q, h), 0)) / nrm)
+        self.assertTrue(np.all(st <= 1 + 1e-5)); self.assertAlmostEqual(st[0], 1.0, places=4); self.assertAlmostEqual(st[4], 1.0, places=4)
+
+    def test_arm0_has_no_hinge_multipliers_in_loss(self):
+        d = S.build_data(); p = S.init_params(0)
+        f = jnp.asarray(d["train"]["feats"][:4]); t = jnp.asarray(d["tgt_i_train"][:4])
+        nrm = S.soft_norm(p, d["train"])
+        l_a, _ = S.loss_fn(p, jnp.ones(3), f, t, jnp.zeros(4, int), 0, 0.0, nrm)
+        l_b, _ = S.loss_fn(p, 100 * jnp.ones(3), f, t, jnp.zeros(4, int), 0, 0.0, nrm)
+        self.assertAlmostEqual(float(l_a), float(l_b), places=6)       # mu has no effect in arm 0
 
     def test_logreg_separates(self):
         rng = np.random.default_rng(0)
@@ -105,7 +142,7 @@ class Smoke(unittest.TestCase):
             self.assertTrue(np.isfinite(hist[0]["loss"]))
             if arm == "iv":
                 self.assertNotEqual(hist[0]["logdet"], 0.0)
-            if arm == "i":
+            if arm in ("0", "i"):
                 self.assertEqual(hist[0]["nce"], 0.0)
             r = S.evaluate(params, arm, ad, "val")
             self.assertTrue(0 <= r["js_between"] <= 1)
