@@ -163,6 +163,8 @@ broken in 5/16 episodes, shoulder parked 0.1 deg past limit 19 % of rows). Detai
 
 **2026-11-08 ~03:50:** WO17 clips rendered by overseer (unit hyst-wo17-clips-0332, rerun4/clips/, 60.0 s, 720p 27.5-27.7 MB, frames checked) and SENT to user; awaiting user verdict (watch: no rests, longest hold 0.02-0.04 s; top program 84 %/98 %). PASS2 RUNNING: unit hyst-wo14-a2 (agent 1, body-k5p2 93e18bb, 10 GB cap, cores 6-11, data /secondary/hyst-data/body/k5p2/run/, train.log); first launch hyst-wo14-a1 failed (no working dir) and was reset. Pass2 options incl. --smooth-u. Next: projection from first rounds (box 30 h), validations with ETAs, user may stop after clips. Agent 2: summary.json + night-log WO17 section still owed when its limit resets.
 
+**2026-11-08 07:08:** pass2 (hyst-wo14-a2) validation round 200: ext 0.862, int 0.873, b 37.2, 3.37 h compute (K5 try 1 at 200: 0.559/0.510). Rounds ~59.5 s; training end ~20:00-21:00. Overseer watcher = background bash loop on progress.json val count / unit / power (re-arm after each event). User verdict on WO17 clips still pending.
+
 **Machine:** Kabl jobs share it (the user prefers sequential Hysteresis work; 14A and 14B's build phase overlap is light). Mains power was on.
 
 **2026-11-06 ~12:00:** user: two fresh agents available; Kabl work will share this machine, so WO12 and WO11 run SEQUENTIALLY (WO11 only after WO12 reports). WO12 prompt written and pushed: `docs/BUILDER_PROMPT_WO12_K5_VIDEOS.md` (body 6e65bdf), share 6 threads / 6 GB, branch `body-k5video`, for a fresh agent (pasted by the user; agents offline in ListAgents). Found: no joint-CSV renderer exists; WO12 step 3 asks for the smallest additive one, v47 cmp required. Body worktree index slip FIXED (user OK, reset --hard HEAD, clean).
