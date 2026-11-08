@@ -1298,3 +1298,62 @@ external (a) 0.943 [0.911, 0.977], internal 0.958 [0.924, 0.992]; vs untrained +
    (v47 14-17); the bend-joint sd and range are nearly identical across the three songs (shape is song-independent; only timing and speed
    vary). The readability bar (a) is met by timing and speed modulation of one fixed shape. Next step goes to the planner
    (`docs/PLANNER_BRIEF_PASS2_VERDICT.md`).
+
+### 7.34 New direction after the pass2 verdict, 2026-11-08, via the user + planner
+
+Background: `docs/RESEARCH_2026-11-08.md` (reference only; its claims are untested proposals and some citations are unverified; only the
+rulings below bind).
+
+1. **Working hypothesis (untested until Stage 0):** the legibility objective was satisfied by one shape modulated in timing because
+   (1) the decoding target was low-dimensional and fast, (2) the 30 s within-song z-scoring removed between-song differences, so
+   song-dependence was invisible to the objective, and (3) the costs priced posture variety while nothing rewarded it.
+2. **Stage 0 (analysis only; no training).** Policies: pass2 best.pkl (round 600), and v47 one arm as the reference. Measures per song:
+   - between-song Jensen-Shannon distance of mirror-ball position distributions (5 cm 3-D grid);
+   - distinct postures (cells with >= 0.5 % dwell);
+   - shoulder sd;
+   - per-song peak hand speed and its distance to the hand-speed bound;
+   - program-usage entropy;
+   - a machine 2AFC: a classifier picks which of two tempo-matched songs a 30 s motion clip came from (held-out songs).
+
+   Pre-registered expectation: pass2 machine 2AFC <= 60 %, v47 clearly higher. If pass2 is already high (> 60 %), the diagnosis is
+   partly wrong: stop and report.
+3. **Stage 1 (toy).** A 2-link planar arm; synthetic songs = a slow per-song latent x a fast beat. Four arms, cumulative:
+   - (i) the current objective;
+   - (ii) + corpus-level normalisation for a slow target stream (slow-layer state, 8 s surprisal integral) and a contrastive music<->motion
+     matching term with tempo/RMS-matched negatives;
+   - (iii) + a Lipschitz-constrained observer (spectral norm, posture metric in metres);
+   - (iv) + a DvD-style -log det song-diversity term.
+
+   In all four arms, costs are hinge constraints with free interiors (dual multipliers). Pass: (iv) between-song JS >= 3x (i) with
+   decoding >= 0.7. Report the smallest arm that reaches >= 2x (i). Ship only the ingredients that are needed.
+4. **Order and reports:** report after Stage 0, then after Stage 1. The rules of each stage are committed before it runs. The human
+   match/mismatch test (real vs swapped music) becomes the headline check for any future pass; its design is ruled before Stage 3.
+5. **Not yet:** no 5-DoF run, no memory retry, no motion-capture prior. The basal ganglia stay (scale-human goal). A Switch-style
+   load-balancing term per song is the planned fix, tested only after Stage 1.
+6. **Hardware note:** 2.9 N m is the 12 V STS3215; the 7.4 V part is ~1.6 N m (16.5 kg cm at 6 V). Record it for the servo choice.
+
+**Overseer operationalisation of Stage 0 (2026-11-08; committed before the run; the planner may amend it before the run starts):**
+- **Songs.**
+  - Pass2: continuous full-song argmax rollout of all 357 held-out check songs and the three danced songs (WO12 / k5p2_eval "songs"
+    recipe), 50 Hz.
+  - v47 one arm: arm 0 of the v47 Off hexagon score. The three danced songs come from the existing CSVs. A held-out subset is used if the
+    sidecar + score pipeline can run on new songs: target 12 tempo-matched pairs (24 songs) within 6 h compute. If not feasible, v47 is
+    measured on the three danced songs only, and its 2AFC is reported as weak (not tempo-matched).
+- **Mirror-ball position:** the last point of the rig forward kinematics (`m3f_report.fk_points`; for v47, the same FK on its joint CSV).
+  Grid: 5 cm cubes, `floor(p / 0.05)`.
+- **JS distance:** base 2, on whole-song cell distributions; median over song pairs. Paired control: the JS between the two halves of each
+  song (median over songs). Report both, plus their ratio.
+- **Distinct postures:** cells with dwell >= 0.5 % of the song.
+- **Peak hand speed:** the maximum of the 50 Hz central-difference hand speed. Report the across-song sd and the distance to the
+  hand-speed bound in force in the pass2 loss, read from the code (check-csv's own limit is 1.2 m/s).
+- **Program-usage entropy:** bits over the 8 programs, per song.
+- **Tempo:** per song, the median beat-phase rate of its B7 lane (`omega`, rad/s -> BPM). Tempo-matched means |dBPM| <= 5. Pairs are
+  greedy one-to-one among held-out songs, with different artists; all available pairs.
+- **Machine 2AFC, per pair:**
+  - clips: non-overlapping 30 s clips;
+  - features per clip: a 10 cm ball-cell histogram, plus per-joint mean and sd of angle and of speed;
+  - classifier: L2 logistic regression (sklearn, brain env), standardised features, C = 1;
+  - train on the clips from the first half of each song, test on the clips from the second half;
+  - accuracy = the mean over test clips. Report the mean over pairs with a 10,000-resample bootstrap over pairs, and a label-shuffled
+    control (expected ~50 %).
+- **"v47 clearly higher":** v47 mean >= pass2 mean + 15 points, and the v47 interval's lower bound > the pass2 mean.
