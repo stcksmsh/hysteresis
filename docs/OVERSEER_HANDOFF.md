@@ -94,6 +94,38 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
+## CURRENT STATE (2026-11-08 ~14:55, saved before an overseer restart) — read this first, then the dated notes below
+
+**Rules of record:** `docs/BRAIN_SPEC.md` §7.27-7.32 (body branch; latest 7.32.6). Builder prompt files: `docs/BUILDER_PROMPT_WO14B_K5_PASS2.md`,
+`_WO17_SMOOTH_U.md`, `_WO18_PASS2_CHECK.md` (all on body). Decisions go to the planner as briefs (user rule 2026-11-08, see "How to write").
+
+**Running:** K5-pass2, systemd unit `hyst-wo14-a2` (agent 1's run script `scripts/body/k5p2_run.sh` in worktree
+`.claude/worktrees/body-k5video`, branch `body-k5p2`), cores 6-11, 10 GB cap, mains-only, data `/secondary/hyst-data/body/k5p2/run/`
+(`progress.json`, `train.log`, checkpoint every round, `best.pkl` at end). Options: `--body v2f --hard-clip --floor-acc-hinges
+--contact-tc 0.006 --raised-plane --w-floor 1.0 --smooth-u` (c = 0.5). Validation (217 windows, argmax) ext/int (a): r200 0.862/0.873,
+r400 0.895/0.921, r600 0.913/0.931 (K5 try 1 at r600: 0.574/0.539). ~65 s/round lately; round ~650/977 at 14:50; **training ends
+~20:30-21:00**; 30 h compute box (7.27.5). Pause `systemctl --user freeze hyst-wo14-a2` / stop (checkpoints, clean exit) / resume
+`scripts/body/k5p2_run.sh <suffix>`. Overseer watcher was a background bash loop on progress.json val count + unit + ADP1 (re-create).
+
+**Builders (sessions restarted ~13:54; refs change on restart — use ListAgents):**
+- Agent 1 [9ae40e]: WO18 (pass2 check `k5p2_eval.py` + video scripts) SENT ~14:15; pushed body-k5p2 99feee2 (check script, render script,
+  tests) at 14:47 but "nothing has passed end to end yet" and it went idle. NEXT: nudge it to finish/test end to end before training ends,
+  and to WATCH the training unit so it starts the check on best.pkl (6 thr / 14 GB, --working-directory) when it ends. Then videos.
+- Agent 2 [071001]: fresh, idle. Owes (optional, record only) WO17 `rerun4/summary.json` + night-log "Work order 17" section on body-m3f.
+
+**Merged:** body 9b73365 contains body-m3f (WO14A-WO17: hinges, end stop, raised plane 0.053, contact-tc 0.006, smooth u, diag tools,
+gates `m3f_gate17.py`). keys-decide merges body.
+
+**WO17 result (verified):** both seeds pass 7.30.3 + 7.31.2 gates; 0 % on stops; vs kappa0 > 0 both decoders both seeds; only 2 programs
+(top share 84 % / 98 %); longest still pose 0.02-0.04 s (no rests). Clips `/secondary/hyst-data/body/m3f/rerun4/clips/ep{0,1}-side-by-side-720p.mp4`
+SENT to the user; **user verdict pending** (the user may stop pass2 after the clips).
+
+**After pass2 training:** agent 1 runs the check (bar = full K5 bar + check-csv on Instant Crush / Five Years / Presence + (e'1)/(e'2) per
+song vs `docs/hf_v47_eprime_reference.json`; report lines 7.28-7.31; kappa0 decides inner-rhythm wording 7.31.3), then videos (3 songs,
+1080p + 720p < 30 MiB, three-panel v47 | fallback | pass2). Overseer verifies (recompute per-song paired bootstraps from eval JSON,
+check-csv per song, (e') per song), sends videos, writes `docs/PLANNER_BRIEF_PASS2_RESULTS.md`. If a bar component fails: §7.26 round 2
+(weights x <= 3 from those in force at launch: floor 1, acc 1), via the planner.
+
 ## Where things stand (2026-11-07, saved before an overseer context clear)
 
 **Goal (user, BRAIN_SPEC 7.19):** a scale human, ONE arm, driven by the brain's own encodings (B7 epoch 6 lanes); it learns to move so its
