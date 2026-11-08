@@ -1270,3 +1270,31 @@ Binding. They answer `docs/PLANNER_BRIEF_WO16B_RESULTS.md`. Set before any furth
    reach +-88.5 deg (not +-100) and about 6 % of each output's range is unreachable at each end; the full joint range is still reachable
    through the amplitude (cap 110 - 88.5 = 21.5 deg). If both seeds pass both gates, pass2 launches with c = 0.5 as ruled. Revisit c = 0.35
    only if the clips or a gate show the arm lacking range.
+
+### 7.33 Rulings on K5-pass2, 2026-11-08, via planner (answering `docs/PLANNER_BRIEF_PASS2_RESULTS.md`)
+
+Results recorded (overseer recomputed): pass2 (best.pkl = round 600 of 977, 17.50 h compute) on the 1,071 check windows / 357 songs, argmax:
+external (a) 0.943 [0.911, 0.977], internal 0.958 [0.924, 0.992]; vs untrained +0.922 / +0.926; vs kappa = 0 +0.025 [0.021, 0.030] /
++0.019 [0.014, 0.023]. `hyst check-csv` accepted on Instant Crush, Five Years, Presence; (e'1) 2.13 / 2.14 / 2.11 m/s2 (limits 5.32 / 5.18 /
+7.50); (e'2) 0 on all three; contact 0, end stops 0.
+
+1. **(a) + (b).** Pass2 is recorded as passing the pass2 bar (7.23 + 7.25): numeric record. Any public wording waits for the user's verdict
+   on the three-panel videos.
+2. **(b).** The inner-rhythm wording (7.31.3) is licensed only with the size qualifier, e.g. "a faint pull toward its own inner rhythm (about
+   3 % of its readability)". Recorded: trained kappa means 0.005-0.015.
+3. **(a).** Recorded: the basal ganglia select a single program 100 % of the time (argmax, check windows and all three songs; (c) MI 0.0).
+   They are "present", never described as choosing. A diversity term only if the user's verdict asks for variety.
+4. **(a), then (b) conditionally.** Recorded: the peak hand speed is 0.741 m/s in all three songs (identical to 3 decimals), a probable
+   ceiling of the movement mapping, cause not checked; hand acceleration p99 ~2.1 vs v47 4.1-6.0. If the user finds the movement too calm
+   or capped, a report-only diagnosis of the ceiling (no training) follows.
+5. **(a), with (b) required before any future long run.** Recorded: validation peaked at round 600 (ext 0.913, int 0.931) and fell to 0.875
+   / 0.869 (round 800) and 0.784 / 0.880 (round 977). Before any future long run, a report-only diagnosis of the late drop (e.g. tau
+   schedule, learning-rate tail) is required.
+6. **Next:** wait for the user's verdict on the videos. Meanwhile the body-k5p2 code is verified and merged into body.
+7. **User verdict on the pass2 three-panel videos (user, 2026-11-08):** "The third video isn't good, it's the same exact shape of movement,
+   just repeated at different speeds/accelerations/etc, it's not conveying anything to me." So no public wording for pass2 (point 1).
+   Overseer measurement recorded (song CSVs, shoulder / elbow / wrist bend): pass2 visits 214 / 239 / 237 distinct 5-degree postures on
+   Instant Crush / Five Years / Presence vs v47 one arm 2,321 / 1,734 / 2,094 and K5 try 1 3,682 / 2,968 / 2,320; shoulder sd 3.0-3.3 deg
+   (v47 14-17); the bend-joint sd and range are nearly identical across the three songs (shape is song-independent; only timing and speed
+   vary). The readability bar (a) is met by timing and speed modulation of one fixed shape. Next step goes to the planner
+   (`docs/PLANNER_BRIEF_PASS2_VERDICT.md`).
