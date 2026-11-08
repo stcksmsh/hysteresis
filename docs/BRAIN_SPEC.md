@@ -1205,3 +1205,68 @@ the limit-proximity term and too small to act.
    the end stops per joint, programs used, trained - kappa0. Then stop and ask; pass2 does not launch until the user has seen the clips.
    **Reading recorded as untested:** under the jerk, speed and floor costs, parking against the end stops may have become a cheap rest (zero
    speed, no energy, no jerk) that the limit-proximity cost does not outweigh.
+9. **User verdict on the WO15B clips (2026-11-07; toy held-out episodes 0 and 1, 60 s, silent, seed 0 left, seed 1 right).** Verbatim:
+   "Video 1: the left one is mostly stuck in a single 'bowed down' position with the head close to the base and the arm slumped over for
+   the head to be there, its also more repetitive. The right one actually seems to be doing something, it looks alive and smooth, it has
+   variety and is overall decent. Video 2: The left is again stuck for a long period of time in the same pose (though the right also gets
+   stuck in that pose ~42s in and stays there until the end, for comparison left gets stuck at ~18 untill ~28, then ~29 untill ~45), as for
+   fluidity etc, I cant really tell, the left is only viable for first 15 and last 15 seconds (mostly) and the second has some strange
+   behaviour at the beginning, not as clear cut as vid 1."
+   Overseer, from the rollouts: the "bowed down" pose is the elbow held on its -110 deg stop (seed 0 ep 0: 9.3-24.6, 29.0-32.1, 40.7-45.1 s;
+   ep 1: 12.3-25.3, 31.2-44.1 s; seed 1 ep 1: 44.6-56.6 s). Pass2 stays held; the parking question goes to the planner.
+
+### 7.31 Rulings on work order 15, 2026-11-07, via planner
+
+Binding. They answer `docs/PLANNER_BRIEF_WO15_RESULTS.md`. Set before any further toy or K5-pass2 result.
+
+1. **Q1: diagnose the parked behaviour first.** No training, no new cost, no pass2 until the user has seen the diagnosis. From the saved
+   rerun3 rollouts (both seeds; re-simulating them deterministically with extra logging is allowed), every hold stretch >= 2 s at a stop
+   (those in the WO15 brief 2.4 plus any others), per stretch:
+   1. Clipping: the pre-clip commanded target, generator centre and amplitude for the held joint; the share of hold time where the
+      commanded target lies beyond the stop; whether the oscillator keeps swinging there.
+   2. Chosen stillness: whether commands sit inside the range with small amplitude (the policy asking to be still).
+   3. Contact: any self-contact (ball or links against the base column or other links) or table contact during the hold, with forces;
+      whether the arm rests on something.
+   4. End stop: end-stop events and velocity zeroing at hold onset and exit; whether the joint is pinned by repeated stop hits.
+   5. Brain side: the program chosen during holds vs outside, kappa, and the inner-state targets (arousal, surprisal, L3 order parameter)
+      during holds vs outside.
+   6. Observer: decoding (a) inside holds vs outside (is the parked pose an easy code?).
+   Then stop and report, with a one-line verdict per hypothesis (supported / not supported).
+2. **Q2: parking gate, adopted now for the next toy rerun whatever the fix:** per seed, no joint on a stop for more than 10 % of the time
+   and no single hold at a stop longer than 5 s, added to the 7.30.3 gate. Report-only: share of time on a stop per joint, longest
+   stop-hold, longest hold of ANY pose (hand speed < 2 cm/s).
+3. **Q3: (a).** Pass2's own kappa-0 control decides the inner-rhythm wording.
+4. **Q4: recorded** as written in the brief, plus: the user's verdict that seed 1, episode 0 "looks alive and smooth, has variety"; the
+   user's reading that the slump may be the arm trying to move but being clipped; untested planner note: a hard clip has zero gradient
+   beyond the limit, so if commands saturate, the limit-proximity cost alone may be too weak to pull the policy out.
+5. **Additions to 7.31.1 (user, 2026-11-07), received after WO16 had run; done as addendum WO16b.**
+   1. Step 1 also lists holds >= 2 s within 1 deg of the target-clip boundary (stop - CLIP_MARGIN_DEG), separately from holds on the stop
+      itself. In point 1 (clipping), "beyond the stop" means beyond the clip boundary.
+   2. **H7, torque saturation / gravity:** per hold, the actuator torque of the held joint and of the shoulder vs the provisional stall
+      torque (2.94 N m): share of hold time at saturation, and whether the joint is pushed into the stop by gravity rather than commanded
+      there.
+   3. **H1b, network saturation:** per hold, whether the motor cortex's centre and amplitude outputs for the held joint sit at their output
+      bounds (share of time within 2 % of a bound).
+   Verdict lines become H1, H1b, H2-H7.
+
+### 7.32 Rulings on work order 16b, 2026-11-08, via planner
+
+Binding. They answer `docs/PLANNER_BRIEF_WO16B_RESULTS.md`. Set before any further toy or K5-pass2 result.
+
+1. **Q1 (a): smooth centre map.** The centre output becomes a smooth (tanh/sigmoid) function of the unclipped sum, into +-(110 - A_min),
+   A_min = 10 deg for the three bend joints; no hard clip on the path. The end stop stays as the physical backstop.
+2. **Q2 (b): the same smooth map replaces every clipped u output** (bounds unchanged; A_min applies to centres only), so no output can hide
+   behind a zero-gradient clip. A unit test checks the gradient is non-zero at and beyond the old bounds.
+3. **Q3:** seed 0's program 2 report-only.
+4. **Recorded (Q4):** the WO16/WO16b verdicts (H1 yes, H1b yes, H2 no, H3 no, H4 yes, H5 seed 0 only, H6 no, H7 torque no / gravity yes)
+   and the chain: the centre output saturates at its clip, zero gradient, the amplitude cap goes to zero, gravity droop (1.5-1.6 deg)
+   carries the joint past the 0.5 deg clip margin onto the stop, where it is pinned. **The user's reading ("trying to do something but
+   clipped", 7.31.4) was correct.**
+5. **Then:** the two-seed toy rerun (seeds 0 and 1) under the 7.30.3 gate plus the 7.31.2 parking gate. **Both seeds pass: launch pass2
+   without asking, and render 60 s clips of both seeds (same episodes as WO15B) for the user in parallel.** Pass2 stays pausable; the user
+   may stop it after the clips. **Either seed fails: stop and report, with clips.**
+6. **Smooth-map scale (user, 2026-11-08, answering `docs/PLANNER_BRIEF_WO17_MAP_SCALE.md`): (c).** Keep u = 0.5 + 0.5 tanh((s - 0.5)/c)
+   with c = 0.5 and the running WO17. Recorded arithmetic: over the reachable sum s in (-0.2, 1.2), u spans 0.057-0.943, so bend centres
+   reach +-88.5 deg (not +-100) and about 6 % of each output's range is unreachable at each end; the full joint range is still reachable
+   through the amplitude (cap 110 - 88.5 = 21.5 deg). If both seeds pass both gates, pass2 launches with c = 0.5 as ruled. Revisit c = 0.35
+   only if the clips or a gate show the arm lacking range.

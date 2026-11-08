@@ -26,6 +26,8 @@ def build(a, toy, C, log):
         import make_arm_v2 as V2
         assert V2.RAISED_PLANE_Z is not None, "RAISED_PLANE_Z not set: run m3f_plane_test.py and record d first"
         cfg["plane"] = V2.RAISED_PLANE_Z
+    if a.smooth_u:
+        cfg["smooth_u"] = True
     if a.hard_clip:
         cfg["clip"] = True                                        # only added when asked, so earlier runs' cfg (and their checkpoints) are unchanged
     opts = {"internal": True, "pen": a.body != "v1" and not a.no_pen, "jerk": a.w_jerk > 0, "sw": a.w_switch > 0 and cfg["xfade"], "pen2": a.body != "v1" and a.floor_acc_hinges}
@@ -52,6 +54,7 @@ def add_args(ap):
     ap.add_argument("--w-floor", type=float, default=1.0, help="weight of the floor-margin hinge inside LAMBDA x (...) (BRAIN_SPEC 7.29: 3.0 for the WO14C rerun); the hand-acceleration hinge stays at m3f.W_ACC = 1")
     ap.add_argument("--contact-tc", type=float, default=None, help="contact time constant (solref[0], s) of every collision geom of the v2/v2f body; default = MuJoCo's 0.02 (BRAIN_SPEC 7.30.7: 0.006)")
     ap.add_argument("--raised-plane", action="store_true", help="table plane at make_arm_v2.RAISED_PLANE_Z = 0.05 + d (7.30.6) and the floor hinge on the surfaces' clearance above it, divided by 0.05 m")
+    ap.add_argument("--smooth-u", action="store_true", help="WO17 (7.32): smooth strictly monotone map of every u output into (0, 1) instead of the hard clip; bend centres within +-100 deg")
     ap.add_argument("--hard-clip", action="store_true", help="BRAIN_SPEC 7.27 point 2: targets of every ranged joint clipped CLIP_MARGIN_DEG inside the range (new body only)")
     ap.add_argument("--max-epochs-now", type=int, default=0, help="stop after this many epochs of this call (0 = all; for timing)")
 
