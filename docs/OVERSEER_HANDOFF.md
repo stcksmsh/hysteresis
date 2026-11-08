@@ -113,6 +113,17 @@ r400 0.895/0.921, r600 0.913/0.931 (K5 try 1 at r600: 0.574/0.539). ~65 s/round 
   and to WATCH the training unit so it starts the check on best.pkl (6 thr / 14 GB, --working-directory) when it ends. Then videos.
 - Agent 2 [071001]: fresh, idle. Owes (optional, record only) WO17 `rerun4/summary.json` + night-log "Work order 17" section on body-m3f.
 
+**2026-11-08 ~23:40 — CURRENT:** Planner ruled on pass2 = BRAIN_SPEC 7.33 (pass recorded numerically; inner-rhythm wording only with
+"about 3 %" qualifier; BG single program -> "present", never choosing; 0.741 m/s ceiling recorded; late-val-drop diagnosis required before
+any future long run). USER VERDICT on the three-panel videos = 7.33.7: pass2 "same exact shape of movement, just repeated at different
+speeds ... not conveying anything". Overseer measurement: pass2 214-239 distinct 5-deg bend postures vs v47 1,734-2,321; shoulder sd ~3 deg
+vs 14-17; shape identical across songs. Brief `docs/PLANNER_BRIEF_PASS2_VERDICT.md` SENT (Q1 toy diagnosis first, Q2 variety gate
+incl. song-dependence, Q3 program diversity after diagnosis, Q4 keep numeric pass marked rejected by eye, Q5 demo fallback = user's choice).
+WAITING: planner answers. All three three-panel videos checked and sent. body-k5p2 (bed52b9, new files only; tests OK when each module runs
+in its own process — together in one process 16 errors) MERGED: body e6cc888, keys-decide fe50466. Nothing running; agents 1 and 2 idle.
+Agent 1 reported WO18 done (matches overseer numbers; its "early stop rule fired" is wrong: run completed).
+Lesson: run scripts/body test modules in separate processes (cross-module import side effects).
+
 **2026-11-08 ~23:10:** WO18 check DONE; pass2 bar MET (builder), VERIFIED by overseer: paired per-song bootstraps recomputed (job tmp
 verify_p2.py logic: per-song mean of a_gaps over windows.json check songs, 10k resamples) match to 3 dp: ext 0.943 [0.911, 0.977], int 0.958;
 vs untrained +0.922/+0.926; vs kappa0 +0.025 [0.021, 0.030] / +0.019 [0.014, 0.023]. check-csv rerun by overseer: accepted x3. e' from CSVs
