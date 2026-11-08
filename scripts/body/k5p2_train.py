@@ -30,7 +30,7 @@ import make_arm_v2 as V2
 
 assert V2.RAISED_PLANE_Z is not None
 # = run_m3f.py build() with --body v2f --hard-clip --floor-acc-hinges --contact-tc 0.006 --raised-plane --w-floor 1.0 (BRAIN_SPEC 7.30.8); the values come from agent 2's code
-CFG = dict(body="v2f", obs_lp=True, phase_lp=True, xfade=True, ctc=0.006, plane=V2.RAISED_PLANE_Z, clip=True)
+CFG = dict(body="v2f", obs_lp=True, phase_lp=True, xfade=True, ctc=0.006, plane=V2.RAISED_PLANE_Z, smooth_u=True, clip=True)      # smooth_u = --smooth-u (WO17, 7.32)
 OPTS = {"internal": True, "pen": True, "jerk": True, "sw": True, "pen2": True}      # pen2 = --floor-acc-hinges (W_FLOOR = W_ACC = 1, 7.27)
 W_JERK, W_SWITCH, W_FLOOR = 0.03, 0.01, 1.0
 T.BOX_H = 30.0
