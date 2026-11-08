@@ -121,7 +121,7 @@ peak hand speed vs bound, program entropy, machine 2AFC on tempo-matched held-ou
 arms (i)-(iv) cumulative, hinges + dual multipliers; pass (iv) JS >= 3x (i) with decoding >= 0.7. Order: report after Stage 0, then Stage 1.
 Prompts on body a4b4e77: `docs/BUILDER_PROMPT_WO19_STAGE0.md` (agent 1, branch body-s0, data /secondary/hyst-data/body/s0/, 6 thr/12 GB),
 `docs/BUILDER_PROMPT_WO20_STAGE1_TOY.md` (agent 2, branch body-s1, data .../s1/, builds + STAGE1_RULES.md, NO run until overseer says
-"run Stage 1" after the Stage 0 report). NOT SENT: waiting for the user's word. Hardware memory updated (12 V STS3215).
+"run Stage 1" after the Stage 0 report). SENT 2026-11-09 ~00:25 (user cleared both agents): WO19 -> agent 1 [9ae40e], WO20 -> agent 2 [4cd51a], notify_when_idle both. Check first pushes of body-s0 / body-s1 within 30 min. Hardware memory updated (12 V STS3215).
 
 **2026-11-08 ~23:40:** Planner ruled on pass2 = BRAIN_SPEC 7.33 (pass recorded numerically; inner-rhythm wording only with
 "about 3 %" qualifier; BG single program -> "present", never choosing; 0.741 m/s ceiling recorded; late-val-drop diagnosis required before
