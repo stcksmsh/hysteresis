@@ -119,6 +119,11 @@ class Switches(unittest.TestCase):
         _, o = chunk(self.C, self.P if P is None else P, "argmax", 0.0, carry, m3d.take(inps, 0, nb))
         return {k: np.asarray(v) for k, v in o.items()}
 
+    @classmethod
+    def run_chunk_static(cls, cfg, nb=8, idx=np.arange(0, 2)):
+        cls.setUpClass()
+        return cls.run_chunk(cls, cfg, nb=nb, idx=idx)
+
     def test_old_path_identity(self):
         """body v1 with every switch off is m3e_jax.chunk: every shared output equal bit for bit."""
         idx = np.arange(0, 2)
@@ -242,6 +247,193 @@ class FirstEpoch(unittest.TestCase):
         rec = tr.run_epoch()
         for k in ("dec_e", "dec_i", "energy_rel", "rms_speed", "kappa_mean", "rate_mult", "abs_delta", "clip_share", "critic_loss", "sigma_delta"):
             self.assertAlmostEqual(rec[k], ref[k], delta=1e-6 * max(1.0, abs(ref[k])), msg=k)
+
+
+class Hinges714(unittest.TestCase):
+    """BRAIN_SPEC 7.27: floor-margin and hand-acceleration hinges, hard clip of the targets."""
+
+    def test_floor_hinge(self):
+        calm = jnp.tile(jnp.asarray(MA.NEUTRAL_DEG), (60, 1))
+        self.assertEqual(float(F.penalties(calm)["floor"]), 0.0)
+        down = jnp.tile(jnp.asarray([0.0, 100.0, 0.0, 0.0, 0.0]), (60, 1))             # points under the plane
+        self.assertGreater(float(F.penalties(down)["floor"]), 0.1)
+
+    def test_floor_hinge_matches_report_margin(self):
+        rng = np.random.default_rng(5)
+        for _ in range(5):
+            q = np.array([0.0, *rng.uniform(-100, 100, 3), 0.0])
+            P = R.fk_points(q[None])[0]
+            margin = min(P[1:5, 2].min() - R.FLOOR_M, P[5, 2] - R.FLOOR_M - R.DISC_M)
+            self.assertAlmostEqual(float(F.penalties(jnp.tile(jnp.asarray(q), (60, 1)))["floor"]), max(0.0, -margin), places=9)
+
+    def test_acc_hinge(self):
+        t = np.arange(60) / 100.0
+        slow = np.array(MA.NEUTRAL_DEG)[None] + np.stack([0 * t, 0 * t, 2 * np.sin(2 * np.pi * 0.5 * t), 0 * t, 0 * t], 1)
+        self.assertEqual(float(F.penalties(jnp.asarray(slow))["acc"]), 0.0)
+        shake = np.array(MA.NEUTRAL_DEG)[None] + np.stack([0 * t, 0 * t, 25 * np.sin(2 * np.pi * 3.0 * t), 0 * t, 0 * t], 1)
+        self.assertGreater(float(F.penalties(jnp.asarray(shake))["acc"]), 0.0)
+
+    def drive_far(self, cfg, secs, flip=None, noise=0.0):
+        d, tgt, tv = F.arm_init(cfg, np.array(MA.NEUTRAL_DEG, float))
+        step = jax.jit(lambda d, tgt, tv, t: F.arm_step(cfg, d, tgt, tv, t))
+        rng = np.random.default_rng(0)
+        held_max, q_max = np.zeros(3), np.zeros(3)
+        for k in range(int(secs * 100)):
+            sgn = 1.0 if flip is None or (k // flip) % 2 == 0 else -1.0
+            t = jnp.asarray([0.0, sgn * 150.0, sgn * 150.0, sgn * 150.0, 0.0]) + rng.normal(0, noise, 5)
+            d, tgt, tv, _ = step(d, tgt, tv, t)
+            held_max = np.maximum(held_max, np.abs(np.asarray(tgt)[1:4]))
+            q_max = np.maximum(q_max, np.abs(np.degrees(np.asarray(d.qpos))[1:4]))
+        return held_max, q_max
+
+    def test_hard_clip_holds_the_target_inside_the_range(self):
+        on, off = {**OFF, "body": "v2f", "clip": True}, {**OFF, "body": "v2f"}
+        held_on, q_on = self.drive_far(on, 6.0)                       # a target 40 deg beyond every limit, held 6 s
+        held_off, q_off = self.drive_far(off, 6.0)
+        self.assertLessEqual(float(held_on.max()), 110.0 - F.CLIP_MARGIN_DEG + 1e-9)             # the held target stops CLIP_MARGIN_DEG inside the range
+        self.assertAlmostEqual(float(held_off.max()), 110.0, places=6)                           # without the option it stops at the range itself
+        print("hard clip, target 150 deg held 6 s: max |q| per bend", q_on.round(3), "(no clip:", q_off.round(3), ")")
+        self.assertLessEqual(float((q_on - 110.0).max()), 1e-9)       # and the joint does not pass the range (a held target beyond it: the wrist alone reaches 111.07 deg without the stop)
+
+    def test_hard_clip_adversarial_excess_is_zero(self):
+        _, q_on = self.drive_far({**OFF, "body": "v2f", "clip": True}, 15.0, flip=70, noise=3.0)
+        excess = q_on - 110.0
+        print("hard clip, adversarial episode (targets +-150 deg flipping every 0.7 s plus noise), max excess beyond +-110 deg per bend:", excess.round(6))
+        self.assertLessEqual(float(excess.max()), 1e-9)               # without the stop: 0.557 deg at the elbow, 1.072 deg at the wrist
+
+    def test_clip_off_by_default_and_identical(self):
+        a = Switches.run_chunk_static({**OFF, "body": "v2f"})
+        b = Switches.run_chunk_static({**OFF, "body": "v2f", "clip": False})
+        self.assertTrue(np.array_equal(a["q"], b["q"]))
+
+
+class FirstEpochM3f(unittest.TestCase):
+    """WO13B's try 1 (body v2f, switches 2-4, jerk 0.03, switch 0.01) first epoch is reproduced with the new options off (~5 min)."""
+
+    def test_first_epoch_matches_wo13b_try1(self):
+        ref = json.load(open("/secondary/hyst-data/body/m3f/try1/result.json"))["hist"][0]
+        toy = m3f.ToyF(TOY)
+        C = M.load_cb()
+        cfg = {"body": "v2f", "obs_lp": True, "phase_lp": True, "xfade": True}
+        tr = m3f.Trainer(toy, C, cfg, 0.03, 1e-3, 40, 8, seed=0, log=lambda s: None, opts={"pen": True, "jerk": True, "sw": True}, w_jerk=0.03, w_sw=0.01)
+        tr.calibrate()
+        rec = tr.run_epoch()
+        for k in ("dec_e", "dec_i", "energy_rel", "rms_speed", "kappa_mean", "rate_mult", "abs_delta", "clip_share", "critic_loss", "sigma_delta", "hand_v", "jolt", "lim", "jerk", "tv"):
+            self.assertAlmostEqual(rec[k], ref[k], delta=1e-6 * max(1.0, abs(ref[k])), msg=k)
+
+
+
+class RaisedPlane(unittest.TestCase):
+    """WO15A (BRAIN_SPEC 7.30.6-7): contact time constant option, raised plane, plane-aware floor hinge."""
+
+    PLANE = V2.RAISED_PLANE_Z
+
+    def cfg(self, **kw):
+        return {**OFF, "body": "v2f", "clip": True, "ctc": V2.CONTACT_TC, "plane": self.PLANE, **kw}
+
+    def test_options_absent_use_the_old_models(self):
+        cfg = {**OFF, "body": "v2f"}
+        self.assertIs(F.body_model(cfg)[0], F.MODELS["v2f"])
+        self.assertIs(F.body_model({**cfg, "clip": True})[1], F.MX["v2f"])
+
+    def test_contact_time_constant_applies_to_collision_geoms(self):
+        m = F.body_model(self.cfg())[0]
+        hit = [g for g in range(m.ngeom) if m.geom_contype[g] or m.geom_conaffinity[g]]
+        self.assertTrue(all(abs(m.geom_solref[g][0] - V2.CONTACT_TC) < 1e-12 for g in hit))
+        self.assertAlmostEqual(float(F.MODELS["v2f"].geom_solref[hit[0]][0]), 0.02)             # the default model is untouched
+        plane = [g for g in range(m.ngeom) if m.geom(g).name == "table"][0]
+        self.assertAlmostEqual(float(m.geom_pos[plane][2]), self.PLANE)
+
+    def test_base_column_does_not_collide_with_the_raised_plane(self):
+        m = F.body_model(self.cfg())[0]
+        plane = [g for g in range(m.ngeom) if m.geom(g).name == "table"][0]
+        collides = lambda g: bool((m.geom_contype[plane] & m.geom_conaffinity[g]) or (m.geom_contype[g] & m.geom_conaffinity[plane]))
+        column = [g for g in range(m.ngeom) if m.geom_contype[g] == 4][0]                          # the static base column (bits 4 / 2)
+        self.assertFalse(collides(column))
+        self.assertTrue(all(collides(g) for g in range(m.ngeom) if m.geom_contype[g] == 2))        # links and ball do
+        d = mujoco.MjData(m)
+        d.qpos[:] = np.radians(MA.NEUTRAL_DEG)
+        mujoco.mj_forward(m, d)
+        self.assertEqual(d.ncon, 0)                                                               # the column (z 0 to 0.08) crosses the plane height without contact
+
+    def test_floor_hinge_known_pose(self):
+        full = jnp.tile(jnp.zeros(5), (60, 1))                                                    # the arm straight along x at z = 0.08: the ball surface is at 0.02
+        self.assertAlmostEqual(float(F.penalties(full, self.PLANE)["floor"]), self.PLANE + 0.06 - 0.08, places=12)
+        self.assertEqual(float(F.penalties(jnp.tile(jnp.asarray(MA.NEUTRAL_DEG), (60, 1)), self.PLANE)["floor"]), 0.0)
+        rng = np.random.default_rng(2)
+        for _ in range(4):
+            q = np.array([0.0, *rng.uniform(-100, 100, 3), 0.0])
+            P = R.fk_points(q[None])[0]
+            c = min(P[1:5, 2].min() - 0.01 - self.PLANE, P[5, 2] - 0.06 - self.PLANE)
+            self.assertAlmostEqual(float(F.penalties(jnp.tile(jnp.asarray(q), (60, 1)), self.PLANE)["floor"]), max(0.0, -c), places=9)
+
+    def test_held_press_has_no_floor_margin_breach_and_is_stable(self):
+        cfg = self.cfg()
+        step = jax.jit(lambda d, tgt, tv, t: F.arm_step(cfg, d, tgt, tv, t))
+        for h in ([0.0, 150.0, 150.0, 150.0, 0.0], [0.0, 100.0, 100.0, 100.0, 0.0], [0.0, 45.0, 0.0, -30.0, 0.0], [0.0, 100.0, 0.0, 30.0, 0.0]):
+            d, tgt, tv = F.arm_init(cfg, np.array(MA.NEUTRAL_DEG, float))
+            qs = []
+            for _ in range(1000):
+                d, tgt, tv, _ = step(d, tgt, tv, jnp.asarray(h))
+                qs.append(np.degrees(np.asarray(d.qpos)))
+            qs = np.array(qs)
+            self.assertTrue(np.isfinite(qs).all())
+            b = R.breaches(qs.reshape(1, 20, 50, 5))
+            self.assertEqual(b["floor_m"]["episodes_with_breach"], 0, (h, b["floor_m"]))               # check-csv floor rule (0.05 / 0.11 m from z = 0) never broken
+            self.assertEqual(b["joint_range_deg"]["episodes_with_breach"], 0)
+            P = R.fk_points(qs)
+            self.assertLess(float(np.linalg.norm(np.diff(P[-101:, 5], axis=0), axis=1).mean() * 100.0), 0.01)    # settled hand speed < 0.01 m/s
+
+    def test_raised_plane_adversarial_has_no_breach(self):
+        cfg = self.cfg()
+        step = jax.jit(lambda d, tgt, tv, t: F.arm_step(cfg, d, tgt, tv, t))
+        d, tgt, tv = F.arm_init(cfg, np.array(MA.NEUTRAL_DEG, float))
+        rng = np.random.default_rng(0)
+        qs = []
+        for k in range(1500):
+            sgn = 1.0 if (k // 70) % 2 == 0 else -1.0
+            d, tgt, tv, _ = step(d, tgt, tv, jnp.asarray([0.0, sgn * 150.0, sgn * 150.0, sgn * 150.0, 0.0]) + rng.normal(0, 3.0, 5))
+            qs.append(np.degrees(np.asarray(d.qpos)))
+        b = R.breaches(np.array(qs).reshape(1, 30, 50, 5))
+        self.assertEqual(b["floor_m"]["episodes_with_breach"], 0, b["floor_m"])
+
+
+class FirstEpochRerun1(unittest.TestCase):
+    """WO14A's rerun (hinges weight 1, hard stop) first epoch is reproduced by the default --w-floor (~5 min); weight 3 changes the loss (the floor term and the trained policy differ)."""
+
+    def trainer(self, **kw):
+        toy = m3f.ToyF(TOY)
+        cfg = {"body": "v2f", "obs_lp": True, "phase_lp": True, "xfade": True, "clip": True}
+        return m3f.Trainer(toy, M.load_cb(), cfg, 0.03, 1e-3, 40, 8, seed=0, log=lambda s: None, opts={"pen": True, "jerk": True, "sw": True, "pen2": True}, w_jerk=0.03, w_sw=0.01, **kw)
+
+    def test_default_weight_reproduces_wo14a_first_epoch(self):
+        ref = json.load(open("/secondary/hyst-data/body/m3f/rerun1/try1/result.json"))["hist"][0]
+        tr = self.trainer()
+        self.assertEqual(tr.w["floor"], 1.0)
+        tr.calibrate()
+        rec = tr.run_epoch()
+        for k in ("dec_e", "dec_i", "energy_rel", "rms_speed", "kappa_mean", "rate_mult", "abs_delta", "critic_loss", "hand_v", "jolt", "lim", "jerk", "tv", "floor", "acc"):
+            self.assertAlmostEqual(rec[k], ref[k], delta=1e-6 * max(1.0, abs(ref[k])), msg=k)
+
+    def test_weight_three_changes_the_loss_by_two_floor_terms(self):
+        tr = self.trainer()
+        tr.calibrate()
+        g = "A"
+        idx = tr.groups[g]
+        E = len(idx)
+        inps = tr.toy.inputs(idx, jax.random.PRNGKey(3))
+        yz = jnp.asarray(tr.toy.yz[idx])
+        carry = jax.vmap(lambda q: F.init_carry(tr.cfg, q, tr.C))(jnp.asarray(m3d.start_poses(E, 100)))
+        S = tr.stats
+        nrm = {k: jnp.asarray(v) for k, v in tr.nrm.items()}
+        out = []
+        for wf in (1.0, 3.0):
+            w = {"jerk": jnp.asarray(0.03), "sw": jnp.asarray(0.01), "floor": jnp.asarray(wf)}
+            (l, (_, aux)), _ = tr.fns["loss"](tr.P, tr.obs[g][0], tr.obs[g][1], carry, m3d.take(inps, 8, 16), yz[:, 8:16], m3e.valid_mask(8, 8, E), 1.0, 0.03, tr.e0, S["dmu"], S["dsd"], S["imu"], S["isd"], nrm, w)
+            out.append((float(l), float(aux["terms"]["floor"])))
+        self.assertAlmostEqual(out[1][1], out[0][1], places=12)                    # the floor term itself is the same
+        self.assertGreater(out[0][1], 0.0)
+        self.assertAlmostEqual(out[1][0] - out[0][0], 0.03 * 2.0 * out[0][1], places=9)     # LAMBDA x (3 - 1) x the floor term
 
 
 if __name__ == "__main__":
