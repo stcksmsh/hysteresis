@@ -92,6 +92,13 @@ class Afc(unittest.TestCase):
             shuf += S.pair_2afc(song(0.05, seed=k), song(0.11, seed=100 + k), rng, n_shuffle=6)["shuffled"]
         self.assertLess(abs(np.mean(shuf) - 0.5), 0.1)
 
+    def test_unequal_song_lengths_do_not_lift_the_shuffled_control(self):
+        rng = np.random.default_rng(7)
+        shuf = []
+        for k in range(12):
+            shuf += S.pair_2afc(song(0.05, secs=600, seed=k), song(0.11, secs=130, seed=50 + k), rng, n_shuffle=6)["shuffled"]
+        self.assertLess(abs(np.mean(shuf) - 0.5), 0.07)
+
     def test_too_short_song_is_skipped(self):
         self.assertIsNone(S.pair_2afc(song(0.05, secs=100), song(0.11, secs=300)))
 

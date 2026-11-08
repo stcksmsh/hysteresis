@@ -118,6 +118,8 @@ def pair_2afc(qa, qb, rng=None, n_shuffle=0, min_clips=2):
     cb = [clips_of(qb, 0), clips_of(qb, 1)]
     if min(len(ca[0]), len(ca[1]), len(cb[0]), len(cb[1])) < min_clips:
         return None
+    n0, n1 = min(len(ca[0]), len(cb[0])), min(len(ca[1]), len(cb[1]))          # equal clips per song and half: otherwise the majority class lifts accuracy (and the shuffled control) above 50 %
+    ca, cb = [ca[0][:n0], ca[1][:n1]], [cb[0][:n0], cb[1][:n1]]
     tr = ca[0] + cb[0]
     te = ca[1] + cb[1]
     ytr = np.r_[np.zeros(len(ca[0])), np.ones(len(cb[0]))]
