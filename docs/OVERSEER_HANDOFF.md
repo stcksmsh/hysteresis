@@ -113,7 +113,17 @@ r400 0.895/0.921, r600 0.913/0.931 (K5 try 1 at r600: 0.574/0.539). ~65 s/round 
   and to WATCH the training unit so it starts the check on best.pkl (6 thr / 14 GB, --working-directory) when it ends. Then videos.
 - Agent 2 [071001]: fresh, idle. Owes (optional, record only) WO17 `rerun4/summary.json` + night-log "Work order 17" section on body-m3f.
 
-**2026-11-08 ~23:40 — CURRENT:** Planner ruled on pass2 = BRAIN_SPEC 7.33 (pass recorded numerically; inner-rhythm wording only with
+**2026-11-09 ~00:15 — CURRENT:** NEW DIRECTION = BRAIN_SPEC 7.34 (user + planner; research doc `docs/RESEARCH_2026-11-08.md` reference
+only). Diagnosis (untested): one shape because the target was low-dim/fast, 30 s within-song z-scoring hid song differences, costs priced
+variety. Stage 0 = analysis only (pass2 best.pkl r600 + v47 one arm): between-song JS (5 cm ball grid), postures >= 0.5 % dwell, shoulder sd,
+peak hand speed vs bound, program entropy, machine 2AFC on tempo-matched held-out pairs; expect pass2 <= 60 %, v47 clearly higher; pass2
+> 60 % -> stop/report. Overseer operationalisation committed at the end of 7.34 (planner may amend before the run). Stage 1 = toy 2-link arm,
+arms (i)-(iv) cumulative, hinges + dual multipliers; pass (iv) JS >= 3x (i) with decoding >= 0.7. Order: report after Stage 0, then Stage 1.
+Prompts on body a4b4e77: `docs/BUILDER_PROMPT_WO19_STAGE0.md` (agent 1, branch body-s0, data /secondary/hyst-data/body/s0/, 6 thr/12 GB),
+`docs/BUILDER_PROMPT_WO20_STAGE1_TOY.md` (agent 2, branch body-s1, data .../s1/, builds + STAGE1_RULES.md, NO run until overseer says
+"run Stage 1" after the Stage 0 report). NOT SENT: waiting for the user's word. Hardware memory updated (12 V STS3215).
+
+**2026-11-08 ~23:40:** Planner ruled on pass2 = BRAIN_SPEC 7.33 (pass recorded numerically; inner-rhythm wording only with
 "about 3 %" qualifier; BG single program -> "present", never choosing; 0.741 m/s ceiling recorded; late-val-drop diagnosis required before
 any future long run). USER VERDICT on the three-panel videos = 7.33.7: pass2 "same exact shape of movement, just repeated at different
 speeds ... not conveying anything". Overseer measurement: pass2 214-239 distinct 5-deg bend postures vs v47 1,734-2,321; shoulder sd ~3 deg
