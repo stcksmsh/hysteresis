@@ -94,74 +94,41 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## CURRENT STATE (2026-11-09 ~03:00, saved for an overseer clear) — read this first, then the dated notes below
+## CURRENT STATE (2026-11-09 ~17:15, saved for an overseer clear) — read this first, then the dated notes below
 
-**Rules of record:** `docs/BRAIN_SPEC.md` on body, latest **7.33-7.36** (7.33 pass2 rulings + user verdict "same shape repeated"; 7.34 new
-direction: diagnosis + Stage 0 + Stage 1 + overseer operationalisation; 7.35 Stage 1 toy rulings (5 s z-score, arm 0, collapse
-precondition); 7.36 Stage 0 rulings (closed; occupied cells replace dwell postures; Stage 3 2AFC interleaved; ceiling diagnosis)).
-Reference only: `docs/RESEARCH_2026-11-08.md`. Toy rules: `docs/STAGE1_RULES.md`. Decisions go to the planner as briefs.
+**Rules of record:** `docs/BRAIN_SPEC.md` on body, latest **7.37-7.38** (7.37 Stage 1 results rulings: fresh-seed rerun, pre-registered
+precondition, cap probe; 7.38 Stage 1 closed without verdict, arm ii forward, D-hinge toy check, thread-count rule). Toy rules
+`docs/STAGE1_RULES.md` (sections 11 = WO22, 12 = WO24 D hinge). Decisions go to the planner as briefs.
 
-**Nothing is running.** Both builders idle: agent 1 [9ae40e] (did WO19 Stage 0 + WO21 ceiling), agent 2 [4cd51a] (did WO20 Stage 1).
-Refs change on restart: use ListAgents. All builder branches verified and merged: body = 918f10a (body-k5p2, body-s0, body-s0b, body-s1),
-keys-decide merged.
+**Nothing is running.** Both builders idle: agent 1 [9ae40e] (did WO23), agent 2 [4cd51a] (did WO22, WO24). Refs change on restart: use
+ListAgents. All builder branches verified and merged: body = caca60d (body-s1r, body-s1d, body-acc), keys-decide merged.
 
-**WAITING: planner answers to `docs/PLANNER_BRIEF_STAGE1_RESULTS.md`** (sent to user ~02:50). Summary:
-- Stage 1 (12 runs, `/secondary/hyst-data/body/s1/`): precondition NOT MET (occupied cells fail because the untrained toy arm is nearly
-  still) -> no verdict. Informational: arms 0/i between-song JS ~ half-song control (pass2 signature); arm ii JS 0.77 (3.7x i) with D
-  0.73/0.77; iii doubles cells; iv D 0.65-0.69 < 0.7. Toy arm i only partly collapsed (2AFC 0.70-0.86 vs pass2 0.49).
-- Q1 recommends: pre-register collapse = between/half JS ratio <= 1.5 on both seeds, rerun all arms on FRESH seeds 2/3 (~1 h, agent 2,
-  `scripts/body/s1_chain.sh` resume-safe; new seeds need a new output dir or seed option). Q2 ingredients after rerun (default ii + iii).
-  Q3 report-only ACC_SHARE probe (generator acceleration cap 0.25 binds pitch joints 99.8 %). Q4 record partial-collapse caveat.
-- When answers arrive: record as BRAIN_SPEC 7.37 on body (detached temp worktree, `git push origin HEAD:body`), BEFORE any run; then
-  message agent 2 (rerun) / agent 1 (probe) only with the user's word.
+**WAITING: planner answers to `docs/PLANNER_BRIEF_WO23_WO24_RESULTS.md`** (sent ~17:00; the user will paste them into the fresh overseer).
+Questions: Q1 keep generator caps 0.25/0.8 for Stage 3 (rec.) vs AS vs S1; Q2 ingredients ii + iii + D hinge (rec.), with a toy check of a
+multiplier that can fall `mu_D <- max(0, mu_D + eta (0.7 - D_est))` (2 seeds ~35 min) before Stage 3; Q3 limit-check reporting (p99 + max,
+method stated, single-sample max = flag); Q4 rule the Stage 3 design (5-DoF run, human real-vs-swapped-music test, ingredients, caps,
+compute box, whether the toy check comes first).
+**When answers arrive:** record as BRAIN_SPEC 7.39 on body (detached temp worktree in job tmp, `git push origin HEAD:body`) BEFORE any run;
+merge body into keys-decide; write builder prompt(s) on body (header block from `docs/BUILDER_PROMPT_WO24_D_HINGE_TOY.md`; next number
+WO25); send only on the user's word (user usually clears builders first). Any Stage 3 design detail not ruled -> brief, not a guess.
 
-**2026-11-09 ~09:20 — CURRENT (supersedes the WAITING item above):** planner answered the Stage 1 results brief = BRAIN_SPEC **7.37**
-(body c013514): Q1 (a) rerun all 6 arms on fresh seeds 2/3, pre-registered precondition = arm 0 or i between/half JS <= 1.5 on both seeds
-(cells + 2AFC reported only), pass rule = smallest of ii/iii/iv reaching >= 2x arm i JS with D >= 0.7 (iv >= 3x reported), seeds 0/1
-informational; overseer operationalisation in 7.37.1 (seed means, D per seed) flagged amendable. Q2 default ii + iii. Q3 report-only
-ACC_SHARE 0.25->0.4 / speed share 0.8->0.95 / both probe on M3f toy, hypothesis "cap sets the shape" untested, report vs per-joint servo
-limits. Q4 partial-collapse caveat recorded. Prompts on body 7f1baee: `docs/BUILDER_PROMPT_WO22_STAGE1_RERUN.md` (agent 2, branch
-body-s1r, cores 6-11, data /secondary/hyst-data/body/s1r/, ~1 h) and `docs/BUILDER_PROMPT_WO23_ACC_CAP_PROBE.md` (agent 1, branch
-body-acc, cores 12-17, data /secondary/hyst-data/body/acc/, baseline = m3f/rerun4/seed0, 3 new seed-0 runs ~45 min each). SENT 2026-11-09 ~09:30 (user cleared both):
-WO22 -> agent 2 [4cd51a], WO23 -> agent 1 [9ae40e], notify_when_idle both. Check first pushes of body-s1r / body-acc by ~10:00. Verify: WO22 rules section 11 + verdict script pushed before launch; WO23 default bit-identity, realised
-joint acc/speed vs limits recomputed from rollouts.
+**Today's results (all verified by overseer, numbers in the briefs):**
+- WO22 Stage 1 rerun seeds 2/3: no verdict (arm 0 ratio 0.93/4.84, arm i 4.82/1.21). Brief `PLANNER_BRIEF_STAGE1_RERUN.md` -> 7.38.
+- WO24 D hinge seeds 4/5: iii+D D 0.790/0.769, cells 47 vs ii 21-24; plain iii also >= 0.7 here (fails 3/6 seeds overall); mu_D only rises
+  (ends 8.45/10.21), MMD lowest. Data `/secondary/hyst-data/body/s1d/`.
+- WO23 cap probe (M3f toy seed 0, 6 thr): acc within servo limits (p99 <= 0.46x); speed max 1.006x (A1) / 1.001x (AS); raising ACC_SHARE
+  moves joints acc-cap -> speed-cap, shoulder 99.6 % on acc cap always; JS ratio 0.78-0.81 everywhere; e'2 A1 .033 / AS .048 (toy limit
+  .011). Data `/secondary/hyst-data/body/acc/` (report.txt). 7.37.3 hypothesis not supported.
 
-**2026-11-09 ~09:45:** WO22 running (hyst-wo22-s1r, pre-run commit 3de54c7 checked: --seeds default 0,1; verdict script = 7.37.1, ref i
-else 0). Seed 2 done: arm 0 JS ratio 0.93 (collapse ok), arm i 4.8 (not collapsed); D ii 0.689, iii 0.643, iv(.05) 0.589, iv(.5) 0.643 (all
-< 0.7 on seed 2); seed 3 running, ETA ~10:15. WO23: identity control verified by overseer (origin/body vs body-acc epoch 0 identical except
-secs); B retrained (overseer ruling: same code/threads/cores for all four); chain hyst-wo23-chain launched 09:41, ETA ~14:05.
-LESSON: M3f training numerics depend on thread count (epoch-0 dec_e 1.9956 at 3 thr, 1.9924 at 6, 1.9983 at 8; calibration identical) -
-never compare runs at different thread counts; retrain baselines at the probe's thread count.
+**Session lessons (2026-11-09 day):**
+- M3f training numbers depend on thread count with the same code (now rule 7.38.4): retrain baselines at the probe's thread count.
+- Monitor pipelines: `cut` after `grep --line-buffered` buffers -> silent watcher; use `awk '{...; fflush()}'`. watch_unit.sh filters
+  can miss epoch lines; a direct `tail -F | grep --line-buffered | awk fflush` + unit-state loop works.
+- Report scripts that read old runs must default missing new options (WO23 report crashed on rerun4's args).
+- A single-sample max of realised acceleration depends on the difference method (central vs plain); report p99 alongside.
+- Builders go idle with units running; nudge them when the unit ends (they did their report steps only when asked).
 
-**2026-11-09 ~10:20 — CURRENT:** WO22 DONE (agent 2, body-s1r 261c760, verified: diff = seeds option + new files + rules s11 + log;
-test_s1r_verdict + test_s1_toy OK in separate processes; all 12 numbers recomputed, match), MERGED body 261c760, keys-decide. NO VERDICT
-under 7.37.1 (arm 0 ratio 0.93/4.84, arm i 4.82/1.21). Brief `docs/PLANNER_BRIEF_STAGE1_RERUN.md` SENT (Q1 close Stage 1 informational,
-Q2 ii alone default / D hinge for iii, Q3 record seed dependence). WAITING: planner answers; WO23 chain (hyst-wo23-chain, ETA ~14:05) ->
-verify (recompute cap shares + realised joint acc/speed vs limits from rollouts) -> own brief. Agent 2 idle.
-
-**2026-11-09 ~13:45 — CURRENT:** planner ruled the Stage 1 rerun = BRAIN_SPEC **7.38** (body f8eee24): Stage 1 closed without verdict
-(four-seed table informational); forward = arm ii; route to iii = ii + iii with D >= 0.7 hinge (dual multiplier), toy check seeds 4/5
-report-only; seed dependence recorded; thread-count rule (fix and state threads, compare only at equal counts). Next per planner: WO23
-brief, then Stage 3 design (5-DoF run, human real-vs-swapped-music test) ruled with both. Prompt `docs/BUILDER_PROMPT_WO24_D_HINGE_TOY.md`
-(agent 2, branch body-s1d, cores 6-11, data /secondary/hyst-data/body/s1d/, ~30 min) written, NOT SENT (waiting for the user's word).
-WO23 chain: A1 + B done (B argmax ext 1.172 int 1.174 e'1 2.55 e'2 0.0013 programs 2; A1 ext 1.098 int 1.129 e'1 3.86 e'2 0.0334
-programs 1), S1 running, AS next, ETA ~16:15.
-
-**2026-11-09 ~14:30 — CURRENT:** WO24 DONE (agent 2, body-s1d 37080a3, verified: s1_toy.py diff keeps old path (dw None default), test_s1d
-OK by overseer, all 6 result.json recomputed = builder's report), MERGED body 37080a3 + keys-decide. Held-out D ii .780/.767, iii .737/.752,
-iii+D .790/.769 (s4/s5); cells ii 21/24, iii 44.5/44.8, iii+D 47.3/46.9; JS ratio ii 24/20.5, iii 11.2/11.9, iii+D 11.6/11.9; 2AFC iii+D
-0.967; MMD ii .45/.51, iii .31/.32, iii+D .21/.22; mu_D only rises (ends 8.45/10.21). Plain iii also >= 0.7 on these seeds -> the hinge's
-own effect is not isolated. NOT yet briefed: goes into ONE brief with WO23 (planner: WO23 brief, then Stage 3 design). WO23 S1 running,
-AS next, ETA ~16:40. Both builders idle.
-
-**2026-11-09 ~17:00 — CURRENT:** WO23 DONE (agent 1, body-acc 7d7c9d3; chain 09:41-16:23, report step crashed on rerun4_ref getattr, fixed +
-rerun), verified (overseer recomputed realised joint speed/acc from rollouts with np.diff: speed + acc p99 match; acc single-sample max
-method-dependent, B shoulder 1.008x by 2nd difference vs 0.805 central), merged body caca60d + keys-decide. Within limits on acc
-everywhere; speed max 1.006 (A1) / 1.001 (AS). Raising ACC_SHARE moves joints acc-cap -> speed-cap; shoulder 99.6 % on acc cap always;
-JS ratio 0.78-0.81 all settings; e'2 A1 .033 AS .048. Combined brief `docs/PLANNER_BRIEF_WO23_WO24_RESULTS.md` SENT (Q1 keep caps,
-Q2 ii+iii+D with descending mu_D toy check, Q3 limit-check reporting, Q4 rule Stage 3). WAITING: planner. Nothing running; agents idle.
-
-**Key verified results of this session:** pass2 (K5-pass2, best r600) passed its numeric bar (7.33) but the user rejected the videos;
+**Key verified results of the 2026-11-08/09 night session:** pass2 (K5-pass2, best r600) passed its numeric bar (7.33) but the user rejected the videos;
 Stage 0: pass2 machine 2AFC 49.1 % (chance) over 128 tempo-matched held-out pairs, JS between 0.30 < half 0.46; v47 held-out impossible
 (auto beat grid fails), v47 3 danced songs = weak ref; 0.741 m/s = start-up transient at 2.74 s, not a bound (after 8 s peak 0.680 sd 0.036).
 
