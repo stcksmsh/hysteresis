@@ -113,6 +113,13 @@ r400 0.895/0.921, r600 0.913/0.931 (K5 try 1 at r600: 0.574/0.539). ~65 s/round 
   and to WATCH the training unit so it starts the check on best.pkl (6 thr / 14 GB, --working-directory) when it ends. Then videos.
 - Agent 2 [071001]: fresh, idle. Owes (optional, record only) WO17 `rerun4/summary.json` + night-log "Work order 17" section on body-m3f.
 
+**2026-11-09 ~02:10:** WO21 ceiling DONE (agent 1, body-s0b b813796, merged into body), verified (overseer recomputed from Stage 0 hand
+positions): 0.741 m/s is a START-UP transient at t = 2.74 s from the fixed start pose (peak in first 8 s on 331/357 songs, 0.7407 sd 0.0004);
+after 8 s peak 0.680 sd 0.036 (0.554-0.806). Amp cap x1.5 / freq x1.5: unchanged; c = 0.35 lowers it -> (a)(b)(c) ruled out. Steady-dance
+limiter (builder, not recomputed): the CPG's own caps in cpg.py: pitch joints on the acceleration cap ACC_SHARE 0.25 for 99.8-99.9 % of
+steps; base/roll on the 0.8 V speed cap 96/98 %; analytic max hand speed ~1.9-2.0 m/s. Goes into the Stage 1 results brief (Stage 3 design).
+Stage 1 running (hyst-wo20-stage1-a, ETA ~02:50-03:20).
+
 **2026-11-09 ~02:00 — CURRENT:** Planner ruled Stage 0 = BRAIN_SPEC 7.36 (body 4c4ebcd): Stage 0 closed (2AFC at chance confirms diagnosis;
 v47 3 songs weak ref); occupied cells (any dwell, equal durations) + entropy replace dwell postures everywhere; Stage 3 2AFC interleaved
 clips with 30 s gap; RUN Stage 1 now; report-only 0.741 ceiling diagnosis. body-s0 MERGED into body (8ef8d5a), keys-decide 3224f55.
