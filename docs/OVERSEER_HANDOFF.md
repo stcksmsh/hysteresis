@@ -147,6 +147,13 @@ brief, then Stage 3 design (5-DoF run, human real-vs-swapped-music test) ruled w
 WO23 chain: A1 + B done (B argmax ext 1.172 int 1.174 e'1 2.55 e'2 0.0013 programs 2; A1 ext 1.098 int 1.129 e'1 3.86 e'2 0.0334
 programs 1), S1 running, AS next, ETA ~16:15.
 
+**2026-11-09 ~14:30 — CURRENT:** WO24 DONE (agent 2, body-s1d 37080a3, verified: s1_toy.py diff keeps old path (dw None default), test_s1d
+OK by overseer, all 6 result.json recomputed = builder's report), MERGED body 37080a3 + keys-decide. Held-out D ii .780/.767, iii .737/.752,
+iii+D .790/.769 (s4/s5); cells ii 21/24, iii 44.5/44.8, iii+D 47.3/46.9; JS ratio ii 24/20.5, iii 11.2/11.9, iii+D 11.6/11.9; 2AFC iii+D
+0.967; MMD ii .45/.51, iii .31/.32, iii+D .21/.22; mu_D only rises (ends 8.45/10.21). Plain iii also >= 0.7 on these seeds -> the hinge's
+own effect is not isolated. NOT yet briefed: goes into ONE brief with WO23 (planner: WO23 brief, then Stage 3 design). WO23 S1 running,
+AS next, ETA ~16:40. Both builders idle.
+
 **Key verified results of this session:** pass2 (K5-pass2, best r600) passed its numeric bar (7.33) but the user rejected the videos;
 Stage 0: pass2 machine 2AFC 49.1 % (chance) over 128 tempo-matched held-out pairs, JS between 0.30 < half 0.46; v47 held-out impossible
 (auto beat grid fails), v47 3 danced songs = weak ref; 0.741 m/s = start-up transient at 2.74 s, not a bound (after 8 s peak 0.680 sd 0.036).
