@@ -24,7 +24,7 @@ WIN_C, SUB_C = 160, 4                   # contrastive window (8 s), motion subsa
 V_MAX, J_MAX, Q_MARGIN = 1.2, 400.0, 0.15
 GRID_N, GRID_LIM = 24, 0.6
 ARMS = ["0", "i", "ii", "iii", "iv"]
-LEVEL = {"0": 0, "i": 0, "ii": 1, "iii": 2, "iv": 3, "iii+D": 2}   # cumulative level; arm 0 = arm i with pass2 soft costs instead of hinges
+LEVEL = {"0": 0, "i": 0, "ii": 1, "iii": 2, "iv": 3, "iii+D": 2, "iii+Df": 2}   # cumulative level; arm 0 = arm i with pass2 soft costs instead of hinges
 D_TARGET, ETA_D, D_SONGS = 0.7, 0.16, 16                       # WO24 (rules section 12): D hinge target, dual step per epoch, held-in songs
 TAU_Z = 5.0                                              # arm i z-score time constant (s), 1/8 of the song (BRAIN_SPEC 7.35)
 LAM_SOFT, W_JERK_SOFT = 0.03, 0.03                       # pass2: LAM, W_JERK
@@ -275,9 +275,10 @@ def adam_step(p, g, st, lr=3e-3, clip=1.0, b1=0.9, b2=0.999):
     return p, {"m": m, "v": v, "t": t}
 
 
-def d_hinge_update(mu_d, d_est, eta=ETA_D, target=D_TARGET):
-    """Rules section 12: g_D = max(0, target - D_est); mu_D <- max(0, mu_D + eta * g_D). -> (mu_D, g_D)."""
-    g = max(0.0, target - d_est)
+def d_hinge_update(mu_d, d_est, eta=ETA_D, target=D_TARGET, falling=False):
+    """Rules section 12: g_D = max(0, target - D_est); mu_D <- max(0, mu_D + eta * g_D). -> (mu_D, g_D).
+    falling=True (section 13, arm iii+Df): g_D = target - D_est (signed), so mu_D falls while D_est > target; never below 0."""
+    g = (target - d_est) if falling else max(0.0, target - d_est)
     return max(0.0, mu_d + eta * g), g
 
 
@@ -309,7 +310,7 @@ def train(arm, seed, epochs, lam=0.0, data=None, log=print, params=None):
     st = adam_init(params)
     mu = jnp.ones(3)
     mu_d, dw = 0.0, 1.0
-    use_d = arm == "iii+D"
+    use_d = arm in ("iii+D", "iii+Df")
     rng = np.random.default_rng(10_000 + seed)
     nrm = soft_norm(params, tr) if arm == "0" else None
     if nrm is not None:
@@ -329,7 +330,7 @@ def train(arm, seed, epochs, lam=0.0, data=None, log=print, params=None):
         dinfo = {}
         if use_d:
             de = d_est(params, tr["feats"][:D_SONGS], tgt[:D_SONGS])
-            mu_d, gd = d_hinge_update(mu_d, de, ETA_D)
+            mu_d, gd = d_hinge_update(mu_d, de, ETA_D, falling=arm == "iii+Df")
             dw = 1.0 + mu_d
             dinfo = {"d_est": de, "g_D": gd, "mu_D": mu_d}
         hist.append({"epoch": ep, "loss": a[0], "dec": a[1], "nce": a[2], "logdet": a[3], "g": a[4:].tolist(), "mu": [float(x) for x in mu], "sec": time.time() - t0, **dinfo})
@@ -533,7 +534,7 @@ def run(arm, seed, epochs, lam, out, data=None):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--arm", choices=ARMS + ["iii+D"])
+    ap.add_argument("--arm", choices=ARMS + ["iii+D", "iii+Df"])
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--epochs", type=int, default=1000)
     ap.add_argument("--lam", type=float, default=0.0)

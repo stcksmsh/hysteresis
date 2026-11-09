@@ -130,3 +130,12 @@ Arm `iii+D` = arm iii (level 2: corpus-normalised slow target, matched InfoNCE, 
 - **Cost:** one rollout + observer over 16 songs plus 20 shifts per epoch (measured in the night log).
 - Runs: arms ii, iii, iii+D x seeds 4 and 5, 1000 epochs, 6 threads on cores 6-11 (`taskset -c 6-11`), one detached unit, resume-safe. Data `/secondary/hyst-data/body/s1d/`. Report only (`s1d_report.py`): no pass claim; states per seed whether iii+D reaches held-out D >= 0.7 and its occupied cells against ii and iii on the same seed.
 - Code: `s1_toy.py` (`d_est`, `d_hinge_update`, arm `iii+D`; `loss_fn` gained `dw`, default None = untouched code path), `s1d_chain.py`, `s1d_chain.sh`, `s1d_report.py`; tests `test_s1d.py`.
+
+## 13. WO25 (BRAIN_SPEC 7.39.2): toy check of a D multiplier that can fall (before the run)
+
+New arm `iii+Df` = arm `iii+D` (section 12) with **only the multiplier update changed**:
+`mu_D <- max(0, mu_D + eta_D * (0.7 - D_est))`, `eta_D = 0.16`, `mu_D = 0` at the start. The signed term means `mu_D` rises while `D_est < 0.7` and falls while `D_est > 0.7`, never below 0. Everything else as section 12: the same held-in 16 songs, the same `D_est`, the same `(1 + mu_D) * dec` scaling, epoch 0 uses `mu_D = 0`. The rising version (`iii+D`) is unchanged.
+- **Runs:** arms `iii+D` (rising) and `iii+Df` (falling), fresh seeds 6 and 7, 1000 epochs, exactly 6 threads, `taskset -c 6-11`: 4 runs, one detached unit, resume-safe. Data `/secondary/hyst-data/body/s1f/`.
+- **Rule (BRAIN_SPEC 7.39.2, verbatim):** the falling multiplier is used in Stage 3 if held-out D >= 0.7 on **both** seeds **and** MMD >= the rising version's mean MMD on seeds 6 and 7; otherwise the rising version.
+- **Operationalisation (overseer default):** "MMD" of the falling version = its mean over seeds 6 and 7 (`mmd_between`), compared with the rising version's mean over seeds 6 and 7. The per-seed comparison is printed too; if the per-seed and mean readings disagree, the report says so plainly and the planner rules.
+- Code: `s1_toy.py` (`d_hinge_update(..., falling=False)`, arm `iii+Df`), `s1f_chain.py`, `s1f_chain.sh`, `s1f_report.py` (reuses the `s1d_report.py` metrics), tests `test_s1f.py`. All existing arms bit-identical (test: one epoch of `iii+D` seed 4 equals origin/body in loss and `mu_D`).
