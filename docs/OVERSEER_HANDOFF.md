@@ -107,10 +107,10 @@ ListAgents. All builder branches verified and merged: body = caca60d (body-s1r, 
 toy check of a FALLING multiplier `mu_D <- max(0, mu_D + 0.16 (0.7 - D_est))` first (seeds 6/7; falling used iff held-out D >= 0.7 on both
 seeds AND MMD >= rising version's mean on seeds 6/7, else rising); limit report p99 + max, central diffs; full Stage 3 design + bars (a)-(f)
 fixed in 7.39.4; order toy check -> timed round -> Stage 3 run -> bars -> user's eye -> human test.
-**Prompt WO25 written, NOT SENT:** `docs/BUILDER_PROMPT_WO25_FALLING_MU_TOY.md` (body da9912e; branch body-s1f, data
+**Prompt WO25 SENT 2026-11-09 ~17:50 to agent 2 [4cd51a] (cleared; notify_when_idle). Check body-s1f first push within 30 min:** `docs/BUILDER_PROMPT_WO25_FALLING_MU_TOY.md` (body da9912e; branch body-s1f, data
 /secondary/hyst-data/body/s1f/, 4 runs iii+D vs iii+Df, 6 thr cores 6-11, ~30 min). Overseer operationalisation in it: falling MMD = mean over
 seeds 6/7 vs rising mean; per-seed reading also printed; disagreement -> planner. Recommended builder: agent 2 (did WO24, knows s1_toy.py).
-Send only on the user's word. keys-decide merged body (358192f).
+Agent 1 [9ae40e] cleared, idle. keys-decide merged body (358192f).
 **NEXT after WO25:** verify (recompute D, MMD from result.json; bit-identity test), record which multiplier wins, then write the Stage 3
 build prompt (WO26: two state streams, objective per 7.39.4, timed round first; ask if > 30 h). Any design detail 7.39.4 does not rule -> brief.
 
