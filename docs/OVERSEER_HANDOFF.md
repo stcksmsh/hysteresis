@@ -94,7 +94,7 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## CURRENT STATE (2026-11-09 ~18:45) — read this first, then the dated notes below
+## CURRENT STATE (2026-11-09 ~19:20) — read this first, then the dated notes below
 
 **Rules of record:** `docs/BRAIN_SPEC.md` on body, latest **7.37-7.38** (7.37 Stage 1 results rulings: fresh-seed rerun, pre-registered
 precondition, cap probe; 7.38 Stage 1 closed without verdict, arm ii forward, D-hinge toy check, thread-count rule). Toy rules
@@ -107,15 +107,18 @@ ListAgents. All builder branches verified and merged: body = caca60d (body-s1r, 
 (result.json recomputed, matches report; test_s1f/s1d/s1_toy OK). Held-out D rising 0.782/0.651, falling 0.778/0.665; MMD mean rising 0.240,
 falling 0.295 -> by rule **RISING multiplier** = BRAIN_SPEC 7.39.6 (body f0ea2f9). Rising also misses held-out 0.7 on seed 7; held-in D_est
 optimistic ~0.13. body-s1f (325978b, night log) MERGED: body 111dcb1, keys-decide 7fc37a5. Agent 2 idle.
-**WAITING: planner answers to `docs/PLANNER_BRIEF_WO25_STAGE3_GAPS.md`** (body 8b4186b, sent to user ~18:45). Q1 energy/jerk hinge thresholds
-(rec. b: v47-derived, jerk 1.25x v47); Q2 keep switch cost 0.01 (rec.); Q3 D hinge per stream (rec. a) on held-in VALIDATION windows (rec. ii);
-Q4 overseer build defaults (L4 PCs = block-mean Re/Im PCA top 8 on train; 8 s surprisal integral from s10; InfoNCE toy settings, librosa
-tempo + RMS; spectral norm both observers; limit multipliers start 1 step 0.02); Q5 start the build now, timed round waits for answers.
-Survey facts: pass2 trainer = gradient through sim (m3f.make_fns loss); fast stream in stored K5 lanes; L4 state NOT stored -> new B7 lane
-pass (~1 h, first pass 57 min / 3,176 songs).
-**NEXT:** record answers as 7.40 on body; write WO26 (Stage 3 build: L4 lanes, tempo/RMS, s3 trainer on m3f.Trainer + k5p2 data, Stage 0
-metrics for bars b-e from WO19 s0 scripts, tests, ONE timed round, stop and report projection; box 30 h). Agent 1 [9ae40e] idle, cleared.
-If the planner says "start the build now" (Q5), WO26 may go out before the full answers are recorded, without the timed round.
+**2026-11-09 ~19:20:** planner answered the gaps brief = **BRAIN_SPEC 7.40** (body e3044b0): rising confirmed; D >= 0.7 = training safeguard,
+not a bar; Q1 (b) energy thr = v47 mean block energy replayed on v2f, jerk thr = 1.25x v47 (fallback pass2 realised x 1.5); Q2 switch 0.01
+kept; Q3 one D hinge per stream, D_est on 16 fixed VALIDATION windows; Q4 overseer defaults accepted; Q5 build now, timed round after 7.40
+(recorded), ask if > 30 h.
+**Prompts written (body cda8b9b), NOT SENT (both agents idle, cleared earlier; send on the user's word):**
+- `docs/BUILDER_PROMPT_WO26A_STAGE3_DATA_EVAL.md` -> agent 1 [9ae40e]: branch body-s3d, L4 slow lanes (13 cols) + tempo_rms.json +
+  thresholds.json (v47 replay on v2f) + `s3_eval.py` bars (a)-(f) + pass2 reference bars; data /secondary/hyst-data/body/s3/, cores 6-11, 12 GB.
+- `docs/BUILDER_PROMPT_WO26B_STAGE3_TRAINER.md` -> agent 2 [4cd51a]: branch body-s3t, `s3_train.py` (ingredients from s1_toy on
+  k5p2/m3f), tests, smoke on cores 12-17; WAITS; timed round only on overseer's word ("timed round") after 26A merged; never launches the run.
+**NEXT:** verify 26A (recompute PCA var, thresholds from replay, pass2 reference bars vs 2AFC ~49 % / ratio ~0.69 / shoulder 3-4 deg) and 26B
+(bit-identity, Lipschitz test, design file vs 7.39.4/7.40); merge both into body; say "timed round" to agent 2; projection <= 30 h -> per 7.39.4
+the run may launch (still confirm with the user); > 30 h -> ask.
 
 **Today's results (all verified by overseer, numbers in the briefs):**
 - WO22 Stage 1 rerun seeds 2/3: no verdict (arm 0 ratio 0.93/4.84, arm i 4.82/1.21). Brief `PLANNER_BRIEF_STAGE1_RERUN.md` -> 7.38.
