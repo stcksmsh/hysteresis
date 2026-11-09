@@ -135,6 +135,11 @@ rollouts: match). Pass2 reference: (a) 0.943 PASS, (b) 46.8 % [40.7, 52.8] on 54
 [59fba5] (fresh session; sent a standalone timed-round message); TIMED ROUND RUNNING: unit hyst-wo26b-timed-r1 (2 rounds + 1 validation, cores
 6-11), out /secondary/hyst-data/body/s3/train_timed/timed_round.json. > 30 h -> planner brief (with the (c) definition note, 54 pairs, bpm-0
 songs, the overseer's Q4 observer error, 2-anchors-per-round design); <= 30 h -> confirm with the user, then launch.
+**~21:10: TIMED ROUND DONE** (hyst-wo26b-timed-r1, /secondary/hyst-data/body/s3/train_timed/): round 73.4 s (one post-compile round), validation
+200 s, 977 rounds + 5 validations -> **20.2 h** (overseer arithmetic matches), within the 30 h box. Round 1: g_jerk 90 (start policy jerk ~4.6e8 vs
+threshold 4.75e6; pass2 untrained 4.56e8 -> trained r600 5.8e5, so reachable), mu_jerk 108 after 1 round; g_energy 2.5 (pass2 trained 0.363
+J/block vs threshold 0.375: Stage 3 has ~pass2's energy budget). D_fast/D_slow ~0 at start. val2 ext a 0.242. WAITING: user's go to launch
+the Stage 3 run (agent 2 [59fba5], fresh out dir, mains for ~20 h).
 **NEXT:** verify 26A (recompute PCA var, thresholds from replay, pass2 reference bars vs 2AFC ~49 % / ratio ~0.69 / shoulder 3-4 deg) and 26B
 (bit-identity, Lipschitz test, design file vs 7.39.4/7.40); merge both into body; say "timed round" to agent 2; projection <= 30 h -> per 7.39.4
 the run may launch (still confirm with the user); > 30 h -> ask.
