@@ -1,5 +1,25 @@
 # Night log, builder (body-s1), work order 20, Stage 1 toy (2026-11-09)
 
+# WO25 (2026-11-09): toy check of a D multiplier that can fall, seeds 6 and 7
+
+## MORNING SUMMARY (WO25)
+
+**Rule outcome (BRAIN_SPEC 7.39.2): RISING.** The falling multiplier fails the D condition: held-out D 0.778 on seed 6 but **0.665 on seed 7** (< 0.7). The MMD condition would have been met (falling mean 0.2948 vs rising mean 0.2402; per seed 0.226 vs 0.214 and 0.364 vs 0.267), so the per-seed and mean readings agree (both give "rising").
+
+4 runs (iii+D rising, iii+Df falling x seeds 6, 7; 1000 epochs; **6 threads, taskset cores 6-11**; one detached unit `hyst-wo25-falling-mu`, 2386 s). Rules: `docs/STAGE1_RULES.md` section 13 (committed and pushed before the run). Data `/secondary/hyst-data/body/s1f/` (`report.json`, `report.txt`).
+
+| run | JS between | JS half | ratio | held-out D (CI) | occupied cells | entropy bits | 2AFC | MMD |
+|---|---|---|---|---|---|---|---|---|
+| iii+D s6 | 0.476 | 0.039 | 12.08 | 0.782 (0.720-0.837) | 50.8 | 5.20 | 0.980 | 0.2136 |
+| iii+Df s6 | 0.478 | 0.045 | 10.71 | 0.778 (0.714-0.834) | 49.9 | 5.19 | 0.976 | 0.2259 |
+| iii+D s7 | 0.480 | 0.049 | 9.89 | 0.651 (0.576-0.723) | 41.2 | 4.79 | 0.970 | 0.2667 |
+| iii+Df s7 | 0.569 | 0.051 | 11.23 | 0.665 (0.600-0.726) | 39.0 | 4.64 | 0.978 | 0.3638 |
+
+- Notes: the rising version also misses 0.7 on seed 7 (0.651); D_est (in-sample) reached about 0.78-0.80 on all four runs, so held-out D is lower than the training estimate on seed 7. Equal-duration cells: both arms similar (49.9-50.8 on s6, 39.0-41.2 on s7).
+- Multiplier: `D_est` first reaches 0.7 at epoch 340/340 (s6) and 290/300 (s7); trajectories are identical until then, as they must be. Epoch-990 `mu_D`: rising 13.29 (s6), 9.50 (s7); falling 6.77 (s6), 3.22 (s7). The falling multiplier does fall after D_est crosses 0.7, and on seed 7 D_est ended at 0.684 (below 0.7) at epoch 990.
+- Every 10th epoch D_est / mu_D for all four runs: `report.txt`.
+- Code: `s1_toy.py` (`d_hinge_update(..., falling=False)`, arm `iii+Df`), `s1f_chain.py/.sh`, `s1f_report.py`, `test_s1f.py` (5 tests, plus `test_s1d.py` 4 tests, each in its own process). One epoch of iii+D seed 4 equals origin/body da9912e in loss, dec, nce, g, mu, d_est, g_D, mu_D.
+
 # WO24 (2026-11-09): arm iii+D, toy check on seeds 4 and 5, report-only
 
 ## MORNING SUMMARY (WO24)
