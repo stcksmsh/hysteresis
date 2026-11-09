@@ -121,6 +121,12 @@ pass2 joint-angle descriptors -> CORRECTED to 7.39.4 metres (causal 1.5 s window
 Q4 text wrongly said pass2's external observer reads positions (it reads descriptors) — tell the planner in the next brief; (2) 26A Burger
 "low-band flux" used B7 L3 power -> changed to audio 50-200 Hz spectral flux (report-only). 26B FOR USER for the planner (information): a round =
 2 anchors + 14 matched neighbours, so 1,954 anchors over the run, neighbours may repeat.
+**~20:30:** 26A thresholds verified (energy 0.3747, jerk 4.748e6 = 1.25 x 3.799e6, v47 arm 0 replay on v2f, 1,784 blocks; recomputed
+block-weighted means OK). 26A data unit hyst-wo26a-data2 (after a b2-import crash fixed in bb642e9) running, L4 raw ~20:45, then PCA,
+tempo/RMS; hyst-wo26a-eval2 waits for it (pass2 reference bars). 26B (body-s3t 70a9acf, new files only): overseer reran 8 fast tests OK;
+smoke unit hyst-wo26b-smoke OK (resume bit-identical, no NaN, rising multipliers, validation writes best.pkl) after a first smoke failed on
+a stub gap. Smoke timing 95 s/round for 4 windows on E-cores 12-17 -> naive 16-window projection ~380 s x 977 = ~100 h (!); timed round
+on P-cores 6-11 decides; > 30 h -> ask (brief).
 **NEXT:** verify 26A (recompute PCA var, thresholds from replay, pass2 reference bars vs 2AFC ~49 % / ratio ~0.69 / shoulder 3-4 deg) and 26B
 (bit-identity, Lipschitz test, design file vs 7.39.4/7.40); merge both into body; say "timed round" to agent 2; projection <= 30 h -> per 7.39.4
 the run may launch (still confirm with the user); > 30 h -> ask.
