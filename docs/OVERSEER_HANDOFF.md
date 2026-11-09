@@ -127,6 +127,14 @@ tempo/RMS; hyst-wo26a-eval2 waits for it (pass2 reference bars). 26B (body-s3t 7
 smoke unit hyst-wo26b-smoke OK (resume bit-identical, no NaN, rising multipliers, validation writes best.pkl) after a first smoke failed on
 a stub gap. Smoke timing 95 s/round for 4 windows on E-cores 12-17 -> naive 16-window projection ~380 s x 977 = ~100 h (!); timed round
 on P-cores 6-11 decides; > 30 h -> ask (brief).
+**~21:30:** WO26A DONE + verified (tests 8 OK rerun; slow lanes spot-check: blocks match k5, train z ~0/1; tempo_rms 3,176, check bpm = s0;
+8 train songs bpm < 40 (6 = 0) left as is; pass2 reference bars (d) 385 cells/285 songs and (e) median 3.76 deg, 0 % >= 8 recomputed from s0/pass2
+rollouts: match). Pass2 reference: (a) 0.943 PASS, (b) 46.8 % [40.7, 52.8] on 54 pairs (interleaved needs songs >= 210 s), (c) 0.321/0.663 = 0.48
+(interleaved within is larger than Stage 0 half split -> not the spec's 0.69; for the planner), (d) ref 385 -> Stage 3 needs >= 577.5, (e) 0 %,
+(f) pass; pass2 used ONE program for all blocks. MERGED body-s3d + body-s3t into body a9fd858, keys-decide 668b996. Agent 2 restarted as
+[59fba5] (fresh session; sent a standalone timed-round message); TIMED ROUND RUNNING: unit hyst-wo26b-timed-r1 (2 rounds + 1 validation, cores
+6-11), out /secondary/hyst-data/body/s3/train_timed/timed_round.json. > 30 h -> planner brief (with the (c) definition note, 54 pairs, bpm-0
+songs, the overseer's Q4 observer error, 2-anchors-per-round design); <= 30 h -> confirm with the user, then launch.
 **NEXT:** verify 26A (recompute PCA var, thresholds from replay, pass2 reference bars vs 2AFC ~49 % / ratio ~0.69 / shoulder 3-4 deg) and 26B
 (bit-identity, Lipschitz test, design file vs 7.39.4/7.40); merge both into body; say "timed round" to agent 2; projection <= 30 h -> per 7.39.4
 the run may launch (still confirm with the user); > 30 h -> ask.
