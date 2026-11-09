@@ -48,6 +48,17 @@ class Clips(unittest.TestCase):
         self.assertTrue(E.limit_report(q)["shoulder"]["flag_acc"])
 
 
+class RawImport(unittest.TestCase):
+    def test_cmd_raw_one_song(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            S.cmd_raw(6, Path(d), 1)
+            f = next((Path(d) / "raw_l4" / "check").glob("*.npy"))
+            z = np.load(f)
+            n = len(np.load(K5 / "lanes" / "check" / f"{f.stem}.npz")["y"])
+            self.assertEqual(z.shape, (n, 512))
+
+
 @unittest.skipUnless((S3 / "slow" / "norm.json").exists(), "slow lanes not built yet")
 class Data(unittest.TestCase):
     def test_block_counts(self):

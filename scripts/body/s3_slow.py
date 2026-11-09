@@ -15,6 +15,7 @@ import numpy as np
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+sys.path.insert(0, str(HERE.parent / "brain"))                 # b2, braindump, train_b7, core (as k5_data.py)
 K5 = Path("/secondary/hyst-data/body/k5")
 S3 = Path("/secondary/hyst-data/body/s3")
 BLOCK, CHUNK = 50, 6000
@@ -51,7 +52,7 @@ def l4_blocks(model, x):
     return np.concatenate(parts, 0)[:nb].astype(np.float32)
 
 
-def cmd_raw(threads):
+def cmd_raw(threads, out=None, limit=None):
     import torch
     import b2
     import braindump as bd
@@ -63,9 +64,9 @@ def cmd_raw(threads):
     mean, std = bd.stats()
     t0, done = time.time(), 0.0
     for split in ("check", "train", "val"):
-        d = S3 / "raw_l4" / split
+        d = (out or S3) / "raw_l4" / split
         d.mkdir(parents=True, exist_ok=True)
-        for sid in sp[split]["ids"]:
+        for sid in sp[split]["ids"][:limit]:
             p = d / f"{sid}.npy"
             if p.exists():
                 continue
@@ -157,8 +158,10 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("what", choices=("raw", "fit", "build"))
     ap.add_argument("--threads", type=int, default=6)
+    ap.add_argument("--out", help="raw only, test: root dir instead of s3")
+    ap.add_argument("--limit", type=int, help="raw only, test: first N songs per split")
     a = ap.parse_args()
-    {"raw": lambda: cmd_raw(a.threads), "fit": cmd_fit, "build": cmd_build}[a.what]()
+    {"raw": lambda: cmd_raw(a.threads, Path(a.out) if a.out else None, a.limit), "fit": cmd_fit, "build": cmd_build}[a.what]()
 
 
 if __name__ == "__main__":
