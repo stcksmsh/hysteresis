@@ -94,7 +94,7 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## CURRENT STATE (2026-11-09 ~17:40) — read this first, then the dated notes below
+## CURRENT STATE (2026-11-09 ~18:45) — read this first, then the dated notes below
 
 **Rules of record:** `docs/BRAIN_SPEC.md` on body, latest **7.37-7.38** (7.37 Stage 1 results rulings: fresh-seed rerun, pre-registered
 precondition, cap probe; 7.38 Stage 1 closed without verdict, arm ii forward, D-hinge toy check, thread-count rule). Toy rules
@@ -103,16 +103,20 @@ precondition, cap probe; 7.38 Stage 1 closed without verdict, arm ii forward, D-
 **Nothing is running.** Both builders idle: agent 1 [9ae40e] (did WO23), agent 2 [4cd51a] (did WO22, WO24). Refs change on restart: use
 ListAgents. All builder branches verified and merged: body = caca60d (body-s1r, body-s1d, body-acc), keys-decide merged.
 
-**2026-11-09 ~17:40: planner answered WO23/WO24 = BRAIN_SPEC 7.39 (body 53fc69f).** Caps stay 0.25/0.8; Stage 3 = ii + iii + D hinge;
-toy check of a FALLING multiplier `mu_D <- max(0, mu_D + 0.16 (0.7 - D_est))` first (seeds 6/7; falling used iff held-out D >= 0.7 on both
-seeds AND MMD >= rising version's mean on seeds 6/7, else rising); limit report p99 + max, central diffs; full Stage 3 design + bars (a)-(f)
-fixed in 7.39.4; order toy check -> timed round -> Stage 3 run -> bars -> user's eye -> human test.
-**Prompt WO25 SENT 2026-11-09 ~17:50 to agent 2 [4cd51a] (cleared; notify_when_idle). Check body-s1f first push within 30 min:** `docs/BUILDER_PROMPT_WO25_FALLING_MU_TOY.md` (body da9912e; branch body-s1f, data
-/secondary/hyst-data/body/s1f/, 4 runs iii+D vs iii+Df, 6 thr cores 6-11, ~30 min). Overseer operationalisation in it: falling MMD = mean over
-seeds 6/7 vs rising mean; per-seed reading also printed; disagreement -> planner. Recommended builder: agent 2 (did WO24, knows s1_toy.py).
-Agent 1 [9ae40e] cleared, idle. keys-decide merged body (358192f).
-**NEXT after WO25:** verify (recompute D, MMD from result.json; bit-identity test), record which multiplier wins, then write the Stage 3
-build prompt (WO26: two state streams, objective per 7.39.4, timed round first; ask if > 30 h). Any design detail 7.39.4 does not rule -> brief.
+**2026-11-09 ~18:45 — CURRENT:** WO25 DONE (agent 2, body-s1f e2f7761, unit hyst-wo25-falling-mu success 2386 s), verified by overseer
+(result.json recomputed, matches report; test_s1f/s1d/s1_toy OK). Held-out D rising 0.782/0.651, falling 0.778/0.665; MMD mean rising 0.240,
+falling 0.295 -> by rule **RISING multiplier** = BRAIN_SPEC 7.39.6 (body f0ea2f9). Rising also misses held-out 0.7 on seed 7; held-in D_est
+optimistic ~0.13. Agent 2 nudged to push night log; body-s1f NOT yet merged into body (merge after its night-log push; new files + additive
+s1_toy change).
+**WAITING: planner answers to `docs/PLANNER_BRIEF_WO25_STAGE3_GAPS.md`** (body 8b4186b, sent to user ~18:45). Q1 energy/jerk hinge thresholds
+(rec. b: v47-derived, jerk 1.25x v47); Q2 keep switch cost 0.01 (rec.); Q3 D hinge per stream (rec. a) on held-in VALIDATION windows (rec. ii);
+Q4 overseer build defaults (L4 PCs = block-mean Re/Im PCA top 8 on train; 8 s surprisal integral from s10; InfoNCE toy settings, librosa
+tempo + RMS; spectral norm both observers; limit multipliers start 1 step 0.02); Q5 start the build now, timed round waits for answers.
+Survey facts: pass2 trainer = gradient through sim (m3f.make_fns loss); fast stream in stored K5 lanes; L4 state NOT stored -> new B7 lane
+pass (~1 h, first pass 57 min / 3,176 songs).
+**NEXT:** record answers as 7.40 on body; write WO26 (Stage 3 build: L4 lanes, tempo/RMS, s3 trainer on m3f.Trainer + k5p2 data, Stage 0
+metrics for bars b-e from WO19 s0 scripts, tests, ONE timed round, stop and report projection; box 30 h). Agent 1 [9ae40e] idle, cleared.
+If the planner says "start the build now" (Q5), WO26 may go out before the full answers are recorded, without the timed round.
 
 **Today's results (all verified by overseer, numbers in the briefs):**
 - WO22 Stage 1 rerun seeds 2/3: no verdict (arm 0 ratio 0.93/4.84, arm i 4.82/1.21). Brief `PLANNER_BRIEF_STAGE1_RERUN.md` -> 7.38.
