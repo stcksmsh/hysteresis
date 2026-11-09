@@ -106,8 +106,7 @@ ListAgents. All builder branches verified and merged: body = caca60d (body-s1r, 
 **2026-11-09 ~18:45 — CURRENT:** WO25 DONE (agent 2, body-s1f e2f7761, unit hyst-wo25-falling-mu success 2386 s), verified by overseer
 (result.json recomputed, matches report; test_s1f/s1d/s1_toy OK). Held-out D rising 0.782/0.651, falling 0.778/0.665; MMD mean rising 0.240,
 falling 0.295 -> by rule **RISING multiplier** = BRAIN_SPEC 7.39.6 (body f0ea2f9). Rising also misses held-out 0.7 on seed 7; held-in D_est
-optimistic ~0.13. Agent 2 nudged to push night log; body-s1f NOT yet merged into body (merge after its night-log push; new files + additive
-s1_toy change).
+optimistic ~0.13. body-s1f (325978b, night log) MERGED: body 111dcb1, keys-decide 7fc37a5. Agent 2 idle.
 **WAITING: planner answers to `docs/PLANNER_BRIEF_WO25_STAGE3_GAPS.md`** (body 8b4186b, sent to user ~18:45). Q1 energy/jerk hinge thresholds
 (rec. b: v47-derived, jerk 1.25x v47); Q2 keep switch cost 0.01 (rec.); Q3 D hinge per stream (rec. a) on held-in VALIDATION windows (rec. ii);
 Q4 overseer build defaults (L4 PCs = block-mean Re/Im PCA top 8 on train; 8 s surprisal integral from s10; InfoNCE toy settings, librosa
