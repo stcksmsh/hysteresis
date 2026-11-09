@@ -1512,3 +1512,21 @@ Recorded before the Stage 3 timed round and before any Stage 3 result.
    - limit-hinge multipliers start at 1, step 0.02 per batch, rising only.
 6. **Q5: start the build now** (L4 lane pass, tempo/RMS, code, tests). The timed round runs after these rulings are recorded (they are,
    here); if it projects past 30 h, ask.
+
+### 7.41 Rulings on the Stage 3 launch, 2026-11-09, via planner (answering `docs/PLANNER_BRIEF_STAGE3_LAUNCH.md`)
+
+The Stage 3 run (unit `hyst-wo26b-run-r1`, started 22:16, code body a9fd858, out `/secondary/hyst-data/body/s3/run/`) continues untouched.
+
+1. **Q1: the energy threshold stays 0.375 J/block for this run.** A change is allowed only as a round-2 adjustment if bar (e) fails.
+2. **Facts 1-8 of the brief are recorded as written**, including: bar (c) on pass2 is 0.48 on the interleaved definition (0.663 within,
+   0.321 between; Stage 0's 0.69 used the half-vs-half split); bar (b) has 54 tempo-matched pairs (songs >= 210 s); Stage 3's energy budget
+   is about pass2's (0.363 vs 0.375 J/block); the starting jerk is ~90x its threshold; 2 anchors per round (1,954 anchors); 8 train songs
+   with librosa tempo < 40 BPM left as is; **the overseer's correction (fact 7):** the WO25 gaps brief wrongly said pass2's external
+   observer reads positions (it read joint-angle descriptors); the build follows 7.39.4 (external observer: causal 1.5 s window of elbow,
+   wrist and hand positions in metres, 4-Lipschitz in metres); pass2 Burger contrasts rho -0.03 / 0.07.
+3. **Report-only additions, no change to the run:**
+   - at each validation: per limit hinge, the share of steps with the constraint active (on or over its threshold) and the current
+     multiplier;
+   - at the round-400 validation: a 60 s render of best.pkl so far on one danced song (one-arm camera), with that clip's shoulder sd and
+     occupied cells, sent to the user. The user may stop the run early on it; otherwise it continues untouched.
+4. **No mid-run changes** to the objective, thresholds or multipliers.
