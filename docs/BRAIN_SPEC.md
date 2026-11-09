@@ -1390,3 +1390,29 @@ rulings below bind).
 5. **Report-only diagnosis of the 0.741 m/s ceiling on pass2,** before any Stage 3 design: which bound produces it (the generator
    amplitude cap, the smooth-u scale c = 0.5, or the frequency range). It does not block Stage 1. Recorded: the hand-speed hinge bound is
    1.2 m/s (`m3f_jax.py:32`), 0.46 m/s above the ceiling.
+
+### 7.37 Rulings on the Stage 1 results, 2026-11-09, via planner (answering `docs/PLANNER_BRIEF_STAGE1_RESULTS.md`)
+
+Recorded before any run they score.
+
+1. **Q1 (a). Pre-registered now, before the rerun.** All six arms (0, i, ii, iii, iv lambda 0.05, iv lambda 0.5) are rerun on **fresh
+   seeds 2 and 3**, 1000 epochs each, rules otherwise as in `docs/STAGE1_RULES.md` and 7.35-7.36.
+   - **Collapse precondition:** arm 0 or arm i has a between-song / half-song JS ratio <= 1.5 on **both** seeds 2 and 3. Occupied cells
+     (any dwell, equal durations, 7.36.2) and the machine 2AFC are reported alongside; they are not part of the precondition. If neither
+     arm 0 nor arm i meets it, there is no verdict: stop and report.
+   - **Pass rule otherwise as ruled:** report the smallest arm (in the cumulative order ii, iii, iv) that reaches a between-song JS >= 2x
+     arm i's between-song JS with D >= 0.7. Also report whether (iv) reaches >= 3x arm i's with D >= 0.7 (the 7.34 bar).
+     *Overseer operationalisation (the planner may amend before the run): arm i's JS = its mean over seeds 2 and 3; an arm reaches a
+     factor when its mean over seeds 2 and 3 does and D >= 0.7 holds on each seed; per-seed values are reported too.*
+   - Seeds 0 and 1 (WO20) are recorded as informational only.
+2. **Q2.** Default going forward: ingredients **ii + iii**. iv only if the rerun shows it is needed and D >= 0.7.
+3. **Q3 (a). Report-only probe on the M3f toy.** Hypothesis recorded, **untested**: an acceleration cap that binds about 99.8 % of the
+   time imposes one acceleration profile on every movement, so the cap, not the brain, sets the shape.
+   - Settings: ACC_SHARE 0.25 -> 0.4 alone; the 0.8 speed share -> 0.95 alone; both together (plus the current setting as baseline).
+   - Report per setting: the share of steps on each cap (per joint), occupied cells, between-song JS, decoding, and the hand metrics.
+   - Any change must stay within the per-joint acceleration limits of the servo model, stated per joint (`make_arm.py` LIMITS, deg/s and
+     deg/s^2: base 120 / 600, shoulder 90 / 300, elbow 150 / 1000, wrist bend 200 / 2000, roll 250 / 3000). The probe reports where each
+     setting sits against them (realised joint acceleration and speed, p99 and max, per joint, as a share of the limit).
+     *Overseer note: `cpg.py:21` records that ACC_SHARE 0.7 once let the shoulder reach 1.2x its acceleration limit at 50 Hz.*
+4. **Q4: recorded.** The toy's arm i is only partly collapsed: its machine 2AFC is 0.70-0.86, against pass2's 0.49 (Stage 0). Song
+   identity stays partly readable in the toy without any change.
