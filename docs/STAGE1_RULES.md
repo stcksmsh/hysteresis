@@ -119,3 +119,14 @@ Precondition and pass rule as BRAIN_SPEC 7.37.1. All six arms, fresh seeds 2 and
 - Reference: arm i's JS (arm 0 if only it meets the precondition) = mean over seeds 2 and 3. An arm reaches a factor when its seed mean does and D >= 0.7 on each seed.
 - Report the smallest of ii, iii, iv (either lambda) reaching >= 2x, and whether iv reaches >= 3x. Alongside: occupied cells, cell entropy, machine 2AFC, MMD. Seeds 0/1 informational only.
 - Code: `scripts/body/s1_chain.py --seeds`, `s1r_chain.sh`, `s1r_verdict.py` (+ `test_s1r_verdict.py`). Data: `/secondary/hyst-data/body/s1r/`.
+
+## 12. WO24 (BRAIN_SPEC 7.38.2): arm iii+D, the D >= 0.7 hinge (before the run, report-only)
+
+Arm `iii+D` = arm iii (level 2: corpus-normalised slow target, matched InfoNCE, 1-Lipschitz observer) plus one more hinge on decoding D. All other arms and the three existing hinges are unchanged.
+- **Training-time estimate of D.** Once per epoch, after its 8 batches, D is computed exactly as the held-out evaluation does (`shifted_gap_D`: 20 circular shifts of at least 160 steps, fixed shift seed 0, the same T_FROM cut, observer in its Lipschitz mode, deterministic rollout) on a fixed **held-in** subset: the **first 16 train songs** (train seeds 1000-1015). The held-out 32 and the 16 validation songs are never used. It is an in-sample estimate, optimistic against held-out D; the held-out D appears only in the final evaluation.
+- **Violation** `g_D = max(0, 0.7 - D_est)`.
+- **Dual multiplier** `mu_D <- max(0, mu_D + eta_D * g_D)`, `mu_D = 0` at the start (the other three multipliers start at 1; D has no free-interior cost, so it starts inactive). **eta_D = 0.16** = 0.02 x 8: the existing multipliers step 0.02 per batch, 8 batches per epoch, and D is observed once per epoch, so the per-epoch ascent rate equals theirs.
+- **Effect:** the decoding loss is scaled, `(1 + mu_D) * dec`, for the next epoch's 8 batches (epoch 0 uses `mu_D = 0`). The estimate is not differentiated; `mu_D` enters as a constant.
+- **Cost:** one rollout + observer over 16 songs plus 20 shifts per epoch (measured in the night log).
+- Runs: arms ii, iii, iii+D x seeds 4 and 5, 1000 epochs, 6 threads on cores 6-11 (`taskset -c 6-11`), one detached unit, resume-safe. Data `/secondary/hyst-data/body/s1d/`. Report only (`s1d_report.py`): no pass claim; states per seed whether iii+D reaches held-out D >= 0.7 and its occupied cells against ii and iii on the same seed.
+- Code: `s1_toy.py` (`d_est`, `d_hinge_update`, arm `iii+D`; `loss_fn` gained `dw`, default None = untouched code path), `s1d_chain.py`, `s1d_chain.sh`, `s1d_report.py`; tests `test_s1d.py`.
