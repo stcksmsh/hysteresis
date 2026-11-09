@@ -1432,3 +1432,49 @@ Recorded before any run they score.
    thread counts.
 5. **Next:** the WO23 cap-probe brief; then the Stage 3 design (5-DoF run; bars incl. the human real-vs-swapped-music test) is ruled with
    both in hand.
+
+### 7.39 Rulings on caps, ingredients and the Stage 3 design, 2026-11-09, via planner (answering `docs/PLANNER_BRIEF_WO23_WO24_RESULTS.md`)
+
+Recorded before any run these rulings score.
+
+1. **Q1 (a). Generator caps stay at the defaults (ACC_SHARE 0.25, speed 0.8).** Recorded: WO23 does not support the 7.37.3 hypothesis.
+   Freeing the acceleration cap moves the binding to the speed cap; episode distinctness is unchanged; hand roughness rises 26-37x.
+2. **Q2 (a). Stage 3 ingredients: ii + iii + the D hinge, with a multiplier allowed to fall:**
+   `mu_D <- max(0, mu_D + eta * (0.7 - D_est))`, eta = 0.16.
+   **Toy check first** (work order 25): fresh seeds 6 and 7, about 35 min, 6 threads. Rule fixed now: the falling multiplier is used in
+   Stage 3 if held-out D >= 0.7 on **both** seeds **and** its MMD >= the rising version's (WO24 iii+D, `mu_D <- max(0, mu_D + eta g_D)`)
+   mean MMD on these same seeds 6 and 7; otherwise the rising version is used.
+3. **Q3: limit-check reporting.** Per joint: p99 and max of realised speed and acceleration, by central differences (stated in every
+   report). A single-sample max above a limit is a flag, not a failure. Speed overshoot <= 0.6 % is clamped by the servo firmware.
+4. **Q4: Stage 3 design (fixed before any Stage 3 result).**
+   - **Body:** the pass2 body: v2f, raised plane at 0.053 m, contact tc 0.006, end stops, smooth-u c = 0.5, hard clip; generator caps
+     at the defaults (point 1).
+   - **Brain:** B7 epoch 6, frozen. Two state streams:
+     - fast: beat-band phase (cos/sin), arousal, surprisal; causal 30 s z-score;
+     - slow: top 8 PCs of the slow-layer (L4) state, the 8 s surprisal integral, per-layer band power; corpus-level normalisation
+       (fit on training songs only).
+   - **Objective:**
+     - ii: InfoNCE music<->motion over a batch of 8 songs (anchor + 7 tempo/RMS-matched), on 4 s motion windows vs the matched
+       brain-state windows;
+     - iii: Lipschitz-constrained observers (spectral norm, posture metric in metres), external and internal;
+     - decoding of both streams with the D >= 0.7 hinge (rising or falling multiplier per the point 2 toy check);
+     - limits as hinge constraints with dual multipliers and free interiors: jerk, energy, hand speed, hand acceleration, floor margin,
+       limit proximity (same thresholds as pass2);
+     - basal ganglia kept as built (no load balancing; that is a later, separately tested step).
+   - **Data and compute:** the K5 splits; 60 s windows; thread count fixed at 6 and stated; resumable; compute box 30 h. One timed round
+     first: if it projects past 30 h, ask before running.
+   - **Bars**, all on the 357 held-out songs, argmax, all must pass:
+     (a) K5: external (a) > 0 and paired vs untrained > 0;
+     (b) machine 2AFC on tempo-matched pairs (|dBPM| <= 5, different artists), interleaved clips (odd train, even test, 30 s gap):
+         >= 75 % (pass2: 49 %);
+     (c) between-song JS / within-song JS (odd vs even clips of the same song) >= 2 (pass2: 0.69);
+     (d) occupied cells per song at equal duration: median >= 1.5x pass2's;
+     (e) shoulder sd >= 8 deg in >= 70 % of songs (pass2: about 3-4 deg);
+     (f) check-csv accepted and (e'1)/(e'2) <= 1.25x v47 on the three danced songs, plus the per-joint limit report (point 3).
+     Reported only: decoding per stream; the kappa-0 control (wording rule as before, 7.31.3); program usage; the Burger-style contrasts
+     (shoulder amplitude vs pulse clarity, wrist bend vs low-band flux).
+   - **Two tries;** round 2 changes only what the failing bar names.
+   - **After the machine bars:** the user's eye on the three danced songs (v47 | pass2 | Stage 3). If the user approves: the human test,
+     designed and ruled before it runs (target: real vs swapped tempo-matched music, 20 s clips, n >= 30 x 20 trials, >= 65 % with
+     binomial p < .01). No public wording before that test passes.
+5. **Order:** toy check (WO25) -> timed round -> Stage 3 run -> bars -> user's eye -> human test.
