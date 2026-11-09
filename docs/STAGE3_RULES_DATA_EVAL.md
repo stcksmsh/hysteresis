@@ -69,4 +69,7 @@ Input: a policy pickle (`k5p2_eval.load_policy` format) and optionally existing 
 Expected (sanity only): 2AFC about 49 %, JS ratio about 0.69, shoulder sd about 3-4 deg. A number far from this is investigated and reported, not tuned.
 
 ## Amendments
-(none yet)
+- **2026-11-09, overseer (report-only change to the Burger contrast):** "low-band flux" in "wrist bend vs low-band flux" means the AUDIO's low-frequency spectral flux, not B7's L3 power.
+  Per check song: librosa STFT of the mono 22,050 Hz audio (n_fft 2048, hop 512), magnitude in the 50-200 Hz bins, half-wave-rectified frame-to-frame difference summed over those bins, mean over frames;
+  Spearman with the per-song wrist-bend (column 3) sd. The pulse-clarity proxy (L3 order parameter squared, from B7) stays, labelled as a B7-derived proxy. The `logpow_L3` definition in section 4 is superseded for this contrast.
+- **2026-11-09, thresholds obtained:** v47 replay on v2f ran (arm 0 of ic/fy/pr, 1,784 blocks after dropping each song's first): energy 0.3747, jerk threshold 4.748e6 (= 1.25 x mean 3.799e6). Written to `s3/thresholds.json`, method `v47-v2f`.
