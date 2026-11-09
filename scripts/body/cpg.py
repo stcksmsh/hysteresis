@@ -18,6 +18,7 @@ from arm_sim import swing_margin
 from make_arm import LIMITS, NEUTRAL_DEG, RANGE_DEG
 
 COUPLING = 0.25
+SPEED_SHARE = 0.8    # share of the speed limit the oscillation alone may use (WO23: --speed-share)
 ACC_SHARE = 0.25     # measured: 0.7 let the shoulder reach 1.2 x its acceleration limit at 50 Hz (servo lag + gravity add to the target's own)
 F_MIN, F_MAX = 0.1, 4.0
 LAG_MAX = 0.5
@@ -62,7 +63,7 @@ class CPG:
         # cap the frequency actually used so the oscillation stays under its share of speed and acceleration
         w = 2 * math.pi * (1 + COUPLING)
         with np.errstate(divide="ignore"):
-            f_cap = np.minimum(0.8 * V / np.maximum(amp, 1e-9) / w, np.sqrt(ACC_SHARE * A / np.maximum(amp, 1e-9)) / w)
+            f_cap = np.minimum(SPEED_SHARE * V / np.maximum(amp, 1e-9) / w, np.sqrt(ACC_SHARE * A / np.maximum(amp, 1e-9)) / w)
         f = np.minimum(self.freq, f_cap)
         lead = np.concatenate([[0.0], self.phase[:-1] - 2 * math.pi * self.lag[1:]])
         pull = np.concatenate([[0.0], np.sin(lead[1:] - self.phase[1:])])
