@@ -122,8 +122,8 @@ informational; overseer operationalisation in 7.37.1 (seed means, D per seed) fl
 ACC_SHARE 0.25->0.4 / speed share 0.8->0.95 / both probe on M3f toy, hypothesis "cap sets the shape" untested, report vs per-joint servo
 limits. Q4 partial-collapse caveat recorded. Prompts on body 7f1baee: `docs/BUILDER_PROMPT_WO22_STAGE1_RERUN.md` (agent 2, branch
 body-s1r, cores 6-11, data /secondary/hyst-data/body/s1r/, ~1 h) and `docs/BUILDER_PROMPT_WO23_ACC_CAP_PROBE.md` (agent 1, branch
-body-acc, cores 12-17, data /secondary/hyst-data/body/acc/, baseline = m3f/rerun4/seed0, 3 new seed-0 runs ~45 min each). NOT SENT:
-waiting for the user's word. Verify: WO22 rules section 11 + verdict script pushed before launch; WO23 default bit-identity, realised
+body-acc, cores 12-17, data /secondary/hyst-data/body/acc/, baseline = m3f/rerun4/seed0, 3 new seed-0 runs ~45 min each). SENT 2026-11-09 ~09:30 (user cleared both):
+WO22 -> agent 2 [4cd51a], WO23 -> agent 1 [9ae40e], notify_when_idle both. Check first pushes of body-s1r / body-acc by ~10:00. Verify: WO22 rules section 11 + verdict script pushed before launch; WO23 default bit-identity, realised
 joint acc/speed vs limits recomputed from rollouts.
 
 **Key verified results of this session:** pass2 (K5-pass2, best r600) passed its numeric bar (7.33) but the user rejected the videos;
