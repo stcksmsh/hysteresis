@@ -142,6 +142,10 @@ J/block vs threshold 0.375: Stage 3 has ~pass2's energy budget). D_fast/D_slow ~
 LAUNCH sent to agent 2 [59fba5] (~21:15; out /secondary/hyst-data/body/s3/run/, cores 6-11, 14 GB). Info brief
 `docs/PLANNER_BRIEF_STAGE3_LAUNCH.md` (body b467341) SENT to user (8 facts incl. overseer's Q4 observer error; optional Q1 energy threshold).
 RUNNING: unit hyst-wo26b-run-r1 since 22:16 (s3t_run.sh, code = body a9fd858, log /secondary/hyst-data/body/s3/run/train.log); ETA ~18:30 tomorrow if on mains.
+**7.41 recorded (body 846ebdd):** energy 0.375 kept (round-2 only if (e) fails); facts 1-8 recorded; report-only: hinge active share +
+multiplier at each validation, round-400 60 s render of best.pkl on one danced song + shoulder sd + cells -> user (may stop the run early); no
+mid-run changes. Prompt `docs/BUILDER_PROMPT_WO27_STAGE3_SIDECAR.md` (agent 1, side-car watcher on cores 12-17, out s3/run_report/) written,
+send on the user's word.
 NEXT: watch (Monitor, re-arm 30 min); report each validation (every 200 rounds, ~4 h); after the run: s3_eval.py
 --policy best.pkl --ref-bars s3/eval_pass2/bars.json, verify bars, videos, brief.
 **NEXT:** verify 26A (recompute PCA var, thresholds from replay, pass2 reference bars vs 2AFC ~49 % / ratio ~0.69 / shoulder 3-4 deg) and 26B
