@@ -138,8 +138,11 @@ songs, the overseer's Q4 observer error, 2-anchors-per-round design); <= 30 h ->
 **~21:10: TIMED ROUND DONE** (hyst-wo26b-timed-r1, /secondary/hyst-data/body/s3/train_timed/): round 73.4 s (one post-compile round), validation
 200 s, 977 rounds + 5 validations -> **20.2 h** (overseer arithmetic matches), within the 30 h box. Round 1: g_jerk 90 (start policy jerk ~4.6e8 vs
 threshold 4.75e6; pass2 untrained 4.56e8 -> trained r600 5.8e5, so reachable), mu_jerk 108 after 1 round; g_energy 2.5 (pass2 trained 0.363
-J/block vs threshold 0.375: Stage 3 has ~pass2's energy budget). D_fast/D_slow ~0 at start. val2 ext a 0.242. WAITING: user's go to launch
-the Stage 3 run (agent 2 [59fba5], fresh out dir, mains for ~20 h).
+J/block vs threshold 0.375: Stage 3 has ~pass2's energy budget). D_fast/D_slow ~0 at start. val2 ext a 0.242. User: "send to planner or start work" -> overseer
+LAUNCH sent to agent 2 [59fba5] (~21:15; out /secondary/hyst-data/body/s3/run/, cores 6-11, 14 GB). Info brief
+`docs/PLANNER_BRIEF_STAGE3_LAUNCH.md` (body b467341) SENT to user (8 facts incl. overseer's Q4 observer error; optional Q1 energy threshold).
+NEXT: confirm unit active + first round; watch (Monitor, re-arm 30 min); report each validation (every 200 rounds, ~4 h); after the run: s3_eval.py
+--policy best.pkl --ref-bars s3/eval_pass2/bars.json, verify bars, videos, brief.
 **NEXT:** verify 26A (recompute PCA var, thresholds from replay, pass2 reference bars vs 2AFC ~49 % / ratio ~0.69 / shoulder 3-4 deg) and 26B
 (bit-identity, Lipschitz test, design file vs 7.39.4/7.40); merge both into body; say "timed round" to agent 2; projection <= 30 h -> per 7.39.4
 the run may launch (still confirm with the user); > 30 h -> ask.
