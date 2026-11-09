@@ -60,7 +60,7 @@ def cpg_step(s, goal, phi, kappa):
     amp = jnp.maximum(jnp.where(BEND, jnp.minimum(amp_raw, CHI - jnp.abs(centre)), amp_raw), 0.0)
     w = 2 * math.pi * (1 + cpg.COUPLING)
     am = jnp.maximum(amp, 1e-9)
-    f = jnp.minimum(freq, jnp.minimum(0.8 * V / am / w, jnp.sqrt(cpg.ACC_SHARE * ACC / am) / w))
+    f = jnp.minimum(freq, jnp.minimum(cpg.SPEED_SHARE * V / am / w, jnp.sqrt(cpg.ACC_SHARE * ACC / am) / w))
     lead = phase[:-1] - 2 * math.pi * lag[1:]
     pull = jnp.concatenate([jnp.zeros(1), jnp.sin(lead - phase[1:])])
     phase = phase + DT * 2 * math.pi * f * (1 + cpg.COUPLING * pull)

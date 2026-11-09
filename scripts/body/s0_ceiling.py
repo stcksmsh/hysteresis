@@ -55,7 +55,7 @@ def peak(rows50):
 def f_caps(amp):
     """The generator's frequency caps for amplitudes amp (5,) deg (cpg.py / m3d_jax.cpg_step): speed cap and acceleration cap, Hz."""
     am = np.maximum(amp, 1e-9)
-    return 0.8 * V / am / W, np.sqrt(cpg.ACC_SHARE * A / am) / W
+    return cpg.SPEED_SHARE * V / am / W, np.sqrt(cpg.ACC_SHARE * A / am) / W
 
 
 def at_peak(g, k):
@@ -84,7 +84,7 @@ def shares(g):
     a_max = np.where(cpg.BEND, cpg.HI - np.abs(centre), cpg.AMP_CAP_CONTINUOUS)
     amp = np.maximum(np.where(cpg.BEND, np.minimum(amp_raw, a_max), amp_raw), 0.0)
     am = np.maximum(amp, 1e-9)
-    fs, fa = 0.8 * V / am / W, np.sqrt(cpg.ACC_SHARE * A / am) / W
+    fs, fa = cpg.SPEED_SHARE * V / am / W, np.sqrt(cpg.ACC_SHARE * A / am) / W
     f_used = np.minimum(freq, np.minimum(fs, fa))
     on_s, on_a = (fs <= fa) & (fs < freq), (fa < fs) & (fa < freq)
     return {j: {"speed_cap": float(on_s[:, i].mean()), "acc_cap": float(on_a[:, i].mean()), "freq_at_fmax": float((freq[:, i] >= 0.98 * cpg.F_MAX).mean()),
