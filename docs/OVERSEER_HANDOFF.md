@@ -116,6 +116,11 @@ kept; Q3 one D hinge per stream, D_est on 16 fixed VALIDATION windows; Q4 overse
   thresholds.json (v47 replay on v2f) + `s3_eval.py` bars (a)-(f) + pass2 reference bars; data /secondary/hyst-data/body/s3/, cores 6-11, 12 GB.
 - `docs/BUILDER_PROMPT_WO26B_STAGE3_TRAINER.md` -> agent 2 [4cd51a]: branch body-s3t, `s3_train.py` (ingredients from s1_toy on
   k5p2/m3f), tests, smoke on cores 12-17; WAITS; timed round only on overseer's word ("timed round") after 26A merged; never launches the run.
+**~19:40:** both rules files pushed first (s3d 609afc6, s3t 5bbae46), read by overseer: match 7.39/7.40 except (1) 26B external observer kept
+pass2 joint-angle descriptors -> CORRECTED to 7.39.4 metres (causal 1.5 s window of elbow/wrist/hand FK positions at 10 Hz, G = 4); overseer's own
+Q4 text wrongly said pass2's external observer reads positions (it reads descriptors) — tell the planner in the next brief; (2) 26A Burger
+"low-band flux" used B7 L3 power -> changed to audio 50-200 Hz spectral flux (report-only). 26B FOR USER for the planner (information): a round =
+2 anchors + 14 matched neighbours, so 1,954 anchors over the run, neighbours may repeat.
 **NEXT:** verify 26A (recompute PCA var, thresholds from replay, pass2 reference bars vs 2AFC ~49 % / ratio ~0.69 / shoulder 3-4 deg) and 26B
 (bit-identity, Lipschitz test, design file vs 7.39.4/7.40); merge both into body; say "timed round" to agent 2; projection <= 30 h -> per 7.39.4
 the run may launch (still confirm with the user); > 30 h -> ask.
