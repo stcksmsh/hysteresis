@@ -115,6 +115,17 @@ keys-decide merged.
 - When answers arrive: record as BRAIN_SPEC 7.37 on body (detached temp worktree, `git push origin HEAD:body`), BEFORE any run; then
   message agent 2 (rerun) / agent 1 (probe) only with the user's word.
 
+**2026-11-09 ~09:20 — CURRENT (supersedes the WAITING item above):** planner answered the Stage 1 results brief = BRAIN_SPEC **7.37**
+(body c013514): Q1 (a) rerun all 6 arms on fresh seeds 2/3, pre-registered precondition = arm 0 or i between/half JS <= 1.5 on both seeds
+(cells + 2AFC reported only), pass rule = smallest of ii/iii/iv reaching >= 2x arm i JS with D >= 0.7 (iv >= 3x reported), seeds 0/1
+informational; overseer operationalisation in 7.37.1 (seed means, D per seed) flagged amendable. Q2 default ii + iii. Q3 report-only
+ACC_SHARE 0.25->0.4 / speed share 0.8->0.95 / both probe on M3f toy, hypothesis "cap sets the shape" untested, report vs per-joint servo
+limits. Q4 partial-collapse caveat recorded. Prompts on body 7f1baee: `docs/BUILDER_PROMPT_WO22_STAGE1_RERUN.md` (agent 2, branch
+body-s1r, cores 6-11, data /secondary/hyst-data/body/s1r/, ~1 h) and `docs/BUILDER_PROMPT_WO23_ACC_CAP_PROBE.md` (agent 1, branch
+body-acc, cores 12-17, data /secondary/hyst-data/body/acc/, baseline = m3f/rerun4/seed0, 3 new seed-0 runs ~45 min each). NOT SENT:
+waiting for the user's word. Verify: WO22 rules section 11 + verdict script pushed before launch; WO23 default bit-identity, realised
+joint acc/speed vs limits recomputed from rollouts.
+
 **Key verified results of this session:** pass2 (K5-pass2, best r600) passed its numeric bar (7.33) but the user rejected the videos;
 Stage 0: pass2 machine 2AFC 49.1 % (chance) over 128 tempo-matched held-out pairs, JS between 0.30 < half 0.46; v47 held-out impossible
 (auto beat grid fails), v47 3 danced songs = weak ref; 0.741 m/s = start-up transient at 2.74 s, not a bound (after 8 s peak 0.680 sd 0.036).
