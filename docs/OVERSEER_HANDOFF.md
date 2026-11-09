@@ -94,6 +94,41 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
+## CURRENT STATE (2026-11-09 ~22:40, saved before a usage limit) — read this block first
+
+**Rules of record:** BRAIN_SPEC on body, latest **7.39-7.41** (7.39 Stage 3 design + bars (a)-(f); 7.39.6/7.40.1 rising D multiplier;
+7.40 build defaults, thresholds from v47; 7.41 launch rulings: energy 0.375 kept, report-only side-car items, NO mid-run changes).
+Build rules: `docs/STAGE3_RULES_DATA_EVAL.md` (26A), `docs/STAGE3_RULES_TRAIN.md` (26B, incl. the dated metres entry).
+
+**RUNNING: Stage 3 run, unit `hyst-wo26b-run-r1`** since 2026-11-09 22:16 (agent 2 launched; script `scripts/body/s3t_run.sh` in agent 2's
+worktree body-m3f; code = body a9fd858; 6 threads cores 6-11, 14 GB cap; log `/secondary/hyst-data/body/s3/run/train.log`; ckpt every round,
+resumable by rerunning the same script under a fresh unit name). Projected 20.2 h (73.4 s/round x 977 + 5 validations x 200 s) -> end ~18:30
+2026-11-10 on mains. Validations at rounds 200 (~02:30), 400 (~06:30), 600, 800, 977. On restart: check `systemctl --user status
+hyst-wo26b-run-r1`, tail train.log, power; re-arm a Monitor on the log (validation/Traceback/nan lines + unit end + power).
+
+**Agents:** agent 1 [9ae40e] idle (did WO26A); agent 2 [59fba5] idle (restarted session; did the WO26B timed round + launch). Refs change on
+restart: ListAgents.
+
+**WAITING on the user:** "send" for **WO27** (`docs/BUILDER_PROMPT_WO27_STAGE3_SIDECAR.md`, body e96443d) -> agent 1: side-car watcher on
+cores 12-17 reading copies of ckpt.pkl/best.pkl: per-hinge active share + multipliers at each validation (s3/run_report/summary.txt), and at
+round 400 a 60 s Instant Crush clip (60-120 s, one-arm camera) + shoulder sd + cells (and pass2's on the same 60 s) -> overseer checks, sends
+to user; user may stop the run early on it. If round 200 passes before WO27 is armed, its hinge report can still be computed later from a
+copy of that round's ckpt only if saved — the watcher copies ckpt at the validation; a missed round is reported as missed.
+
+**After the run:** `s3_eval.py --policy /secondary/hyst-data/body/s3/run/best.pkl --out /secondary/hyst-data/body/s3/eval_run/ --ref-bars
+/secondary/hyst-data/body/s3/eval_pass2/bars.json` (agent 1 or 2, cores 6-11 once the run has ended); overseer recomputes bars (b)-(e) from the
+rollouts (as done for pass2: shoulder sd col 1, 5 cm cells first 120 s via m3f_report.fk_points), checks (a)/(f); then three-panel videos
+(v47 | pass2 | Stage 3) on the three danced songs for the user's eye (7.39.4); planner brief with results. Two tries; round 2 changes only what
+the failing bar names (energy threshold may change only if (e) fails, 7.41.1).
+
+**Pass2 reference bars** (s3/eval_pass2/bars.json, verified): (a) 0.943 PASS; (b) 0.468 on 54 pairs; (c) 0.48; (d) 385 -> Stage 3 needs >= 577.5;
+(e) 0 % (median 3.76 deg); (f) pass.
+
+**Lessons (2026-11-09 evening):** builder sessions can restart under a new ref mid-task (agent 2 [4cd51a] -> [59fba5]): send standalone
+messages; cores 12-19 are E-cores (smoke timings there overstate per-round cost ~1.3x+ vs P-cores 6-11); builders ran long smoke tests
+in their shell (31 min) — ask for detached units; my own test timeouts must exceed smoke tests (>= 35 min) or run only fast classes;
+review rules files the moment they are pushed (caught the observer-units deviation before code).
+
 ## CURRENT STATE (2026-11-09 ~19:20) — read this first, then the dated notes below
 
 **Rules of record:** `docs/BRAIN_SPEC.md` on body, latest **7.37-7.38** (7.37 Stage 1 results rulings: fresh-seed rerun, pre-registered
