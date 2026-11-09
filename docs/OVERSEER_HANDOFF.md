@@ -1,4 +1,4 @@
-# Overseer handoff — 2026-11-06
+# Overseer handoff — 2026-11-09
 
 This file is the overseer's whole state. The `/overseer` skill (`.claude/skills/overseer/SKILL.md` on this branch, the canonical copy) starts a new overseer from it and recreates the worktree if it is gone. To start one by hand, paste everything below the line into a fresh session.
 
@@ -94,24 +94,41 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## CURRENT STATE (2026-11-08 ~14:55, saved before an overseer restart) — read this first, then the dated notes below
+## CURRENT STATE (2026-11-09 ~03:00, saved for an overseer clear) — read this first, then the dated notes below
 
-**Rules of record:** `docs/BRAIN_SPEC.md` §7.27-7.32 (body branch; latest 7.32.6). Builder prompt files: `docs/BUILDER_PROMPT_WO14B_K5_PASS2.md`,
-`_WO17_SMOOTH_U.md`, `_WO18_PASS2_CHECK.md` (all on body). Decisions go to the planner as briefs (user rule 2026-11-08, see "How to write").
+**Rules of record:** `docs/BRAIN_SPEC.md` on body, latest **7.33-7.36** (7.33 pass2 rulings + user verdict "same shape repeated"; 7.34 new
+direction: diagnosis + Stage 0 + Stage 1 + overseer operationalisation; 7.35 Stage 1 toy rulings (5 s z-score, arm 0, collapse
+precondition); 7.36 Stage 0 rulings (closed; occupied cells replace dwell postures; Stage 3 2AFC interleaved; ceiling diagnosis)).
+Reference only: `docs/RESEARCH_2026-11-08.md`. Toy rules: `docs/STAGE1_RULES.md`. Decisions go to the planner as briefs.
 
-**Running:** K5-pass2, systemd unit `hyst-wo14-a2` (agent 1's run script `scripts/body/k5p2_run.sh` in worktree
-`.claude/worktrees/body-k5video`, branch `body-k5p2`), cores 6-11, 10 GB cap, mains-only, data `/secondary/hyst-data/body/k5p2/run/`
-(`progress.json`, `train.log`, checkpoint every round, `best.pkl` at end). Options: `--body v2f --hard-clip --floor-acc-hinges
---contact-tc 0.006 --raised-plane --w-floor 1.0 --smooth-u` (c = 0.5). Validation (217 windows, argmax) ext/int (a): r200 0.862/0.873,
-r400 0.895/0.921, r600 0.913/0.931 (K5 try 1 at r600: 0.574/0.539). ~65 s/round lately; round ~650/977 at 14:50; **training ends
-~20:30-21:00**; 30 h compute box (7.27.5). Pause `systemctl --user freeze hyst-wo14-a2` / stop (checkpoints, clean exit) / resume
-`scripts/body/k5p2_run.sh <suffix>`. Overseer watcher was a background bash loop on progress.json val count + unit + ADP1 (re-create).
+**Nothing is running.** Both builders idle: agent 1 [9ae40e] (did WO19 Stage 0 + WO21 ceiling), agent 2 [4cd51a] (did WO20 Stage 1).
+Refs change on restart: use ListAgents. All builder branches verified and merged: body = 918f10a (body-k5p2, body-s0, body-s0b, body-s1),
+keys-decide merged.
 
-**Builders (sessions restarted ~13:54; refs change on restart — use ListAgents):**
-- Agent 1 [9ae40e]: WO18 (pass2 check `k5p2_eval.py` + video scripts) SENT ~14:15; pushed body-k5p2 99feee2 (check script, render script,
-  tests) at 14:47 but "nothing has passed end to end yet" and it went idle. NEXT: nudge it to finish/test end to end before training ends,
-  and to WATCH the training unit so it starts the check on best.pkl (6 thr / 14 GB, --working-directory) when it ends. Then videos.
-- Agent 2 [071001]: fresh, idle. Owes (optional, record only) WO17 `rerun4/summary.json` + night-log "Work order 17" section on body-m3f.
+**WAITING: planner answers to `docs/PLANNER_BRIEF_STAGE1_RESULTS.md`** (sent to user ~02:50). Summary:
+- Stage 1 (12 runs, `/secondary/hyst-data/body/s1/`): precondition NOT MET (occupied cells fail because the untrained toy arm is nearly
+  still) -> no verdict. Informational: arms 0/i between-song JS ~ half-song control (pass2 signature); arm ii JS 0.77 (3.7x i) with D
+  0.73/0.77; iii doubles cells; iv D 0.65-0.69 < 0.7. Toy arm i only partly collapsed (2AFC 0.70-0.86 vs pass2 0.49).
+- Q1 recommends: pre-register collapse = between/half JS ratio <= 1.5 on both seeds, rerun all arms on FRESH seeds 2/3 (~1 h, agent 2,
+  `scripts/body/s1_chain.sh` resume-safe; new seeds need a new output dir or seed option). Q2 ingredients after rerun (default ii + iii).
+  Q3 report-only ACC_SHARE probe (generator acceleration cap 0.25 binds pitch joints 99.8 %). Q4 record partial-collapse caveat.
+- When answers arrive: record as BRAIN_SPEC 7.37 on body (detached temp worktree, `git push origin HEAD:body`), BEFORE any run; then
+  message agent 2 (rerun) / agent 1 (probe) only with the user's word.
+
+**Key verified results of this session:** pass2 (K5-pass2, best r600) passed its numeric bar (7.33) but the user rejected the videos;
+Stage 0: pass2 machine 2AFC 49.1 % (chance) over 128 tempo-matched held-out pairs, JS between 0.30 < half 0.46; v47 held-out impossible
+(auto beat grid fails), v47 3 danced songs = weak ref; 0.741 m/s = start-up transient at 2.74 s, not a bound (after 8 s peak 0.680 sd 0.036).
+
+**Overseer scripts (job tmp, NOT durable):** verify_p2.py (pass2 paired bootstrap), ep_csv.py / shape*.py (posture, e'), s0_fk.py +
+s0_check.py (independent Stage 0 2AFC/JS), all simple; rewrite if needed.
+
+**Session lessons (2026-11-08/09):**
+- "Distinct postures >= 0.5 % dwell" runs backwards for wide motion; use occupied cells at equal duration (7.36.2).
+- A numeric legibility bar can pass with one shape modulated in timing; the user's eye is the real test (7.33.7).
+- The B7 `omega` lane is the L3 phase rate, not the beat tempo; use librosa for tempo.
+- Glob carefully when counting result files (smoke-run result.json files counted as runs once).
+- Run scripts/body test modules in separate processes (16 errors only when run together).
+- Builders often go idle with a unit running; watch units yourself.
 
 **2026-11-09 ~02:50 — CURRENT:** Stage 1 DONE (agent 2, body-s1 5999c31, 12 runs, 51 min), recomputed by overseer from run_*/result.json
 (match). Collapse precondition NOT MET (JS ok, occupied cells fail: untrained toy arm nearly still, 23-27 cells) -> no verdict, as ruled.
