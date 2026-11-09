@@ -1374,3 +1374,19 @@ rulings below bind).
    tempo- and gain-matched nearest train songs; and the builder's own L2 logistic regression. That regression gets a test against scipy's
    optimiser (or a closed-form check on a separable toy, if scipy is absent).
 4. Stage 1 still waits for the Stage 0 report.
+
+### 7.36 Rulings on Stage 0, 2026-11-09, via planner (answering `docs/PLANNER_BRIEF_STAGE0_RESULTS.md`)
+
+1. **Q1 (c). Stage 0 is closed.** The pass2 machine 2AFC is at chance (49.1 % [45.4, 52.7] over 128 tempo-matched held-out pairs;
+   overseer recomputed 48.4 %), which confirms the working diagnosis (7.34.1). v47 one arm on the three danced songs is recorded as a weak
+   reference only: v47's automatic beat grid failed on held-out songs, 0 of 10.
+2. **Q2 (a) + (b), before Stage 1 runs.** "Occupied cells (any dwell)" replaces "distinct postures (>= 0.5 % dwell)" in the Stage 1 collapse
+   precondition (7.35.2) and in every later bar. The entropy of the cell distribution (bits) is reported alongside. Occupied cells are
+   always compared at equal durations, because cell counts grow with time. Reason: the dwell measure ran backwards (v47 7 vs pass2 60;
+   occupied cells v47 1,507 vs pass2 412-458).
+3. **Q3 (a), for Stage 3.** The machine 2AFC uses interleaved 30 s clips (odd clips train, even clips test) with a 30 s gap. Stage 1 keeps
+   its rules.
+4. **Q4: run Stage 1 now** (arms 0 and i-iv, two seeds).
+5. **Report-only diagnosis of the 0.741 m/s ceiling on pass2,** before any Stage 3 design: which bound produces it (the generator
+   amplitude cap, the smooth-u scale c = 0.5, or the frequency range). It does not block Stage 1. Recorded: the hand-speed hinge bound is
+   1.2 m/s (`m3f_jax.py:32`), 0.46 m/s above the ceiling.
