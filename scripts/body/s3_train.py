@@ -166,13 +166,16 @@ class Trainer3(m3e.Trainer):
                 acc["rms"].append(float(np.sqrt(np.asarray(aux["ms"])[..., m3d.NON_ROLL].mean())))
                 acc["kap"].append(np.asarray(aux["kappa"]).mean())
             self.data[g] = (self.data[g] + [self._collect(g, {"q": np.concatenate(qs, 1), "idesc": np.concatenate(ids, 1)})])[-4:]
+        t_ref = time.time()
         self._refresh(200)
+        t_d = time.time()
         self.update_D()
+        secs_refresh, secs_D = t_d - t_ref, time.time() - t_d
         mean = lambda k: float(np.mean(acc[k])) if acc[k] else None
         rec = {"epoch": self.epoch, "tau": tau, "dec_e": mean("dec_e"), "dec_i": mean("dec_i"), "fast_mse": mean("fast"), "slow_mse": mean("slow"), "nce": mean("nce"), "tv": mean("tv"),
                "g": dict(zip(L.G_NAMES, np.mean(gs, 0).tolist())) if gs else None, "mu": dict(zip(L.G_NAMES, self.mu.tolist())), "muD": {"fast": float(self.muD[0]), "slow": float(self.muD[1])},
                "D_fast": self.Dest[0], "D_slow": self.Dest[1], "rms_speed": mean("rms"), "kappa_mean": mean("kap"), "rate_mult": mean("mult"), "abs_delta": mean("absd"),
-               "critic_loss": mean("vloss"), "secs": time.time() - t0}
+               "critic_loss": mean("vloss"), "secs_observer_refresh": secs_refresh, "secs_D_est": secs_D, "secs": time.time() - t0}
         self.hist.append(rec)
         self.log("epoch " + json.dumps({k: (round(v, 4) if isinstance(v, float) else (({a: round(b, 4) for a, b in v.items()}) if isinstance(v, dict) else v)) for k, v in rec.items()}))
         self.epoch += 1
@@ -257,8 +260,11 @@ def timed(run, rounds=2):
     round_s = float(np.mean(secs[1:] or secs))
     n_val = run.R // T.VAL_EVERY + 1
     hours = (run.R * round_s + n_val * val_s) / 3600
-    out = {"round_secs": secs, "round_s_used": round_s, "validation_s": val_s, "R": run.R, "validations": n_val, "projected_h": hours, "box_h": T.BOX_H, "within_box": hours <= T.BOX_H,
-           "threads": os.environ.get("OMP_NUM_THREADS"), "note": "round 0 includes JIT compile; round_s_used is the mean of the later rounds"}
+    h = run.tr.hist[-rounds:]
+    out = {"round_secs": secs, "round_s_used": round_s, "round_s_with_compile": secs[0], "D_est_secs": [r["secs_D_est"] for r in h], "observer_refresh_secs": [r["secs_observer_refresh"] for r in h],
+           "validation_s": val_s, "R": run.R, "validations": n_val, "projected_h": hours, "box_h": T.BOX_H, "within_box": hours <= T.BOX_H,
+           "threads": os.environ.get("OMP_NUM_THREADS"), "cores": "taskset -c 6-11",
+           "note": "round 0 includes JIT compile (and the calibration is not in the round time); round_s_used is the mean of the later rounds; the first validation also compiles the 64-window batch rollout"}
     (run.out / "timed_round.json").write_text(json.dumps(out, indent=1))
     run.log("timed round: " + json.dumps(out))
     return out
