@@ -141,7 +141,8 @@ threshold 4.75e6; pass2 untrained 4.56e8 -> trained r600 5.8e5, so reachable), m
 J/block vs threshold 0.375: Stage 3 has ~pass2's energy budget). D_fast/D_slow ~0 at start. val2 ext a 0.242. User: "send to planner or start work" -> overseer
 LAUNCH sent to agent 2 [59fba5] (~21:15; out /secondary/hyst-data/body/s3/run/, cores 6-11, 14 GB). Info brief
 `docs/PLANNER_BRIEF_STAGE3_LAUNCH.md` (body b467341) SENT to user (8 facts incl. overseer's Q4 observer error; optional Q1 energy threshold).
-NEXT: confirm unit active + first round; watch (Monitor, re-arm 30 min); report each validation (every 200 rounds, ~4 h); after the run: s3_eval.py
+RUNNING: unit hyst-wo26b-run-r1 since 22:16 (s3t_run.sh, code = body a9fd858, log /secondary/hyst-data/body/s3/run/train.log); ETA ~18:30 tomorrow if on mains.
+NEXT: watch (Monitor, re-arm 30 min); report each validation (every 200 rounds, ~4 h); after the run: s3_eval.py
 --policy best.pkl --ref-bars s3/eval_pass2/bars.json, verify bars, videos, brief.
 **NEXT:** verify 26A (recompute PCA var, thresholds from replay, pass2 reference bars vs 2AFC ~49 % / ratio ~0.69 / shoulder 3-4 deg) and 26B
 (bit-identity, Lipschitz test, design file vs 7.39.4/7.40); merge both into body; say "timed round" to agent 2; projection <= 30 h -> per 7.39.4
