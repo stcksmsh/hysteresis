@@ -113,6 +113,14 @@ r400 0.895/0.921, r600 0.913/0.931 (K5 try 1 at r600: 0.574/0.539). ~65 s/round 
   and to WATCH the training unit so it starts the check on best.pkl (6 thr / 14 GB, --working-directory) when it ends. Then videos.
 - Agent 2 [071001]: fresh, idle. Owes (optional, record only) WO17 `rerun4/summary.json` + night-log "Work order 17" section on body-m3f.
 
+**2026-11-09 ~01:40 — CURRENT:** Stage 0 DONE (agent 1, body-s0), VERIFIED by overseer (independent FK + sklearn, job tmp s0_check.py):
+pass2 2AFC 49.1 % [45.4, 52.7] (overseer 48.4 %), pairs valid (128, tempo <= 5, different artists), JS 0.298 vs half 0.463, peak 0.742 sd
+0.007, shoulder 3.87. Expectation met (<= 60 %). v47 held-out NOT feasible (auto beat grid fails gate 0/10) -> 3 danced songs only.
+FINDING: "distinct postures >= 0.5 % dwell" runs backwards (v47 7 vs pass2 60; occupied cells v47 1,507 vs 412) -> affects 7.35.2 Stage 1
+precondition. Brief `docs/PLANNER_BRIEF_STAGE0_RESULTS.md` SENT (Q1 accept with v47 weak ref, Q2 occupied cells in precondition,
+Q3 interleaved 2AFC split for Stage 3, Q4 run Stage 1 after Q2). Agent 2 Stage 1 ready (body-s1 5ba7343, 17 tests rerun OK by overseer,
+arm (i) surviving sd 0.20 vs 0.99). Stage 1 run waits for Q2 ruling + user's word. body-s0 not merged yet (new files only).
+
 **2026-11-09 ~01:00:** Stage 0 pass2 rollouts DONE (357 songs, 25 min, hyst-wo19-roll1); agent 1 measuring next. Tempo: omega-BPM
 disagreed with librosa on 20/20 -> librosa tempo for all (prompt's fallback; note: omega is not the beat tempo). Stage 1 toy built
 (agent 2, body-s1 8700c2b, 13 tests). Planner ruled on it = BRAIN_SPEC 7.35 (body 665eb4d): 5 s z-score; NEW arm (0) = arm (i) target with
