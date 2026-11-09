@@ -113,6 +113,13 @@ r400 0.895/0.921, r600 0.913/0.931 (K5 try 1 at r600: 0.574/0.539). ~65 s/round 
   and to WATCH the training unit so it starts the check on best.pkl (6 thr / 14 GB, --working-directory) when it ends. Then videos.
 - Agent 2 [071001]: fresh, idle. Owes (optional, record only) WO17 `rerun4/summary.json` + night-log "Work order 17" section on body-m3f.
 
+**2026-11-09 ~02:50 — CURRENT:** Stage 1 DONE (agent 2, body-s1 5999c31, 12 runs, 51 min), recomputed by overseer from run_*/result.json
+(match). Collapse precondition NOT MET (JS ok, occupied cells fail: untrained toy arm nearly still, 23-27 cells) -> no verdict, as ruled.
+Informational: arms 0/i reproduce pass2's between~half JS signature; arm ii JS 0.77 (3.7x i) with D 0.73/0.77; iii doubles cells;
+iv D < 0.7. Brief `docs/PLANNER_BRIEF_STAGE1_RESULTS.md` SENT (Q1 pre-register new precondition = between/half JS ratio <= 1.5, rerun fresh
+seeds 2/3; Q2 ingredients after rerun; Q3 report-only ACC_SHARE probe; Q4 record partial-collapse caveat). body-s1 not merged yet
+(new files only). Both agents idle.
+
 **2026-11-09 ~02:10:** WO21 ceiling DONE (agent 1, body-s0b b813796, merged into body), verified (overseer recomputed from Stage 0 hand
 positions): 0.741 m/s is a START-UP transient at t = 2.74 s from the fixed start pose (peak in first 8 s on 331/357 songs, 0.7407 sd 0.0004);
 after 8 s peak 0.680 sd 0.036 (0.554-0.806). Amp cap x1.5 / freq x1.5: unchanged; c = 0.35 lowers it -> (a)(b)(c) ruled out. Steady-dance
