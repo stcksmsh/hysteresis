@@ -139,6 +139,14 @@ under 7.37.1 (arm 0 ratio 0.93/4.84, arm i 4.82/1.21). Brief `docs/PLANNER_BRIEF
 Q2 ii alone default / D hinge for iii, Q3 record seed dependence). WAITING: planner answers; WO23 chain (hyst-wo23-chain, ETA ~14:05) ->
 verify (recompute cap shares + realised joint acc/speed vs limits from rollouts) -> own brief. Agent 2 idle.
 
+**2026-11-09 ~13:45 — CURRENT:** planner ruled the Stage 1 rerun = BRAIN_SPEC **7.38** (body f8eee24): Stage 1 closed without verdict
+(four-seed table informational); forward = arm ii; route to iii = ii + iii with D >= 0.7 hinge (dual multiplier), toy check seeds 4/5
+report-only; seed dependence recorded; thread-count rule (fix and state threads, compare only at equal counts). Next per planner: WO23
+brief, then Stage 3 design (5-DoF run, human real-vs-swapped-music test) ruled with both. Prompt `docs/BUILDER_PROMPT_WO24_D_HINGE_TOY.md`
+(agent 2, branch body-s1d, cores 6-11, data /secondary/hyst-data/body/s1d/, ~30 min) written, NOT SENT (waiting for the user's word).
+WO23 chain: A1 + B done (B argmax ext 1.172 int 1.174 e'1 2.55 e'2 0.0013 programs 2; A1 ext 1.098 int 1.129 e'1 3.86 e'2 0.0334
+programs 1), S1 running, AS next, ETA ~16:15.
+
 **Key verified results of this session:** pass2 (K5-pass2, best r600) passed its numeric bar (7.33) but the user rejected the videos;
 Stage 0: pass2 machine 2AFC 49.1 % (chance) over 128 tempo-matched held-out pairs, JS between 0.30 < half 0.46; v47 held-out impossible
 (auto beat grid fails), v47 3 danced songs = weak ref; 0.741 m/s = start-up transient at 2.74 s, not a bound (after 8 s peak 0.680 sd 0.036).
