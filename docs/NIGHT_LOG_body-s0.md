@@ -28,7 +28,6 @@ STAGE 0 DONE, nothing trained. Pass2 machine 2AFC on 128 tempo-matched held-out 
 | peak hand speed | mean 0.742 m/s, across-song sd 0.0073 (range 0.739-0.806): the same on every song |
 | distance to the bound (1.2 m/s, m3f_jax.py:32, hinge line 272) | 0.46 m/s below it; the peak never approaches the bound |
 | program entropy | 0.0 bits on all 357 songs (one program) |
-| tempo | librosa; 5-95 % not used further |
 
 **Three danced songs (not tempo matched, 3 pairs):**
 | | v47 arm 0 | pass2 |
