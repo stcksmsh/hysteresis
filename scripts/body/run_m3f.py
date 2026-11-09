@@ -13,6 +13,7 @@ import sys
 import time
 from pathlib import Path
 
+import cpg
 import m3e
 import m3e_jax as M
 import m3f
@@ -56,6 +57,8 @@ def add_args(ap):
     ap.add_argument("--raised-plane", action="store_true", help="table plane at make_arm_v2.RAISED_PLANE_Z = 0.05 + d (7.30.6) and the floor hinge on the surfaces' clearance above it, divided by 0.05 m")
     ap.add_argument("--smooth-u", action="store_true", help="WO17 (7.32): smooth strictly monotone map of every u output into (0, 1) instead of the hard clip; bend centres within +-100 deg")
     ap.add_argument("--hard-clip", action="store_true", help="BRAIN_SPEC 7.27 point 2: targets of every ranged joint clipped CLIP_MARGIN_DEG inside the range (new body only)")
+    ap.add_argument("--acc-share", type=float, default=0.25, help="WO23 (7.37.3): the generator's share of each joint's acceleration limit (cpg.ACC_SHARE; default = today)")
+    ap.add_argument("--speed-share", type=float, default=0.8, help="WO23 (7.37.3): the generator's share of each joint's speed limit (cpg.SPEED_SHARE; default = today)")
     ap.add_argument("--max-epochs-now", type=int, default=0, help="stop after this many epochs of this call (0 = all; for timing)")
 
 
@@ -64,6 +67,7 @@ def main():
     ap.add_argument("--out", required=True)
     add_args(ap)
     a = ap.parse_args()
+    cpg.ACC_SHARE, cpg.SPEED_SHARE = a.acc_share, a.speed_share      # read at trace time by cpg.py and m3d_jax.cpg_step
     out = Path(a.out)
     (out / "rollouts").mkdir(parents=True, exist_ok=True)
     t0 = time.time()
