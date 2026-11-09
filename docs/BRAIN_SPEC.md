@@ -1416,3 +1416,19 @@ Recorded before any run they score.
      *Overseer note: `cpg.py:21` records that ACC_SHARE 0.7 once let the shoulder reach 1.2x its acceleration limit at 50 Hz.*
 4. **Q4: recorded.** The toy's arm i is only partly collapsed: its machine 2AFC is 0.70-0.86, against pass2's 0.49 (Stage 0). Song
    identity stays partly readable in the toy without any change.
+
+### 7.38 Rulings on the Stage 1 rerun, 2026-11-09, via planner (answering `docs/PLANNER_BRIEF_STAGE1_RERUN.md`)
+
+1. **Q1 (a). Stage 1 is closed without a verdict.** The four-seed table (seeds 0-3, `/secondary/hyst-data/body/s1/` and `.../s1r/`) is
+   recorded as informational: arms ii-iv show between/half JS ratios of 8.8-20.5 against 0.77-4.84 for arms 0/i, and machine 2AFC 0.97-0.99
+   against 0.63-0.88. The forward choice is a design decision on this evidence, not a pre-registered pass.
+2. **Q2 (a) + (c).** Default forward: **arm ii** (corpus-normalised slow target + matched InfoNCE). The route to arm iii's wider movement:
+   ii + iii with **D >= 0.7 enforced as a hinge with a dual multiplier**. One toy check on two fresh seeds (4 and 5), report-only, before
+   any long run (work order 24).
+3. **Q3: recorded.** Toy collapse is seed-dependent: arm 0 meets the collapse ratio on 3 of 4 seeds, arm i on 2 of 4. Any toy precondition
+   needs several seeds.
+4. **Recorded: M3f training numbers depend on the thread count with the same code** (WO23 identity control: epoch-0 dec_e 1.9956 at 3
+   threads, 1.9924 at 6, 1.9983 at 8; calibration identical). Every run states and fixes its thread count; comparisons only at equal
+   thread counts.
+5. **Next:** the WO23 cap-probe brief; then the Stage 3 design (5-DoF run; bars incl. the human real-vs-swapped-music test) is ruled with
+   both in hand.
