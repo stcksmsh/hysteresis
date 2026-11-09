@@ -361,6 +361,12 @@ def mmd_between(hand, bw=0.1, sub=4):
     return float(np.median(pairs)), float(np.median(half))
 
 
+def occupied_cells(hand):
+    """Occupied cells on the 24 x 24 grid (any dwell), mean over songs; compare only at equal durations. Also the mean entropy (bits) of the cell distribution."""
+    H = [hist2d(h) for h in hand]
+    return float(np.mean([(x > 0).sum() for x in H])), float(np.mean([-(x[x > 0] * np.log2(x[x > 0])).sum() for x in H]))
+
+
 def distinct_postures(hand):
     return float(np.mean([(hist2d(h) >= 0.005).sum() for h in hand]))
 
@@ -450,6 +456,8 @@ def evaluate(params, arm, data, which="held"):
     D, ci = shifted_gap_D(pred, data["tgt_" + which])
     mm, mm_half = mmd_between(hand)
     res = {"mmd_between": mm, "mmd_half": mm_half, "js_between": js, "js_half": js_half, "js_ratio": js / max(js_half, 1e-12), "D": D, "D_ci": ci,
+           "occupied_cells": occupied_cells(hand)[0], "cell_entropy_bits": occupied_cells(hand)[1],
+           "occupied_cells_half": occupied_cells(np.concatenate([hand[:, :T // 2], hand[:, T // 2:]]))[0], "cell_entropy_bits_half": occupied_cells(np.concatenate([hand[:, :T // 2], hand[:, T // 2:]]))[1],
            "distinct_postures": distinct_postures(hand), "peak_hand_speed": float(np.mean([np.linalg.norm(np.diff(h, axis=0), axis=1).max() / DT for h in hand])),
            "mean_dec_loss": float(np.mean((pred[:, T_FROM:] - data["tgt_" + which][:, T_FROM:]) ** 2))}
     if which == "held":
@@ -462,7 +470,7 @@ def evaluate(params, arm, data, which="held"):
 def untrained_reference(seed, data, which="held"):
     """Between-song JS and distinct postures of the untrained (initial) policy for this seed: the collapse precondition's denominators."""
     _, hand = rollout_np(init_params(seed), data[which]["feats"])
-    return {"js_between": between_song_js(hand)[0], "distinct_postures": distinct_postures(hand)}
+    return {"js_between": between_song_js(hand)[0], "distinct_postures": distinct_postures(hand), "occupied_cells": occupied_cells(hand)[0], "cell_entropy_bits": occupied_cells(hand)[1]}
 
 
 def build_data():
@@ -495,7 +503,7 @@ def run(arm, seed, epochs, lam, out, data=None):
     res = {"arm": arm, "seed": seed, "lam": lam, "epochs": epochs, "val": evaluate(params, arm, d, "val"), "held": evaluate(params, arm, d, "held"), "untrained": untrained_reference(seed, d), "hist_tail": hist[-5:],
            "sec_per_epoch": float(np.mean([h["sec"] for h in hist[1:]] or [hist[0]["sec"]]))}
     json.dump(res, open(os.path.join(out, "result.json"), "w"), indent=1)
-    log(json.dumps({k: res["held"][k] for k in ("js_between", "js_half", "D", "distinct_postures")}))
+    log(json.dumps({k: res["held"][k] for k in ("js_between", "js_half", "D", "occupied_cells")}))
     return res
 
 

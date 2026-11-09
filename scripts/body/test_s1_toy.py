@@ -118,6 +118,15 @@ class Pieces(unittest.TestCase):
         l_b, _ = S.loss_fn(p, 100 * jnp.ones(3), f, t, jnp.zeros(4, int), 0, 0.0, nrm)
         self.assertAlmostEqual(float(l_a), float(l_b), places=6)       # mu has no effect in arm 0
 
+    def test_occupied_cells_wide_loop_beats_small_repeated_loop(self):
+        t = np.arange(S.T) * S.DT
+        small = np.stack([0.05 * np.cos(2 * np.pi * 2 * t), 0.05 * np.sin(2 * np.pi * 2 * t)], 1)[None]
+        wide = np.stack([0.5 * np.cos(2 * np.pi * 0.1 * t), 0.5 * np.sin(2 * np.pi * 0.1 * t)], 1)[None]
+        (cs, es), (cw, ew) = S.occupied_cells(small), S.occupied_cells(wide)
+        self.assertGreater(cw, 3 * cs); self.assertGreater(ew, es)
+        # equal durations: halves of the same song are compared only with halves
+        self.assertLessEqual(S.occupied_cells(wide[:, :S.T // 2])[0], cw)
+
     def test_logreg_separates(self):
         rng = np.random.default_rng(0)
         X = np.vstack([rng.normal(0, 1, (20, 5)), rng.normal(3, 1, (20, 5))]); y = np.r_[np.zeros(20), np.ones(20)]

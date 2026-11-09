@@ -105,4 +105,9 @@ The 2AFC is reported for all arms as supporting evidence; it is not part of the 
      collapsing arm (if both collapse: arm i, with arm 0 reported alongside), and the report states which.
   4. **MMD** (RBF bandwidth 0.1 m, squared, whole-song hand positions every 4th step, median over song pairs, with the half-song control) is a secondary column (`mmd_between`, `mmd_half`); not part of the verdict.
   5. Test of the own L2 logistic regression against scipy minimisers (BFGS and Nelder-Mead on the same objective, fixed data) added (`test_logreg_matches_scipy_minimiser`).
+  6. **2026-11-09, BRAIN_SPEC 7.36.2 (before the run): "occupied cells (any dwell)" replaces "distinct postures (>= 0.5 % dwell)" everywhere, including the collapse precondition** (arm 0 or arm i: trained between-song JS <= 1/3 of untrained
+     AND occupied cells <= 1/3 of untrained). Occupied cells = cells of the 24 x 24 grid with any visit, mean over the 32 held-out songs; all songs are 40 s so whole-song counts compare at equal duration;
+     the half-song control (20 s halves) is compared only with other 20 s values (`occupied_cells_half`). Also reported: the entropy of the cell distribution in bits (`cell_entropy_bits`, `_half`). The old dwell measure stays as the
+     report-only column `distinct_postures`. Test: a wide slow loop occupies more cells than a small fast loop over the same duration. The collapse precondition needs both seeds of the arm to collapse (section 10 item 3).
+     Run: 12 runs, one detached unit, resume-safe at run granularity (`s1_chain.py`), 6 threads on cores 6-11; `summary.json` has the collapse precondition first, then the verdict.
   Smoke (2 epochs per arm, 3 threads): 0.46 / 0.42 / 0.40 / 0.64 / 0.68 s per epoch for arms 0, i, ii, iii, iv; 12 runs x 1000 epochs = 1.8 h serial at 3 threads.
