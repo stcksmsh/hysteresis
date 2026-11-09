@@ -1487,3 +1487,28 @@ Recorded before any run these rulings score.
    ends at 0.78 on both seeds (held-in estimate optimistic by about 0.13 on seed 7). Rising D across seeds 4-7: 0.790, 0.769, 0.782,
    0.651. Other held-out numbers (seeds 6/7): JS ratio rising 12.1/9.9, falling 10.7/11.2; occupied cells 50.8/41.2 vs 49.9/39.0;
    machine 2AFC 0.970-0.980 all four runs.
+
+### 7.40 Rulings on WO25 and the Stage 3 gaps, 2026-11-09, via planner (answering `docs/PLANNER_BRIEF_WO25_STAGE3_GAPS.md`)
+
+Recorded before the Stage 3 timed round and before any Stage 3 result.
+
+1. **7.39.6 confirmed: Stage 3 uses the rising D multiplier.** Also recorded: rising held-out D over toy seeds 4-7 was 0.790, 0.769, 0.782,
+   0.651; the held-in estimate can be optimistic by about 0.12. **D >= 0.7 is a training safeguard, not a Stage 3 bar;** held-out D per
+   stream is reported.
+2. **Q1 (b). Energy and jerk hinge thresholds:** energy threshold = v47's mean block energy replayed on the v2f body; jerk threshold =
+   1.25x v47's jerk. Computed in the build and recorded (dated note in the Stage 3 rules) before the timed round. If v47 cannot be
+   replayed on v2f: report, then use pass2's realised values (best.pkl r600, mean over its training windows) x 1.5.
+3. **Q2 (b).** The program switch cost stays at W_SWITCH 0.01, as part of the basal ganglia as built.
+4. **Q3 (a) + (ii). One D hinge per stream** (fast and slow; two multipliers; rising, `mu <- max(0, mu + 0.16 max(0, 0.7 - D_est))`,
+   once per round). D_est is computed once per round on a **fixed set of 16 validation windows** (never trained on, never the 357
+   held-out songs), with the toy's shifted-gap definition (20 circular shifts >= 8 s, D = 1 - L_matched / L_shifted).
+5. **Q4: overseer defaults accepted as written:**
+   - L4 PCs: block mean (0.5 s) of the L4 state's real and imaginary parts, PCA fitted on train songs only, top 8, corpus z-scored;
+   - the 8 s surprisal integral: causal sum of total surprisal over the last 8 s, from the 10 Hz lane;
+   - InfoNCE: temperature 0.1, weight 0.5, symmetric, motion encoder on hand positions, gradient through the motion encoder; negatives =
+     the 7 nearest train songs by sqrt((dBPM/10)^2 + (dlogRMS/0.3)^2), tempo by librosa, RMS from the audio;
+   - Lipschitz by spectral norm (exact SVD per step) on both observers, units stated (external: metres of hand/joint position; internal:
+     its descriptor units);
+   - limit-hinge multipliers start at 1, step 0.02 per batch, rising only.
+6. **Q5: start the build now** (L4 lane pass, tempo/RMS, code, tests). The timed round runs after these rulings are recorded (they are,
+   here); if it projects past 30 h, ask.
