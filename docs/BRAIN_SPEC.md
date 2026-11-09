@@ -1478,3 +1478,12 @@ Recorded before any run these rulings score.
      designed and ruled before it runs (target: real vs swapped tempo-matched music, 20 s clips, n >= 30 x 20 trials, >= 65 % with
      binomial p < .01). No public wording before that test passes.
 5. **Order:** toy check (WO25) -> timed round -> Stage 3 run -> bars -> user's eye -> human test.
+6. **Outcome of the point 2 toy check (WO25, recorded 2026-11-09 ~18:35, overseer-recomputed from `run_*/result.json` in
+   `/secondary/hyst-data/body/s1f/`; body-s1f e2f7761; 6 threads, cores 6-11; tests test_s1f/test_s1d/test_s1_toy OK).**
+   Held-out D: rising (iii+D) 0.782 [0.720, 0.837] seed 6, 0.651 [0.576, 0.723] seed 7; falling (iii+Df) 0.778 [0.714, 0.834] seed 6,
+   0.665 [0.600, 0.726] seed 7. MMD (between): rising 0.214 / 0.267 (mean 0.240); falling 0.226 / 0.364 (mean 0.295).
+   Falling D >= 0.7 on both seeds: no (seed 7 0.665). **By the rule, Stage 3 uses the rising multiplier** (mean and per-seed readings
+   agree). Recorded facts, not rulings: the rising version also misses held-out D 0.7 on seed 7 (0.651), although its held-in D_est
+   ends at 0.78 on both seeds (held-in estimate optimistic by about 0.13 on seed 7). Rising D across seeds 4-7: 0.790, 0.769, 0.782,
+   0.651. Other held-out numbers (seeds 6/7): JS ratio rising 12.1/9.9, falling 10.7/11.2; occupied cells 50.8/41.2 vs 49.9/39.0;
+   machine 2AFC 0.970-0.980 all four runs.
