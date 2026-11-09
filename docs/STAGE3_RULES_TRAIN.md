@@ -73,3 +73,11 @@ Blocks b >= `VALID_FROM` = 8 of the window are scored (as pass2). `valid` = that
 Tests use a stub written to a temporary directory. Until 26A's files exist the trainer refuses to start (explicit error).
 
 ## 5. Dated notes
+
+**2026-11-09 (overseer ruling, replaces the external-observer input of section 2 point 1 and its FOR USER note; BRAIN_SPEC 7.39.4 "posture metric in metres").** The external observer reads a causal
+1.5 s window of forward-kinematics positions in **metres**: 15 samples at 10 Hz (samples 9, 19, ... of the 100 Hz joint trajectory; a block ends on every 5th grid sample, newest first), for three points of the
+visible arm in the base frame (`m3f_jax.fk_all` points 2, 3, 5 = elbow, wrist, hand), x, y, z, flattened: 15 x 3 x 3 = **135 inputs**, no standardisation. Samples before the episode start are 0.
+Spectral-norm Lipschitz with gain G = 4, so the external observer is 4-Lipschitz in metres (test: measured on random inputs, with and without the normalisation). The window is computed from the carry
+buffer plus the chunk in the loss (`s3_obs.ext_features_chunk`) and from the whole rollout elsewhere (`ext_features`); a test shows they are equal. The **internal** observer keeps its descriptor
+units (27 numbers, standardised by the calibration sd), as BRAIN_SPEC 7.40.5. Bar (a) is scored by `k5p2_eval` with its own fresh unconstrained observers and does not use these. D per stream is
+computed with the external observers on this input.
