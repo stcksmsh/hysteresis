@@ -154,6 +154,13 @@ iii+D .790/.769 (s4/s5); cells ii 21/24, iii 44.5/44.8, iii+D 47.3/46.9; JS rati
 own effect is not isolated. NOT yet briefed: goes into ONE brief with WO23 (planner: WO23 brief, then Stage 3 design). WO23 S1 running,
 AS next, ETA ~16:40. Both builders idle.
 
+**2026-11-09 ~17:00 — CURRENT:** WO23 DONE (agent 1, body-acc 7d7c9d3; chain 09:41-16:23, report step crashed on rerun4_ref getattr, fixed +
+rerun), verified (overseer recomputed realised joint speed/acc from rollouts with np.diff: speed + acc p99 match; acc single-sample max
+method-dependent, B shoulder 1.008x by 2nd difference vs 0.805 central), merged body caca60d + keys-decide. Within limits on acc
+everywhere; speed max 1.006 (A1) / 1.001 (AS). Raising ACC_SHARE moves joints acc-cap -> speed-cap; shoulder 99.6 % on acc cap always;
+JS ratio 0.78-0.81 all settings; e'2 A1 .033 AS .048. Combined brief `docs/PLANNER_BRIEF_WO23_WO24_RESULTS.md` SENT (Q1 keep caps,
+Q2 ii+iii+D with descending mu_D toy check, Q3 limit-check reporting, Q4 rule Stage 3). WAITING: planner. Nothing running; agents idle.
+
 **Key verified results of this session:** pass2 (K5-pass2, best r600) passed its numeric bar (7.33) but the user rejected the videos;
 Stage 0: pass2 machine 2AFC 49.1 % (chance) over 128 tempo-matched held-out pairs, JS between 0.30 < half 0.46; v47 held-out impossible
 (auto beat grid fails), v47 3 danced songs = weak ref; 0.741 m/s = start-up transient at 2.74 s, not a bound (after 8 s peak 0.680 sd 0.036).
