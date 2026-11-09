@@ -113,7 +113,14 @@ r400 0.895/0.921, r600 0.913/0.931 (K5 try 1 at r600: 0.574/0.539). ~65 s/round 
   and to WATCH the training unit so it starts the check on best.pkl (6 thr / 14 GB, --working-directory) when it ends. Then videos.
 - Agent 2 [071001]: fresh, idle. Owes (optional, record only) WO17 `rerun4/summary.json` + night-log "Work order 17" section on body-m3f.
 
-**2026-11-09 ~01:40 — CURRENT:** Stage 0 DONE (agent 1, body-s0), VERIFIED by overseer (independent FK + sklearn, job tmp s0_check.py):
+**2026-11-09 ~02:00 — CURRENT:** Planner ruled Stage 0 = BRAIN_SPEC 7.36 (body 4c4ebcd): Stage 0 closed (2AFC at chance confirms diagnosis;
+v47 3 songs weak ref); occupied cells (any dwell, equal durations) + entropy replace dwell postures everywhere; Stage 3 2AFC interleaved
+clips with 30 s gap; RUN Stage 1 now; report-only 0.741 ceiling diagnosis. body-s0 MERGED into body (8ef8d5a), keys-decide 3224f55.
+SENT: agent 2 [4cd51a] amend rules (occupied cells) then run all 12 Stage 1 runs (6 thr cores 6-11, one unit); agent 1 [9ae40e] WO21
+ceiling diagnosis (branch body-s0b, 3 thr cores 12-14, out /secondary/hyst-data/body/s0/ceiling/). notify_when_idle both.
+NEXT: verify Stage 1 amendment pushed before launch; watch the unit; verify results (collapse precondition first); brief planner.
+
+**2026-11-09 ~01:40:** Stage 0 DONE (agent 1, body-s0), VERIFIED by overseer (independent FK + sklearn, job tmp s0_check.py):
 pass2 2AFC 49.1 % [45.4, 52.7] (overseer 48.4 %), pairs valid (128, tempo <= 5, different artists), JS 0.298 vs half 0.463, peak 0.742 sd
 0.007, shoulder 3.87. Expectation met (<= 60 %). v47 held-out NOT feasible (auto beat grid fails gate 0/10) -> 3 danced songs only.
 FINDING: "distinct postures >= 0.5 % dwell" runs backwards (v47 7 vs pass2 60; occupied cells v47 1,507 vs 412) -> affects 7.35.2 Stage 1
