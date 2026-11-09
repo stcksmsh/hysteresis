@@ -1,5 +1,28 @@
 # Night log, builder (body-s1), work order 20, Stage 1 toy (2026-11-09)
 
+# WO24 (2026-11-09): arm iii+D, toy check on seeds 4 and 5, report-only
+
+## MORNING SUMMARY (WO24)
+
+6 runs (ii, iii, iii+D x seeds 4, 5; 1000 epochs; **6 threads, taskset cores 6-11**; one detached unit `hyst-wo24-dhinge`, 2048 s). Rules: `docs/STAGE1_RULES.md` section 12 (committed and pushed before the run). Report: `/secondary/hyst-data/body/s1d/report.json` + `report.txt`. **No pass claim.**
+
+| run | JS between | JS half | ratio | held-out D (CI) | occupied cells | entropy bits | 2AFC | MMD |
+|---|---|---|---|---|---|---|---|---|
+| ii s4 | 0.862 | 0.036 | 23.97 | 0.780 (0.707-0.848) | 21.4 | 3.30 | 0.988 | 0.4465 |
+| iii s4 | 0.536 | 0.048 | 11.18 | 0.737 (0.679-0.794) | 44.5 | 4.99 | 0.992 | 0.3103 |
+| iii+D s4 | 0.440 | 0.038 | 11.61 | 0.790 (0.743-0.835) | 47.3 | 5.12 | 0.967 | 0.2103 |
+| ii s5 | 0.845 | 0.041 | 20.51 | 0.767 (0.712-0.819) | 24.1 | 3.60 | 0.990 | 0.5051 |
+| iii s5 | 0.581 | 0.049 | 11.91 | 0.752 (0.688-0.813) | 44.8 | 4.96 | 0.988 | 0.3238 |
+| iii+D s5 | 0.482 | 0.041 | 11.88 | 0.769 (0.699-0.832) | 46.9 | 5.10 | 0.967 | 0.2203 |
+
+- iii+D reaches held-out D >= 0.7 on both seeds (0.790, 0.769). Arms ii and iii on the same seeds also have D >= 0.7 (0.780, 0.767; 0.737, 0.752): the hinge was not needed to cross 0.7 on these seeds.
+- Occupied cells, iii+D vs ii vs iii: seed 4 47.3 / 21.4 / 44.5; seed 5 46.9 / 24.1 / 44.8.
+- iii+D versus iii: D +0.053 (s4), +0.017 (s5); cells +2.8, +2.1; between-song JS 0.440 / 0.482 against 0.536 / 0.581.
+- D_est (in-sample, 16 held-in train songs) / mu_D trajectory every 10th epoch: `report.txt` and `report.json` (`iii+D_trajectory`). D_est rose from 0.02 at epoch 0 to about 0.70 at epoch 220-230 (s4) and 270-300 (s5), then stayed near 0.75-0.80 (s4 has a dip to 0.443 at epoch 590 that recovered by epoch 610).
+- **Fact: `mu_D` can only rise** (`g_D = max(0, 0.7 - D_est)` is clipped at 0, so `mu_D <- max(0, mu_D + eta_D g_D)` never decreases). **End values (epoch 999): s4 mu_D = 8.453, s5 mu_D = 10.209** (decoding loss weight 1 + mu_D = 9.45 and 11.21). It stopped growing once D_est reached 0.7 (s4 about epoch 220-260, s5 about epoch 270-340) except for small steps at isolated dips.
+- Choices: eta_D = 0.16 per epoch (= 0.02 x 8 batches), held-in = first 16 train songs, mu_D starts at 0; all in section 12. Arm iii epoch-0 loss is bit-identical to origin/body f8eee24 (`test_s1d.py`). Validation-split D (secondary, not in the report): iii+D 0.825 / 0.842; ii 0.872 / 0.845; iii 0.776 / 0.811.
+
+
 ## MORNING SUMMARY
 
 Stage 1 RAN (12 runs, 1000 epochs, one detached unit, 51 min at 6 threads). `/secondary/hyst-data/body/s1/summary.json`.

@@ -24,7 +24,8 @@ WIN_C, SUB_C = 160, 4                   # contrastive window (8 s), motion subsa
 V_MAX, J_MAX, Q_MARGIN = 1.2, 400.0, 0.15
 GRID_N, GRID_LIM = 24, 0.6
 ARMS = ["0", "i", "ii", "iii", "iv"]
-LEVEL = {"0": 0, "i": 0, "ii": 1, "iii": 2, "iv": 3}   # cumulative level; arm 0 = arm i with pass2 soft costs instead of hinges
+LEVEL = {"0": 0, "i": 0, "ii": 1, "iii": 2, "iv": 3, "iii+D": 2}   # cumulative level; arm 0 = arm i with pass2 soft costs instead of hinges
+D_TARGET, ETA_D, D_SONGS = 0.7, 0.16, 16                       # WO24 (rules section 12): D hinge target, dual step per epoch, held-in songs
 TAU_Z = 5.0                                              # arm i z-score time constant (s), 1/8 of the song (BRAIN_SPEC 7.35)
 LAM_SOFT, W_JERK_SOFT = 0.03, 0.03                       # pass2: LAM, W_JERK
 SOFT_FLOORS = {"hand_v": 0.02, "jolt": 0.2, "lim": 0.005, "jerk": 1.0, "en": 1e-6}   # m3f.FLOORS
@@ -230,7 +231,7 @@ def soft_terms(q, hand, g):
     return jnp.stack([jnp.mean(qd ** 2), g[0], g[1], g[2], jnp.mean(j3 ** 2)])
 
 
-def loss_fn(params, mu, feats, tgt, starts, arm, lam, nrm=None):
+def loss_fn(params, mu, feats, tgt, starts, arm, lam, nrm=None, dw=None):
     """feats (B,T,5), tgt (B,T,8), starts (B,) contrastive window starts. -> loss, aux dict."""
     q = rollout(params["pol"], feats)
     hand = fk(q)
@@ -240,9 +241,9 @@ def loss_fn(params, mu, feats, tgt, starts, arm, lam, nrm=None):
     g = jnp.mean(hinges(q, hand), 0)
     if nrm is not None:           # arm 0: pass2 soft costs, normalised by the untrained policy's values; no hinges, no multipliers
         st = soft_terms(q, hand, g) / nrm
-        total = dec + LAM_SOFT * jnp.sum(st[:4]) + W_JERK_SOFT * st[4]
+        total = (dec if dw is None else dw * dec) + LAM_SOFT * jnp.sum(st[:4]) + W_JERK_SOFT * st[4]
     else:
-        total = dec + jnp.sum(mu * g)
+        total = (dec if dw is None else dw * dec) + jnp.sum(mu * g)
     aux = {"dec": dec, "g": g, "nce": jnp.zeros(()), "logdet": jnp.zeros(())}
     if arm >= 1:
         sl = lambda x, s, n: jax.lax.dynamic_slice_in_dim(x, s, n, 0)
@@ -274,6 +275,18 @@ def adam_step(p, g, st, lr=3e-3, clip=1.0, b1=0.9, b2=0.999):
     return p, {"m": m, "v": v, "t": t}
 
 
+def d_hinge_update(mu_d, d_est, eta=ETA_D, target=D_TARGET):
+    """Rules section 12: g_D = max(0, target - D_est); mu_D <- max(0, mu_D + eta * g_D). -> (mu_D, g_D)."""
+    g = max(0.0, target - d_est)
+    return max(0.0, mu_d + eta * g), g
+
+
+def d_est(params, feats, tgt, lip=True):
+    """D exactly as the evaluation (shifted_gap_D, fixed shift seed 0) on a fixed held-in subset (rules section 12)."""
+    _, hand = rollout_np(params, feats)
+    return shifted_gap_D(observe_np(params, hand, lip), tgt, boot=False)[0]
+
+
 def nearest_batch(bpm, logg, anchor, B=8):
     d = np.sqrt(((bpm - bpm[anchor]) / 10) ** 2 + ((logg - logg[anchor]) / 0.3) ** 2)
     return np.argsort(d)[:B]       # includes the anchor itself (distance 0)
@@ -295,25 +308,33 @@ def train(arm, seed, epochs, lam=0.0, data=None, log=print, params=None):
     params = init_params(seed) if params is None else params
     st = adam_init(params)
     mu = jnp.ones(3)
+    mu_d, dw = 0.0, 1.0
+    use_d = arm == "iii+D"
     rng = np.random.default_rng(10_000 + seed)
     nrm = soft_norm(params, tr) if arm == "0" else None
     if nrm is not None:
         log(f"soft-cost normalisation (untrained policy): {np.round(np.asarray(nrm), 5).tolist()}")
-    gradf = jax.jit(jax.value_and_grad(lambda p, m, f, t, s, l: loss_fn(p, m, f, t, s, ai, l, nrm), has_aux=True))
+    gradf = jax.jit(jax.value_and_grad(lambda p, m, f, t, s, l, w: loss_fn(p, m, f, t, s, ai, l, nrm, w if use_d else None), has_aux=True))
     hist = []
     for ep in range(epochs):
         t0 = time.time(); acc = []
         for _ in range(8):
             idx = nearest_batch(tr["bpm"], tr["logg"], int(rng.integers(0, len(tr["bpm"]))))
             starts = jnp.asarray(rng.integers(0, T - WIN_C + 1, len(idx)))
-            (l, aux), g = gradf(params, mu, jnp.asarray(tr["feats"][idx]), jnp.asarray(tgt[idx]), starts, lam)
+            (l, aux), g = gradf(params, mu, jnp.asarray(tr["feats"][idx]), jnp.asarray(tgt[idx]), starts, lam, dw)
             params, st = adam_step(params, g, st)
             mu = jnp.maximum(0.0, mu + 0.02 * aux["g"])
             acc.append([float(l), float(aux["dec"]), float(aux["nce"]), float(aux["logdet"])] + [float(x) for x in aux["g"]])
         a = np.mean(acc, 0)
-        hist.append({"epoch": ep, "loss": a[0], "dec": a[1], "nce": a[2], "logdet": a[3], "g": a[4:].tolist(), "mu": [float(x) for x in mu], "sec": time.time() - t0})
+        dinfo = {}
+        if use_d:
+            de = d_est(params, tr["feats"][:D_SONGS], tgt[:D_SONGS])
+            mu_d, gd = d_hinge_update(mu_d, de, ETA_D)
+            dw = 1.0 + mu_d
+            dinfo = {"d_est": de, "g_D": gd, "mu_D": mu_d}
+        hist.append({"epoch": ep, "loss": a[0], "dec": a[1], "nce": a[2], "logdet": a[3], "g": a[4:].tolist(), "mu": [float(x) for x in mu], "sec": time.time() - t0, **dinfo})
         if ep % 10 == 0 or ep == epochs - 1:
-            log(f"{arm} s{seed} ep{ep} loss {a[0]:.4f} dec {a[1]:.4f} nce {a[2]:.3f} logdet {a[3]:.2f} g {np.round(a[4:], 4).tolist()} mu {np.round(np.array(mu), 3).tolist()} {hist[-1]['sec']:.1f}s")
+            log(f"{arm} s{seed} ep{ep} loss {a[0]:.4f} dec {a[1]:.4f} nce {a[2]:.3f} logdet {a[3]:.2f} g {np.round(a[4:], 4).tolist()} mu {np.round(np.array(mu), 3).tolist()} {('D_est %.3f mu_D %.3f ' % (de, mu_d)) if use_d else ''}{hist[-1]['sec']:.1f}s")
     return params, hist
 
 
@@ -371,7 +392,7 @@ def distinct_postures(hand):
     return float(np.mean([(hist2d(h) >= 0.005).sum() for h in hand]))
 
 
-def shifted_gap_D(pred, tgt, n_shifts=20, seed=0):
+def shifted_gap_D(pred, tgt, n_shifts=20, seed=0, boot=True):
     """D = 1 - L_matched / L_shifted over songs (rules section 3); also per-song gaps for a bootstrap."""
     rng = np.random.default_rng(seed)
     S = len(pred)
@@ -384,6 +405,8 @@ def shifted_gap_D(pred, tgt, n_shifts=20, seed=0):
             v.append(np.mean((pred[s, T_FROM:] - np.roll(tgt[s], k, 0)[T_FROM:]) ** 2))
         ls[s] = np.mean(v)
     D = 1 - lm.mean() / ls.mean()
+    if not boot:
+        return float(D), None
     boot = [1 - lm[i].mean() / ls[i].mean() for i in (rng.integers(0, S, S) for _ in range(1000))]
     return float(D), [float(np.percentile(boot, 2.5)), float(np.percentile(boot, 97.5))]
 
@@ -501,6 +524,7 @@ def run(arm, seed, epochs, lam, out, data=None):
     params, hist = train(arm, seed, epochs, lam, d, log)
     pickle.dump(jax.tree_util.tree_map(np.asarray, params), open(os.path.join(out, "params.pkl"), "wb"))
     res = {"arm": arm, "seed": seed, "lam": lam, "epochs": epochs, "val": evaluate(params, arm, d, "val"), "held": evaluate(params, arm, d, "held"), "untrained": untrained_reference(seed, d), "hist_tail": hist[-5:],
+           "d_traj": [{k: h[k] for k in ("epoch", "d_est", "g_D", "mu_D")} for h in hist if "d_est" in h and h["epoch"] % 10 == 0],
            "sec_per_epoch": float(np.mean([h["sec"] for h in hist[1:]] or [hist[0]["sec"]]))}
     json.dump(res, open(os.path.join(out, "result.json"), "w"), indent=1)
     log(json.dumps({k: res["held"][k] for k in ("js_between", "js_half", "D", "occupied_cells")}))
@@ -509,7 +533,7 @@ def run(arm, seed, epochs, lam, out, data=None):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--arm", choices=ARMS)
+    ap.add_argument("--arm", choices=ARMS + ["iii+D"])
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--epochs", type=int, default=1000)
     ap.add_argument("--lam", type=float, default=0.0)
