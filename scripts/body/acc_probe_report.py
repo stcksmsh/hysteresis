@@ -95,7 +95,7 @@ def cap_shares(run, args):
     import m3f
     import run_m3f as RM
     import s0_ceiling as C
-    a = argparse.Namespace(**args)
+    a = argparse.Namespace(**{"acc_share": 0.25, "speed_share": 0.8, **args})      # runs from before WO23 saved no shares: today's defaults
     cpg.ACC_SHARE, cpg.SPEED_SHARE = a.acc_share, a.speed_share
     toy = m3f.ToyF(a.toy)
     Cb = M.load_cb()
