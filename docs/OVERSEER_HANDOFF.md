@@ -133,6 +133,12 @@ secs); B retrained (overseer ruling: same code/threads/cores for all four); chai
 LESSON: M3f training numerics depend on thread count (epoch-0 dec_e 1.9956 at 3 thr, 1.9924 at 6, 1.9983 at 8; calibration identical) -
 never compare runs at different thread counts; retrain baselines at the probe's thread count.
 
+**2026-11-09 ~10:20 — CURRENT:** WO22 DONE (agent 2, body-s1r 261c760, verified: diff = seeds option + new files + rules s11 + log;
+test_s1r_verdict + test_s1_toy OK in separate processes; all 12 numbers recomputed, match), MERGED body 261c760, keys-decide. NO VERDICT
+under 7.37.1 (arm 0 ratio 0.93/4.84, arm i 4.82/1.21). Brief `docs/PLANNER_BRIEF_STAGE1_RERUN.md` SENT (Q1 close Stage 1 informational,
+Q2 ii alone default / D hinge for iii, Q3 record seed dependence). WAITING: planner answers; WO23 chain (hyst-wo23-chain, ETA ~14:05) ->
+verify (recompute cap shares + realised joint acc/speed vs limits from rollouts) -> own brief. Agent 2 idle.
+
 **Key verified results of this session:** pass2 (K5-pass2, best r600) passed its numeric bar (7.33) but the user rejected the videos;
 Stage 0: pass2 machine 2AFC 49.1 % (chance) over 128 tempo-matched held-out pairs, JS between 0.30 < half 0.46; v47 held-out impossible
 (auto beat grid fails), v47 3 danced songs = weak ref; 0.741 m/s = start-up transient at 2.74 s, not a bound (after 8 s peak 0.680 sd 0.036).
