@@ -31,11 +31,11 @@ def first_windows_distinct_songs(n):
     return out
 
 
-def write_stub(root, wins, n_val=4):
-    """26A's interface with random content: slow/<split>/<id>.npz, tempo_rms.json, thresholds.json."""
+def write_stub(root, wins):
+    """26A's interface with random content, covering every song the run can touch (the train windows and ALL validation songs): slow/<split>/<id>.npz, tempo_rms.json, thresholds.json, norm.json."""
     root = Path(root)
     rng = np.random.default_rng(0)
-    for split, ids in (("train", sorted({s for s, _ in wins})), ("val", SPL["val"]["ids"][:n_val])):
+    for split, ids in (("train", sorted({s for s, _ in wins})), ("val", SPL["val"]["ids"])):
         (root / "slow" / split).mkdir(parents=True, exist_ok=True)
         for sid in ids:
             nb = len(T.lanes(T.K5, split, sid)[0])
@@ -150,9 +150,9 @@ class Run(unittest.TestCase):
     def test_smoke_resume_identical_and_validation(self):
         T.EVAL_BATCH = 3
         S.N_D_WINDOWS = 3
-        wins = first_windows_distinct_songs(8)
+        wins = first_windows_distinct_songs(16)                        # 4 rounds of 4 windows; the test stops after 2, so no end-of-pass validation over the stub-less val songs
         with tempfile.TemporaryDirectory() as a, tempfile.TemporaryDirectory() as b, tempfile.TemporaryDirectory() as s3:
-            write_stub(s3, wins, n_val=4)
+            write_stub(s3, wins)
             straight = self._run(a, wins, s3, 2)
             self._run(b, wins, s3, 1)
             resumed = self._run(b, wins, s3, 2)
@@ -166,6 +166,7 @@ class Run(unittest.TestCase):
             for x in jax.tree_util.tree_leaves(straight.tr.P) + jax.tree_util.tree_leaves(straight.tr.enc):
                 self.assertTrue(np.isfinite(np.asarray(x)).all())
             h = straight.tr.hist
+            print("SECS_PER_ROUND (4 windows, batch 2, cores 12-17):", [round(r["secs"], 1) for r in h], flush=True)
             self.assertEqual(len(h), 2)
             for r in h:
                 for k in ("dec_e", "dec_i", "nce", "D_fast", "D_slow"):

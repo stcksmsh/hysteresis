@@ -55,7 +55,18 @@ def limit_g(o, valid, thr):
                       mean(o["acc"]) / ACC, mean(o["floor"]) / FLOOR, mean(o["lim"])])
 
 
+_FNS = {}
+
+
 def make_fns(C, cfg):
+    """Cached per cfg within a process: C is the fixed cerebellum file (m3e_jax.load_cb), so a second trainer reuses the compiled functions (a resumed run does not recompile)."""
+    k = F.key(cfg)
+    if k not in _FNS:
+        _FNS[k] = _make_fns(C, cfg)
+    return _FNS[k]
+
+
+def _make_fns(C, cfg):
     chunk = F.make_chunk(cfg)
 
     def loss_fn(Q, Oe, Oi, carry, inps, tgt, valid, tau, mu, dw, dmu, dsd, imu, isd, thr, c0, nce_on):
