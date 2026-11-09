@@ -111,3 +111,11 @@ The 2AFC is reported for all arms as supporting evidence; it is not part of the 
      report-only column `distinct_postures`. Test: a wide slow loop occupies more cells than a small fast loop over the same duration. The collapse precondition needs both seeds of the arm to collapse (section 10 item 3).
      Run: 12 runs, one detached unit, resume-safe at run granularity (`s1_chain.py`), 6 threads on cores 6-11; `summary.json` has the collapse precondition first, then the verdict.
   Smoke (2 epochs per arm, 3 threads): 0.46 / 0.42 / 0.40 / 0.64 / 0.68 s per epoch for arms 0, i, ii, iii, iv; 12 runs x 1000 epochs = 1.8 h serial at 3 threads.
+
+## 11. 7.37 rerun: seeds 2/3 (before the run)
+
+Precondition and pass rule as BRAIN_SPEC 7.37.1. All six arms, fresh seeds 2 and 3, 1000 epochs, rules otherwise as above.
+- Collapse precondition: arm 0 or arm i has between-song JS / half-song JS <= 1.5 on **both** seeds. Not met: "no verdict", stop.
+- Reference: arm i's JS (arm 0 if only it meets the precondition) = mean over seeds 2 and 3. An arm reaches a factor when its seed mean does and D >= 0.7 on each seed.
+- Report the smallest of ii, iii, iv (either lambda) reaching >= 2x, and whether iv reaches >= 3x. Alongside: occupied cells, cell entropy, machine 2AFC, MMD. Seeds 0/1 informational only.
+- Code: `scripts/body/s1_chain.py --seeds`, `s1r_chain.sh`, `s1r_verdict.py` (+ `test_s1r_verdict.py`). Data: `/secondary/hyst-data/body/s1r/`.

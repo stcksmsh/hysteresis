@@ -1,5 +1,5 @@
 """Stage 1 chain (work order 20): the 12 runs as one unit, resume-safe (a run with result.json is skipped), then summary.
-    python -u s1_chain.py [--epochs 1000] [--root /secondary/hyst-data/body/s1]"""
+    python -u s1_chain.py [--epochs 1000] [--root /secondary/hyst-data/body/s1] [--seeds 0,1]"""
 import argparse
 import os
 import time
@@ -18,10 +18,12 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--epochs", type=int, default=1000)
     ap.add_argument("--root", default="/secondary/hyst-data/body/s1")
+    ap.add_argument("--seeds", default="0,1")
     a = ap.parse_args()
+    seeds = tuple(int(x) for x in a.seeds.split(","))
     data = S.build_data()
     t0 = time.time()
-    for seed in (0, 1):
+    for seed in seeds:
         for arm, lam in RUNS:
             d = run_dir(a.root, arm, lam, seed)
             if os.path.exists(os.path.join(d, "result.json")):
@@ -29,5 +31,5 @@ if __name__ == "__main__":
                 continue
             print(f"=== {d} start {time.time() - t0:.0f}s", flush=True)
             S.run(arm, seed, a.epochs, lam, d, data)
-    s1_summary.summarise(a.root, a.epochs)
+    s1_summary.summarise(a.root, a.epochs, seeds)
     print("done", time.time() - t0, flush=True)
