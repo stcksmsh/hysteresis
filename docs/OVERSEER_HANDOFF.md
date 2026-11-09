@@ -126,6 +126,13 @@ body-acc, cores 12-17, data /secondary/hyst-data/body/acc/, baseline = m3f/rerun
 WO22 -> agent 2 [4cd51a], WO23 -> agent 1 [9ae40e], notify_when_idle both. Check first pushes of body-s1r / body-acc by ~10:00. Verify: WO22 rules section 11 + verdict script pushed before launch; WO23 default bit-identity, realised
 joint acc/speed vs limits recomputed from rollouts.
 
+**2026-11-09 ~09:45:** WO22 running (hyst-wo22-s1r, pre-run commit 3de54c7 checked: --seeds default 0,1; verdict script = 7.37.1, ref i
+else 0). Seed 2 done: arm 0 JS ratio 0.93 (collapse ok), arm i 4.8 (not collapsed); D ii 0.689, iii 0.643, iv(.05) 0.589, iv(.5) 0.643 (all
+< 0.7 on seed 2); seed 3 running, ETA ~10:15. WO23: identity control verified by overseer (origin/body vs body-acc epoch 0 identical except
+secs); B retrained (overseer ruling: same code/threads/cores for all four); chain hyst-wo23-chain launched 09:41, ETA ~14:05.
+LESSON: M3f training numerics depend on thread count (epoch-0 dec_e 1.9956 at 3 thr, 1.9924 at 6, 1.9983 at 8; calibration identical) -
+never compare runs at different thread counts; retrain baselines at the probe's thread count.
+
 **Key verified results of this session:** pass2 (K5-pass2, best r600) passed its numeric bar (7.33) but the user rejected the videos;
 Stage 0: pass2 machine 2AFC 49.1 % (chance) over 128 tempo-matched held-out pairs, JS between 0.30 < half 0.46; v47 held-out impossible
 (auto beat grid fails), v47 3 danced songs = weak ref; 0.741 m/s = start-up transient at 2.74 s, not a bound (after 8 s peak 0.680 sd 0.036).
