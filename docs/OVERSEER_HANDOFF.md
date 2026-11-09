@@ -111,7 +111,7 @@ optimistic ~0.13. body-s1f (325978b, night log) MERGED: body 111dcb1, keys-decid
 not a bar; Q1 (b) energy thr = v47 mean block energy replayed on v2f, jerk thr = 1.25x v47 (fallback pass2 realised x 1.5); Q2 switch 0.01
 kept; Q3 one D hinge per stream, D_est on 16 fixed VALIDATION windows; Q4 overseer defaults accepted; Q5 build now, timed round after 7.40
 (recorded), ask if > 30 h.
-**Prompts written (body cda8b9b), NOT SENT (both agents idle, cleared earlier; send on the user's word):**
+**Prompts SENT 2026-11-09 ~19:25 (user "do it"; notify_when_idle both; check first pushes of body-s3d / body-s3t by ~19:55):**
 - `docs/BUILDER_PROMPT_WO26A_STAGE3_DATA_EVAL.md` -> agent 1 [9ae40e]: branch body-s3d, L4 slow lanes (13 cols) + tempo_rms.json +
   thresholds.json (v47 replay on v2f) + `s3_eval.py` bars (a)-(f) + pass2 reference bars; data /secondary/hyst-data/body/s3/, cores 6-11, 12 GB.
 - `docs/BUILDER_PROMPT_WO26B_STAGE3_TRAINER.md` -> agent 2 [4cd51a]: branch body-s3t, `s3_train.py` (ingredients from s1_toy on
