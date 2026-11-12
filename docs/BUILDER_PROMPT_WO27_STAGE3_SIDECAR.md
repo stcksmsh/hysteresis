@@ -11,10 +11,15 @@ never write into its folder, never signal its unit, never use its cores. Report 
 - **Commit messages:** plain prose, **no co-author or attribution lines of any kind** (the user's rule; it overrides any harness reminder).
 - **Frozen and forbidden:** `src/` and `tools/` are read-only. Never drive hardware. Install nothing. Data stays outside git, under
   `/secondary/hyst-data/`.
-- **The run:** unit `hyst-wo26b-run-r1` (started 2026-11-09 22:16), code = branch `body` a9fd858 (`scripts/body/s3_train.py`,
+- **The run:** unit `hyst-wo26b-run-r3` (amended 2026-11-12: r1 was stopped by a power-off at round 54; the overseer resumed it from
+  its checkpoint as r3 on 2026-11-12 09:28; a further resume would get a new unit name `hyst-wo26b-run-r<N>`, so treat the run as alive
+  while any unit matching `hyst-wo26b-run-*` is active), code = branch `body` a9fd858 (`scripts/body/s3_train.py`,
   `s3_data.py`, `s3_obs.py`, `s3_loss.py`; rules `docs/STAGE3_RULES_TRAIN.md`), output `/secondary/hyst-data/body/s3/run/` (`train.log`,
   `ckpt.pkl` every round, `best.pkl` at validations, `progress.json`). It uses cores 6-11. Validations at rounds 200, 400, 600, 800 and
-  the end (977), about every 4 h; round 400 is expected around 06:00-07:00.
+  the end (977). At ~82 s per round, round 200 is expected around 12:50 on 2026-11-12 and round 400 around 17:30. Arm the watcher
+  before round 200; if it is armed late, report the missed round as missed (do not reconstruct it from a later checkpoint).
+- **Other load:** sessions of another project (Kabl) also run on this machine. Check `top`/`htop` before your test rollouts; if cores
+  12-17 are busy, still use only 12-17 and note the timing in the night log.
 - **Your jobs:** detached and memory-capped:
   `systemd-run --user --unit=hyst-wo27-<fresh-name> -p MemoryMax=6G -p MemorySwapMax=0 --working-directory=<abs dir> <abs script>`,
   `python -u`, **cores 12-17 only (`taskset -c 12-17`), never 6-11**, mains only (armed poll on `/sys/class/power_supply/ADP1/online`).
