@@ -38,8 +38,8 @@ and in `docs/DIALSTUDY_DIALS.md`.
 3. **Roundness**: blend `rho = (d + 1) / 2` between two joint-space paths through the same poses: (angular) joint-linear segments with a
    short ease (trapezoid, 15 % each end), stopping at every pose; (round) a C1 Catmull-Rom spline through the same poses at their
    arrival times, flowing without stopping.
-4. **Lead/lag**: per-joint start offsets `lag01 * [0, 0.10, 0.35, 0.55, 0.70]` beats for (base, shoulder, elbow, wrist bend, wrist roll),
-   with `lag01 = (d + 1) / 2`: low = all together, high = base and shoulder lead, wrist follows 0.42 s late.
+4. **Lead/lag**: per-joint start offsets `lag01 * [0, 0.20, 0.60, 1.00, 1.40]` beats for (base, shoulder, elbow, wrist bend, wrist roll),
+   with `lag01 = (d + 1) / 2`: low = all together, high = base and shoulder lead, wrist roll follows 0.84 s late (raised from the first 0.10-0.70 beats: a first look at the CSVs showed under 0.4 s and almost no change from neutral).
 5. **Posture**: centre pose `(base, shoulder, elbow, wrist bend, roll)` `low = (0, -45, 60, -70, 0)`, `neutral = (0, -60, 30, -15, 0)`,
    `high = (0, -80, 10, -20, 0)` deg, linear in d; low = drooped, low, folded; high = lifted, tall, open (the study's neutral is not the rig's home pose; the wrist
    is cocked up in low and neutral so the hand clears the plane; revised from the first numbers for feasibility: with the first amplitudes
