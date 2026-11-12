@@ -10,7 +10,7 @@ import argparse, csv, json
 from pathlib import Path
 
 ROUND1 = "/secondary/hyst-data/body/dialstudy/session_2026-11-12"
-MEAS = ["pr", "regime", "freq_hz", "hand_speed", "hand_height", "straightness"]
+MEAS = ["pr", "regime", "freq_hz", "hand_speed", "hand_height", "straightness", "straightness_min"]
 
 
 def cell(s):

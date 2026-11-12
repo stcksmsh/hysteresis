@@ -143,10 +143,11 @@ class Measure(unittest.TestCase):
         h8 = np.stack([0.1 * np.sin(2 * np.pi * 0.8 * self.T), 0 * self.T, 0 * self.T], 1)
         self.assertAlmostEqual(mm.dominant_freq(h8), 0.8, delta=0.1)
         self.assertAlmostEqual(mm.hand_speed(h).mean(), 0.2 * 2 * np.pi * f * 2 / np.pi, delta=0.02)
-        self.assertAlmostEqual(mm.straightness(h), 1.0, places=3)
+        self.assertAlmostEqual(mm.straightness(h)[0], 1.0, places=3)
         self.assertAlmostEqual(float(h[:, 2].mean()), 0.3)
-        c = np.stack([0.2 * np.cos(2 * np.pi * 0.2 * self.T), 0.2 * np.sin(2 * np.pi * 0.2 * self.T), 0 * self.T], 1)
-        self.assertLess(mm.straightness(c) or 0, 0.9) if mm.straightness(c) is not None else None
+        th = np.pi * (0.5 - 0.5 * np.cos(2 * np.pi * 0.5 * self.T))  # back and forth along a semicircle: chord/arc = 2/pi
+        c = 0.2 * np.stack([np.cos(th), np.sin(th), 0 * th], 1)
+        self.assertAlmostEqual(mm.straightness(c)[0], 2 / np.pi, delta=0.05)
 
     def test_cli_on_fake_manifest(self):
         import subprocess
@@ -161,7 +162,7 @@ class Measure(unittest.TestCase):
                                capture_output=True, text=True, env={"PYTHONPATH": str(Path(__file__).resolve().parent)})
             self.assertEqual(r.returncode, 0, r.stderr)
             m = json.loads((d / "o.json").read_text())["S01"]
-            self.assertEqual(sorted(m), sorted(["pr", "regime", "freq_hz", "hand_speed", "hand_height", "straightness"]))
+            self.assertEqual(sorted(m), sorted(["pr", "regime", "freq_hz", "hand_speed", "hand_height", "straightness", "straightness_min"]))
 
 
 class Report(unittest.TestCase):

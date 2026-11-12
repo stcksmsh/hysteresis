@@ -10,7 +10,7 @@ Per setting, from its Part 1 clip (CSV at 50 Hz, activity.npy float32 T x N at 5
   freq_hz     peak of the summed power spectra of the mean-removed hand x, y, z (DC excluded)
   hand_speed  mean hand speed, m/s
   hand_height mean hand z, m
-  straightness mean chord/arc per stroke; stroke = hand path between hand-speed minima (dialstudy_straight.py: arc > 0.05 m counts)
+  straightness mean (and straightness_min) chord/arc per stroke, strokes as in rules (f)
 Numbers only: no judgement.
 """
 import argparse, json, sys
@@ -50,25 +50,32 @@ def hand_speed(h, hz=HZ):
 
 
 def dominant_freq(h, hz=HZ):
-    """Peak of the summed power spectra of the mean-removed x, y, z hand coordinates, DC excluded."""
+    """Peak of the summed power spectra of the mean-removed x, y, z hand coordinates (overseer's correction of rules (f): the speed
+    spectrum doubles a back-and-forth frequency). Hann window, whole clip, no zero padding, bins above 0.1 Hz."""
     h = np.asarray(h, float)
-    p = (np.abs(np.fft.rfft(h - h.mean(0), axis=0)) ** 2).sum(1)
+    x = (h - h.mean(0)) * np.hanning(len(h))[:, None]
+    p = (np.abs(np.fft.rfft(x, axis=0)) ** 2).sum(1)
     f = np.fft.rfftfreq(len(h), 1 / hz)
-    return float(f[1:][np.argmax(p[1:])])
+    ok = f > 0.1
+    return float(f[ok][np.argmax(p[ok])])
 
 
 def straightness(h, hz=HZ):
-    """Mean chord/arc over strokes (hand path between hand-speed minima); 1.0 for a straight path."""
-    v = hand_speed(h, hz)
-    mins = [i for i in range(1, len(v) - 1) if v[i] < v[i - 1] and v[i] <= v[i + 1]]
-    cuts = [0] + mins + [len(h) - 1]
+    """(mean, min) chord/arc over strokes: hand path between local minima of the 0.1 s box-smoothed hand speed, minima >= 0.3 s apart,
+    strokes with arc < 0.05 m skipped.  (1.0, 1.0) for a straight path; (None, None) when no stroke qualifies."""
+    v = np.convolve(hand_speed(h, hz), np.ones(max(1, round(0.1 * hz))) / max(1, round(0.1 * hz)), "same")
+    gap = round(0.3 * hz)
+    mins = []
+    for i in range(1, len(v) - 1):
+        if v[i] < v[i - 1] and v[i] <= v[i + 1] and (not mins or i - mins[-1] >= gap):
+            mins.append(i)
     out = []
-    for a, b in zip(cuts, cuts[1:]):
+    for a, b in zip(mins, mins[1:]):
         seg = h[a:b + 1]
-        arc = np.linalg.norm(np.diff(seg, axis=0), axis=1).sum() if len(seg) > 1 else 0
-        if arc > MIN_ARC:
+        arc = np.linalg.norm(np.diff(seg, axis=0), axis=1).sum()
+        if arc >= MIN_ARC:
             out.append(np.linalg.norm(seg[-1] - seg[0]) / arc)
-    return float(np.mean(out)) if out else None
+    return (float(np.mean(out)), float(np.min(out))) if out else (None, None)
 
 
 def read_csv(p):
@@ -84,7 +91,7 @@ def hand_path(csv_path):
 
 def measure(r, h, hz=HZ):
     return dict(pr=participation_ratio(r), regime=regime(r, hz), freq_hz=dominant_freq(h, hz),
-                hand_speed=float(hand_speed(h, hz).mean()), hand_height=float(h[:, 2].mean()), straightness=straightness(h, hz))
+                hand_speed=float(hand_speed(h, hz).mean()), hand_height=float(h[:, 2].mean()), straightness=straightness(h, hz)[0], straightness_min=straightness(h, hz)[1])
 
 
 def main():
