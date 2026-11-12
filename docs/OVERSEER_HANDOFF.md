@@ -94,7 +94,25 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## CURRENT STATE (2026-11-12 19:20) — read this block first
+## CURRENT STATE (2026-11-12 19:45) — read this block first
+
+**NEW DIRECTION (Kosta via planner) = BRAIN_SPEC 7.42 (Stage 3 closed; no more proxy-objective movement training) + 7.43 (the piece:
+a machine conveying emotion it does not understand; the hand-set dial study, WO28)**, body 665abdc. Read 7.43 in full: five dials, Sets
+A-D, blind labelling tool, out-of-scope list, overseer notes 7.43.6 (Set D skipped: no audio in `/secondary/hyst-data/audio/checkset/`;
+defaults for tense "long holds" and light "bouncy"; glitch gates = builder's rules file, overseer reviews).
+**SENT 19:45 (user: "both agents free"), notify_when_idle both:**
+- `docs/BUILDER_PROMPT_WO28A_DIAL_CLIPS.md` -> agent 1 [19f533]: branch body-dial, cores 6-11; rules file `docs/DIALSTUDY_RULES.md` first
+  (REVIEW IT: gates, dial ranges, not v47), Sets A (11) + B (5) to `/secondary/hyst-data/body/dialstudy/clips/` + manifest.json; Set C waits
+  for overseer word after 28B's effector merge; dial notes `docs/DIALSTUDY_DIALS.md`.
+- `docs/BUILDER_PROMPT_WO28B_DIAL_TOOL.md` -> agent 2 [778c35]: branch body-dialtool, cores 12-17; `--implement lamp|gripper` in
+  ensemble_preview (visual only; v47 Off byte-identical), then blind tool (`dialstudy_session.py`, 127.0.0.1, key in session/key/) and
+  `dialstudy_report.py` (no verdict). "EFFECTOR READY <commit>" in its night log -> overseer verifies (hash, tests, frames), merges into
+  body, tells agent 1 to render Set C.
+**Overseer checks before Kosta sees anything:** every clip's gates recomputed from its CSV (clearance via m3f_report.fk_points, end-stop
+dwell, jitter), frames looked at, same framing, 12 s; tool: key not served, no external URL. Then start the session for Kosta (< 20 min);
+report from the CSV, no verdict. Asked Kosta (pending): the "long holds"/"bouncy" defaults; Set D audio files.
+
+## STATE (2026-11-12 19:20)
 
 **STAGE 3 STOPPED ON THE USER'S VERDICT. ALL WORK STOPPED.** User on the round-400 clip (~19:13): "Again same issue, it's the same tight
 move all the time with variations. Stop all work and make handoff explaining state so far to planner". Overseer stopped
