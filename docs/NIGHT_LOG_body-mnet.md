@@ -16,8 +16,9 @@
 
 Status: ON HOLD at the overseer's request. Manifest finished; clips exist but are not declared ready.
 
-CORRECTION (overseer, 2026-11-12): the earlier line "the beat-rate drive is speed-limited" in the FOR USER items above and in the rules file was
-wrong as stated. In the realised clips no joint exceeds 0.9 of its speed or acceleration limit. See DIAGNOSIS below. HOLD: nothing further
+CORRECTION (overseer, 2026-11-12), cause restated: the round-1 command limiter (mainly base and shoulder acceleration) cuts the 1.66 Hz
+beat-rate command's amplitude, then servo lag cuts it further; base yaw 47.5 -> 41.7 -> 13.4 -> 5.4 deg. The earlier line "the beat-rate drive
+is speed-limited" was wrong as stated (realised speeds stay under 0.9 of their limits because the lag has already cut them). See DIAGNOSIS below. HOLD: nothing further
 rendered, no "CLIPS READY" written. Network, settings and clips unchanged.
 
 ## DIAGNOSIS FOR OVERSEER
