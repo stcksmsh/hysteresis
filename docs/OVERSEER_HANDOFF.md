@@ -111,6 +111,12 @@ defaults for tense "long holds" and light "bouncy"; glitch gates = builder's rul
 **Overseer checks before Kosta sees anything:** every clip's gates recomputed from its CSV (clearance via m3f_report.fk_points, end-stop
 dwell, jitter), frames looked at, same framing, 12 s; tool: key not served, no external URL. Then start the session for Kosta (< 20 min);
 report from the CSV, no verdict. Asked Kosta (pending): the "long holds"/"bouncy" defaults; Set D audio files.
+**22:15:** 28B EFFECTOR READY f936827 VERIFIED (overseer: cargo test hyst-compile+hyst-previz 103 OK on an archive of f936827, cores
+12-17; tool tests 5 OK; no external URL; lamp/gripper frames read; new Mirror fields serde-skipped at default so ball JSON unchanged; ball
+page file hash changes by template JS only) -> body fast-forwarded to ef0081c, keys-decide merged. 28A rules (body-dial 59e909d) reviewed
+and ACCEPTED (seed 28011, 1 move / 2 beats, gates incl. no contact at any substep). Told agent 1: Set C go; neutral identical on-screen label
+(page prints "K5 policy"); roundness 'angular' = joint-linear with stops, note it + straightness. Agent 2 done (idle). Next: agent 1 says
+A-C ready -> overseer recomputes gates from CSVs, frames -> start the session for Kosta (dialstudy_session.py ... --serve, port 8765).
 
 ## STATE (2026-11-12 19:20)
 
