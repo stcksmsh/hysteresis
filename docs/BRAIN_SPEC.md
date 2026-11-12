@@ -1530,3 +1530,85 @@ The Stage 3 run (unit `hyst-wo26b-run-r1`, started 22:16, code body a9fd858, out
    - at the round-400 validation: a 60 s render of best.pkl so far on one danced song (one-arm camera), with that clip's shoulder sd and
      occupied cells, sent to the user. The user may stop the run early on it; otherwise it continues untouched.
 4. **No mid-run changes** to the objective, thresholds or multipliers.
+
+### 7.42 Stage 3 closed, 2026-11-12, via the user (Kosta) + planner (answering `docs/PLANNER_BRIEF_STAGE3_VERDICT.md`)
+
+1. **Stage 3 is closed, rejected by Kosta's eye.** Verdict on the round-400 clip (Instant Crush 60-120 s), verbatim: "Again same issue, it's
+   the same tight move all the time with variations." The run stopped at round 511 of 977 (10.94 h compute; best.pkl = round 400, validation
+   ext a 0.572). It is not resumed and gets no bar evaluation. All checkpoints and logs stay in `/secondary/hyst-data/body/s3/run/` and
+   `.../s3/run_report/`.
+2. **Recorded numbers (overseer, Instant Crush whole song, 5 cm cells, hand = `m3f_report.fk_points` last point):**
+
+   | | Stage 3 r400 | pass2 r600 | v47 arm 0 |
+   |---|---|---|---|
+   | hand extent p5-p95 x / y (cm) | 36 / 27 | 59 / 58 | 84 / 83 |
+   | cells per 60 s | 78 | 277 | 474 |
+   | base sd / shoulder sd (deg) | 12 / 8.8 | 99 / 3.0 | 525 / 16.7 |
+
+3. **Lesson:** three objective-only attempts (K5 try 1, K5-pass2, Stage 3) passed their numeric bars and failed the eye. **No further
+   movement training on proxy objectives.**
+
+### 7.43 New direction and the hand-set dial study, 2026-11-12, via Kosta + planner
+
+1. **The piece, Kosta verbatim:** "a machine attempting to show emotion it doesn't understand, nor encode properly, into movement that
+   humans understand perfectly as that emotion". Also: "it has a brain, a human like brain in some aspects, and it dances, it conveys
+   something, some emotion, to your human brain through it's dance, it's trying to be human, trying to tell you something which it itself
+   does not understand".
+2. **Consequences (Kosta's decisions):**
+   - The target is no longer "pleasant, varied dance". The target: a viewer reads a feeling in the arm, and it matches the feeling they hear
+     in the music.
+   - Struggle is allowed: laboured, overthinking, overemphasised. Jitter and glitching are not struggle and are not acceptable.
+   - One arm, permanently. It does not sense visitors.
+   - The mirror ball and the light projection are no longer the primary objective. The end effector may change if another reads better.
+   - v47 must not seed anything. It stays byte-identical in Off.
+   - The old test songs (Instant Crush, Five Years, Presence) are dropped as test material.
+   - Priority order unchanged: looks good and conveys the music > movement truly learned > brain built from brain-like parts. All three
+     central.
+   - The piece is for exhibitions, not for sale. Note for later: the DEAM music-emotion dataset is licensed non-commercial (CC BY-NC).
+3. **Direction accepted as the thing to test (not a build order):** (a) music -> feeling: a small readout on the frozen cortex (surprise,
+   uncertainty, slow state -> intensity and dark/bright), trained on human-rated music; (b) movement -> feeling: the arm explores on its own
+   in simulation, Kosta labels single clips with words, a model learns how humans read its movements; (c) matching: select movement whose
+   predicted human reading matches the music's predicted reading; (d) feeling acts on movement as slow dials, not as a choice of moves.
+   *PROPOSAL (planner, undecided):* auditory cortex (exists) / limbic part (new, small) / emotional drive setting movement dials / motor
+   babbling + cerebellum (exist) / learning to express by caregiver-style feedback from Kosta's labels / basal ganglia + dopamine keep what
+   the labels reinforce. **Do not build (a), (b), (c) or the proposal yet.**
+4. **Work order: the hand-set dial study** (WO28; prompts `docs/BUILDER_PROMPT_WO28A_DIAL_CLIPS.md`, `docs/BUILDER_PROMPT_WO28B_DIAL_TOOL.md`).
+   Purpose: whether this arm body can carry readable feelings at all when movement qualities are set by hand at extremes. Disposable;
+   nothing ships; no learning, no training, no numeric pass bars; Kosta's eye is the only judge.
+   - **Body:** the existing simulated arm (v2f: raised plane, self-collision, hard end stops, smooth command map); plain MuJoCo on CPU;
+     thread count stated. No clip may show jitter, penetration of the plane or base, or dwelling at end stops: such clips are rejected and
+     regenerated before Kosta sees them.
+   - **Five dials** (low / neutral / high): 1 vigour (slow and small <-> fast and large); 2 stiffness (loose, overshoots and settles <->
+     rigid, stops dead); 3 roundness (straight angular segments <-> curved arcs of the end effector); 4 lead/lag (all joints together <->
+     base and shoulder lead, elbow and wrist follow late); 5 posture (drooped, low, folded <-> lifted, tall, open). Underlying movement: one
+     fixed, seeded random sequence of feasible poses, moves timed to a beat grid, the SAME for every clip. Implementation per dial is the
+     builder's choice, reported in two lines each with the numeric range, plus whether the stiffness range is plausible for a position
+     servo like the STS3215 (best estimate, marked unverified).
+   - **Clips:** 12 s, fixed three-quarter camera, table/pillar visible, same framing. Set A: 10 single-dial extremes + 1 all-neutral.
+     Set B: 5 presets (heavy: low vigour, high stiffness, large lag, drooped, round; angry: high vigour, high stiffness, angular, together,
+     lifted; tense: small moves, high stiffness, angular, long holds, lifted; calm: low vigour, low stiffness, round, flowing lag, neutral;
+     light: medium-high vigour, low stiffness, round, bouncy, lifted); adjustments only for feasibility, by eye, final values reported.
+     Set C: heavy, angry, light with a lamp-like head and a simple hand/gripper (simple geometry, same mass as the ball): 6 clips. A-C
+     silent on a fixed 100 BPM grid. Set D only if audio exists in `/secondary/hyst-data/audio/checkset/` (Epitaph = heavy, 21st Century
+     Schizoid Man = angry, One of These Days = tense, Breathe = calm, Blue Lagoon = light): 12 s excerpt per song, matching and clearly
+     mismatching preset, timing from the cortex beat-band phase; else skipped and said so.
+   - **Blind labelling tool:** local, no network; random order, coded names, key in a separate file. A-C: one click from tense / heavy /
+     calm / angry / light / nothing, glitching / something, can't name it; optional note; replay. D: the two renders of one excerpt, order
+     randomised: "which one fits the music?" plus "neither". Answers to CSV; session under 20 minutes.
+   - **Outputs:** videos, key and CSV in `/secondary/hyst-data/body/dialstudy/` (outside git). Report in `docs/`: intended setting vs label
+     per clip; which single dials shifted the reading; end-effector comparison; Set D picks; the dial notes. No verdict from builder or
+     overseer. Planner's suggested reading, for Kosta only: viable if >= 3 of 5 presets are read as intended and >= 2 single dials visibly
+     shift the reading.
+   - **Out of scope (ask Kosta first):** learning or training of any kind; DEAM download; limbic readout; exploration archive / pyribs;
+     brain monitor work; cortex changes (B7 epoch 6 frozen); hardware; new dials or feelings.
+5. **Standing rules unchanged:** branches keys-decide / body only, never master; plain commit messages without attribution lines; frozen
+   `src/` and `tools/`; v47 byte-identical in Off; data, models, audio and videos outside git; copyrighted audio never committed or uploaded;
+   free compute only; no posting; never drive hardware; on anything unclear or conflicting, stop and ask Kosta.
+6. **Overseer notes (not rulings; Kosta may amend):**
+   - Audio check 2026-11-12 19:30: `/secondary/hyst-data/audio/` does not exist and no file with these titles was found under `/secondary`,
+     `~/Music` or `~/Downloads`. Set D is skipped unless Kosta places the five files there.
+   - "Long holds" (tense) and "bouncy" (light) are not among the five dials, and the pose sequence must stay the same. Default taken:
+     "long holds" = each move finishes early in its beat interval and the pose is held to the next (a vigour/timing setting inside the
+     same sequence); "bouncy" = low stiffness overshoot and settle. Asked of Kosta in the same message.
+   - Glitch gates for rejecting clips (not pass bars on the study): defined by the builder in its rules file before rendering, reviewed by
+     the overseer.
