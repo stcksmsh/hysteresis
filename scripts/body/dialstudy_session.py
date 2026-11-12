@@ -9,6 +9,9 @@ The key (code -> manifest id, set, intent, effector, dials, seed) goes to SESSIO
 reads it and never serves it. The page shows one clip at a time, nothing but the clip, the buttons and n of N.
 Set A-C items: one click from LABELS, optional note. Set D items (manifest entry with set "D" and "files": [a, b], two renders
 of one excerpt): the two clips one after the other in random order, "first / second / neither".
+Motor-network manifest (WO29B; any item with a "part" field, 1, 2, 3 or 4): the labels are LABELS2, Part 3 items (files: [a, b]) are pairs,
+Part 4 items point at a round-1 video (file, or round1_file; absolute path allowed) and get a fresh code name like any other clip. The key
+adds part, setting, round1_id, song. With --out left out, the session goes to <manifest folder>/../session_<date>.
 Answers are appended at once to SESSION_DIR/answers.csv (code,answer,note,timestamp,replays); a reload resumes at the first
 unanswered item. Manifest paths (file, files) are relative to the manifest's folder.
 """
@@ -17,6 +20,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 LABELS = ["tense", "heavy", "calm", "angry", "light", "nothing, glitching", "something, can't name it"]
+LABELS2 = ["calm", "sad", "tense", "energetic", "light", "nothing, glitching", "something, can't name it"]  # WO29B, motor-network manifests
 PAIR_LABELS = ["first", "second", "neither"]
 FIELDS = ["code", "answer", "note", "timestamp", "replays"]
 
@@ -27,6 +31,7 @@ def build(manifest_path, out, seed=None):
         raise SystemExit(f"{out} already holds a session")
     data = json.loads(manifest_path.read_text())
     clips = data["clips"] if isinstance(data, dict) else data
+    v2 = any("part" in c for c in clips)
     seed = secrets.randbits(32) if seed is None else int(seed)
     rng = random.Random(seed)
     (out / "clips").mkdir(parents=True)
@@ -52,22 +57,25 @@ def build(manifest_path, out, seed=None):
 
     items, key = [], {}
     for clip in clips:
-        meta = {k: clip.get(k) for k in ("id", "set", "intent", "effector", "dials")}
-        if clip.get("set") == "D":
+        meta = {k: clip.get(k) for k in ("id", "set", "intent", "effector", "dials", "part", "setting", "round1_id", "song")}
+        if clip.get("set") == "D" or clip.get("files"):
             first, second = list(clip["files"])
+            sets = list(clip.get("setting") or [None, None])
             if rng.random() < 0.5:
                 first, second = second, first
+                sets.reverse()
             codes = [place(first), place(second)]
             item = {"code": code(), "kind": "pair", "clips": codes}
-            key[item["code"]] = {**meta, "first": first, "second": second}
+            key[item["code"]] = {**meta, "first": first, "second": second, "first_setting": sets[0], "second_setting": sets[1]}
         else:
-            c = place(clip["file"])
+            c = place(clip.get("file") or clip["round1_file"])
             item = {"code": c, "kind": "single", "clips": [c]}
             key[c] = meta
         items.append(item)
     rng.shuffle(items)
     (out / "key" / "key.json").write_text(json.dumps({"seed": seed, "key": key}, indent=1))
     (out / "order.json").write_text(json.dumps(items))
+    (out / "labels.json").write_text(json.dumps(LABELS2 if v2 else LABELS))
     (out / "answers.csv").write_text("")
     print(f"session built: {len(items)} items, seed {seed}, in {out}")
 
@@ -78,6 +86,8 @@ class Session:
         self.items = json.loads((self.out / "order.json").read_text())  # never the key
         self.lock = threading.Lock()
         self.path = self.out / "answers.csv"
+        lf = self.out / "labels.json"
+        self.labels = json.loads(lf.read_text()) if lf.is_file() else LABELS
         self.path.touch()
 
     def answered(self):
@@ -88,13 +98,13 @@ class Session:
         done = self.answered()
         todo = [i for i in self.items if i["code"] not in done]
         return {"total": len(self.items), "done": len(self.items) - len(todo), "item": (todo[0] if todo else None),
-                "labels": LABELS, "pairLabels": PAIR_LABELS}
+                "labels": self.labels, "pairLabels": PAIR_LABELS}
 
     def answer(self, body):
         code, ans, note = body.get("code"), body.get("answer"), str(body.get("note", ""))[:2000]
         with self.lock:
             item = next((i for i in self.items if i["code"] == code), None)
-            allowed = PAIR_LABELS if item and item["kind"] == "pair" else LABELS
+            allowed = PAIR_LABELS if item and item["kind"] == "pair" else self.labels
             if item is None or ans not in allowed:
                 return 400
             if code in self.answered():
@@ -127,7 +137,7 @@ async function load() {
   $('note').value = ''; replays = 0; which = 0;
   const it = st.item;
   $('stage').innerHTML = '';
-  vids = it.clips.map(c => { const v = document.createElement('video'); v.src = '/clips/' + c + '.mp4'; v.muted = true; v.playsInline = true; v.controls = false; return v; });
+  vids = it.clips.map(c => { const v = document.createElement('video'); v.src = '/clips/' + c + '.mp4'; v.muted = false; v.playsInline = true; v.controls = false; return v; });
   show(0);
   const labels = it.kind === 'pair' ? st.pairLabels : st.labels;
   $('buttons').innerHTML = '';
@@ -211,9 +221,13 @@ def make_server(out, port=8765):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--clips"); ap.add_argument("--out", required=True); ap.add_argument("--seed")
+    ap.add_argument("--clips"); ap.add_argument("--out"); ap.add_argument("--seed")
     ap.add_argument("--serve", action="store_true"); ap.add_argument("--port", type=int, default=8765)
     a = ap.parse_args()
+    if a.clips and not a.out:
+        a.out = str(Path(a.clips).resolve().parent.parent / ("session_" + time.strftime("%Y-%m-%d")))
+    if not a.out:
+        ap.error("--out is required to serve")
     if a.clips:
         build(a.clips, a.out, a.seed)
     if a.serve or not a.clips:
