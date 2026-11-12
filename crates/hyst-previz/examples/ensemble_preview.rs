@@ -254,7 +254,7 @@ fn usage() -> &'static str {
      --groove-only    disable hit accents\n\
      --no-reuse       disable recalled musical material\n\
      --drag GAIN      wrist trails the hand's rise and fall, degrees per m/s (default 240)\n\
-     --implement KIND hand object: ball (default, lumpy mirror ball) or disc; a --rig file may carry any other\n\
+     --implement KIND hand object: ball (default, lumpy mirror ball), disc, lamp or gripper (the last two visual only); a --rig file may carry any other\n\
      --zone BOX       red zone corners in metres, x0,y0,z0,x1,y1,z1 (repeatable)\n\
      --ring N,R       N arms evenly on a circle of radius R metres, their forward toward its centre (6,1.1 is a hexagon)\n\
      --clearance M    arms keep their checked points this far apart, metres (default 0.1)\n\
@@ -308,7 +308,9 @@ fn main() -> io::Result<()> {
                 implement = Some(match args.next().as_deref() {
                     Some("disc") => hyst_compile::ensemble::Implement::disc(),
                     Some("ball") => hyst_compile::ensemble::Implement::mirror_ball(),
-                    _ => return Err(io::Error::other("--implement requires disc or ball")),
+                    Some("lamp") => hyst_compile::ensemble::Implement::lamp(),
+                    Some("gripper") => hyst_compile::ensemble::Implement::gripper(),
+                    _ => return Err(io::Error::other("--implement requires ball, disc, lamp or gripper")),
                 })
             }
             "--ring" => {

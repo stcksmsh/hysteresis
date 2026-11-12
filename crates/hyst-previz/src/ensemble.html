@@ -174,13 +174,14 @@
     const last=arm.length-1, stem=norm(sub(arm[last],arm[last-1])), facing=discNormal(arm,turns), third=cross(stem,facing);
     const world=v=>[0,1,2].map(a=>v[0]*stem[a]+v[1]*facing[a]+v[2]*third[a]);
     return IMPLEMENT.mirrors.map(m=>{const normal=world(m.normal), u=world(m.u);
-      return {centre:along(arm[last],world(m.centreM),1),normal,u,v:cross(normal,u),size:m.halfSizeM,sides:m.sides,both:m.bothFaces};});
+      return {centre:along(arm[last],world(m.centreM),1),normal,u,v:cross(normal,u),size:m.halfSizeM,sides:m.sides,both:m.bothFaces,aspect:m.aspect||1,matte:m.matte};});
   }
-  const outline=m=>Array.from({length:m.sides},(_,i)=>{const a=(i+.5)*2*Math.PI/m.sides;return along(along(m.centre,m.u,m.size*Math.cos(a)),m.v,m.size*Math.sin(a));});
+  const outline=m=>Array.from({length:m.sides},(_,i)=>{const a=(i+.5)*2*Math.PI/m.sides;return along(along(m.centre,m.u,m.size*Math.cos(a)),m.v,m.size*(m.aspect||1)*Math.sin(a));});
   // One mirror: dark from behind unless both faces are mirrored, bright when
   // it throws the projector's light at the camera.
   function shard(m) {
     const rim=outline(m).map(project), away=dot(m.normal,sub(eye,m.centre))<=0;
+    if(m.matte) {fill(rim,rgb(m.matte,.55+.45*Math.abs(dot(m.normal,norm(sub(m.centre,eye))))));ctx.strokeStyle=rgb(HOUSING,1.4);ctx.lineWidth=1;ctx.stroke();return;}
     if(away&&!m.both) {fill(rim,rgb(HOUSING,1.2));return;}
     const normal=away?m.normal.map(v=>-v):m.normal, view=norm(sub(m.centre,eye)), bounce=along(view,normal,-2*dot(view,normal));
     const lamp=norm(sub(PROJECTOR,m.centre)), glint=Math.pow(Math.max(0,dot(bounce,lamp)),8);
@@ -217,7 +218,7 @@
     ctx.globalCompositeOperation='lighter';
     state.agents.forEach((arm,id)=>handMirrors(arm,state.turns[id]).forEach(m=>{
       const {centre,normal}=m;
-      if(!m.both&&dot(normal,sub(PROJECTOR,centre))<=0) return; // faces away from the projector
+      if(m.matte||(!m.both&&dot(normal,sub(PROJECTOR,centre))<=0)) return; // faces away from the projector
       const bounce=from=>{const beam=norm(sub(from,PROJECTOR));return along(beam,normal,-2*dot(beam,normal));};
       const land=from=>{const out=bounce(from), toFloor=-from[2]/out[2];return toFloor>0&&toFloor<8?along(from,out,toFloor):null;};
       const caught=Math.abs(dot(norm(sub(centre,PROJECTOR)),normal)), tint=ACCENTS[id%4].join(',');
