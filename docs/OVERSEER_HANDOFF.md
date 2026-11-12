@@ -118,6 +118,11 @@ lim 1.78 %, energy 85.5 %, jerk 23.7 %. Agent 1 next: render-path test, then wai
 **09:43 (clock check: earlier "09:50" note times ran ~8 min ahead):** Kabl sessions' cargo/clippy/rustc builds (nice 5, unpinned) run
 on all cores incl. 6-11; per-round seconds r55-60 76-98, r61 264 (r54 231 = post-resume compile). ETA depends on Kabl load: at 82 s ->
 end ~07:00 2026-11-13; at 100 s -> ~11:30. Told the user; overseer does not touch Kabl.
+**09:50:** agent 1 idle after the clip-path test (body-s3r e4e5c68): 10 s test clip 720p h264+aac 15 MB, deleted; `shoulder_cells` repeats
+s0_measure's hand/cells/unique definition (sklearn absent in body env) — overseer compared: identical. The watcher renders the r400 clip
+itself. Agent 1 asked to be woken ~17:30: when the round-400 validation line appears, message agent 1 to verify and report the clip;
+overseer then checks the clip (size, duration, audio window 60-120 s, frames) and recomputes shoulder sd + cells from its CSV, then sends
+it to the user.
 
 ## CURRENT STATE (2026-11-09 ~22:40, saved before a usage limit)
 
