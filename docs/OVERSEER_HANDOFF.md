@@ -1,4 +1,4 @@
-# Overseer handoff — 2026-11-09
+# Overseer handoff — 2026-11-13
 
 This file is the overseer's whole state. The `/overseer` skill (`.claude/skills/overseer/SKILL.md` on this branch, the canonical copy) starts a new overseer from it and recreates the worktree if it is gone. To start one by hand, paste everything below the line into a fresh session.
 
@@ -94,7 +94,28 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## CURRENT STATE (2026-11-12 ~23:30) — read this block first
+## CURRENT STATE (2026-11-13 ~00:05) — read this block first
+
+**DIAL STUDY CLOSED; WO29 MOTOR-NETWORK TOY TEST SENT.** Planner/Kosta answers recorded as **BRAIN_SPEC 7.44** (body d1795e4): dial study
+closed; new direction "lean more into the dynamic NN humanlike angle" (Stroud et al. 2018 gain modulation); toy test only, proposal NOT
+built. Overseer defaults in 7.44.5 (10 s warm-up, arousal 0 silent, spring-damper before round-1 command path, failing extreme not shown
+nor replaced, builder sets min-motion gate / gain range / regime definition in rules file).
+Prompts (body 51cd507, merged keys-decide db254e5), SENT ~00:00 with notify_when_idle (user: "Both agents cleared and free"):
+- `docs/BUILDER_PROMPT_WO29A_MOTORNET_CLIPS.md` -> agent 1 [6b7ace], branch body-mnet, cores 6-11; rules `docs/MOTORNET_RULES.md` first
+  (REVIEW within 30 min: spectral radius, gain range, calibration, min-motion gate, measurement defs (f)); params `docs/MOTORNET_PARAMS.md`;
+  out `/secondary/hyst-data/body/motornet_toy/clips/` + manifest.json + settings.json; "CLIPS READY <commit>" in night log.
+- `docs/BUILDER_PROMPT_WO29B_MOTORNET_TOOL.md` -> agent 2 [331a44], branch body-mnettool, cores 12-17: session tool (new labels incl. sad,
+  Part 4 round-1 clips under fresh codes), `motornet_measure.py`, `motornet_report.py` -> docs/MOTORNET_REPORT.md; "TOOL READY <commit>".
+**Part 3 (music) HELD:** `/secondary/hyst-data/audio/` does not exist; asked Kosta for the 5 files (Epitaph, Schizoid Man, One of These Days,
+Breathe, Blue Lagoon) in `/secondary/hyst-data/audio/checkset/` AND the 12 s excerpt start per song (builder must not pick). When given:
+tell agent 1 to render Part 3.
+**Overseer checks before Kosta sees anything:** gates recomputed by own code from each CSV (clearance via m3f_report.fk_points, no-contact
+can't be recomputed from CSV -> trust sim log + look, end-stop dwell, >8 Hz share, speed/acc p99+max vs make_arm.LIMITS, min motion);
+discards per gate; sampling in draw order (settings.json draw index); spot-check 2 measurements; frames + contact sheet; Part 4 files =
+round-1 files (hash). Then session on 8765, then report, merge body-mnet + body-mnettool into body, brief to planner, no verdict.
+Note: main checkout `/secondary/Programming/Github/Hysteresis` is now on `body-dialtool` (not dance-checkpoint); not touched.
+
+## STATE (2026-11-12 ~23:30)
 
 **DIAL STUDY DONE; WAITING FOR THE PLANNER.** Kosta labelled all 22 clips (session_2026-11-12). body-dial merged into body (edf3c35).
 Report `docs/DIALSTUDY_REPORT.md` (body b4efa26; overseer joined answers.csv with key/key.json independently: 22/22 match). Brief
