@@ -145,6 +145,10 @@ cells): 60-120 s Stage 3 shoulder sd 5.42 deg, 67 cells; pass2 1.94 deg, 279 cel
 Stage 3 9.35 deg in that window (pass2's cells come from base rotation); hand speed p50 0.19 vs 0.40 m/s. 0-120 s: S3 sd 9.42 / 155 cells,
 pass2 4.18 / 375. Whole song: S3 8.78 / 203, pass2 3.03 / 441. Clip SENT to user 19:15 with the two numbers; waiting for the user's eye
 (may stop the run, 7.41). Round 600 ~21:10, 800 ~01:15, end ~05:30 2026-11-13. Monitor re-armed 19:15.
+**19:20:** body-s3r MERGED (new files only, 7 files): body fast-forwarded to e4e5c68, keys-decide 19bcc54. test_s3_sidecar rerun by
+overseer at e4e5c68: OK. Failed units hyst-wo27-test-unit-a (09:37, floor sign test) and hyst-wo27-cliptest-a (09:46) are superseded
+first attempts (test_unit_b 09:40 OK; clip test passed ~09:50); ignore. No Hysteresis builder online (all offline in ListAgents); nothing
+to nudge. After the run: s3_eval.py (see "After the run" below) needs a builder or the user's word.
 
 ## CURRENT STATE (2026-11-09 ~22:40, saved before a usage limit)
 
