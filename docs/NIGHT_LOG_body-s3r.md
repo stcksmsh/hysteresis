@@ -5,7 +5,7 @@
 - 2026-11-12 09:42: watcher armed, unit `hyst-wo27-watcher-s3` (cores 12-17, `MemoryMax=6G`, started by `scripts/body/s3_sidecar_watch.sh`), output `/secondary/hyst-data/body/s3/run_report/`
   (`summary.txt`, `<R>/hinges.json`, `watch.log`). Run at that time: round 61 of 977, no validation line yet, so nothing is missed. Round 200 expected ~12:50.
 - Test on `s3/train_timed/` (validation at round 2): hinges written in 62 s of rollout, 7 unit tests green. Details below.
-- Round-400 clip: code written, test of the render path still to do (see below, updated as it happens).
+- Round-400 clip: render path tested on the timed best.pkl (10 s of the 60-120 s window; 1280x720 h264 + aac, 15 MB; test video deleted). The watcher runs the clip as a fresh subprocess at the 400 validation, so it uses the code on disk at that time. Waiting for round 400 (~17:30).
 
 ## Log
 
@@ -21,3 +21,8 @@ selection / missed rule): 7 tests OK, own process, cores 12-17.
 ### Notes
 - Worktree: the harness forced an isolated worktree before any edit (`.claude/worktrees/wo27-s3r`, branch `body-s3r` from `origin/body`), so this session did not stay in the checkout it started in.
 - Commits carry no co-author or attribution lines (the work order's rule).
+
+### 09:44-09:49 clip test (units `hyst-wo27-cliptest-a`, `-b`)
+Slow lanes of Instant Crush built (brain env, `s3_sidecar_slow.py`, 679 blocks x 13, corpus-normalised; `run_report/work/instant-crush.slow.npz`). Rollout of 144 blocks on the timed best.pkl (round 2), joint CSV, ensemble_preview page,
+`record_ensemble.cjs` window 60 s + 10 s, mp4 720p. First try failed at the numbers step (`s0_measure` imports sklearn, absent in the body env): `shoulder_cells` now repeats the cell definition
+(`fk_points` hand, floor(p / 0.05), unique) instead of importing it. Second try: ok, numbers produced (round-2 policy: shoulder sd 23.0 deg, 162 cells in the 10 s; pass2 same 10 s: 1.5 deg, 112 cells).

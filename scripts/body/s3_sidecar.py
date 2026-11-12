@@ -137,8 +137,11 @@ def slow_lanes_ready(work):
 
 
 def shoulder_cells(rows):
-    import s0_measure as S
-    return {"shoulder_sd_deg": float(np.std(rows[:, 1])), "occupied_5cm_cells": int(len(S.cell_dist(rows))), "rows": int(len(rows))}
+    """Shoulder sd (joint column 1, deg) and occupied 5 cm hand cells: s0_measure.hand / cells / cell_dist (CELL 0.05 m), repeated here because s0_measure needs sklearn (brain env only)."""
+    import m3f_report as R
+    h = R.fk_points(np.asarray(rows, float))[:, 5]
+    c = np.floor(h / 0.05).astype(np.int64)
+    return {"shoulder_sd_deg": float(np.std(rows[:, 1])), "occupied_5cm_cells": int(len(np.unique(c, axis=0))), "rows": int(len(rows))}
 
 
 def mp4_720(src, dst):
