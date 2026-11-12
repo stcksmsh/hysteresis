@@ -139,7 +139,9 @@ class Measure(unittest.TestCase):
     def test_frequency_straightness_speed_height(self):
         f = 1.5
         h = np.stack([0.2 * np.sin(2 * np.pi * f * self.T), 0 * self.T, 0.3 + 0 * self.T], 1)
-        self.assertAlmostEqual(mm.dominant_freq(h), 2 * f, delta=0.1)  # speed |cos| runs at twice the sweep frequency
+        self.assertAlmostEqual(mm.dominant_freq(h), f, delta=0.1)
+        h8 = np.stack([0.1 * np.sin(2 * np.pi * 0.8 * self.T), 0 * self.T, 0 * self.T], 1)
+        self.assertAlmostEqual(mm.dominant_freq(h8), 0.8, delta=0.1)
         self.assertAlmostEqual(mm.hand_speed(h).mean(), 0.2 * 2 * np.pi * f * 2 / np.pi, delta=0.02)
         self.assertAlmostEqual(mm.straightness(h), 1.0, places=3)
         self.assertAlmostEqual(float(h[:, 2].mean()), 0.3)

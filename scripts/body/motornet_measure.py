@@ -7,7 +7,7 @@ Per setting, from its Part 1 clip (CSV at 50 Hz, activity.npy float32 T x N at 5
   pr          participation ratio (sum lam)^2 / sum lam^2 of the covariance of r
   regime      decays: std of r (over units) in the last 4 s < 0.1 x the first 4 s; cycles: top PC autocorrelation has a peak > 0.5 at a
               lag of 0.3-5 s; else wanders
-  freq_hz     peak of the hand-speed power spectrum (mean removed, > 0)
+  freq_hz     peak of the summed power spectra of the mean-removed hand x, y, z (DC excluded)
   hand_speed  mean hand speed, m/s
   hand_height mean hand z, m
   straightness mean chord/arc per stroke; stroke = hand path between hand-speed minima (dialstudy_straight.py: arc > 0.05 m counts)
@@ -50,9 +50,10 @@ def hand_speed(h, hz=HZ):
 
 
 def dominant_freq(h, hz=HZ):
-    v = hand_speed(h, hz)
-    p = np.abs(np.fft.rfft(v - v.mean())) ** 2
-    f = np.fft.rfftfreq(len(v), 1 / hz)
+    """Peak of the summed power spectra of the mean-removed x, y, z hand coordinates, DC excluded."""
+    h = np.asarray(h, float)
+    p = (np.abs(np.fft.rfft(h - h.mean(0), axis=0)) ** 2).sum(1)
+    f = np.fft.rfftfreq(len(h), 1 / hz)
     return float(f[1:][np.argmax(p[1:])])
 
 

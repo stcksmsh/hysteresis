@@ -13,7 +13,7 @@ TOOL READY (commit below in the final line). Built, with tests, no real session 
   once it is pushed, compare its definitions with the constants at the top of `motornet_measure.py` and adjust if they differ.
 - `scripts/body/motornet_report.py`: tables only, no verdict. Reads settings values from `settings.json` beside the clips folder if present
   (shape guessed: list of `{id|setting, values}` or dict by id; adjust once 29A's file exists). Round-1 labels from the round-1 session.
-- Tests: `scripts/body/test_motornet.py` (13 tests; session 5, measure 4, report 1 + the CLI one), round 1's `test_dialstudy.py` still passes.
+- Tests: `scripts/body/test_motornet.py` (10 tests: Session 5, Measure 4, Report 1), round 1's `test_dialstudy.py` still passes.
   Run each class in its own process: `/secondary/hyst-env/body/bin/python -I scripts/body/test_motornet.py Session` (also `Measure`, `Report`).
 
 ## How Kosta runs it
