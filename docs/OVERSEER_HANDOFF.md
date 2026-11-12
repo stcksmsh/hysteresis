@@ -132,7 +132,11 @@ to ~72 s.)
 e'1 2.28, e'2 0; best.pkl = r200. Side-car (run_report/200/hinges.json, summary.txt): active shares hand_v/jolt/acc/floor/lim/jerk all
 0.00 %, energy 15.62 % of blocks (>= 0.3747 J); mu energy 11.44, jerk 165.3, others ~1.0-1.08; muD fast 12.07 slow 18.22 (rising);
 D_fast 0.459, D_slow 0.155 (safeguard 0.7 not reached; 7.40: safeguard, not a bar). Not overseer-recomputed yet (side-car numbers are the
-builder's code). Next: round 400 ~17:00 + clip. Lesson: a wait loop must not grep "fail" in logs that print "Failed to import warp".
+builder's code). Next: round 400 ~17:00 + clip.
+**15:27 (saved before a usage limit):** round 325/977, ~73 s/round, mains on. Round 400 ~17:00 (WO27 watcher renders the clip itself to
+run_report/400/instant-crush-r400-60s.mp4); end ~05:30 2026-11-13. On resume: tail train.log + run_report/summary.txt; message agent 1
+[b15601] to verify/report the clip; overseer checks the clip (size, duration, audio 60-120 s, frames) and recomputes shoulder sd + cells,
+then sends to the user. Re-arm a Monitor on train.log ("validation at|Traceback|Error|nan|Killed|waiting for mains|box") + unit end + power. Lesson: a wait loop must not grep "fail" in logs that print "Failed to import warp".
 
 ## CURRENT STATE (2026-11-09 ~22:40, saved before a usage limit)
 
