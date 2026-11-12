@@ -27,3 +27,5 @@ Later: `motornet_measure.py --manifest <manifest> --out <dir>/measurements.json`
 Note: Part 3 clips carry music, so the browser needs one click before sound plays (the replay button).
 
 Not done: no real session, no real clips available to test on.
+
+TOOL READY d349e6e
