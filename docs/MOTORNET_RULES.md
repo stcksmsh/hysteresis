@@ -31,8 +31,9 @@ Joint target (deg) = `centre_j + CAL_FRAC * AMP_j * (y_j - m_j) / (2 s_j)` with 
 
 *Deviation from the default (+-60 %), for feasibility:* at +-60 % the gain-1 silent run reached a hand extent of 0.056 m, under the minimum-
 motion gate. The values 0.6, 1.0 and 1.5 were each tried once, at gain 1 only (the calibration run, not a sampled setting): extent 0.056, 0.084
-and 0.062 m. The beat-rate drive is limited by the joint speed limits (`LIMITS`), so more amplitude does not give more extent. 1.0 is the
-natural round-1 reading ("+-2 sd = the neutral amplitude") and the largest of the three. Logged FOR USER.
+and 0.062 m. 1.0 is the natural round-1 reading ("+-2 sd = the neutral amplitude") and the largest of the three. Logged FOR USER.
+*Correction (overseer, 2026-11-12):* an earlier version of this paragraph blamed the joint speed limits for the small extent. That is wrong: in
+the rendered clips no joint exceeds 0.9 of its speed or acceleration limit. The cause is under diagnosis (see the night log).
 
 ## (c) Spinal layer and body
 
@@ -57,8 +58,8 @@ substep (from 1.5 s before the shown clip, the end of round 1's pre-roll equival
 acceleration within `LIMITS` (5 % tolerance), finite. **Plus minimum motion**: hand-point p5-p95 extent **>= 0.05 m** on at least one axis over
 the 12 s, and **no 3 s stretch** with mean hand speed below **0.01 m/s**.
 
-*Deviation from the default (0.10 m), for feasibility:* the default is above what the speed-limited beat-rate drive can reach at the reference
-gain (0.084 m); round 1's lowest-vigour clip has 0.094 m, its neutral 0.29 m. 0.05 m still excludes a static arm. Logged FOR USER.
+*Deviation from the default (0.10 m), for feasibility:* the default is above the hand extent the network reached at the reference gain
+(0.084 m; not caused by the speed limits, see (b)); round 1's lowest-vigour clip has 0.094 m, its neutral 0.29 m. 0.05 m still excludes a static arm. Logged FOR USER.
 
 A failing setting is discarded and replaced by the next sampled one; discards are counted per gate (a setting can fail several; all failed
 gates are counted). Three frames per clip and a contact sheet are looked at by the builder before a clip is listed, never to select or reshape a
