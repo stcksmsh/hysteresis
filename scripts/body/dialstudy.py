@@ -204,6 +204,9 @@ def clip_defs():
            "light": dict(vigour=0.6, stiffness=-1, roundness=1, lag=0, posture=1, zeta=0.2)}
     for name, dv in pre.items():
         defs.append(dict(id=f"B_{name}", set="B", intent=dict(kind="preset", preset=name), dials=dv))
+    for eff in ("lamp", "gripper"):
+        for name in ("heavy", "angry", "light"):
+            defs.append(dict(id=f"C_{name}_{eff}", set="C", effector=eff, intent=dict(kind="preset", preset=name), dials=pre[name]))
     return defs
 
 
@@ -232,7 +235,7 @@ def gen(out, overrides=None):
     for cid, (c, q, g, eff) in res.items():
         ok, parts = judge(g, thr)
         (out / f"{cid}.csv").write_text(arm_sim.csv_text(q, HZ, name=cid))
-        (out / f"{cid}.json").write_text(json.dumps(dict(id=cid, set=c["set"], intent=c["intent"], dials=eff, gates=dict(passed=ok, parts=parts, values=g, thresholds=thr),
+        (out / f"{cid}.json").write_text(json.dumps(dict(id=cid, set=c["set"], effector=c.get("effector", "ball"), intent=c["intent"], dials=eff, gates=dict(passed=ok, parts=parts, values=g, thresholds=thr),
                                                          overrides=(overrides or {}).get(cid, {})), indent=1))
         print(f"{cid:22s} {'PASS' if ok else 'FAIL'} floor {g['floor_m']:+.3f} stop {g['endstop_samples']:3d} hf {g['hf_share']:.4f} rev {g['reversals_max']:.1f} "
               f"v {g['speed_ratio']:.2f} a {g['accel_ratio']:.2f} con {g['contact_substeps']}  {[k for k, v in parts.items() if not v]}")

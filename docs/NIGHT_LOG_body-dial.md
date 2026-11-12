@@ -29,3 +29,7 @@
 - 22:03 test render of `A_neutral` (66 s alone), framing checked.
 - 22:07 first full render stopped when the lag check showed almost no lag effect; lag range doubled, regenerated, all re-rendered (22:11).
 - 22:12 manifest built, 16 clips.
+- Overseer round 2: merged origin/body (lamp, gripper). Set C rendered (6 clips: heavy, angry, light x lamp, gripper; same dials and CSV as
+  Set B, only `--implement` differs). All 22 clips re-rendered with the new binary. On-screen text is identical in every clip ("1 arm · ·":
+  "K5 policy" and "joint CSV" blanked); hand trail and score clock stay ON in all (choice: unchanged page, identical everywhere).
+  Hand-path straightness added to `DIALSTUDY_DIALS.md` (angular 0.949, round 0.877 chord/arc). Manifest: 22 clips, Sets A-C.

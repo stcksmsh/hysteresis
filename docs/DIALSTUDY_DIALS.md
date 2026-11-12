@@ -14,6 +14,9 @@ per two beats (1.2 s), the same normalised sequence in every clip. No reading of
    Range: kp_scale 0.45 / 1.0 / 2.5 (KP = 16.8 N.m/rad, stall at 10 deg error), zeta 0.3 / 1.5 / 1.0 (loose: overshoots and settles; rigid: stops dead).
 3. **Roundness.** Blend between joint-linear segments with a 15 % trapezoid ease that stop at every pose (angular) and a C1 Catmull-Rom
    spline through the same poses at their arrival times that never stops (round). Range: blend 0 / 0.5 / 1 (rho = (d + 1) / 2).
+   **Plain note:** the angular end is straight in JOINT space with stops at the poses (corners in time), not straight in the end-effector's
+   path. Measured hand-path chord/arc length per 1.2 s move (realised CSV, `dialstudy_straight.py`, 10 moves): angular 0.949 mean (min 0.835),
+   neutral 0.938 (0.777), round 0.877 (0.673); 1.0 would be a straight line. The two ends differ in stopping and flowing more than in curvature.
 4. **Lead/lag.** Per-joint start delay, base leads and the wrist follows late. Range: delays (base, shoulder, elbow, wrist bend, wrist roll) =
    lag01 x (0, 0.2, 0.6, 1.0, 1.4) beats, lag01 = 0 / 0.5 / 1 (a beat = 0.6 s), so at high the wrist roll is 0.84 s behind the base.
 5. **Posture.** The centre pose the random excursions are drawn around, linear in d. Range (base, shoulder, elbow, wrist bend, roll, deg):
