@@ -94,7 +94,18 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## CURRENT STATE (2026-11-12 09:30) — read this block first
+## CURRENT STATE (2026-11-12 19:20) — read this block first
+
+**STAGE 3 STOPPED ON THE USER'S VERDICT. ALL WORK STOPPED.** User on the round-400 clip (~19:13): "Again same issue, it's the same tight
+move all the time with variations. Stop all work and make handoff explaining state so far to planner". Overseer stopped
+`hyst-wo26b-run-r3` (clean, round 511/977, 10.94 h compute, ckpt.pkl resumable, best.pkl = r400) and `hyst-wo27-watcher-s3`. Nothing
+runs; no builder assigned. Brief **`docs/PLANNER_BRIEF_STAGE3_VERDICT.md`** written, pushed, sent to the user (Q1 close Stage 3 [rec (a) no
+bar eval]; Q2 next direction [rec report-only energy/workspace diagnosis on r400, then the authored path]; Q3 record verdict as 7.42).
+Key numbers (Instant Crush whole song, overseer): hand p5-p95 extent x/y S3 36/27 cm vs pass2 59/58 vs v47 84/83; cells/60 s 78 vs 277 vs
+474; base sd 12 vs 99 deg; hand speed p50 0.19 vs 0.37 m/s; shoulder sd 8.8 vs 3.0. WAITING: the planner's answers (pasted by the user) ->
+record as BRAIN_SPEC 7.42 on body before anything else. The block below is history.
+
+## STATE (2026-11-12 09:30)
 
 **Stage 3 run was stopped twice by a system power-off, then resumed.** `hyst-wo26b-run-r1` ran 22:16-23:25 on 2026-11-09 and stopped at
 round 54/977 (1.13 h compute, no validation yet) when the machine powered off (journal: logind "The system will power off now!"; cause not
