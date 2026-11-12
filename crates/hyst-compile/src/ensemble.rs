@@ -38,6 +38,35 @@ pub struct Mirror {
     pub sides: u8,
     /// Mirrored on the back as well.
     pub both_faces: bool,
+    /// Outline height over width (the v axis over the u axis); 1 = regular. A rectangle is
+    /// `sides` 4 with this at most 1.
+    #[serde(default = "one", skip_serializing_if = "is_one")]
+    pub aspect: f64,
+    /// A flat coloured part that does not mirror or throw light (lamp and gripper shapes).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub matte: Option<[u8; 3]>,
+}
+
+fn one() -> f64 {
+    1.0
+}
+fn is_one(v: &f64) -> bool {
+    *v == 1.0
+}
+
+impl Mirror {
+    /// Greatest distance of any part of the outline from the hand point.
+    fn reach_m(&self) -> f64 {
+        let c = std::f64::consts::FRAC_1_SQRT_2;
+        let corner = if self.sides == 4 { (c * c * (1.0 + self.aspect * self.aspect)).sqrt() } else { self.aspect.max(1.0) };
+        dot(self.centre_m, self.centre_m).sqrt() + self.half_size_m * corner
+    }
+
+    /// A flat rectangle (visual only): half extents `hu` along `u`, `hv` along the normal-cross-u axis.
+    fn rect(centre_m: [f64; 3], normal: [f64; 3], u: [f64; 3], hu: f64, hv: f64, colour: [u8; 3], both_faces: bool) -> Self {
+        let c = std::f64::consts::FRAC_1_SQRT_2;
+        Self { centre_m, normal, u, half_size_m: hu / c, sides: 4, both_faces, aspect: hv / hu, matte: Some(colour) }
+    }
 }
 
 /// The object the arm holds at its hand point: any set of flat mirrors.
@@ -72,8 +101,62 @@ impl Implement {
                 half_size_m: 0.06,
                 sides: 16,
                 both_faces: true,
+                aspect: 1.0,
+                matte: None,
             }],
         }
+    }
+
+    fn matte_shape(name: &str, parts: Vec<Mirror>) -> Self {
+        let radius_m = (parts.iter().map(Mirror::reach_m).fold(0.0, f64::max) * 1000.0).ceil() / 1000.0;
+        Self { name: name.into(), radius_m, mirrors: parts }
+    }
+
+    /// A lamp head: ten-panel conical shade opening along the last link, a lit face at its mouth. Visual only.
+    pub fn lamp() -> Self {
+        let (shade, lit) = ([70, 78, 92], [255, 226, 150]);
+        let mut parts: Vec<Mirror> = (0..10)
+            .map(|i| {
+                let a = (i as f64 + 0.5) * std::f64::consts::TAU / 10.0;
+                let (rho, tau) = ([0.0, a.cos(), a.sin()], [0.0, -a.sin(), a.cos()]);
+                let n = [-0.3, 0.95 * rho[1], 0.95 * rho[2]];
+                let k = dot(n, n).sqrt();
+                Mirror::rect([0.01, 0.0375 * rho[1], 0.0375 * rho[2]], n.map(|v| v / k), tau, 0.013, 0.041, shade, true)
+            })
+            .collect();
+        parts.push(Mirror {
+            centre_m: [0.05, 0.0, 0.0],
+            normal: [1.0, 0.0, 0.0],
+            u: [0.0, 1.0, 0.0],
+            half_size_m: 0.05,
+            sides: 16,
+            both_faces: false,
+            aspect: 1.0,
+            matte: Some(lit),
+        });
+        Self::matte_shape("lamp", parts)
+    }
+
+    /// A gripper: a palm block and three finger bars pointing along the last link. Visual only.
+    pub fn gripper() -> Self {
+        let (palm, finger) = ([96, 104, 118], [170, 178, 190]);
+        let (x, y, z) = ([1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]);
+        let neg = |v: [f64; 3]| v.map(|a| -a);
+        // Box faces: (centre, normal, u, half u, half v), half extents 0.02 x 0.015 x 0.04.
+        let mut parts = vec![
+            Mirror::rect([0.0, 0.0, 0.0], x, z, 0.04, 0.015, palm, false),
+            Mirror::rect([-0.04, 0.0, 0.0], neg(x), z, 0.04, 0.015, palm, false),
+            Mirror::rect([-0.02, 0.015, 0.0], y, z, 0.04, 0.02, palm, false),
+            Mirror::rect([-0.02, -0.015, 0.0], neg(y), z, 0.04, 0.02, palm, false),
+            Mirror::rect([-0.02, 0.0, 0.04], z, y, 0.02, 0.015, palm, false),
+            Mirror::rect([-0.02, 0.0, -0.04], neg(z), y, 0.02, 0.015, palm, false),
+        ];
+        for fz in [-0.033, 0.0, 0.033] {
+            // Bar of 0.06 x 0.012 x 0.012: two crossed plates.
+            parts.push(Mirror::rect([0.03, 0.0, fz], y, x, 0.03, 0.006, finger, true));
+            parts.push(Mirror::rect([0.03, 0.0, fz], z, x, 0.03, 0.006, finger, true));
+        }
+        Self::matte_shape("gripper", parts)
     }
 
     /// A lumpy, dented, not-quite-round ball tiled with small square mirrors
@@ -150,6 +233,8 @@ impl Implement {
                 half_size_m,
                 sides: 4,
                 both_faces: false,
+                aspect: 1.0,
+                matte: None,
             });
         }
         Self {
@@ -272,8 +357,10 @@ impl Rig {
                     && unit(m.u)
                     && dot(m.normal, m.u).abs() < 1e-6
                     && m.half_size_m > 0.0
-                    && m.sides >= 3;
-                !shaped || dot(m.centre_m, m.centre_m).sqrt() + m.half_size_m > hand.radius_m + 1e-9
+                    && m.sides >= 3
+                    && m.aspect > 0.0
+                    && m.aspect.is_finite();
+                !shaped || m.reach_m() > hand.radius_m + 1e-9
             })
         {
             return Err(format!("invalid implement: {}", hand.name));
@@ -773,6 +860,20 @@ fn rotate(v: [f64; 3], axis: [f64; 3], degrees: f64) -> [f64; 3] {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn lamp_and_gripper_are_valid_matte_shapes_and_ball_json_is_unchanged() {
+        let mut rig = Rig::illustrative_five_axis();
+        for hand in [Implement::lamp(), Implement::gripper()] {
+            assert!(hand.radius_m < 0.12, "{} radius {}", hand.name, hand.radius_m);
+            assert!(hand.mirrors.iter().all(|m| m.matte.is_some()));
+            rig.implement = hand;
+            rig.validate().unwrap();
+        }
+        // The default ball carries neither new field in its JSON.
+        let json = serde_json::to_string(&Implement::mirror_ball()).unwrap();
+        assert!(!json.contains("aspect") && !json.contains("matte"));
+    }
 
     #[test]
     fn implements_are_rig_data() {
