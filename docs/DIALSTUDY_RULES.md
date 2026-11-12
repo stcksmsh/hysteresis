@@ -27,22 +27,24 @@ and in `docs/DIALSTUDY_DIALS.md`.
   clips differ only by dial settings. Not v47, no v47 data read.
 - Grid: 100 BPM, beat 0.6 s. One move per **two beats** (interval 1.2 s), 10 moves in 12 s; pose 0 is held at the start.
   Move k leaves pose k-1 at `k * 1.2 s`; it ends at `k * 1.2 + share * 1.2 s` (share is set by vigour, see (c)).
-- Neutral amplitudes (deg): base yaw 30, shoulder 12, elbow 18, wrist bend 20, wrist roll 45 (initial).
+- Neutral amplitudes (deg): base yaw 30, shoulder 12, elbow 16, wrist bend 16, wrist roll 45.
 
 ## (c) Dials (value d in [-1, +1]: -1 low, 0 neutral, +1 high; presets may use values between)
 
 1. **Vigour**: excursion scale `0.35 -> 1.0 -> 1.7` (d = -1, 0, +1, piecewise linear) and move time share of the interval
    `0.95 -> 0.70 -> 0.45`. Peak speed and acceleration are held by the limiter inside `LIMITS`.
-2. **Stiffness**: `kp_scale 0.3 -> 1.0 -> 2.5`, `zeta 0.25 -> 1.5 -> 1.0` (log-linear in d for kp, linear for zeta).
+2. **Stiffness**: `kp_scale 0.45 -> 1.0 -> 2.5`, `zeta 0.3 -> 1.5 -> 1.0` (log-linear in d for kp, linear for zeta).
    Loose: overshoots and settles; rigid: stops dead.
 3. **Roundness**: blend `rho = (d + 1) / 2` between two joint-space paths through the same poses: (angular) joint-linear segments with a
    short ease (trapezoid, 15 % each end), stopping at every pose; (round) a C1 Catmull-Rom spline through the same poses at their
    arrival times, flowing without stopping.
 4. **Lead/lag**: per-joint start offsets `lag01 * [0, 0.10, 0.35, 0.55, 0.70]` beats for (base, shoulder, elbow, wrist bend, wrist roll),
    with `lag01 = (d + 1) / 2`: low = all together, high = base and shoulder lead, wrist follows 0.42 s late.
-5. **Posture**: centre pose `(base, shoulder, elbow, wrist bend, roll)` `low = (0, -38, 55, 25, 0)`, `neutral = (0, -55, 35, 5, 0)`,
-   `high = (0, -78, 15, -15, 0)` deg, linear in d; low = drooped, low, folded; high = lifted, tall, open (initial; checked by FK
-   at all excursion-box corners, adjusted for feasibility only).
+5. **Posture**: centre pose `(base, shoulder, elbow, wrist bend, roll)` `low = (0, -45, 60, -70, 0)`, `neutral = (0, -60, 30, -15, 0)`,
+   `high = (0, -80, 10, -20, 0)` deg, linear in d; low = drooped, low, folded; high = lifted, tall, open (the study's neutral is not the rig's home pose; the wrist
+   is cocked up in low and neutral so the hand clears the plane; revised from the first numbers for feasibility: with the first amplitudes
+   and centres the hand sat on the plane at vigour high / posture low / stiffness low; kp and zeta of low stiffness raised because at
+   kp 0.3 the shoulder droops 17 deg and the arm lies on the plane).
 - Non-dial words (do not change the pose sequence): **long holds** (tense) = share multiplied by 0.55; **bouncy** (light) = zeta forced to
   0.2 at any kp_scale.
 
