@@ -115,6 +115,9 @@ read by overseer: matches the prompt (thresholds, 16 val windows, seed 4242, arg
 floor = check-csv margin, plus `floor_trained` (raised-plane, trainer's hinge) and `lim_any_bend` reported alongside (FOR USER/planner).
 Timed-round test shares (untrained policy, information only): hand_v 4.03 %, jolt 0.17 %, acc 1.87 %, floor 0 %, floor_trained 17 %,
 lim 1.78 %, energy 85.5 %, jerk 23.7 %. Agent 1 next: render-path test, then waits for round 400. Merge body-s3r after the clip is verified.
+**09:43 (clock check: earlier "09:50" note times ran ~8 min ahead):** Kabl sessions' cargo/clippy/rustc builds (nice 5, unpinned) run
+on all cores incl. 6-11; per-round seconds r55-60 76-98, r61 264 (r54 231 = post-resume compile). ETA depends on Kabl load: at 82 s ->
+end ~07:00 2026-11-13; at 100 s -> ~11:30. Told the user; overseer does not touch Kabl.
 
 ## CURRENT STATE (2026-11-09 ~22:40, saved before a usage limit)
 
