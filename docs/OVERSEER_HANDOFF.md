@@ -108,6 +108,13 @@ Everything else in the block below still holds.
 400 ~17:30, end ~07:00 2026-11-13. User: charger in, agents free. WO27 prompt amended (keys-decide 0462f43: unit r3, new times, follow
 `hyst-wo26b-run-*`) and SENT 09:40 to agent 1 [b15601] (notify_when_idle). Agent 2 [c56de4] idle, nothing assigned. Check body-s3r's
 first push (rules file) by ~10:15 and read it; the watcher must be armed before round 200.
+**09:50:** WO27 watcher ARMED 09:42, unit `hyst-wo27-watcher-s3` (affinity 12-17 and MemoryMax 6G checked by overseer), out
+`/secondary/hyst-data/body/s3/run_report/` (summary.txt, <R>/hinges.json, watch.log). body-s3r 8d43f66 (rules 99a1539, new files only),
+read by overseer: matches the prompt (thresholds, 16 val windows, seed 4242, argmax, copies first; Instant Crush slow lanes via
+`s3_slow.load_norm` corpus PCA/normalisation, no refit). Builder notes: own worktree `.claude/worktrees/wo27-s3r` (harness forced);
+floor = check-csv margin, plus `floor_trained` (raised-plane, trainer's hinge) and `lim_any_bend` reported alongside (FOR USER/planner).
+Timed-round test shares (untrained policy, information only): hand_v 4.03 %, jolt 0.17 %, acc 1.87 %, floor 0 %, floor_trained 17 %,
+lim 1.78 %, energy 85.5 %, jerk 23.7 %. Agent 1 next: render-path test, then waits for round 400. Merge body-s3r after the clip is verified.
 
 ## CURRENT STATE (2026-11-09 ~22:40, saved before a usage limit)
 
