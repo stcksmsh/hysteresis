@@ -103,7 +103,11 @@ machine powered off at 20:20. Machine booted 2026-11-12 09:23 on mains (battery 
 **`hyst-wo26b-run-r3`** (same script `s3t_run.sh` in body-m3f, code identical to body a9fd858, 14 GB cap, cores 6-11): log says "resumed at
 round 54 of 977, 1.13 h of compute spent". Remaining 923 rounds x 73 s + 5 validations x 200 s = ~19.0 h -> end ~04:30 2026-11-13 if on
 mains throughout. Validations: round 200 ~12:30, 400 ~16:35, 600 ~20:40, 800 ~00:45, 977 ~04:25. No builders online (ListAgents empty).
-WO27 still not sent (waiting for the user's "send"); no s3/run_report/ exists. Everything else in the block below still holds.
+Everything else in the block below still holds.
+**09:40 update:** rounds now ~82 s (timed round 73 s; Kabl sessions also running on the machine, cause not checked) -> round 200 ~12:50,
+400 ~17:30, end ~07:00 2026-11-13. User: charger in, agents free. WO27 prompt amended (keys-decide 0462f43: unit r3, new times, follow
+`hyst-wo26b-run-*`) and SENT 09:40 to agent 1 [b15601] (notify_when_idle). Agent 2 [c56de4] idle, nothing assigned. Check body-s3r's
+first push (rules file) by ~10:15 and read it; the watcher must be armed before round 200.
 
 ## CURRENT STATE (2026-11-09 ~22:40, saved before a usage limit)
 
