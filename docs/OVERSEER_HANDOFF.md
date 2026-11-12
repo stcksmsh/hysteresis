@@ -123,6 +123,10 @@ s0_measure's hand/cells/unique definition (sklearn absent in body env) — overs
 itself. Agent 1 asked to be woken ~17:30: when the round-400 validation line appears, message agent 1 to verify and report the clip;
 overseer then checks the clip (size, duration, audio window 60-120 s, frames) and recomputes shoulder sd + cells from its CSV, then sends
 it to the user.
+**09:52 RISK:** rounds 62-64 took 134/151/214 s under Kabl build load. The run stops at the 30 h compute box (k5_train.py:345,
+`clock.spent >= BOX_H*3600`, BOX_H 30 via k5p2_train; the clock is wall time while running). Spent 1.13 h at resume. At ~150 s/round the
+box ends the run near round ~750 (validations 200/400/600 only, no 800/977); at 73 s it finishes. Told the user: pause Kabl builds or pin
+them to cores 0-5/12-19 (12-17 is WO27's watcher). User's call; overseer does not touch Kabl.
 
 ## CURRENT STATE (2026-11-09 ~22:40, saved before a usage limit)
 
