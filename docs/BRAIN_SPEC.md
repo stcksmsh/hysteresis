@@ -1612,3 +1612,76 @@ The Stage 3 run (unit `hyst-wo26b-run-r1`, started 22:16, code body a9fd858, out
      same sequence); "bouncy" = low stiffness overshoot and settle. Asked of Kosta in the same message.
    - Glitch gates for rejecting clips (not pass bars on the study): defined by the builder in its rules file before rendering, reviewed by
      the overseer.
+
+### 7.44 Dial study closed; motor-network toy test, 2026-11-12, via Kosta + planner (answering `docs/PLANNER_BRIEF_DIALSTUDY_RESULTS.md`)
+
+Marked DEFAULT = planner choice Kosta did not overrule; PROPOSAL = undecided.
+
+1. **Dial study recorded and closed.** Results as reported in `docs/DIALSTUDY_REPORT.md`. No further dial rounds.
+   - Planner reading, for the record (Kosta did not dispute it): about three readings came through: slow/low = calm, heavy or sad;
+     choppy move-stop = light, tense or energetic; bouncy = light. Light read as intended 3/3. Heavy and calm swapped. The only "angry"
+     came with the lamp.
+   - Known limits of round 1: silent only (Set D not run); one shared random pose sequence dominated the clips; the roundness dial
+     barely changed path shape (hand chord/arc 0.949 angular vs 0.877 round).
+   - Brief answers: Q1 add "sad" as a label button (DEFAULT, see 3.6). Q2 no separate re-run; 4 round-1 clips are repeated inside the
+     next session instead. Q3 (Kosta): replace the hand-set dial layer with a motor-cortex recurrent network (point 2). Q4 the lamp head
+     is the default end effector (DEFAULT); the ball is kept only for comparison.
+2. **New direction, Kosta verbatim:** "lean more into the dynamic NN humanlike angle". Basis: Stroud, Hennequin, Porter & Vogels, Nature
+   Neuroscience 2018, "Motor primitives in space and time via targeted gain modulation in cortical networks": one fixed recurrent
+   motor-cortex network produces different movements when only its neurons' input-output gains change; a few modulatory control units
+   steer it, and a simple reward rule can train them (neuromodulators acting on motor cortex).
+   *PROPOSAL (planner, not a build order):* auditory cortex (exists, frozen) -> limbic part (new) -> sets gains of a motor-cortex network
+   -> spinal oscillators -> muscle-like joints -> arm. The arm babbles on its own; Kosta's labels act as the reward that trains the gain
+   controls (dopamine role). Hand-set dials and random pose lists are gone from the design. **Do not build the proposal; only the toy
+   test of point 3.**
+3. **Work order: motor-network toy test** (WO29; prompts `docs/BUILDER_PROMPT_WO29A_MOTORNET_CLIPS.md`,
+   `docs/BUILDER_PROMPT_WO29B_MOTORNET_TOOL.md`). Question: does changing ONLY the gains of one fixed recurrent network give arm movement
+   that (1) looks organic, not glitchy or random, and (2) differs in feeling between gain settings, judged blind by Kosta, with and without
+   music? Disposable; nothing ships; no reward learning, no training to targets, no hand-tuning of movement by eye; Kosta's eye is the only
+   judge; no pass bars beyond the safety gates of 3.4.
+   1. **Motor network:** one recurrent rate network, about 200 units, unit time constant 50-100 ms (builder picks one value, states it),
+      smooth saturating nonlinearity. Recurrent weights random, seeded, fixed for the whole study; scale near the edge between decaying
+      and self-sustained activity at gain 1 (spectral radius stated). Inputs: cos and sin of the frozen cortex's beat-band phase (from the
+      song for music clips; a fixed 100 BPM phase for silent clips), plus the cortex arousal signal when music is present; input weights
+      random, seeded, fixed. About 4 modulatory control units, each scaling the gains of a random subset of neurons (subsets overlap); a
+      gain setting = the values of these units; optional one extra global gain factor. Readout: 5 linear outputs -> joint targets; weights
+      random, seeded, fixed. One allowed calibration: a single overall scale and offset per joint so outputs use a sensible part of the
+      joint range at gain 1 (stated). No other fitting.
+   2. **Body:** joint targets pass through a per-joint spring-damper (muscle-like), stiffness and damping fixed at mid values for the whole
+      study (stated), no per-clip changes. Existing v2f simulated arm, plain MuJoCo on CPU, thread count stated. End effector: lamp head
+      (DEFAULT), same geometry as round 1 Set C; ball only for the 2 comparison clips.
+   3. **Clips** (12 s, same camera and framing as round 1). Gain settings are SAMPLED, not picked: seeded random settings of the control
+      units across their full range; discard only those failing 3.4; take the first 10 that pass; plus 2 settings with all control units at
+      their low and high extremes. The builder must not choose settings by looking at them.
+      - Part 1, silent: the 12 settings, lamp. 12 clips.
+      - Part 2, ball comparison: the first two settings by seed, with the ball. 2 clips.
+      - Part 3, with music: per check song one 12 s excerpt where the feeling is clear, rendered with two different settings (seeded pick
+        from the 12); question per pair "which fits the music?" + "neither"; 5 pairs. Songs (DEFAULT, from round 1): King Crimson "Epitaph",
+        King Crimson "21st Century Schizoid Man", Pink Floyd "One of These Days", Pink Floyd "Breathe", Takanaka "Blue Lagoon". Audio must be
+        in `/secondary/hyst-data/audio/checkset/`; if missing, STOP and ask Kosta before running; never skip silently.
+      - Part 4, consistency: 4 round-1 clips (seeded pick), shown again in the same blind order mix.
+   4. **Gates** (as round 1, recomputed by the overseer's own code before Kosta sees anything): floor and base clearance, end-stop dwell 0,
+      joint-velocity power above 8 Hz near zero, speed and acceleration within limits; plus the arm must actually move (minimum motion
+      stated). A failing setting is discarded and replaced by the next sampled one; the count of discards is reported.
+   5. **Measurements per setting** (numbers only): network activity dimensionality (participation ratio); whether activity decays, cycles
+      or wanders; dominant movement frequency; mean hand speed; mean hand height; hand path straightness (chord/arc per stroke).
+   6. **Blind tool** (reuse round 1): coded names, seeded random order, key not served. Labels for Parts 1, 2 and 4 (DEFAULT): calm / sad /
+      tense / energetic / light / nothing, glitching / something, can't name it; optional note. Part 3: the two renders of an excerpt in
+      random order, "which fits the music?" + "neither". Session under 25 minutes.
+   7. **Outputs:** clips, key, answers, per-setting measurements under `/secondary/hyst-data/body/motornet_toy/` (outside git). Report in
+      `docs/`: setting -> label -> note -> measurements; ball vs lamp; Part 3 picks; Part 4 round 1 vs now; network and body parameters
+      used. No verdict from builder or overseer. Planner's suggested reading, for Kosta only: worth building on if most silent clips are
+      NOT labelled "nothing, glitching", at least 3 different labels appear across Part 1, and Part 3 picks are not random-looking.
+   8. **Out of scope (ask Kosta first):** reward or label-driven learning; training of network weights or readout beyond the one
+      calibration; limbic part; DEAM download; exploration archive / pyribs; brain monitor work; changes to the frozen cortex (B7 epoch 6);
+      hardware; hand-picking or hand-shaping of movements.
+4. **Standing rules unchanged** (as 7.43.5).
+5. **Overseer notes (not rulings; Kosta may amend):**
+   - Audio check 2026-11-12 23:55: `/secondary/hyst-data/audio/` still does not exist; no file with the five titles under `/secondary`,
+     `~/Music`, `~/Downloads`. Part 3 is held, and asked of Kosta (files, and which 12 s excerpt per song). Parts 1, 2 and 4 go ahead.
+   - Defaults taken where the order is silent: (a) every clip runs network and sim for 10 s of warm-up before the 12 s shown (no start
+     transient); for music, the excerpt's preceding 10 s of the song drive the warm-up; (b) silent clips feed arousal as 0; (c) the
+     spring-damper sits before the v2f command path round 1 used (limiter, hard stops), unchanged; (d) if an all-low or all-high extreme
+     fails a gate, it is not shown and not replaced, and this is reported; (e) the minimum-motion gate, the gain range of the control units
+     and the decays/cycles/wanders definition are set by the builder in its rules file before any clip is rendered, reviewed by the
+     overseer.
