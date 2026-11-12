@@ -117,6 +117,14 @@ page file hash changes by template JS only) -> body fast-forwarded to ef0081c, k
 and ACCEPTED (seed 28011, 1 move / 2 beats, gates incl. no contact at any substep). Told agent 1: Set C go; neutral identical on-screen label
 (page prints "K5 policy"); roundness 'angular' = joint-linear with stops, note it + straightness. Agent 2 done (idle). Next: agent 1 says
 A-C ready -> overseer recomputes gates from CSVs, frames -> start the session for Kosta (dialstudy_session.py ... --serve, port 8765).
+**22:25: SESSION LIVE for Kosta.** 28A done (body-dial edf3c35, NOT merged yet): 22 clips A 11 / B 5 / C 6 in
+`/secondary/hyst-data/body/dialstudy/clips/` + manifest. Overseer gate recompute (job tmp gate_check.py, own code): all 22 pass; 12.00 s
+1280x720; min link z 0.070 m, min hand z 0.144 m; end-stop dwell 0; >8 Hz share 0.0000; max speed <= 0.99 lim, max acc <= 0.99 lim.
+Contact sheets looked at: same framing, neutral label "1 arm · ·". Session `/secondary/hyst-data/body/dialstudy/session_2026-11-12/`
+(seeded order, coded names; key/ order.json answers.csv all 404 over HTTP; /api/state leaks no intent), unit `hyst-wo28-session`,
+http://127.0.0.1:8765/. AFTER Kosta finishes: `python3 -I scripts/body/dialstudy_report.py --session <that dir>` -> docs/DIALSTUDY_REPORT.md
+(on body; verify table vs key + answers.csv by hand), merge body-dial into body, stop the unit, send the report to Kosta; no verdict. Then
+the planner brief with the report.
 
 ## STATE (2026-11-12 19:20)
 
