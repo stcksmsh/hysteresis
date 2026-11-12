@@ -126,7 +126,13 @@ it to the user.
 **09:52 RISK:** rounds 62-64 took 134/151/214 s under Kabl build load. The run stops at the 30 h compute box (k5_train.py:345,
 `clock.spent >= BOX_H*3600`, BOX_H 30 via k5p2_train; the clock is wall time while running). Spent 1.13 h at resume. At ~150 s/round the
 box ends the run near round ~750 (validations 200/400/600 only, no 800/977); at 73 s it finishes. Told the user: pause Kabl builds or pin
-them to cores 0-5/12-19 (12-17 is WO27's watcher). User's call; overseer does not touch Kabl.
+them to cores 0-5/12-19 (12-17 is WO27's watcher). User's call; overseer does not touch Kabl. (Kabl load eased by ~10:00; rounds back
+to ~72 s.)
+**12:52 ROUND 200 VALIDATION** (train.log 12309 s, compute 4.55 h): ext a 0.442 [0.407, 0.477], int a 0.431, b 37.0, programs 1,
+e'1 2.28, e'2 0; best.pkl = r200. Side-car (run_report/200/hinges.json, summary.txt): active shares hand_v/jolt/acc/floor/lim/jerk all
+0.00 %, energy 15.62 % of blocks (>= 0.3747 J); mu energy 11.44, jerk 165.3, others ~1.0-1.08; muD fast 12.07 slow 18.22 (rising);
+D_fast 0.459, D_slow 0.155 (safeguard 0.7 not reached; 7.40: safeguard, not a bar). Not overseer-recomputed yet (side-car numbers are the
+builder's code). Next: round 400 ~17:00 + clip. Lesson: a wait loop must not grep "fail" in logs that print "Failed to import warp".
 
 ## CURRENT STATE (2026-11-09 ~22:40, saved before a usage limit)
 
