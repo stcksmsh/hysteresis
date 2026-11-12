@@ -94,7 +94,16 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## CURRENT STATE (2026-11-12 19:45) — read this block first
+## CURRENT STATE (2026-11-12 ~23:30) — read this block first
+
+**DIAL STUDY DONE; WAITING FOR THE PLANNER.** Kosta labelled all 22 clips (session_2026-11-12). body-dial merged into body (edf3c35).
+Report `docs/DIALSTUDY_REPORT.md` (body b4efa26; overseer joined answers.csv with key/key.json independently: 22/22 match). Brief
+`docs/PLANNER_BRIEF_DIALSTUDY_RESULTS.md` SENT (Q1 add "sad" button [rec a]; Q2 reshuffled consistency re-run [rec yes]; Q3 meaning/next =
+Kosta's call; Q4 effector record-only). Facts: presets as intended with ball 1/5 (light); light 3/3 effectors; angry only with lamp; heavy
+0/3; 5/5 dials shift the label from neutral "calm"; "sad" volunteered in 6 notes; angry/tense called "choppy". Session unit stopped; both
+builders idle. NEXT: planner answers -> record as BRAIN_SPEC 7.44 on body before anything else.
+
+## STATE (2026-11-12 19:45)
 
 **NEW DIRECTION (Kosta via planner) = BRAIN_SPEC 7.42 (Stage 3 closed; no more proxy-objective movement training) + 7.43 (the piece:
 a machine conveying emotion it does not understand; the hand-set dial study, WO28)**, body 665abdc. Read 7.43 in full: five dials, Sets
