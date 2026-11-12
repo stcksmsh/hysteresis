@@ -94,7 +94,7 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## CURRENT STATE (2026-11-13 ~00:05) — read this block first
+## CURRENT STATE (2026-11-12 23:55; earlier '00:05' stamp was wrong) — read this block first
 
 **DIAL STUDY CLOSED; WO29 MOTOR-NETWORK TOY TEST SENT.** Planner/Kosta answers recorded as **BRAIN_SPEC 7.44** (body d1795e4): dial study
 closed; new direction "lean more into the dynamic NN humanlike angle" (Stroud et al. 2018 gain modulation); toy test only, proposal NOT
@@ -113,6 +113,7 @@ tell agent 1 to render Part 3.
 can't be recomputed from CSV -> trust sim log + look, end-stop dwell, >8 Hz share, speed/acc p99+max vs make_arm.LIMITS, min motion);
 discards per gate; sampling in draw order (settings.json draw index); spot-check 2 measurements; frames + contact sheet; Part 4 files =
 round-1 files (hash). Then session on 8765, then report, merge body-mnet + body-mnettool into body, brief to planner, no verdict.
+**23:50:** 29B TOOL READY d349e6e verified by overseer on an archive: test_motornet Session 5 / Measure 4 / Report 1 OK (10 tests; log said 13), test_dialstudy 5 OK; no external URL. Measurement defaults match prompt. Overseer error fixed: dominant freq now = summed hand-POSITION spectra (speed spectrum doubles back-and-forth) -> sent to agent 2 (fix + test, push, no merge; then align with MOTORNET_RULES (f)) and agent 1 (use in rules (f)). Not merged. Agent 1 had not pushed body-mnet at 23:47 (due ~00:10).
 Note: main checkout `/secondary/Programming/Github/Hysteresis` is now on `body-dialtool` (not dance-checkpoint); not touched.
 
 ## STATE (2026-11-12 ~23:30)
