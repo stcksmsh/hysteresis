@@ -137,6 +137,14 @@ builder's code). Next: round 400 ~17:00 + clip.
 run_report/400/instant-crush-r400-60s.mp4); end ~05:30 2026-11-13. On resume: tail train.log + run_report/summary.txt; message agent 1
 [b15601] to verify/report the clip; overseer checks the clip (size, duration, audio 60-120 s, frames) and recomputes shoulder sd + cells,
 then sends to the user. Re-arm a Monitor on train.log ("validation at|Traceback|Error|nan|Killed|waiting for mains|box") + unit end + power. Lesson: a wait loop must not grep "fail" in logs that print "Failed to import warp".
+**19:15 (new overseer session after a clear):** round 506/977, 72 s/round, mains on. ROUND 400 VALIDATION (17:00, compute 8.69 h): ext a
+0.572 (best; r200 0.442); side-car shares energy 7.31 %, jerk 0.33 %, others 0; muD fast 19.24 slow 32.49; D_fast 0.509 D_slow 0.326.
+Round-400 clip CHECKED by overseer (agent 1 [b15601] not in ListAgents; not messaged): 60.0 s, 1280x720 h264, 1800 frames, AAC 60.0 s,
+28.3 MB, window 60-120 s; frame at 30 s shows the arm. Recomputed from the CSVs (job tmp clip_check.py, m3f_report.fk_points, 5 cm floor
+cells): 60-120 s Stage 3 shoulder sd 5.42 deg, 67 cells; pass2 1.94 deg, 279 cells (match builder). Context: pass2 base_yaw sd 95.6 deg vs
+Stage 3 9.35 deg in that window (pass2's cells come from base rotation); hand speed p50 0.19 vs 0.40 m/s. 0-120 s: S3 sd 9.42 / 155 cells,
+pass2 4.18 / 375. Whole song: S3 8.78 / 203, pass2 3.03 / 441. Clip SENT to user 19:15 with the two numbers; waiting for the user's eye
+(may stop the run, 7.41). Round 600 ~21:10, 800 ~01:15, end ~05:30 2026-11-13. Monitor re-armed 19:15.
 
 ## CURRENT STATE (2026-11-09 ~22:40, saved before a usage limit)
 
