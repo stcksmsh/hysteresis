@@ -94,7 +94,18 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## CURRENT STATE (2026-11-09 ~22:40, saved before a usage limit) — read this block first
+## CURRENT STATE (2026-11-12 09:30) — read this block first
+
+**Stage 3 run was stopped twice by a system power-off, then resumed.** `hyst-wo26b-run-r1` ran 22:16-23:25 on 2026-11-09 and stopped at
+round 54/977 (1.13 h compute, no validation yet) when the machine powered off (journal: logind "The system will power off now!"; cause not
+checked — no critical-battery line found). `hyst-wo26b-run-r2` was started 2026-11-10 20:17 (not by the overseer), waited on battery, and the
+machine powered off at 20:20. Machine booted 2026-11-12 09:23 on mains (battery 93 %). The overseer resumed it at 09:28 as
+**`hyst-wo26b-run-r3`** (same script `s3t_run.sh` in body-m3f, code identical to body a9fd858, 14 GB cap, cores 6-11): log says "resumed at
+round 54 of 977, 1.13 h of compute spent". Remaining 923 rounds x 73 s + 5 validations x 200 s = ~19.0 h -> end ~04:30 2026-11-13 if on
+mains throughout. Validations: round 200 ~12:30, 400 ~16:35, 600 ~20:40, 800 ~00:45, 977 ~04:25. No builders online (ListAgents empty).
+WO27 still not sent (waiting for the user's "send"); no s3/run_report/ exists. Everything else in the block below still holds.
+
+## CURRENT STATE (2026-11-09 ~22:40, saved before a usage limit)
 
 **Rules of record:** BRAIN_SPEC on body, latest **7.39-7.41** (7.39 Stage 3 design + bars (a)-(f); 7.39.6/7.40.1 rising D multiplier;
 7.40 build defaults, thresholds from v47; 7.41 launch rulings: energy 0.375 kept, report-only side-car items, NO mid-run changes).
