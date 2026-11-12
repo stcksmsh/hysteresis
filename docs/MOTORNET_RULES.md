@@ -80,8 +80,9 @@ manifest: Part 4 with `default_rng(29041)` choosing 4 of round 1's 22 clips (wit
 - **Regime** (silent clips, with input): *decays* if the std over units-and-time of `r` in the last 4 s is < 0.1 x that of the first 4 s; else
   *cycles* if the autocorrelation of the first principal-component score (mean-removed, 50 Hz) has a peak > 0.5 at a lag of 0.3-5 s; else
   *wanders*. (Note: the warm-up has run for 10 s before the shown 12 s, so "decays" means the shown 12 s decay further.)
-- **Dominant movement frequency**: frequency of the maximum of the hand-speed power spectrum (hand-speed = norm of the finite-difference hand
-  velocity at 50 Hz, mean removed, Hann window, whole 12 s, zero-padding none, bins above 0.1 Hz).
+- **Dominant movement frequency**: frequency of the maximum of the summed power spectra of the three mean-removed hand-position coordinates
+  (x, y, z; 50 Hz, Hann window, whole 12 s, no zero-padding, DC excluded, bins above 0.1 Hz). Not the hand-speed spectrum (it doubles the
+  frequency of back-and-forth motion). Amended by the overseer 2026-11-12.
 - **Mean hand speed** (m/s): mean of the hand-speed samples. **Mean hand height** (m): mean z of the hand point (`m3f_report.fk_points`, index 5).
 - **Hand-path straightness**: strokes are the hand path between consecutive local minima of hand speed (50 Hz, speed smoothed with a 0.1 s box
   window, minima at least 0.3 s apart, strokes whose arc length is under 0.05 m skipped); per stroke chord / arc; reported as mean, and min.
