@@ -1,4 +1,4 @@
-# Overseer handoff — 2026-11-13
+# Overseer handoff — 2026-11-13 (13:00)
 
 This file is the overseer's whole state. The `/overseer` skill (`.claude/skills/overseer/SKILL.md` on this branch, the canonical copy) starts a new overseer from it and recreates the worktree if it is gone. To start one by hand, paste everything below the line into a fresh session.
 
@@ -94,15 +94,61 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## CURRENT STATE (2026-11-13 ~12:50) — read this block first
+## CURRENT STATE (2026-11-13 ~13:00, saved for a clear) — read this block first
 
-**MOTORNET PART 3 DONE; WAITING FOR THE PLANNER.** Kosta answered 5 pairs (12:40-12:44): Blue Lagoon S03 (first), Breathe S03, Epitaph S03,
-OOTD neither, Schizoid neither; notes: loops, fixed facing, little base/shoulder, too small on energetic music; OOTD cortex arousal -1.40
-(lowest) though Kosta hears energetic. Overseer join answers x key matches report table. body-mnet3 + body-mnettool3 MERGED (body e5f3ac9).
-Report script prints Part 3 twice + lacks replaced list -> fix sent to agent 2 [892bfc] (branch body-mnetfix, "FIX READY"); verify, merge,
-then commit regenerated docs/MOTORNET_REPORT.md. Brief `docs/PLANNER_BRIEF_MOTORNET_PART3.md` SENT (Q1 next step [rec (a) close toy,
-richer dynamics round 2 specified by planner], Q2 arousal vs Kosta [rec report-only vs dial recordings], Q3 record 7.47). Session unit
-stopped. Agent 1 [0b1684] idle. **12:55:** report fix body-mnetfix 1df9ada VERIFIED (Part 3 once, replaced list matches, tests 12+5 OK) and MERGED into body; agent 2 idle. NEXT: planner answers -> BRAIN_SPEC 7.47 on body first.
+**Motor-network toy test (BRAIN_SPEC 7.44-7.46) is COMPLETE. Waiting for the planner's answers to `docs/PLANNER_BRIEF_MOTORNET_PART3.md`
+(sent to the user 12:50).** The user will paste them right after restarting the overseer. FIRST ACTION: record them as **BRAIN_SPEC 7.47** on
+body (worktree `.claude/worktrees/body`, `git pull --ff-only` first), commit, push, merge body into keys-decide; then act on them (prompts as
+`docs/BUILDER_PROMPT_WO30*.md`, sent only on the user's word).
+
+- **Brief questions:** Q1 next step: (a) close the toy test, second toy round for richer dynamics specified by the planner [rec]; (b)
+  limbic gains trained by labels; (c) second silent round. Q2 cortex arousal vs Kosta's hearing: (a) report-only comparison with his dial
+  recordings [rec]. Q3 record as 7.47.
+- **Results (all overseer-verified):**
+  - Parts 1/2/4: energetic 6 / tense 2 / light 2, no "nothing, glitching" labels. Labels ordered by mean hand speed (tense 0.25-0.32, light
+    0.34-0.39, energetic 0.49-0.86 m/s). Ball = lamp. Part 4 2/4 the same as round 1. PR about 2 everywhere.
+  - Part 3 picks:
+
+    | Song | Pick |
+    |---|---|
+    | Blue Lagoon | S03 |
+    | Breathe | S03 |
+    | Epitaph | S03 |
+    | One of These Days | neither |
+    | 21st Century Schizoid Man | neither |
+
+    Notes: loops, fixed facing, little base/shoulder movement, too small on energetic music. One of These Days cortex arousal std -1.40 (the
+    lowest) though Kosta hears it as energetic.
+  - 3 settings failed the gates with music only (S04 Blue Lagoon, S02 Epitaph, S06 One of These Days) and were replaced per 7.46.7.
+- **Repo:** body 6468e2c has everything merged: body-mnet, body-mnettool, body-mnet3, body-mnettool3, body-mnetfix. `docs/MOTORNET_REPORT.md`
+  is final (Parts 1-4 + replaced list). Rules and params: `docs/MOTORNET_RULES.md`, `docs/MOTORNET_PARAMS.md`. Prompts WO29A-D in docs/.
+  keys-decide has body merged.
+- **Data** (outside git): `/secondary/hyst-data/body/motornet_toy/`:
+  - `clips/`: manifest.json with Parts 1-4, settings.json, part3_numbers.json; P1/P2/P3 mp4 + csv + activity.npy;
+  - `clips_v1/`, `work_v1/`: the first, input-dominated run;
+  - `session_2026-11-13/` (Parts 1/2/4) and `session_2026-11-13_part3/`;
+  - `measurements.json`, `tool_0de2ffd/`, `tool_e29217e/` (tool archives);
+  - `work3/`: song lanes and beats.
+
+  Audio: `/secondary/hyst-data/audio/checkset/` (5 mp3; never in git).
+- **Overseer check scripts** (on keys-decide, `scripts/body/`):
+  - `overseer_mnet_check.py`: first-run limiter and frequency check;
+  - `overseer_mnet_check2.py`: stop rule, gates, PR and joint peaks; its glob is currently set to `clips/P3_*`;
+  - `overseer_p3_audio_check.py`: audio window alignment, 3 s motion.
+- **Machine:** nothing running. All hyst-wo29 session units are stopped. Failed units in the list are old, superseded attempts (wo27-test-unit-a,
+  wo27-cliptest-a, wo28a-render1, wo29c-clips = the stop on the gate failures).
+- **Builders:** both idle, done: agent 1 [0b1684] (29A/29C), agent 2 [892bfc] (29B/29D/fix). Refs change on restart: use ListAgents.
+  Agent 1's pinned worktree is `.claude/worktrees/wo27-s3r`.
+- **Main checkout:** `/secondary/Programming/Github/Hysteresis` is on `body-dialtool` (not dance-checkpoint); do not touch.
+- **Lessons this session:**
+  - A spec that fixes "random input weights" must also fix the input/recurrent drive ratio. Unscaled Win made the network follow the input
+    (7.44 correction).
+  - Check limiters on the COMMANDED signal, not on realised angles (lag hides the clipping). The overseer was wrong once on this, and
+    corrected it.
+  - Settings that pass silent can fail the gates with music input; the replace rule 7.44.3.4 covers it.
+  - Builders go idle while their units run: watch the unit (`until ... is-active` in the background) and wake them.
+  - Builders' report scripts can duplicate sections: always read the generated report, not only the tests.
+  - Clock: check `date` before writing times; several earlier handoff stamps were guessed wrong.
 
 ## STATE (2026-11-13 ~12:10)
 
