@@ -1,69 +1,47 @@
 # Night log, branch body-mnet (work order 29A)
 
-## MORNING SUMMARY
-- Rendered: Part 1 **10** silent lamp clips (S01-S10), Part 2 **2** ball clips (S01, S02), Part 4 **4** round-1 clips referenced (A_lag_low,
-  A_neutral, A_posture_high, A_vigour_high). Part 3 held, path tested on a synthetic click track only.
-- Discards per gate: none (draws 1-10 all passed). S11 (all low) and S12 (all high) failed the minimum-motion gate; not shown, not replaced.
-  So the 12-setting design is 10 clips shown, 2 reported.
-- Numbers from 29B's script (numbers only): every setting "cycles" at 1.664 Hz (the beat-input rate), participation ratio 2.03-2.2, mean hand
-  height 0.513-0.514 m; hand speed 0.30-0.39 m/s; straightness varies (0.06-0.97). The settings share the input-entrained rhythm.
-- Threads: cores 6-11 pinned, simulations single-threaded, renders 3 recorder workers. Compute: ~25 s sampling, ~10 min rendering.
-- Files: `/secondary/hyst-data/body/motornet_toy/` (clips/, settings.json, measurements.json, work/). Manifest: `clips/manifest.json`.
-- FOR USER: two deviations from the defaults (feasibility, in the rules file): calibration +-100 % of round-1 neutral amplitudes (default +-60 %);
-  minimum-motion extent 0.05 m (default 0.10 m). Reason: hand extent 0.084 m at gain 1 (cause: see DIAGNOSIS; first stated cause was wrong).
-- FOR USER: Part 3 held for the audio files and excerpt times. The click-track test shows the cortex phase lanes of a click track barely move, so
-  real songs are needed to see the music path matter.
+## MORNING SUMMARY (re-run under BRAIN_SPEC 7.45, 2026-11-13)
+- Steps (7.45.10 order), all gain 1 silent: (i) input scale s = 0.04278085684427462 (5 fixed-point steps; drive-std ratio 0.2504; input 0.0370 vs
+  recurrent 0.1477). (ii) calibrated at +-60 %. (iii) command-limiter share (output p5-p95 / target p5-p95): base yaw 0.985, shoulder 0.997,
+  elbow 0.977, wrist bend 0.995, wrist roll 0.988: neither base nor shoulder below half, so the spinal spring-damper stays at 3 Hz. (iv) gain-1 hand
+  extent at +-60 % = 0.182 m (>= 0.10 m): +-60 % and the 0.10 m gate kept.
+- Redraw (seed 29011): 41 draws, 10 kept (draws 6, 7, 9, 14, 18, 23, 27, 29, 38, 41), 31 discarded. Discards per gate (a draw can fail several):
+  motion 20, limits 11, contact 9, clearance 1, end stop 1. S11 (all low) failed motion, S12 (all high) failed contact and limits: neither shown,
+  neither replaced.
+- Rendered: Part 1 **10** lamp clips (S01-S10), Part 2 **2** ball clips (S01, S02), Part 4 unchanged (4 round-1 clips referenced). Part 3 NOT run.
+  Old clips kept in `/secondary/hyst-data/body/motornet_toy/clips_v1/` (with `work_v1/`, `settings_v1.json`, `measurements_v1.json`, `diag_v1.json`).
+- Threads: cores 6-11 pinned, simulations single-threaded, renders 3 recorder workers. Compute: fit about 1 min, sampling 41 draws about 8 s,
+  rendering 12 clips about 15 min wall; no GPU.
+- Files: `/secondary/hyst-data/body/motornet_toy/` (clips/, settings.json, measurements.json, stoprule_numbers.json, motornet_fit.json).
+  Manifest: `clips/manifest.json`. Params: `docs/MOTORNET_PARAMS.md`.
 
-Status: ON HOLD at the overseer's request. Manifest finished; clips exist but are not declared ready.
+## 7.45.5 stop-rule numbers (numbers only; the stop rule is NOT judged here)
+Per shown setting: position-spectrum peak of each joint (base yaw, shoulder, elbow, wrist bend, wrist roll; Hann, 12 s, DC excluded, bins > 0.1 Hz,
+bin width 0.083 Hz), "at beat" = within one bin of 100/60 = 1.667 Hz, and the activity participation ratio (PR). Script `motornet_stoprule.py`.
 
-CORRECTION (overseer, 2026-11-12), cause restated: the round-1 command limiter (mainly base and shoulder acceleration) cuts the 1.66 Hz
-beat-rate command's amplitude, then servo lag cuts it further; base yaw 47.5 -> 41.7 -> 13.4 -> 5.4 deg. The earlier line "the beat-rate drive
-is speed-limited" was wrong as stated (realised speeds stay under 0.9 of their limits because the lag has already cut them). See DIAGNOSIS below. HOLD: nothing further
-rendered, no "CLIPS READY" written. Network, settings and clips unchanged.
+| setting | peak Hz per joint | joints at the beat | PR |
+|---|---|---|---|
+| S01 | 0.416, 0.416, 1.664, 0.416, 0.416 | elbow | 2.213 |
+| S02 | 0.416 x5 | none | 2.179 |
+| S03 | 0.416 x5 | none | 2.016 |
+| S04 | 0.416 x5 | none | 2.637 |
+| S05 | 0.499 x5 | none | 2.172 |
+| S06 | 0.416 x5 | none | 2.185 |
+| S07 | 0.499 x5 | none | 2.208 |
+| S08 | 0.416 x5 | none | 2.377 |
+| S09 | 0.250 x5 | none | 1.968 |
+| S10 | 0.499, 0.499, 1.664, 0.499, 0.499 | elbow | 2.177 |
 
-## DIAGNOSIS FOR OVERSEER
-Script `scripts/body/motornet_diag.py` (read-only), raw output `/secondary/hyst-data/body/motornet_toy/diag.json`, cores 6-11, detached unit.
-Ranges are p5-p95 in degrees over the shown 12 s, joints = (base yaw, shoulder, elbow, wrist bend, wrist roll).
-
-**(1) Drive per unit** (std over the shown 12 s of Win u and of W r, mean over 200 units):
-
-| | input drive | recurrent drive |
-|---|---|---|
-| gain 1 | 0.864 | 0.553 |
-| S01-S10 | 0.864 (all) | 0.43-0.67 (S08 0.43, S01 0.53, S03 0.67, S05 0.67) |
-| S11 low / S12 high | 0.864 | 0.28 / 0.78 |
-| gain 1, zero input (x0 = 0.01 N(0,1), seed 29099) | 0 | 0.113 |
-
-**(2) Per joint ranges, gain 1** (S01-S10 differ by about +-30 % on shoulder/wrist bend/elbow targets; base realised always 5.3-6.4, roll 42.7-43.1):
-
-| stage | base | shoulder | elbow | wrist bend | roll |
-|---|---|---|---|---|---|
-| calibrated target | 47.5 | 18.6 | 21.4 | 21.6 | 59.3 |
-| spring-damper output | 41.7 | 16.4 | 21.1 | 21.2 | 58.4 |
-| realised (physics) | 5.4 | 3.2 | 13.9 | 15.4 | 43.1 |
-
-Extra, to locate the loss (gain 1, replicating the round-1 limiter on the spring-damper output): `LIMITS` speed (120, 90, 150, 200, 250) deg/s,
-accel (600, 300, 1000, 2000, 3000) deg/s^2. The spring-damper output peaks at (200, 80, 118, 114, 351) deg/s, so base (200 > 120) and roll
-(351 > 250) ask for more than the speed limit; a 20 deg amplitude at 1.66 Hz needs about 2200 deg/s^2 against the base acceleration limit
-600. Output of the limiter: p5-p95 (13.4, 6.7, 22.4, 21.2, 53.2), peak speed (91, 46, 150, 106, 250). So the command limiter, not the
-realised-angle speed, takes base from 41.7 to 13.4 deg, and the servo/physics takes it on to 5.4 (shoulder 16.4 -> 6.7 -> 3.2, elbow
-21.1 -> 22.4 -> 13.9). The overseer's 0.9 check is on realised angles, where the lag has already lowered the speed. Roll is the one joint
-whose realised range (43) is close to its limiter output (53).
-
-**(3) Autonomous activity and extremes:**
-
-| | PR of r | joint peak frequency (target / realised) |
-|---|---|---|
-| S11 (all low) | 1.97 | 1.664 Hz all five joints |
-| S12 (all high) | 2.41 | 1.664 Hz all five joints |
-| gain 1, zero input | 1.99 | 0.499 Hz all five joints (spectral bin resolution 0.083 Hz) |
-
-Zero-input gain 1 does not decay and does not cycle at the beat: the activity is slow (0.5 Hz peak), PR 1.99, p5-p95 of the targets 1.5-10 deg.
-Every joint peaks at 1.664 Hz in S01-S12 and at gain 1 (input rate = 100 BPM / 60). S11 and S12 failed the motion gate (not shown).
-
-No change made to anything. Design question left to the overseer and planner.
+Note: in S01 and S10 the third joint (elbow) is the one at 1.664 Hz; no other joint of any setting peaks within a bin of the beat. PR range 1.97-2.64.
+Other numbers (29B's script): all ten "cycles"; dominant hand frequency 0.25-0.50 Hz; mean hand speed 0.25-0.86 m/s; mean hand height 0.28-0.52 m;
+straightness 0.71-0.96. Hand extents (p5-p95, max axis): 0.16-0.67 m.
 
 ## Log
-- 2026-11-12: branch body-mnet from origin/body. Rules written (`docs/MOTORNET_RULES.md`) and pushed before any clip.
-- Overseer amendment applied: dominant frequency = summed power spectra of mean-removed hand x, y, z, DC excluded.
-- Sampling, rendering, manifest, measurement run done; see `docs/MOTORNET_PARAMS.md`.
+- 2026-11-12: branch body-mnet from origin/body. Rules written and pushed before any clip (v1). v1 clips rendered, then held at the overseer's request
+  (all joints peaked at the 1.664 Hz input; PR 2.0-2.2): the diagnosis (v1) is in `/secondary/hyst-data/body/motornet_toy/diag_v1.json`; v1 cause
+  restated by the overseer: the round-1 command limiter cut the beat-rate command, then servo lag: base yaw 47.5 -> 41.7 -> 13.4 -> 5.4 deg.
+- 2026-11-13: merged origin/body; re-run per 7.45 as above. Rules and params pushed (`361b49b`) before sampling and rendering.
+- FOR USER: Part 3 (music) still waits for the audio files and excerpt start times; the path is tested on a synthetic click track only.
+- FOR USER: S11 and S12 are not shown (they fail gates); Part 1 has 10 clips, not 12.
+
+CLIPS READY (commit hash below)

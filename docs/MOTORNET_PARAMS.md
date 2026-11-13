@@ -40,4 +40,11 @@ in `clips_v1/`, `work_v1/`, `settings_v1.json`, `measurements_v1.json`, `diag_v1
 
 ## Run record
 
-(filled after sampling and rendering)
+- Draw (seed 29011): 41 draws, kept draws 6, 7, 9, 14, 18, 23, 27, 29, 38, 41 as S01-S10. Discards per gate: motion 20, limits 11, contact 9,
+  clearance 1, end stop 1 (31 discarded draws; a draw can fail several gates). S11 (all low): fails motion. S12 (all high): fails contact and
+  limits. Neither shown or replaced.
+- Rendered: Part 1 S01-S10 (lamp), Part 2 S01 and S02 (ball), Part 4: A_lag_low, A_neutral, A_posture_high, A_vigour_high (seed 29041, referenced).
+  Part 3 not run.
+- Threads: cores 6-11 pinned (`taskset`), simulations single-threaded, 3 recorder workers; mains only. Compute: fit about 1 min, sampling about 8 s,
+  rendering about 15 min wall; no GPU.
+- Numbers per setting (29B's `motornet_measure.py`, `stoprule_numbers.json`): see `docs/NIGHT_LOG_body-mnet.md`.
