@@ -15,6 +15,56 @@
 - **Battery:** gating and rendering ran on battery on the user's instruction (relayed by the overseer); the render script takes `HYST_BATTERY_OK=1`.
 - Choices carried from (j), FOR USER: shoulder p1 exempt from the clearance margin, margins on p2-p4 and the hand ball (0.11 m), link segments covered by the contact gate.
 
+## LIMITS BREAKDOWN be4a023 (report only, nothing adopted)
+
+Re-ran the same 145 candidates, both variants (same stream, same v2p path, cores 6-11); script `scripts/body/retarget_limits.py`, full per-candidate data in
+`/secondary/hyst-data/body/retarget_look/limits_breakdown.json` (outside git). Ratios as `dialstudy.gate_values`: realised 50 Hz rows, speed = diff x 50 / limit, acceleration = second difference x 2500 / limit.
+Limits (deg/s, deg/s2): base 120/600, shoulder 90/300, elbow 150/1000, wrist bend 200/2000, wrist roll 250/3000. Medians over the 145 candidates.
+
+**1 and 2 and 3, per joint** (realised ratio; limiter cut share = 1 - limiter-output p5-p95 / command p5-p95; overshoot = realised ratio - limiter-output ratio; command ratio = the retargeted command before the limiter):
+
+| joint | V1 speed | V1 accel | V1 cut med (max) | V1 overshoot spd / acc | V1 command spd / acc | V2 speed | V2 accel | V2 cut med (max) | V2 overshoot spd / acc | V2 command spd / acc |
+|---|---|---|---|---|---|---|---|---|---|---|
+| base yaw | 0.59 | 0.42 | 0.000 (0.15) | -0.12 / -0.53 | 0.82 / 1.5 | 0.54 | 0.37 | 0.000 (0.08) | -0.11 / -0.60 | 0.79 / 1.5 |
+| shoulder | 0.96 | **1.24** | 0.018 (0.35) | -0.04 / +0.23 | 3.3 / 21.8 | 0.83 | **1.14** | 0.002 (0.77) | -0.12 / +0.05 | 1.9 / 8.7 |
+| elbow | **1.02** | 0.93 | 0.066 (0.40) | +0.02 / -0.07 | 4.4 / 15.2 | 0.97 | 0.90 | 0.005 (0.74) | -0.02 / -0.14 | 2.0 / 5.4 |
+| wrist bend | 1.01 | 0.90 | 0.059 (0.47) | +0.01 / -0.10 | 5.2 / 14.6 | 0.99 | 0.89 | 0.013 (1.00) | 0.00 / -0.11 | 3.1 / 8.5 |
+| wrist roll | 1.00 | 0.88 | 0.036 (0.21) | 0.00 / -0.12 | 4.8 / 10.5 | 1.00 | 0.88 | 0.028 (1.00) | 0.00 / -0.12 | 4.4 / 12.2 |
+
+Which joint sets the failing maximum (candidates with a worst ratio > 1.05): **acceleration is the shoulder in every case** (V1 132 of 145, V2 97 of 145; no other joint ever sets it). Speed: shoulder 19 and elbow 18 (V1), shoulder 15 and elbow 17 (V2); never base, wrist bend or wrist roll.
+The command limiter itself sits at its own acceleration bound on the shoulder (limiter-output accel ratio about 1.0, realised 1.24 / 1.14): the servo adds a median +0.23 (V1) / +0.05 (V2) of acceleration overshoot on that joint, and on speed adds at most a few hundredths. The limiter shrinks the p5-p95 range little (median cut 0 to 7 %; it delays the command rather than flattening it), but the raw retargeted shoulder command is far over the limits (median 3.3x speed, 22x acceleration on V1).
+
+**4, per genre: median of the worst speed / worst acceleration ratio (9 candidates each; `kun` 10)** and "limits" passes at 1.05, V1 | V2:
+
+| genre | V1 spd / acc | V1 pass | V2 spd / acc | V2 pass |
+|---|---|---|---|---|
+| breaking | 1.00 / 1.23 | 0 | 1.07 / 1.22 | 0 |
+| chinese | 1.05 / 1.28 | 1 | 1.07 / 1.28 | 0 |
+| choreography | 1.02 / 1.39 | 0 | 1.02 / 1.21 | 1 |
+| dai | 1.03 / 1.16 | 1 | 1.06 / 1.06 | 4 |
+| dunhuang | 1.07 / 1.26 | 0 | 1.03 / 1.03 | 5 |
+| hantang | 1.05 / 1.22 | 1 | 1.03 / 1.00 | 4 |
+| hiphop | 1.01 / 1.28 | 1 | 1.02 / 1.25 | 0 |
+| jazz | 1.04 / 1.27 | 0 | 1.02 / 1.22 | 1 |
+| korean | 1.03 / 1.30 | 0 | 1.00 / 1.18 | 2 |
+| kun | 1.02 / 0.85 | 7 | 0.89 / 0.55 | 10 |
+| locking | 1.00 / 1.28 | 0 | 1.01 / 1.37 | 0 |
+| miao | 1.03 / 1.21 | 0 | 1.00 / 1.02 | 6 |
+| popping | 0.99 / 1.25 | 0 | 1.01 / 1.09 | 2 |
+| shenyun | 1.04 / 1.20 | 1 | 1.01 / 1.07 | 4 |
+| urban | 1.00 / 1.27 | 1 | 1.01 / 1.32 | 1 |
+| wei | 1.04 / 1.32 | 0 | 0.99 / 1.05 | 5 |
+
+**5, "limits" gate pass counts at the tolerance on speed and acceleration ratios** (145 candidates; counts only):
+
+| tolerance | V1 limits only | V2 limits only | V1 all gates (other gates as run) | V2 all gates | **both variants, all gates** |
+|---|---|---|---|---|---|
+| 1.05 (current) | 13 | 45 | 13 | 43 | **10** |
+| 1.25 | 77 | 104 | 62 | 89 | **43** |
+| 1.5 | 136 | 138 | 118 | 112 | **93** |
+
+(V1 13 and V2 43 at 1.05 match the gating run's pass counts; "limits only" counts ignore every other gate, "all gates" holds the other gates as they were.)
+
 ## WO32B log
 - 2026-11-13: branch body-retarget from origin/body. Rules file written and accepted (V2 elbow = lateral torso bend, FOR USER).
 - FineDance READY; layout T x 315 = 3 root + 52 x 6D (first two ROWS, pytorch3d), joint order SMPL-H (rules (h)).
