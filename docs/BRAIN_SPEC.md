@@ -1934,3 +1934,37 @@ PROPOSAL = planner, not yet ruled.
    - *Guard mechanism* is stated in a dated rules note before any render. Default: when the commanded pose's FK breaks the C margins, hold
      the last safe command for that frame. Engagement = the share of 100 Hz command frames held.
    - *Scale:* `docs/RETARGET_SCALE.json` unchanged. The seeded clip stream restarts from candidate 1.
+
+### 7.52 Retarget look test: limiter overshoot first, then a look-test tolerance of 1.25 and a spread pick rule, 2026-11-13, via Kosta + planner (answering `docs/PLANNER_BRIEF_RETARGET_LIMITS.md`)
+
+1. **Record (Q4).** On v2p (7.51), 145 candidates gave 10 passing in both variants, but 7 of the 10 were windows of one Kunqu opera sequence
+   (FineDance seq 028) and 12 of 16 genres, every street style included, passed 0 of 9. The session was held by the overseer; nothing was
+   shown to Kosta. Failures were almost all shoulder acceleration (V1 132, V2 97); median realised shoulder acceleration / limit 1.24 (V1),
+   1.14 (V2); median commanded shoulder acceleration 22x (V1) and 9x (V2) the limit. In 6 % (V1) and 19 % (V2) of candidates the command
+   limiter's own shoulder output exceeded the acceleration limit, up to 5.5x, cause unchecked. Pass-both counts at tolerance 1.05 / 1.25 / 1.5:
+   10 / 43 / 93 (genres 4 / 15 / 16, sequences 4 / 30 / 63).
+2. **Q3 first, before any re-render:** agent 1 finds why the limiter's own shoulder output exceeds the acceleration limit.
+   - If it is a bug: fix it and record the fix in a dated rules note. This is not a design choice and needs no ruling.
+   - If it is not a bug: report the cause and HOLD (no re-gate, no render) until Kosta rules.
+3. **Q1 (a): speed and acceleration tolerance 1.25 x limit, for this look test only** (simulation, no hardware). It is a **look-test
+   exception, not a new hardware margin**; every other gate is unchanged (contact, clearance, end stops, guard > 10 %, > 8 Hz share, minimum
+   motion).
+4. **Q2: pick rule:** at most one window per FineDance sequence and at most two per genre (genres case-insensitive, 16), taken in the same
+   seeded stream order (seed 32011, restarted from candidate 1); both variants must pass.
+5. **Then:** re-gate (with the Q3 fix) -> re-pick 10 -> render -> Kosta's blind session as 7.49.5 / 7.51 F. **Report per clip:** commanded vs
+   realised shoulder acceleration and the limiter's share of the command, so Kosta can see how much of the human motion was cut.
+6. **For the record (planner reading, Kosta did not dispute):** human dance commands 9-22x the provisional shoulder servo's acceleration.
+   If the look test passes, the real arm likely needs a stronger or higher-geared shoulder actuator than the STS3215. Hardware decision
+   deferred; flagged.
+7. Standing rules unchanged.
+8. **Overseer notes (operational defaults, not rulings; Kosta may amend):**
+   - *Limiter overshoot definition:* the shoulder acceleration of the limiter's output, computed exactly as the gate computes realised
+     acceleration (same differencing and filtering), over the limit. The report names the code lines and shows the fix on the worst candidate
+     (5.5x) before and after.
+   - *A fix that changes the limiter's output* re-gates the whole stream from candidate 1; the old gating log is kept, not overwritten.
+   - *Per-clip numbers:* commanded / realised shoulder acceleration as p50, p95 and max over the clip, both as multiples of the limit; the
+     limiter's share = the share of 100 Hz frames where the limiter changed the shoulder command, plus the RMS of (command - limiter output) on
+     the shoulder in degrees. Both variants; in `numbers.json` and the session report.
+   - *Reference:* round-1 S03 is re-gated at the same 1.25 tolerance on v2p on the 2 seeded songs; a failing reference is logged, not replaced.
+   - *Pair order:* V1 first in exactly 2 or 3 of the 5 pairs (7.50.8), checked before the session.
+   - *Fewer than 10 picks within 200 candidates under the pick rule:* HOLD and report counts; no relaxation without Kosta.
