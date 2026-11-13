@@ -1806,3 +1806,66 @@ Marked DEFAULT = planner choice Kosta did not overrule; PROPOSAL = undecided.
    - *Part B pick:* `default_rng(seed)` draws 5 different settings from the 8, one per song, songs in the 7.46.4 order.
    - *Facing drift:* mean base yaw over the clip's last 3 s minus over its first 3 s (deg), plus the range of its 3 s moving mean.
    - *Stop rule:* evaluated on the Part A silent clips (PR per population and base yaw p5-p95).
+
+### 7.48 Motor-network toy round 2 and the arousal/energy comparison recorded, 2026-11-13, via Kosta + planner (answering `docs/PLANNER_BRIEF_MOTORNET2_RESULTS.md` and `docs/PLANNER_BRIEF_AROUSAL_ENERGY.md`)
+
+1. **Toy round 2 recorded** as in `docs/MOTORNET2_REPORT.md` (body 7801dc9) and the brief. Part A (silent, 8 settings): nothing, glitching 4
+   (S02, S04, S05, S07), energetic 2 (S06, S08), tense 1 (S03), something, can't name it 1 (S01); Kosta's notes name "micro-movements" in 7 of
+   8, glitchy during sweeps and useful as in-place bobbing. Part B (music, 5 pairs): round-1 S03 picked 5/5.
+2. **Seed/order confound recorded, no re-show:** with session seed 30061 no pair was swapped, so the new setting was shown first and round-1
+   S03 second in all 5 pairs; "first vs second" is confounded with "new vs S03".
+3. **Arousal/energy comparison recorded** as in `docs/AROUSAL_ENERGY_REPORT.md` (body-mnettool4 1c59ea3, merged into body) and the brief:
+   ear energy (`docs/EAR_ENERGY_RULES.md`) correlates positively with every dial axis at every lag (lag 0 Pearson 0.35-0.80 against energy and
+   light); `arousal_b7` correlates negatively with Five Years pass A energy (-0.77) and near zero on Presence (0.09). The arousal brief's Q1
+   (drop arousal from round 2) was overtaken: round 2 ran as ordered.
+4. **Standing rules unchanged.**
+
+### 7.49 Toy line closed; new direction: the arm learns by watching humans, 2026-11-13, via Kosta + planner
+
+PROPOSAL = planner, not yet ruled.
+
+1. **Toy line closed.** Reason: no human movement source existed anywhere in the system; proxy objectives, hand-set dials and random networks
+   cannot be expected to look human. Kosta's notes across all rounds describe properties human dancers acquire by watching others (head-bob
+   vs sweep, rise at vocal peak, rotation as a tool, bigger on the drop). These are not to be hand-built.
+2. **New direction (Kosta, verbatim): "It should just learn".** Kosta is comfortable with the story that it learned by watching humans.
+   Source: a public dataset if possible.
+3. **Frozen target architecture** (changes need Kosta's ruling):
+   - a) **WATCHING (imitation):** the motor-cortex network is TRAINED to move to music the way humans do, from human dance motion retargeted
+     onto the arm's 5 joints, conditioned on the frozen cortex's view of the same music. Brain parallel: observational learning / mirror
+     system.
+   - b) **FEELING:** music-driven gain modulation of that trained network (Stroud et al. 2018 mechanism, tested in the toy rounds), using ear
+     energy, `arousal_b7` and slow cortex state.
+   - c) **TEACHER:** Kosta's blind picks refine it afterwards. Kosta's notes are feedback for this step, never hand-built specs.
+   - Unchanged: frozen cortex (B7 epoch 6), one arm, v47 seeds nothing, Kosta's eye is the judge, no proxy-objective training of movement.
+4. **Work order step 1: licence check (no downloads yet).** Report from primary sources only (official sites, licence files), quoting the
+   exact terms:
+   - AIST++ (google.github.io/aistplusplus_dataset): motion annotations are stated as CC BY 4.0; confirm from the licence file.
+   - AIST Dance Video Database (the source of the videos AND the music): terms of use for (1) the music audio, (2) the videos, (3) derived
+     data. Specifically: is local use for training a model allowed; is public exhibition of a model trained on it allowed (non-commercial
+     art exhibition, no ticket sales expected); is any registration or agreement required.
+   - 2-3 alternative public music-dance datasets with 3D motion AND music (e.g. FineDance, others the builder finds): size, licence of
+     motion, licence of music, same questions.
+   - Output: one table + exact quotes + links in `docs/`. No verdict; Kosta decides which source is usable. Unclear terms are reported as
+     unclear, not guessed.
+5. **Work order step 2: retarget look test (only after Kosta rules on step 1).** Purpose: before any training, find out whether human dance
+   mapped onto this arm looks like dancing to Kosta. If it does not, imitation cannot work and the line stops here.
+   - 10 clips (seeded pick across genres) of motion from the source Kosta approves. Motion data only; audio only if its terms allow local
+     use.
+   - Two retargeting variants, both fixed and written down before any clip is viewed:
+     - V1 "arm as arm": the human's right arm drives the robot (shoulder, elbow, wrist), torso yaw drives base yaw, forearm/hand twist
+       drives wrist roll.
+     - V2 "arm as whole body" (PROPOSAL, Kosta's "scale human"): hip/torso yaw -> base yaw; torso lean forward/back -> shoulder; upper-body
+       bend / neck -> elbow; head nod -> wrist bend; head tilt -> wrist roll.
+   - Angles scaled to joint ranges by one fixed rule per variant; passed through the existing limiter/servo/v2f body; per-joint limiter cut
+     reported. Same gates as 7.44 (overseer recomputes). Lamp head.
+   - Clips 20 s each: 10 clips x 2 variants = 20, plus round-1 S03 on 2 of the same songs if audio is allowed (reference). With music if
+     allowed, else silent.
+   - Kosta's blind session: per clip "does this look like dancing?" (yes / sort of / no) + optional note; then V1 vs V2 pairs on 5 clips
+     "which looks more like a person dancing?". Under 25 min.
+   - Report: answers, limiter cuts, per-variant summary. No verdict.
+   - Out of scope until ruled: any model training, the gain-modulation module, Kosta-feedback learning, cortex changes, hardware, monitor,
+     uploads anywhere.
+6. **Standing rules (unchanged):** branches keys-decide / body only, never master; plain commit messages with no co-author or attribution
+   lines; frozen `src/` and `tools/` read-only; data, models, audio and video outside git; nothing uploaded; free compute only, no spending,
+   no posting/emailing/submitting, no accounts or registrations without Kosta's go-ahead; never drive hardware; if unclear, stop and ask
+   Kosta.
