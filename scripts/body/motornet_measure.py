@@ -106,11 +106,12 @@ def measure2(r, h, q, population, hz=HZ):
     """Round 2 (WO30A, BRAIN_SPEC 7.47.4.7): measure() plus base yaw and shoulder p5-p95 range (deg; q = joint angles, columns 0 and 1),
     facing drift, and the participation ratio per population (population: 0 slow, 1 fast, per unit)."""
     pop = np.asarray(population)
+    single = bool((pop == 0).all())  # one population of units (round-1 network): PR of all units goes to pr_slow, pr_fast is None
     q = np.asarray(q, float)
     d, dr = drift(q[:, 0], hz)
     rng = lambda a: float(np.percentile(a, 95) - np.percentile(a, 5))
-    return dict(measure(r, h, hz), pr_slow=participation_ratio(r[:, pop == 0]), pr_fast=participation_ratio(r[:, pop == 1]),
-                yaw_range=rng(q[:, 0]), shoulder_range=rng(q[:, 1]), drift=d, drift_range=dr)
+    return dict(measure(r, h, hz), pr_slow=participation_ratio(r[:, pop == 0]), pr_fast=None if single else participation_ratio(r[:, pop == 1]),
+                yaw_range=rng(q[:, 0]), shoulder_range=rng(q[:, 1]), drift=d, drift_range=dr, single_population=single)
 
 
 def main():
@@ -125,9 +126,12 @@ def main():
     if a.round2:
         for c in clips:
             two = isinstance(c["csv"], list)
-            for cs, ac in zip(c["csv"] if two else [c["csv"]], c["activity"] if two else [c["activity"]]):
+            pops = c.get("population")  # single item: one list of units; pair item: one list per render
+            pops = pops if two else [pops]
+            for i, (cs, ac) in enumerate(zip(c["csv"] if two else [c["csv"]], c["activity"] if two else [c["activity"]])):
                 q = read_csv(mp.parent / cs)
-                pop = c.get("population") or [0] * (np.load(mp.parent / ac).shape[1] // 2) + [1] * (np.load(mp.parent / ac).shape[1] // 2)
+                n = np.load(mp.parent / ac).shape[1]
+                pop = pops[i] if pops and pops[i] is not None else [0] * (n // 2) + [1] * (n // 2)
                 res[Path(cs).stem] = measure2(np.load(mp.parent / ac).astype(float), hand_path(mp.parent / cs), q, pop)
         Path(a.out).write_text(json.dumps(res, indent=1))
         print("wrote", a.out, len(res), "clips")
