@@ -25,9 +25,23 @@ Network and body parameters used: see `docs/MOTORNET_PARAMS.md`.
 | S01 | energetic | - | energetic | - |
 | S02 | energetic | - | energetic | energetic again, light/happy song maybe?? idk |
 
-## Part 3
+## Part 3: which render fits the music
 
-Not run (no pairs in this session).
+| song | settings as shown | pick | chosen setting | note | mean hand speed (m/s) | cortex arousal raw | arousal standardised |
+|---|---|---|---|---|---|---|---|
+| blue-lagoon | first S03, second S06 | first | S03 | Id say first (more "on the music" and less janky), but theyre both too simple/repetitive loops facing the same direction always? Takanaka is jazz fusion, the guitar melody here is more than just loops, it can be better and more on-point whilst keeping the energy and upbeat-ness, but its not too bad, its on beat mostly | first 0.365, second 0.473 | 0.485 | -0.227 |
+| breathe | first S05, second S03 | second | S03 | And now for breathe it swings wildly (the first) why? The second is then ofcourse much better but even it is too loopy/swingy/fast idk | first 0.797, second 0.281 | 1.17 | 0.429 |
+| epitaph | first S08, second S03 | second | S03 | Second is better, but still its too stationary, its in the same direction, almost no if any rotation of the base, little movement in the shoulder etc | first 0.184, second 0.273 | 0.106 | -0.592 |
+| one-of-these-days | first S01, second S08 | neither | neither | both are too small/boring on this section, they seem to do something near the end but for now its neither, they dont match the musics energy at all, its not a ballad so they shouldnt be this droopy/sad | first 0.163, second 0.0633 | -0.733 | -1.4 |
+| schizoid-man | first S01, second S07 | neither | neither | Not energetic enough on the "drop" or whatever this is called after the `21st century schizoid man` line, its too soft anyway, this is an angrier/more energetic song, again, little to no shoulder/base movement, too small  | first 0.297, second 0.292 | 1.4 | 0.659 |
+
+## Settings that failed the gates with music (replaced, 7.46.7)
+
+| song | slot | failed setting | failed gates | values | replacement |
+|---|---|---|---|---|---|
+| blue-lagoon | b | S04 | contact, limits | contact_substeps 13, accel_ratio 1.18 | S06 |
+| epitaph | b | S02 | contact, limits | contact_substeps 339, accel_ratio 7.32 | S03 |
+| one-of-these-days | a | S06 | contact, limits | contact_substeps 180, accel_ratio 1.96 | S08 |
 
 ## Part 4: round 1 vs now
 

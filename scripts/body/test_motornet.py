@@ -240,6 +240,15 @@ class Report(unittest.TestCase):
             self.assertIn("| 0.42 | 3.5 |", text)  # arousal raw / standardised of Days (i=2)
             self.assertEqual(text.count("(not answered)"), text.count("(not answered)"))
             self.assertNotIn("Not run", text)
+            self.assertEqual(text.count("## Part 3: which render fits the music"), 1)
+            self.assertIn("None.", text)
+            mf = d / "m3.json"
+            mf.write_text(json.dumps({"clips": [dict(part=3, song="Days", setting=["S03", "S06"], replaced=[[], [dict(
+                setting="S04", gates=dict(contact_substeps=13, accel_ratio=1.179), parts=dict(contact=False, limits=False, hf=True))]])]}))
+            text = rep.report([a, b], meas, d / "none", mf)
+            self.assertEqual(text.count("## Part 3: which render fits the music"), 1)
+            self.assertIn("## Settings that failed the gates with music (replaced, 7.46.7)", text)
+            self.assertIn("| Days | b | S04 | contact, limits | contact_substeps 13, accel_ratio 1.18 | S06 |", text)
 
 
 if __name__ == "__main__":
