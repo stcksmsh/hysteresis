@@ -1716,3 +1716,23 @@ Marked DEFAULT = planner choice Kosta did not overrule; PROPOSAL = undecided.
     - *"Peaks at the input beat frequency":* the joint's position-spectrum peak (Hann, 12 s, DC excluded) lies within one frequency bin
       (1/12 Hz) of 100/60 Hz.
     - The joint-rate and limiter numbers are recomputed by the overseer's own code before anything reaches Kosta.
+
+### 7.46 Motor-network toy test: Parts 1, 2 and 4 recorded; Part 3 ordered, 2026-11-13, via Kosta + planner (answering `docs/PLANNER_BRIEF_MOTORNET_RESULTS.md`)
+
+1. **Results recorded** as in `docs/MOTORNET_REPORT.md` (body 77cc84c) and the brief. Kosta answered all 16 clips ("unsure of all the
+   results, imperfect probably").
+2. **Planner reading, for the record (Kosta did not dispute it):**
+   - first round with no "nothing, glitching" labels; S06 drew Kosta's most positive note so far;
+   - labels ordered with mean hand speed (tense < light < energetic), no overlap, 10 clips: observation only;
+   - activity PR about 2 in every setting: gains change speed and size of one cycle; known risk: repetitive over a full song; the next
+     design question after Part 3;
+   - calm and sad were not produced by any setting;
+   - repeat consistency 2/4: single-rater labels are noisy; no decision rests on one label.
+3. **Q1 (a): Part 3 runs** (music, 5 pairs, the same 12 settings and the same network; S11/S12 were not shown, so the seeded pick 29031
+   draws from the shown S01-S10). Then report; (b) vs (c) of the brief is decided after. **Q2 (a):** network unchanged for Part 3.
+4. **Excerpt start times (Kosta, 2026-11-13; those marked ? were given as tentative and are used as given):** Blue Lagoon 0:20;
+   21st Century Schizoid Man 0:58; Epitaph 5:45?; Breathe 1:17?; One of These Days 3:57?. 12 s each; the 10 s before each start drive
+   the warm-up (7.44.5a). Audio in `/secondary/hyst-data/audio/checkset/` (mp3, 48 kHz stereo; outside git, never uploaded).
+5. **Part 3 report adds**, per pair: the mean hand speed of both renders and the cortex arousal over the excerpt (mean of `arousal_b7`
+   in the shown 12 s, raw and as the standardised network input), so picks can be compared with energy.
+6. **Standing rules unchanged.**
