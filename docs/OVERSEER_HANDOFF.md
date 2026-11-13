@@ -120,6 +120,17 @@ both 11, 1 skipped (kun 028 again). Picks: kun 028, urban 204, korean 206, dunhu
 dai 045, breaking 054 = 10 distinct seqs, max 2/genre; no empty-parts FAIL lines. Discards V1 limits 12, endstop 2; V2 limits 8, endstop 7,
 contact/guard/clearance 1 each. hyst-wo32d-render running. Next on CLIPS READY: own gate recompute at 1.25 on CSVs, S03 ref status,
 shoulder table vs CSVs, pair order 2-3, audio alignment, frames -> session.
+**16:00: SESSION LIVE for Kosta (retarget look test, 7.49.5 / 7.51 F / 7.52).** CLIPS (body-retarget 0be1f71, render unit OK 22/22) VERIFIED
+by `scripts/body/overseer_retarget_check.py` (keys-decide; args = archive of builder scripts): 0 fails at 1.25; speed/acc/margin equal
+numbers.json; none within 1 deg of an end stop; 10 seqs, max 2/genre; pairs V1-first 3/5 (C01, C05, C06); all 20.000 s 1280x720 h264+aac,
+audio offset 0.0 s vs FineDance music_wav at window start; contact sheet looked at (column, lamp, '1 arm'). Shoulder: V1 street clips
+commanded max 25-34x limit, limiter RMS cut 16-24 deg (C02 urban 19.9, C03 korean 16.0, C04 dunhuang 20.0, C09 dai 23.6, C10 breaking 16.0);
+V2 cuts 1.4-10.7 deg; kun C01 1.6/0.1 deg. S03 refs C01/C09 pass (a/lim 0.27/0.25). Session: tool archive
+`/secondary/hyst-data/body/retarget_look/tool_200016f/`, manifest copied to clips/manifest.json, session
+`/secondary/hyst-data/body/retarget_look/session_2026-11-13/` seed 32051, 27 items (22 singles, 5 pairs; order fixed by manifest), hashes
+equal; unit hyst-wo32d-session (cores 18-19), http://127.0.0.1:8765/; key/answers/order/labels 404.
+AFTER Kosta: answers.csv (no header) x key/key.json by own join; retarget_report.py (body-data) -> docs/RETARGET_REPORT.md incl. the per-clip
+shoulder table (7.52.5); verify by hand; merge body-retarget + body-data into body; stop unit; brief PLANNER_BRIEF_RETARGET_RESULTS.md.
 
 ## CURRENT STATE (2026-11-13 15:26, saved for a clear) — superseded by the update above
 
