@@ -52,4 +52,4 @@ TOOL READY e9c67ab
   30.8); report generated from a synthetic session on the real manifest and read: each section once.
 - Tests: `test_motornet2.py` 4 OK (new: pair populations, single-population render), `test_motornet` 12, `test_dialstudy` 5, `test_ear_energy` 6.
 
-FIX READY
+FIX READY a8f7b6a
