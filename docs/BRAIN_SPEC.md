@@ -1903,3 +1903,34 @@ PROPOSAL = planner, not yet ruled.
      design.
    - *Reference:* round-1 S03 is rendered on 2 of the 10 clips' music (seeded), 20 s, round-1 network and inputs unchanged, cortex lanes
      computed from that audio.
+
+### 7.51 Retarget look test: pillar mount instead of smaller motion, 2026-11-13, via Kosta + planner (answering `docs/PLANNER_BRIEF_RETARGET_FLOOR.md`)
+
+1. **Record (Q2).** The retarget look test was blocked: over the first 200 seeded 20 s windows, V1 passed 2, V2 13, both 1 (10 needed);
+   contact 194 (V1) and 161 (V2); the hand minimum sat at the 0.11 m gate floor. Nothing was rendered or viewed.
+2. **Planner reading (Kosta did not dispute):** the failure is body geometry, not scaling. Human arm motion uses the space below the
+   shoulder; the robot's shoulder sits just above a table. Options (a)-(c) of the brief all remove that half of human movement.
+3. **Decision (Kosta): change the mount, not the motion.**
+   - A. **Pillar mount** (new body variant "v2p"): replace the raised plane with a vertical column whose top is the base footprint + 2 cm per
+     side; the floor is 1.0 m below the column top. Everything else in v2f is unchanged (servos, limits, end stops, self-collision). Contact
+     with the column counts as contact for the gates. Rule fixed before any render.
+   - B. **Retargeting on v2p:** V1 and V2 as in `docs/RETARGET_RULES.md`, scaling share 80 % as written, centre = round 1's centre. No other
+     change.
+   - C. **Floor guard (option b) as a BACKSTOP only:** clamp commands so the hand stays >= 0.05 m from the column and links do not enter it.
+     Log the fraction of frames where the guard engages, per clip. If it engages in more than 10 % of frames for a clip, that clip fails the
+     gate. Never rely on it to pass.
+   - D. Gate the seeded stream of 20 s windows on v2p for both variants as before; 10 passing in both are needed; report pass counts and
+     discards by gate.
+   - E. If fewer than 10 pass in both variants within 200 candidates: hold and report. No fallback to the share ladder without Kosta.
+   - F. Then render and run Kosta's blind session exactly as 7.49.5: FineDance music, lamp head, round-1 S03 reference on 2 songs (S03 re-gated
+     on v2p too), pair order checked to be mixed. Camera: same framing, column visible, the column top at the old table height in frame.
+4. **Datasets:** AIOZ-GDANCE and AIST++ (downloaded) are not used in this test. Motorica stays blocked (login) unless Kosta says otherwise.
+5. **Out of scope:** training, gain modulation, feedback learning, cortex changes, hardware, brain monitor, uploads. Standing rules unchanged.
+6. **Overseer notes (operational defaults, not rulings; Kosta may amend):**
+   - *Clearance gates on v2p:* the old table rule (links >= 0.05 m and hand >= 0.11 m above z = 0) becomes: no link point inside the column
+     or within 0.05 m of it, hand >= 0.05 m from the column (C), and all points >= 0.05 m above the floor. Other gates as 7.44.
+   - *Column shape* follows the base footprint (a disc gives a cylinder, a square a square column), stated in the rules note; it rises from
+     the floor to the old table plane, so the base sits exactly where it sat.
+   - *Guard mechanism* is stated in a dated rules note before any render. Default: when the commanded pose's FK breaks the C margins, hold
+     the last safe command for that frame. Engagement = the share of 100 Hz command frames held.
+   - *Scale:* `docs/RETARGET_SCALE.json` unchanged. The seeded clip stream restarts from candidate 1.
