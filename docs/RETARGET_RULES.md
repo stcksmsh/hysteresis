@@ -115,3 +115,21 @@ Clips are not shown to the user; the overseer checks them first.
 - V2 elbow = lateral upper-body bend (not neck), see the V2 table. **FOR USER** (logged).
 - Base yaw span +-180, wrist roll span +-150, ranged-joint share 80 %: builder's defaults, fixed here.
 - Window start and the 5 s reference frame: yaw and twist are relative to the 5 s frame of each sequence.
+
+## (h) Dated note 2026-11-13: motion layout, 6D convention, joint order, genre spelling (before any scale step)
+
+Overseer-accepted rules above are unchanged (mapping, scale rule). This note replaces only the layout statement in (a) ("159 columns, axis-angle"); it was a guess from the readme.
+
+- **Actual layout** (`INVENTORY.md`, checked on the unpacked files): `motion/NNN.npy` is float32 `T x 315` at 30 fps: columns 0-2 root translation (unused), columns 3-314 = 52 joints x **6D rotation**.
+  203 sequences (lengths 521 to 11781 frames).
+- **6D convention** (read online, no download): FineDance `data/code/pre_motion.py` (`motion_feats_extract`) reshapes the 312 values to `(T, 52, 6)` and calls `ax_from_6v` from
+  `dataset/quaternion.py`, which is `matrix_to_axis_angle(rotation_6d_to_matrix(q))` with both helpers from `pytorch3d.transforms` (`rotation_conversions.py`).
+  `matrix_to_rotation_6d` returns `matrix[..., :2, :]` flattened: **the 6D holds the first two ROWS of the 3x3 rotation matrix** (row 0 then row 1). `rotation_6d_to_matrix`:
+  `a1, a2 = d6[:3], d6[3:]; b1 = normalize(a1); b2 = normalize(a2 - (b1.a2) b1); b3 = b1 x b2; R = stack((b1, b2, b3), dim=-2)`, i.e. b1, b2, b3 are the **rows** of R.
+  Implemented that way in `retarget.py` (numpy), no torch/pytorch3d. The resulting `R_local` replaces the Rodrigues step in (b); everything downstream (forward kinematics, swing-twist via quaternion of R) is unchanged.
+- **Joint order:** the same `pre_motion.py` slices the 156-dim axis-angle as `global_orient = [:, :3]` (joint 0), `body_pose = [:, 3:66]` (21 body joints, 1-21), `left_hand_pose = [:, 66:111]`, `right_hand_pose = [:, 111:]`:
+  SMPL-X/SMPL-H body order, which is the order used in (a): 0 pelvis, 3 spine1, 6 spine2, 9 spine3, 12 neck, 14 R collar, 15 head, 17 R shoulder, 19 R elbow, 21 R wrist. The code also uses SMPL-X feet (7, 8, 10, 11) consistent with that order.
+  Sanity check made in `retarget_scale.py` before the scale step: all matrices orthonormal (|det - 1| < 1e-3), and the pooled R elbow flexion lies in 0-180 deg with median well below 180 (a wrong order would not).
+- **Genre spelling:** `style2` has 17 spellings; compared **case-insensitively** (jazz = Jazz), **16 genres**, sorted lowercase names, permuted by `default_rng(32011)`. The genre shown in the manifest is the lowercase name.
+- **Sequence length filter** (clarifies (e)): a sequence is eligible if at least 25.0 s long (a 5.0 s lead-in plus the 20 s window); the "26.5 s" in (e) is withdrawn. The window start is uniform in `[5.0, len - 20.0]`.
+- **Data root:** `/secondary/hyst-data/datasets/finedance/data/finedance/` (`motion`, `music_wav`, `label_json`).
