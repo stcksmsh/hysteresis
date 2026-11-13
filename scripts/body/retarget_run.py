@@ -49,11 +49,34 @@ REF_MIN = 25.0
 
 
 def patch_gates():
+    """20 s clips, 1.5 s pre-roll, and the v2p body (WO32C) in place of the v2f model: dialstudy.make_model is swapped in this process only; no v2f file is edited"""
     import dialstudy as D
+    import make_arm_v2p as P
     import motornet as M
     D.CLIP_S = SHOW_S
     M.WARM_S = PRE_S
+    D.make_model = P.make_model
     return D, M
+
+
+GUARD_MAX = 0.10
+
+
+def gates_v2p(q50, contact_substeps, guard_share=None):
+    """the v2p gate dict: dialstudy.gate_values with floor_m replaced by the clearance margins of rules (j), plus minimum motion and, for retargeted clips, the guard share"""
+    import dialstudy as D
+    import make_arm_v2p as P
+    import motornet as M
+    g = D.gate_values(q50, contact_substeps)
+    g["floor_m"] = float(P.margins(q50).min())
+    mv = M.motion_values(q50)
+    ok, parts = D.judge(g, M.THR)
+    parts["motion"] = mv["extent_m"] >= M.MIN_EXTENT_M and mv["min_stretch_speed"] >= M.MIN_SPEED
+    vals = {**g, **mv}
+    if guard_share is not None:
+        vals["guard_share"] = guard_share
+        parts["guard"] = guard_share <= GUARD_MAX
+    return dict(passed=bool(ok and all(parts.values())), parts=parts, values=vals, thresholds={**M.THR, "guard_share_max": GUARD_MAX})
 
 
 _ANG = {}
@@ -67,24 +90,21 @@ def human(seq):
 
 
 def sim_variant(c, var):
-    """pick c, variant 'V1'|'V2' -> q50 (1001, 5), contacts, limiter shares, gate dict"""
+    """pick c, variant 'V1'|'V2' -> q50 (1001, 5), limiter shares, v2p gate dict (with the guard share)"""
+    import make_arm_v2p as P
     import retarget as RT
     D, M = patch_gates()
     v = human(c["seq"])[0 if var == "V1" else 1]
     i0 = round(c["start_s"] * RT.FPS)
     y = RT.to_commands(RT.referenced(v, i0), var)
-    G = RT.to_100hz(y, c["start_s"] - PRE_S, SHOW_S + PRE_S)
+    G0 = RT.to_100hz(y, c["start_s"] - PRE_S, SHOW_S + PRE_S)
+    G, gshare = P.guard(G0)
     q50, contacts = M.simulate_goals(G)
     lim = M.limiter_out(G)[round(PRE_S * 100):]
-    tgt = G[round(PRE_S * 100):]
+    tgt = G0[round(PRE_S * 100):]
     p = lambda a: np.percentile(a, 95, axis=0) - np.percentile(a, 5, axis=0)
     share = (p(lim) / np.maximum(p(tgt), 1e-9)).tolist()
-    g = D.gate_values(q50, contacts)
-    mv = M.motion_values(q50)
-    ok, parts = D.judge(g, M.THR)
-    parts["motion"] = mv["extent_m"] >= M.MIN_EXTENT_M and mv["min_stretch_speed"] >= M.MIN_SPEED
-    gates = dict(passed=bool(ok and parts["motion"]), parts=parts, values={**g, **mv}, thresholds=M.THR)
-    return q50, share, gates
+    return q50, share, gates_v2p(q50, contacts, gshare)
 
 
 def excerpt(seq, start, out):
@@ -97,11 +117,12 @@ def numbers_of(q50, share, gates):
     h = R.fk_points(q50)[:, 5]
     sp = np.linalg.norm(np.diff(h, axis=0), axis=1) * 50
     return dict(limiter_share=dict(zip(JN, share)), limiter_cut=dict(zip(JN, [1 - s for s in share])), gates=gates["values"],
-                gates_parts=gates["parts"], joint_p5_p95=dict(zip(JN, [[float(np.percentile(q50[:, j], 5)), float(np.percentile(q50[:, j], 95))] for j in range(5)])),
+                gates_parts=gates["parts"], guard_share=gates["values"].get("guard_share"), joint_p5_p95=dict(zip(JN, [[float(np.percentile(q50[:, j], 5)), float(np.percentile(q50[:, j], 95))] for j in range(5)])),
                 mean_hand_speed=float(sp.mean()))
 
 
 def cmd_clips():
+    import collections
     import arm_sim
     import dialstudy as D
     W.mkdir(parents=True, exist_ok=True)
@@ -109,37 +130,44 @@ def cmd_clips():
     order = [str(g) for g in np.random.default_rng(SEED).permutation(sorted({v[0] for v in cat.values()}))]
     print("genre order", order, flush=True)
     slots, failures, k = [], [], 0
-    cache = {}
-    def attempt(c):
-        res = {}
-        for var in ("V1", "V2"):
-            q50, share, g = sim_variant(c, var)
-            res[var] = (q50, share, g)
-        ok = all(r[2]["passed"] for r in res.values())
-        print(f"cand {c['k']} {c['genre']} seq {c['seq']} start {c['start_s']:.1f}", "ok" if ok else "FAIL",
-              {v: {p: x for p, x in r[2]["parts"].items() if not x} for v, r in res.items()}, flush=True)
-        if not ok:
-            failures.append(dict(cand=c, **{v: dict(parts=r[2]["parts"], values=r[2]["values"]) for v, r in res.items()}))
-        return ok, res
-    while len(slots) < N_CLIPS:
+    stats = dict(candidates=0, pass_V1=0, pass_V2=0, pass_both=0, discards={"V1": collections.Counter(), "V2": collections.Counter()}, guard_shares={"V1": [], "V2": []})
+    while len(slots) < N_CLIPS and k < 200:
         c = pick(k, order, cat)
         k += 1
-        ok, res = attempt(c)
+        res = {var: sim_variant(c, var) for var in ("V1", "V2")}
+        stats["candidates"] = k
+        for var, (q50, share, g) in res.items():
+            stats["pass_" + var] += int(g["passed"])
+            stats["guard_shares"][var].append(g["values"]["guard_share"])
+            for pn, x in g["parts"].items():
+                if not x:
+                    stats["discards"][var][pn] += 1
+        ok = all(r[2]["passed"] for r in res.values())
+        stats["pass_both"] += int(ok)
+        print(f"cand {c['k']} {c['genre']} seq {c['seq']} start {c['start_s']:.1f}", "ok" if ok else "FAIL",
+              {v: [pn for pn, x in r[2]["parts"].items() if not x] for v, r in res.items()}, flush=True)
         if ok:
             slots.append((c, res))
-        if k > 200:
-            sys.exit("too many failures: STOP")
-    # a failed candidate is replaced by the next pick in the stream; slot order = candidate order (rules (e))
+        else:
+            failures.append(dict(cand=c, **{v: dict(parts=r[2]["parts"], values=r[2]["values"]) for v, r in res.items()}))
+    stats["discards"] = {v: dict(x) for v, x in stats["discards"].items()}
+    stats["guard_share_median"] = {v: float(np.median(x)) for v, x in stats["guard_shares"].items()}
+    stats["guard_shares"] = {v: [round(float(a), 4) for a in x] for v, x in stats["guard_shares"].items()}
     picks = []
-    for n, (c, res) in enumerate(slots, 1):
-        cid = f"C{n:02d}"
-        for var, (q50, share, g) in res.items():
-            (W / f"{cid}_{var}.csv").write_text(arm_sim.csv_text(q50, D.HZ, name=f"{cid}_{var}"))
-            (W / f"{cid}_{var}.json").write_text(json.dumps(dict(id=f"{cid}_{var}", clip=cid, variant=var, pick=c, gates=g, numbers=numbers_of(q50, share, g)), indent=1))
-        excerpt(c["seq"], c["start_s"], W / f"{cid}.m4a")
-        picks.append(dict(clip=cid, **c))
-    (W / "picks.json").write_text(json.dumps(dict(genre_order=order, picks=picks, candidates_used=k, failures=failures), indent=1))
-    print("clips done, candidates", k, "failures", len(failures))
+    if len(slots) == N_CLIPS:
+        for n, (c, res) in enumerate(slots, 1):
+            cid = f"C{n:02d}"
+            for var, (q50, share, g) in res.items():
+                (W / f"{cid}_{var}.csv").write_text(arm_sim.csv_text(q50, D.HZ, name=f"{cid}_{var}"))
+                (W / f"{cid}_{var}.json").write_text(json.dumps(dict(id=f"{cid}_{var}", clip=cid, variant=var, pick=c, gates=g, numbers=numbers_of(q50, share, g)), indent=1))
+            excerpt(c["seq"], c["start_s"], W / f"{cid}.m4a")
+            picks.append(dict(clip=cid, **c))
+    (W / "picks.json").write_text(json.dumps(dict(genre_order=order, picks=picks, candidates_used=k, stats=stats, failures=failures), indent=1))
+    summ = {x: stats[x] for x in ("candidates", "pass_V1", "pass_V2", "pass_both", "discards", "guard_share_median")}
+    if len(slots) < N_CLIPS:
+        print("HOLD", json.dumps(summ))
+        sys.exit(3)
+    print("clips done", json.dumps(summ))
 
 
 def ref_clips():
@@ -186,7 +214,8 @@ def cmd_refs():
     for i in ref_clips():
         c = picks[i]
         lanes = np.load(W / f"{c['seq']}.lanes.npz")
-        q50, _, g = M.run_setting(s03["values"], u_fn=MM.music_input(lanes, c["start_s"], 10.0))
+        q50, _, g0 = M.run_setting(s03["values"], u_fn=MM.music_input(lanes, c["start_s"], 10.0))
+        g = gates_v2p(q50, g0["values"]["contact_substeps"])                      # v2p gates (the contact count came from the v2p sim: patch_gates swapped the model)
         cid = c["clip"]
         (W / f"{cid}_R1S03.csv").write_text(arm_sim.csv_text(q50, D.HZ, name=f"{cid}_R1S03"))
         (W / f"{cid}_R1S03.json").write_text(json.dumps(dict(id=f"{cid}_R1S03", clip=cid, variant="R1_S03", pick=c, setting="S03", setting_values=s03["values"], gates=g,
