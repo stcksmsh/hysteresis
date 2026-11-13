@@ -94,7 +94,19 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## CURRENT STATE (2026-11-13 15:26, saved for a clear) — read this block first
+## UPDATE 2026-11-13 ~15:45 — newest, read first
+
+**Planner answered = BRAIN_SPEC 7.52 (body 7c18503):** Q3 first (agent 1 explains the limiter's own shoulder overshoot; bug -> fix + record,
+not a bug -> report + HOLD); Q1 (a) speed/acc tolerance 1.25, look-test exception only (not a hardware margin); Q2 max 1 window per sequence,
+2 per genre, seed 32011 order; then re-gate, re-pick, render, session as 7.49.5/7.51 F, per-clip commanded vs realised shoulder acc + limiter
+share. Recorded: human dance commands 9-22x the STS3215 shoulder acc; stronger shoulder likely needed; hardware deferred. Overseer defaults
+7.52.8. Prompt `docs/BUILDER_PROMPT_WO32D_LIMITER_AND_REPICK.md` (body 03d045f, merged keys-decide c681948) SENT ~15:45 to agent 1 [0b1684]
+(continued, not cleared; notify_when_idle; ruling ordered agent 1 directly). Two "agent 1" sessions exist: use ref [0b1684].
+**Overseer next:** on "LIMITER FIXED": read the fix + test, check the worst candidate before/after; on "LIMITER NOT A BUG": brief to planner.
+Review rules note (l) before render. On CLIPS READY: gates recomputed at 1.25 by own code on CSVs, 10 distinct sequences, <= 2 per genre,
+pair order 2-3 V1-first, audio alignment, frames, per-clip shoulder table -> then session (agent 2's tool, port 8765, detached unit).
+
+## CURRENT STATE (2026-11-13 15:26, saved for a clear) — superseded by the update above
 
 **WAITING FOR THE PLANNER'S ANSWER to `docs/PLANNER_BRIEF_RETARGET_LIMITS.md`** (sent 15:24). The user will paste it right after restarting the
 overseer. FIRST ACTION: record it as **BRAIN_SPEC 7.52** on body (worktree `.claude/worktrees/body`, `git pull --ff-only` first), commit, push,
