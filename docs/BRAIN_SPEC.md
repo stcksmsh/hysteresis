@@ -2007,3 +2007,77 @@ PROPOSAL = planner, not yet ruled.
      per second of the limiter output acceleration.
    - *Control:* the 2 round-1 S03 reference clips are measured at stages 3-4 as they are (they have no stages 1-2).
    - *Gates:* every variant run is also gated as 7.52 (1.25), and the pass/fail is reported, not used to select.
+
+### 7.54 Jitter comes from the retargeting; space retarget V3; Q1 session held, 2026-11-13, via Kosta + planner (answering `docs/PLANNER_BRIEF_JITTER.md`, then superseding its Q1)
+
+1. **Record (Q3).** Jitter diagnosis (`docs/JITTER_DIAGNOSIS.md`, report only), medians over the 20 look-test clips:
+
+   | stage | acceleration sign changes per second, shoulder | wrist bend |
+   |---|---|---|
+   | stage 1, human command at 30 fps | 7.3 | 11.6 |
+   | cubic spline to 100 Hz | 9.1 | 14.6 |
+   | limiter | 4.2 | 9.0 |
+   | realised | 2.7 | 5.0 |
+   | H1 (round-1 spinal layer before the limiter), realised | 2.4 | 3.65 |
+   | round-1 S03 reference | about 1 | about 1 |
+
+   The limiter sits at its acceleration limit in 62 % of shoulder frames. The 7.53 H3 premise was false: the resampling was already a cubic
+   spline (overseer note 7.53.8). Linear vs cubic interpolation differ little at the realised stage.
+2. **Kosta, after watching the viewing video** (`/secondary/hyst-data/body/retarget_look/jitter/viewing/jitter_viewing.mp4`; C05_V1 and
+   C04_V2, four panels): the human dancer's hand (V1 source) and spine (V2 source) do not jitter at all; at most a wrist flick, a real human
+   gesture. **Therefore the jitter is created by the retargeting, not by the dance or the servo.**
+3. **HOLD** the Q1 old-vs-H1 / H1 + low-pass session. **Q2 stands:** report-only check of the C04_V2 steady shoulder offset (about 10 deg).
+4. **STEP A, report-only:** for the same 20 clips, direction changes per second and power above 3 Hz for:
+   - (0) the human source end point in world space from FineDance forward kinematics: right hand position (V1), head / upper-spine position
+     (V2);
+   - (1) the retargeted joint angles (stage 1), as already measured.
+
+   **Planner hypothesis:** (0) is smooth and (1) is not, because per-joint angles in the data wobble in ways that cancel in world space;
+   copying single angles onto different kinematics removes the cancellation.
+5. **STEP B, new variant V3 "space retarget"** (rules fixed in `docs/RETARGET_RULES.md` before any render):
+   - V3a: the lamp's position follows the human right-hand path. V3b: the lamp follows the head / upper-spine path.
+   - Both are taken relative to the human shoulder (V3a) or pelvis (V3b), scaled uniformly so the human's p2-p98 reach fills 80 % of the
+     arm's reach, then offset to the arm's workspace centre.
+   - Lamp orientation follows the human hand (V3a) or head (V3b) orientation, only in the two axes the wrist has.
+   - Joint angles by damped least-squares inverse kinematics on the v2p arm, warm-started from the previous frame, with a small penalty on
+     joint change per frame (weight fixed in the rules, not tuned by eye). Joint limits and column clearance are enforced in the solve.
+   - Then the existing pipeline: round-1 spinal layer (H1) before the limiter, limiter, servo, v2p body, gates at 1.25.
+   - Report the same jitter measures per stage as the diagnosis.
+6. **STEP C, blind look** (only after Kosta sees the Step A/B numbers and says go):
+   - the same seeded clips as the look test, where they pass;
+   - 6 pairs: V3 vs the look-test version of the same variant (V3a vs V1, V3b vs V2), pair order checked to be mixed;
+   - question "which looks more like a person dancing?" with first / second / same, and an optional note.
+7. **Out of scope:** training, music conditioning, gain modulation, limiter redesign, hardware, monitor, uploads. Standing rules unchanged.
+   Q2 of the brief (keep V1 and V2) already stands from 7.53.
+8. **Overseer notes (operational defaults, not rulings; Kosta may amend):**
+   - *End points:*
+     - "right hand" = FineDance SMPL-H right wrist joint (index 21);
+     - "head / upper spine" = the head joint (15);
+     - the "pelvis" (0) and the "right shoulder" (17) are the origins.
+   - *FK:* FK uses the same canonical T-pose offsets as the viewing video (WO34, stated in the rules note). FineDance ships no body model
+     and none is downloaded (7.50.8). Scale cancels in the reach normalisation.
+   - *Step A columns:*
+     - (0w) end point in world space (root translation included);
+     - (0r) end point relative to its origin (shoulder for V1, pelvis for V2), the signal V3 actually follows;
+     - (1) stage-1 joint angles;
+     - (1e) the robot lamp position by arm FK of the stage-1 angles, which compares end point with end point.
+
+     For a 3D position the measures are per axis (direction changes per second as acceleration sign changes per axis, the jitter_diag
+     counting rule; power above 3 Hz and above 6 Hz of the speed vector), reported per axis and as the mean over axes.
+   - *Reach and centre:*
+     - the human p2-p98 reach = the 98th percentile of the end point's distance from its origin, pooled over the same 4,603 eligible
+       windows as `RETARGET_SCALE.json`; one scale per variant, written to `RETARGET_SCALE.json` as new keys (old keys unchanged);
+     - "the arm's reach" = the distance from the shoulder joint (p1) to the lamp centre at full extension;
+     - the workspace centre = the lamp position at round 1's centre pose (base 0, shoulder -60, elbow 30, wrist bend -15, roll 0);
+     - the scaled human end-point offset is added there (direction kept, the human's forward axis mapped to the robot's base-0 forward).
+   - *IK:*
+     - IK runs at 100 Hz on the end-point path, cubic-spline resampled (as now);
+     - DLS damping lambda, the per-frame change penalty, the orientation weight (position first, orientation secondary) and the iteration
+       count are fixed as numbers in the rules note, from a rule stated before any render (e.g. the change penalty set so that a stationary
+       target gives zero motion and a 1 cm target step moves the joints by at least 90 % of the exact solution); never tuned by eye;
+     - joint limits by clamping inside the solve, column clearance by a penalty plus projection, with the guard of 7.51 as backstop;
+     - frames where the solver ends with residual error > 2 cm are counted and reported per clip.
+   - *Clips:* Step B runs the same 10 seeded windows (V3a and V3b each), gated at 1.25. Pass/fail is reported; nothing is re-picked.
+   - *Step C pairs:* from the passing clips, seed 32061, 3 V3a-vs-V1 and 3 V3b-vs-V2, always including C10 (V3a vs V1) and C04 (V3b vs V2)
+     when they pass (Kosta's earlier re-look picks); V3 first in exactly 3 of 6.
+   - *The C04_V2 offset check (Q2)* is part of the same work order, report-only.
