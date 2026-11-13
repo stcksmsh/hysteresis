@@ -1676,6 +1676,8 @@ Marked DEFAULT = planner choice Kosta did not overrule; PROPOSAL = undecided.
       calibration; limbic part; DEAM download; exploration archive / pyribs; brain monitor work; changes to the frozen cortex (B7 epoch 6);
       hardware; hand-picking or hand-shaping of movements.
 4. **Standing rules unchanged** (as 7.43.5).
+   - *Correction (planner, 2026-11-13, see 7.45):* 7.44.3.1 did not fix the ratio of input drive to recurrent drive. As first built, the
+     input drive (std 0.864) exceeded the recurrent drive (0.553) at gain 1, and every setting followed the beat input. 7.45 fixes the ratio.
 5. **Overseer notes (not rulings; Kosta may amend):**
    - Audio check 2026-11-12 23:55: `/secondary/hyst-data/audio/` still does not exist; no file with the five titles under `/secondary`,
      `~/Music`, `~/Downloads`. Part 3 is held, and asked of Kosta (files, and which 12 s excerpt per song). Parts 1, 2 and 4 go ahead.
@@ -1685,3 +1687,32 @@ Marked DEFAULT = planner choice Kosta did not overrule; PROPOSAL = undecided.
      fails a gate, it is not shown and not replaced, and this is reported; (e) the minimum-motion gate, the gain range of the control units
      and the decays/cycles/wanders definition are set by the builder in its rules file before any clip is rendered, reviewed by the
      overseer.
+
+### 7.45 Motor-network toy test: input scale and re-run rules, 2026-11-13, via Kosta + planner (answering `docs/PLANNER_BRIEF_MOTORNET_INPUT.md`)
+
+1. **Q1 (b): input weight scale.** Fixed by rule before anything is viewed: input drive std = 0.25 x recurrent drive std at gain 1,
+   silent. The same scale is used for music clips. Same seeds (sampling 29011, network 29001); redraw and re-render.
+2. **Q2 (a), with a pre-registered rule.** After Q1, if base yaw or shoulder loses more than half its target p5-p95 range to the command
+   limiter, the spinal spring-damper is set to 1.5 Hz, fixed for the whole study, without asking again. The limiter's share of the
+   command per joint is reported either way.
+3. **Q3 (b): gate defaults.** Return to the defaults (0.10 m minimum motion, +-60 % calibration) if the gain-1 run reaches 0.10 m at
+   +-60 %.
+4. **Q4 (a): extremes.** S11 and S12 are re-gated after the changes; they are shown only if they pass, and are not replaced.
+5. **New pre-registered stop.** After the changes, if ALL shown settings still have every joint peaking at the input beat frequency AND an
+   activity participation ratio below 3, Kosta's session is not started; the numbers are reported and the study holds.
+6. **Planner's spec error recorded:** 7.44 did not fix the input/recurrent drive ratio (correction added under 7.44.4).
+7. **Part 3** (music) still waits for Kosta's audio files and excerpt start times; it is not run without both. Parts 1, 2 and 4 may run
+   once the rules above pass; Kosta is told Part 3 is pending.
+8. **Merge:** body-mnet and body-mnettool go into body only after the re-run report.
+9. **Standing rules unchanged** (as 7.43.5).
+10. **Overseer notes (operational definitions, not rulings; Kosta may amend):**
+    - *Drive std:* for each unit, the std over time of `Win u` and of `W r` over the shown 12 s of the gain-1 silent run, averaged over
+      units, as in the builder's diagnosis. Win is multiplied by one scalar s; since W r depends on s, s is found by fixed-point iteration
+      until the ratio is 0.25 within 2 %. s is stated.
+    - *Order of steps:* (i) Q1 scale; (ii) calibrate at +-60 %; (iii) Q2 check at gain 1, silent: target p5-p95 vs command-limiter-output
+      p5-p95 for base yaw and shoulder. If either output is below half the target, set spinal 1.5 Hz and recalibrate at +-60 %. (iv) Q3: if
+      the gain-1 hand extent at +-60 % is >= 0.10 m on one axis, use +-60 % and the 0.10 m gate; else +-100 % and 0.05 m, as before.
+      (v) Redraw S01-S10 with seed 29011, re-gate S11/S12, render. (vi) Check the stop rule (5) before any session.
+    - *"Peaks at the input beat frequency":* the joint's position-spectrum peak (Hann, 12 s, DC excluded) lies within one frequency bin
+      (1/12 Hz) of 100/60 Hz.
+    - The joint-rate and limiter numbers are recomputed by the overseer's own code before anything reaches Kosta.
