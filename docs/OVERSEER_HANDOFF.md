@@ -1,4 +1,4 @@
-# Overseer handoff — 2026-11-13 (12:55)
+# Overseer handoff — 2026-11-13 (15:26)
 
 This file is the overseer's whole state. The `/overseer` skill (`.claude/skills/overseer/SKILL.md` on this branch, the canonical copy) starts a new overseer from it and recreates the worktree if it is gone. To start one by hand, paste everything below the line into a fresh session.
 
@@ -94,7 +94,63 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## CURRENT STATE (2026-11-13 12:55) — read this block first
+## CURRENT STATE (2026-11-13 15:26, saved for a clear) — read this block first
+
+**WAITING FOR THE PLANNER'S ANSWER to `docs/PLANNER_BRIEF_RETARGET_LIMITS.md`** (sent 15:24). The user will paste it right after restarting the
+overseer. FIRST ACTION: record it as **BRAIN_SPEC 7.52** on body (worktree `.claude/worktrees/body`, `git pull --ff-only` first), commit, push,
+merge body into keys-decide; then send agent 1 the follow-up (the user has said continuing agent 1 without clearing is fine for retarget work;
+still ask "send" unless the answer itself orders it).
+
+**Direction (BRAIN_SPEC 7.49-7.51, all on body):** toy line CLOSED. Kosta: "It should just learn". Frozen target architecture: (a) WATCHING:
+motor network trained by imitation of human dance retargeted to the arm's 5 joints, conditioned on the frozen cortex; (b) FEELING: gain modulation
+(ear energy, arousal_b7, slow cortex); (c) TEACHER: Kosta's blind picks refine. Context: undergraduate final paper first, art piece the end goal,
+non-commercial, Kosta is a student. Step 1 licences DONE (7.50). Step 2 = **retarget look test** (7.49.5): before any training, does human dance
+mapped onto the arm look like dancing to Kosta? V1 arm-as-arm, V2 arm-as-whole-body; 10 clips x 2 x 20 s + 2 round-1 S03 references; blind
+session yes / sort of / no + 5 V1-vs-V2 pairs. Out of scope: training, gain modulation, feedback learning, cortex, hardware, uploads.
+
+**Where step 2 stands:**
+- 7.51 (Kosta): change the MOUNT not the motion: pillar body **v2p** (square column 0.14 m, top at old table plane z 0.053, floor -0.947),
+  80 % share unchanged, floor guard backstop only (>10 % frames held = fail), < 10 passes in 200 -> HOLD.
+- v2p gating (hyst-wo32c-clips3): 145 candidates, both pass 10. Clips RENDERED (body-retarget d0644f0, `/secondary/hyst-data/body/retarget_look/`,
+  22 mp4 + manifest + numbers.json). **Session HELD by the overseer**: 7/10 clips = Kunqu opera seq 028 (only kun sequence; C03/C08/C10 windows
+  40.5/41.2/43.3 s overlap); 12 of 16 genres (all street styles) 0/9.
+- Limits breakdown (`retarget_look/limits_breakdown.json`, report-only): failures = SHOULDER ACCELERATION (V1 132, V2 97); realised shoulder acc
+  median 1.24 / 1.14 x limit; servo overshoot over limiter output +0.23 / +0.05; command 22x / 9x. Unexplained: limiter's own shoulder output >
+  limit in 6 % / 19 % of candidates (max 5.5x). Pass both at tolerance 1.05 / 1.25 / 1.5 = 10 / 43 / 93; genres 4 / 15 / 16; sequences 4 / 30 / 63
+  (overseer recount).
+- Brief questions: Q1 (a) tolerance 1.25 for this sim-only look test [rec] / (b) shoulder limiter headroom 0.8 / (c) show as is [not rec];
+  Q2 pick rule max 1 window per sequence, 2 per genre [rec]; Q3 agent 1 explains the limiter overshoot, report-only [rec]; Q4 record 7.52.
+- After the ruling: agent 1 re-picks from the same seeded stream (seeds 32011/32021/32031/32041; pair order V1-first in exactly 2 or 3 of 5),
+  re-renders, CLIPS READY -> overseer checks (gates via own code on CSVs, audio alignment, frames, distinct sequences/genres, pair order) ->
+  session with agent 2's tool (`dialstudy_session.py` look-test mode, `retarget_report.py`; body-data 200016f, verified) on port 8765 as a
+  detached unit, key not served -> report `docs/RETARGET_REPORT.md` -> verify vs key -> merge body-retarget + body-data into body -> brief.
+
+**Accepted retarget rules:** `docs/RETARGET_RULES.md` on body-retarget, notes (h) FineDance 6D = first two ROWS of R (pytorch3d, verified by
+overseer in FineDance dataset/quaternion.py + data/code/pre_motion.py), SMPL-H order, genres case-insensitive (16), eligibility >= 25 s; (i) yaw and
+twist relative to each window start (base scale 0.23); (j) v2p column, clearance p2-p4 >= 0.05 m and hand centre >= 0.11 m from column, shoulder
+p1 exempt (FOR USER), guard = hold last safe command, camera unchanged. FOR USER also: V2 elbow = lateral torso bend.
+`docs/RETARGET_SCALE.json` unchanged since 3f93bc0.
+
+**Datasets** (`/secondary/hyst-data/datasets/`, verified, licence + SOURCE + sha256 each; never upload/redistribute, cite, credit music):
+FineDance 11 GB (203 seqs, 7.66 h, 30 fps, T x 315, music_wav 48 kHz) READY; AIOZ-GDANCE 26 GB READY; AIST++ motion annotations 1.9 GB READY;
+Motorica BLOCKED (SharePoint login). Licence report `docs/DATASET_LICENCES.md`; open item before any public exhibition: Motorica/AIST are
+research-only (Kosta asks owners, or exhibit a model trained only on FineDance/AIOZ/AIST++).
+
+**Branches:** body has 7.47-7.51, all briefs and prompts (WO30A/B, WO31, WO32A/B/C) and the merged round-2 + licence work; keys-decide has
+body merged (cbf426e). NOT merged yet: body-retarget (agent 1), body-data (agent 2) — merge after the look-test report.
+**Builders:** agent 1 [0b1684] idle (WO32B/C, pinned worktree `.claude/worktrees/wo27-s3r`); agent 2 [892bfc] idle (WO32A done). Refs may
+change after a restart: ListAgents.
+**Machine:** nothing running (hyst-wo32c-limits ended). Old failed units in the list are superseded.
+**Lessons this session:**
+- **RUN ON BATTERY** (user, angrily): short jobs never wait for mains. No mains-only wait in prompts for short jobs; only multi-hour training
+  may wait, and ask first (memory updated).
+- A seeded "across genres" pick can collapse onto one sequence when a gate removes most genres: check the distinct sequences and genres of the
+  picked clips before any session.
+- Session seeds can leave every pair in the same order (round 2, seed 30061): balance pair order by design (now in 7.50.8).
+- Fetch licence and code pages raw (curl) and grep the quotes; WebFetch paraphrases.
+- `answers.csv` has no header row; count lines directly.
+
+## PREVIOUS STATE (2026-11-13 12:55)
 
 **Planner answered the Part 3 brief = BRAIN_SPEC 7.47 (body 63cd2c8):** toy round 1 closed; **toy round 2** (two populations: slow tau 300
 ms -> base/shoulder, fast tau 75 ms -> elbow/wrist/roll; inputs beat phase, L4 projection to slow, ear energy + arousal_b7 to both; first 8
