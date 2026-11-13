@@ -3,7 +3,7 @@
 V3a: end point = right wrist (joint 21), origin = right shoulder (17), orientation = G21;   V3b: end point = head (15), origin = pelvis (0), orientation = G15.
 Heading frame: the world rotated about the vertical by minus the pelvis yaw (yaw = atan2(F_x, F_z), F = G0 (0,0,1)), so the human's own forward axis is +z; then human axes (x left, y up, z forward)
 map to the robot's (X forward, Y left, Z up) by A: robot = (z, x, y).
-Lamp target = c0 + s * A (rel - r_med); tool rotation target = A Ry(-yaw) G_end M, with M the fixed tool-axis matrices below.
+Lamp target = p1 + s * A rel (7.54.9; was c0 + s * A (rel - r_med) in the first draft of note (m)); tool rotation target = A Ry(-yaw) G_end M, with M the fixed tool-axis matrices below.
 """
 import json
 import sys
@@ -30,6 +30,11 @@ FD = L.FD
 
 def c0():
     return K.fk_batch(K.CENTRE_POSE[None])[0][0, 5]
+
+
+def p1():
+    """the robot shoulder joint (the point after the base joint's link), (0, 0, 0.08)"""
+    return K.fk_batch(K.CENTRE_POSE[None])[0][0, 1]
 
 
 def heading_rel(P, G, var):
@@ -79,7 +84,7 @@ def build_targets(seq, var, start_s, pre_s=1.5, show_s=20.0, scale=None):
     P, G = L.fk(seq, k0, k1)
     rel, Rh = heading_rel(P, G, var)
     t = np.arange(k0, k0 + len(P)) / 30.0
-    pt = c0() + sc["scale"] * (A_MAP @ (rel - np.array(sc["r_med_human_heading_frame"])).T).T
+    pt = p1() + sc["scale"] * (A_MAP @ rel.T).T                                                     # BRAIN_SPEC 7.54.9: the human origin maps onto the robot shoulder joint p1, no median shift
     Rt = A_MAP @ Rh @ M_TOOL[var]
     tt = start_s - pre_s + np.arange(round((pre_s + show_s) * 100) + 1) / 100.0
     pos = CubicSpline(t, pt, axis=0)(tt)
