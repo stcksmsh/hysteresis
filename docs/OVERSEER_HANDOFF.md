@@ -94,7 +94,16 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-13 ~20:45 — newest, read first
+## UPDATE 2026-11-13 ~21:00 — newest, read first
+
+**JITTER DIAGNOSIS DONE (body-jitter a3d1bae, MERGED into body); WAITING FOR THE PLANNER on `docs/PLANNER_BRIEF_JITTER.md`.** Overseer
+verified: tests 6 OK; stage-4 medians recomputed from CSVs equal; stage 1/4/H1 for C04_V2 + C10_V1 recomputed independently (within 0.05/s);
+spinal = round-1 3 Hz zeta 0.7; no round-1 file changed. Facts: sign changes/s shoulder/wrist bend: stage 1 human 7.3/11.6, spline 9.1/14.6,
+limiter 4.2/9.0, realised 2.7/5.0, H1 2.4/3.65, S03 ~1. Limiter at accel limit 62 % of shoulder frames. Linear vs cubic: little difference at
+realised. C04_V2 shoulder steady ~10 deg offset (unexplained). Brief Qs: Q1 re-look fix (a) H1 / (b) H1 + 3 Hz zero-phase low-pass on stage 1
+by rule / (c) both arms in one session [rec] / (d) none; Q2 C04_V2 offset check report-only [rec]; Q3 record 7.54. Builders idle.
+
+## UPDATE 2026-11-13 ~20:45
 
 **Planner answered = BRAIN_SPEC 7.53 (body 2d5ab1f):** results recorded (no "no"; C04_V2 first clip above v47; imitation works in principle);
 next problem = Kosta's "micro-movements, too frequent changes of direction, robotic unhuman stuff"; keep V1 + V2; energy/timing -> step 3;
