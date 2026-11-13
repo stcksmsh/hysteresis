@@ -2,6 +2,7 @@
 
     motornet_part3.py prep       brain env: per song decode, beat grid (analyze_mix, as the corpus grids), cortex lanes, 12 s audio excerpt
     motornet_part3.py clips      body env: draw 2 shown settings per song (seed 29031), simulate with music input, gate, write work3/P3_<n>_<a|b>.*
+    motornet_part3.py replace    body env: replace the failing sims by 7.46.7
     motornet_part3.py manifest   body env: part3_numbers.json, manifest_parts124.json copy, manifest.json with the Part 3 items (after the render)
 Audio stays outside git.
 """
@@ -81,6 +82,51 @@ def cmd_clips():
         sys.exit(2)
 
 
+def cmd_replace():
+    """7.44.3.4 / 7.46.7: continue default_rng(29031) after the 5 original pair draws (replayed, same calls); per failing render in song order draw
+    one setting at a time (rng.integers(10); a skipped draw is consumed too), skip the pair's other setting and settings already failed for that song, first pass wins."""
+    import arm_sim
+    import dialstudy as D
+    import motornet as M
+    import motornet_music as MM
+    shown = [s for s in json.loads((ROOT / "settings.json").read_text())["settings"] if s["id"] <= "S10"]
+    rng = np.random.default_rng(SEED)
+    pairs = [rng.choice(10, 2, replace=False) for _ in SONGS]
+    log = {}
+    for n, (slug, f, start) in enumerate(SONGS, 1):
+        lanes = np.load(W3 / f"{slug}.lanes.npz")
+        for k, i in zip("ab", pairs[n - 1]):
+            cid = f"P3_{n}{k}"
+            jp = W3 / f"{cid}.json"
+            j = json.loads(jp.read_text())
+            if j["gates"]["passed"]:
+                continue
+            orig = dict(setting=j["setting"], gates=j["gates"]["values"], parts=j["gates"]["parts"])
+            failed = {int(i)}
+            skip = {int(x) for x in pairs[n - 1]}
+            rec, draws = [orig], 0
+            while True:
+                d = int(rng.integers(10))
+                draws += 1
+                if d in skip or d in failed:
+                    continue
+                s = shown[d]
+                q, r, g = M.run_setting(s["values"], u_fn=MM.music_input(lanes, start, M.WARM_S))
+                print(cid, "draw", draws, s["id"], "passed", g["passed"], g["parts"], flush=True)
+                if g["passed"]:
+                    break
+                failed.add(d)
+                rec.append(dict(setting=s["id"], gates=g["values"], parts=g["parts"]))
+            jp.rename(W3 / f"{cid}.failed0.json")
+            (W3 / f"{cid}.csv").write_text(arm_sim.csv_text(q, D.HZ, name=cid))
+            np.save(W3 / f"{cid}.activity.npy", r)
+            (W3 / f"{cid}.json").write_text(json.dumps(dict(id=cid, effector="lamp", setting=s["id"], setting_values=s["values"], song=slug, start_s=start,
+                                                           gates=g, replaced=rec), indent=1))
+            log[cid] = dict(replacement=s["id"], failed_before=rec)
+    (W3 / "replacements.json").write_text(json.dumps(log, indent=1))
+    print(json.dumps(log, indent=1))
+
+
 def cmd_manifest():
     import motornet_measure as ME
     import motornet_music as MM
@@ -93,7 +139,7 @@ def cmd_manifest():
         seg = ar[int(start * 10):int((start + 12) * 10)]
         raw = float(seg.mean())
         std = float(np.clip((seg - mu) / sd, -3, 3).mean())
-        sp, files, csvs, acts, setts, gates = [], [], [], [], [], []
+        sp, files, csvs, acts, setts, gates, rep = [], [], [], [], [], [], []
         for k in "ab":
             cid = f"P3_{n}{k}"
             j = json.loads((W3 / f"{cid}.json").read_text())
@@ -103,15 +149,18 @@ def cmd_manifest():
                 shutil.copy(W3 / f"{cid}{ext}", C / f"{cid}{ext}")
             sp.append(float(ME.hand_speed(ME.hand_path(C / f"{cid}.csv")).mean()))
             files.append(mp4.name); csvs.append(f"{cid}.csv"); acts.append(f"{cid}.activity.npy"); setts.append(j["setting"])
+            rep.append([dict(setting=x["setting"], gates=x["gates"], parts=x["parts"]) for x in j.get("replaced", [])])
             gates.append(dict(passed=True, values=j["gates"]["values"], thresholds=j["gates"]["thresholds"]))
         nums[f"P3_{n}"] = dict(song=slug, excerpt_start_s=start, settings=setts, hand_speed=sp, arousal_raw=raw, arousal_std=std,
                                arousal_norm=dict(mean=mu, sd=sd, clip=3))
         items.append(dict(id=f"P3_{n}", part=3, files=files, setting=setts, song=slug, excerpt_start_s=start, csv=csvs, activity=acts,
-                          hand_speed=sp, arousal_raw=raw, arousal_std=std, gates=gates))
+                          hand_speed=sp, arousal_raw=raw, arousal_std=std, gates=gates, replaced=rep))
+        if any(rep):
+            nums[f"P3_{n}"]["replaced"] = rep
     (C / "manifest.json").write_text(json.dumps(items, indent=1))
     (ROOT / "part3_numbers.json").write_text(json.dumps(nums, indent=1))
     print(json.dumps(nums, indent=1))
 
 
 if __name__ == "__main__":
-    {"prep": cmd_prep, "clips": cmd_clips, "manifest": cmd_manifest}[sys.argv[1]]()
+    {"prep": cmd_prep, "clips": cmd_clips, "replace": cmd_replace, "manifest": cmd_manifest}[sys.argv[1]]()
