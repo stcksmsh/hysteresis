@@ -1742,3 +1742,67 @@ Marked DEFAULT = planner choice Kosta did not overrule; PROPOSAL = undecided.
    by the next sampled one: the same generator `default_rng(29031)` continues after the original draws; for each failing render, in song
    order, draw one setting at a time from S01-S10, skip the pair's other setting and any setting already failed for that song, and take the
    first that passes. Every failure and replacement goes into the report, so Kosta sees which settings fail with music.
+
+### 7.47 Motor-network toy round 1 closed; toy round 2 and an arousal/energy comparison ordered, 2026-11-13, via Kosta + planner (answering `docs/PLANNER_BRIEF_MOTORNET_PART3.md`)
+
+1. **Q3: recorded.** Part 3 results as in `docs/MOTORNET_REPORT.md` (body 1df9ada): S03 picked for Blue Lagoon, Breathe and Epitaph;
+   "neither" for One of These Days and 21st Century Schizoid Man. **Q1 (a): toy round 1 is closed.** Next is toy round 2 (point 4).
+2. **Planner reading, for the record (Kosta did not dispute it):**
+   - Kosta's notes name the network's limits: one loop, fixed facing direction, small base/shoulder motion, too small on energetic music.
+     S03 won 3/3 of its pairs, as the least bad.
+   - `arousal_b7` is surprise-driven, not energy. Predictable energetic music (One of These Days, standardised -1.40) shrank the movement.
+     Feeding it alone as the movement input was a planner design error.
+   - 3 settings that passed silent failed the gates with music: gates must be checked per song.
+3. **Q2 (a), extended: report-only comparison.** Compare `arousal_b7` with Kosta's dial recordings (3 songs) and the 5 excerpts, AND compare a
+   plain acoustic energy measure against the same: loudness + onset density from the existing 44 ear features
+   (`scripts/brain/fast_features.py`: column 41 `rms`, column 40 `onset`). The builder states the exact formula before looking at any
+   result. Correlations only. The cortex stays frozen.
+4. **Work order: motor-network toy round 2** (proposal items accepted by Kosta unless struck). Same rules as 7.44: no learning, no training
+   of weights, no hand-shaping, Kosta the blind judge, gates as before and recomputed by the overseer. Every change below is fixed and
+   written down before any clip is viewed.
+   1. **Two populations:** slow (tau 300 ms, about 100 units) and fast (tau 75 ms, about 100 units), random coupling within and between.
+      Readout: base yaw and shoulder from the slow population only; elbow, wrist bend and wrist roll from the fast population only. Same
+      calibration rule as round 1 (+-60 %).
+   2. **Inputs:** beat-band phase (cos, sin) to both populations; the slowest cortex layer's state (a fixed random projection of L4,
+      0.01-0.5 Hz) to the slow population; acoustic energy (the formula of point 3) and `arousal_b7` to both. Input drive = 0.25 x recurrent
+      drive at gain 1, as 7.45.
+   3. **Control units:** 4, as round 1, with subsets spanning both populations.
+   4. **Spectral radius:** 1.05 for both populations.
+   5. **Sampling:** new seed; the first 8 settings that pass the gates on ALL five songs AND silent. Discards reported by gate.
+   6. **Session** (blind, seeded order):
+      - Part A, silent, lamp, 30 s clips: the 8 settings. Labels as the 7.46 list (7.44.3.6).
+      - Part B, music: 30 s excerpts starting at Kosta's same start times (7.46.4; warm-up as before). Per song, one new setting (seeded
+        pick) vs round-1 S03. "Which fits the music?" + "neither". 5 pairs.
+   7. **Measurements per clip:** as 7.46, plus base yaw and shoulder p5-p95 range, facing-direction (base yaw) drift over the clip, and
+      PR per population.
+   8. **Stop rule:** if all 8 settings show PR < 3 in both populations AND base yaw range < 20 deg, hold and report before the session.
+   9. No verdict from builder or overseer. Kosta decides.
+   10. **Out of scope:** limbic part, label-driven learning, cortex changes, hardware, brain monitor.
+5. **Standing rules unchanged** (as 7.43.5).
+6. **Overseer notes (operational defaults, not rulings; Kosta may amend):**
+   - *Ear energy (point 3):* the builder's formula goes into `docs/EAR_ENERGY_RULES.md`, committed and pushed before any correlation is
+     computed or any dial value is read; the overseer checks the commit order. The formula uses only columns 40 and 41 of the 44 features,
+     with fixed windows stated. The same function feeds the round-2 network.
+   - *Dial data:* `/secondary/hyst-data/emotion/dial/dial2.json` (Five Years and Presence pass A; all three songs pass B) and
+     `dial-ic-try1.json` (Instant Crush pass A, Kosta's first try on the older pad, used as given and marked so). The 7.43-era rule that the
+     builder never opens dial files is lifted for this comparison only.
+   - *Comparison method:* both signals and each dial axis (pass A energy; pass B light, heavy) resampled to 2 Hz after a 2 s moving mean;
+     Pearson and Spearman per song at every lag from -2 s to +4 s in 0.5 s steps (dial behind music = positive). All lags reported; none
+     is picked. Taps and the 5 excerpts get no correlation (too few points): for the excerpts, the mean of each signal over the 12 s
+     shown in round 1, ranked, beside Kosta's Part 3 notes.
+   - *L4 input:* L4 = the slowest of B7's four layers (horizon 800 frames). Its complex state (real and imaginary parts) is projected by a
+     seeded Gaussian matrix to 4 signals, standardised like `arousal_b7` (one mean and sd over the three danced songs, clipped to +-3). No
+     extra filtering. Silent clips: L4 inputs, energy and arousal are 0.
+   - *Coupling:* the full 200 x 200 matrix is drawn iid; all rows of a population are scaled by one factor so that the population's
+     within-population block has spectral radius 1.05. The between-population blocks keep that row factor. The full matrix's radius is
+     reported.
+   - *Drive ratio:* one input scale per population, found as in 7.45.10, with the gain-1 silent run, input std = 0.25 x recurrent std in
+     each population.
+   - *Body:* spinal spring-damper, servo, limiter and gates as round 1 (MOTORNET_PARAMS at body-mnet 265fe79); the 7.45.2 limiter rule
+     applies again.
+   - *Gate windows:* each candidate is simulated on 10 s warm-up + 30 s for silent and for each song at Kosta's start times; it must pass
+     all six. Round-1 S03 is re-rendered unchanged (round-1 network and inputs) at 30 s per song; if it fails a gate on a song, that pair
+     is not shown and is reported (S03 is not replaced).
+   - *Part B pick:* `default_rng(seed)` draws 5 different settings from the 8, one per song, songs in the 7.46.4 order.
+   - *Facing drift:* mean base yaw over the clip's last 3 s minus over its first 3 s (deg), plus the range of its 3 s moving mean.
+   - *Stop rule:* evaluated on the Part A silent clips (PR per population and base yaw p5-p95).
