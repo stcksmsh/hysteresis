@@ -1,0 +1,17 @@
+# Night log body-jitter (WO33, report only)
+
+## MORNING SUMMARY: JITTER READY (see the commit that carries this file)
+
+**Report only: nothing adopted, no verdict, no video rendered, no shown clip changed.** Report `docs/JITTER_DIAGNOSIS.md`; numbers `/secondary/hyst-data/body/retarget_look/jitter/numbers.json`; plots (not in git) `jitter/C04_V2_{baseline,H1,H3_linear}.png` and `jitter/C10_V1_{baseline,H1,H3_linear}.png` (shoulder and wrist bend, seconds 8-12 of the clip). Code: `scripts/body/jitter_diag.py`, `test_jitter_diag.py` (6 tests, known sine/cubic/bang-bang values). Round-1 files untouched.
+
+- **Baseline reproduces the shown clips:** rebuilt stage-4 rows vs `work/<id>.csv`, max abs difference over the 20 clips 5.0e-07 deg (CSV rounding).
+- **Facts from the baseline tables** (median over the 20 clips, own rate; shoulder / wrist bend): acceleration sign changes per second: stage 1 (30 fps command) 7.3 / 11.6, stage 2 (100 Hz spline + guard) 9.1 / 14.6, stage 3 (limiter) 4.2 / 9.0, stage 4 (realised) 2.7 / 5.0. Speed power above 3 Hz: 0.075 / 0.199, 0.072 / 0.194, 0.008 / 0.061, 0.001 / 0.011. Jerk RMS (deg/s^3): 14400 / 109252, 26284 / 204855, 6766 / 61049, 1218 / 10764. The round-1 S03 reference clips at stage 4 are at about 1 sign change per second on every joint with 0.000 power above 3 Hz (jerk RMS 120-816).
+- **H1 (spinal layer 3 Hz, zeta 0.7 before the limiter; also = H1 + H3 combined, cubic spline as used):** stage 4 sign changes /s 2.4 / 3.65 (baseline 2.7 / 5.0), jerk RMS 1057 / 8580, power > 3 Hz 0.001 / 0.006; limiter output sign flips of its acceleration per second falls (shoulder 4.15 -> 3.35, wrist bend 8.97 -> 5.25). Gate 7.52 at 1.25: 19 / 20 pass (C10_V2 fails "limits").
+- **H2 (baseline limiter output at >= 0.98 x the acceleration limit, 100 Hz frames / gate 50 Hz):** shoulder 0.615 / 0.580, elbow 0.327 / 0.279, wrist bend 0.394 / 0.307, wrist roll 0.330 / 0.247, base yaw 0.033 / 0.021. Acceleration sign flips per second of the limiter output: base 5.7, shoulder 4.15, elbow 7.15, wrist bend 8.97, wrist roll 8.72.
+- **H3 (resampling):** the shown clips already use the cubic spline. Stage 2 vs stage 1 (cubic): sign changes /s shoulder 7.28 -> 9.05, wrist bend 11.6 -> 14.6; jerk RMS about doubles (14400 -> 26284, 109252 -> 204855); power > 3 Hz about unchanged. Linear-interpolation control: stage 2 sign changes equal stage 1's (7.30 / 11.62), but jerk RMS is 112044 / 521437 (impulses at the 30 fps frames, as the hypothesis describes); at stage 4 linear and cubic differ little (2.62 / 4.90 vs 2.72 / 4.95). Gate at 1.25: 19 / 20 (C03_V2 "limits"). H1 with linear interpolation (extra control): 19 / 20 (C10_V2).
+- **Guard:** baseline guard share median 0, max 0.005; it changed the command by up to 39.6 deg on the frames it held.
+- **Plot note (fact):** in the C04_V2 baseline plot the realised shoulder sits about 10 deg above the commanded/limited line over seconds 8-12 (a steady offset between command and realised, not a lag only).
+- **Method choices** (FOR USER, defaults): accelerations below 1 deg/s^2 count as zero in the sign-change count; Welch, Hann, 5 s segments (0.2 Hz bins); "at the 30 fps instants" = the stage's rows linearly interpolated to k/30 s; the plots were drawn as SVG and rasterised by the system Chrome (no plotting library is installed, nothing was installed).
+
+## Log
+- 2026-11-13: branch body-jitter from origin/body (31fff7d). Script and tests pushed before the run (hyst-wo33-run, cores 6-11, battery); one dry run on C04_V2 first. Run time under 2 minutes.
