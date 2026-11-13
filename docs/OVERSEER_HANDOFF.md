@@ -94,7 +94,14 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-13 ~21:10 — newest, read first
+## UPDATE 2026-11-13 ~21:15 — newest, read first
+
+VIEWING READY (body-viewing 4452518, merged into body) VERIFIED: jitter_viewing.mp4 1920x1080 30 fps h264+aac 40.0 s; music -12/-14 dB in
+the 1x parts, -91 dB (silent) in 0.5x; 4 labelled panels (stick figure, stage 1 kinematic, stage 4, H1); slices C05_V1 7.3-13.3 s (overseer
+recount same start), C04_V2 6.0-12.0 s (overseer 6.1, 44 vs 43 changes: window-edge rule, immaterial). Told Kosta the path. Still waiting
+for the planner on PLANNER_BRIEF_JITTER.md. Builders idle.
+
+## UPDATE 2026-11-13 ~21:10
 
 Kosta asked (direct request, view only, before the Q1 session) for one jitter VIEWING video. Overseer picked by measure: C05_V1 (realised
 wrist-bend sign changes 8.39/s, highest; C10_V2 7.74 next) + C04_V2 (5.59) for contrast. Prompt docs/BUILDER_PROMPT_WO34_JITTER_VIEWING.md
