@@ -94,7 +94,17 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## CURRENT STATE (2026-11-13 ~12:10) — read this block first
+## CURRENT STATE (2026-11-13 ~12:50) — read this block first
+
+**MOTORNET PART 3 DONE; WAITING FOR THE PLANNER.** Kosta answered 5 pairs (12:40-12:44): Blue Lagoon S03 (first), Breathe S03, Epitaph S03,
+OOTD neither, Schizoid neither; notes: loops, fixed facing, little base/shoulder, too small on energetic music; OOTD cortex arousal -1.40
+(lowest) though Kosta hears energetic. Overseer join answers x key matches report table. body-mnet3 + body-mnettool3 MERGED (body e5f3ac9).
+Report script prints Part 3 twice + lacks replaced list -> fix sent to agent 2 [892bfc] (branch body-mnetfix, "FIX READY"); verify, merge,
+then commit regenerated docs/MOTORNET_REPORT.md. Brief `docs/PLANNER_BRIEF_MOTORNET_PART3.md` SENT (Q1 next step [rec (a) close toy,
+richer dynamics round 2 specified by planner], Q2 arousal vs Kosta [rec report-only vs dial recordings], Q3 record 7.47). Session unit
+stopped. Agent 1 [0b1684] idle. NEXT: planner answers -> BRAIN_SPEC 7.47 on body first.
+
+## STATE (2026-11-13 ~12:10)
 
 **MOTORNET PARTS 1/2/4 DONE; WAITING FOR THE PLANNER.** Kosta labelled all 16 (session_2026-11-13, 11:51-11:56; "unsure of all the
 results, imperfect probably"). body-mnet + body-mnettool MERGED into body (f78a90a); report `docs/MOTORNET_REPORT.md` (body 77cc84c);
