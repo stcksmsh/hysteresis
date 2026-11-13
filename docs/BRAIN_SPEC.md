@@ -2099,3 +2099,49 @@ PROPOSAL = planner, not yet ruled.
    - **Q2 answered (WO35, report only):** the C04_V2 shoulder offset is gravity sag in the servo model: mean +4.8 deg (-4.4 to +12.4) over
      seconds 8-12, +0.1 deg with gravity off, 5.3 deg predicted from gravity torque 1.55 N m / kp 16.86 N m/rad. Not the limiter, guard, end
      stops or column.
+
+### 7.55 V3 closed; joint-space low-pass to the human's own smoothness, then the blind re-look, 2026-11-13, via Kosta + planner (answering `docs/PLANNER_BRIEF_V3.md`)
+
+1. **Record (Q4).**
+   - **Step A:** the human end point (right wrist relative to the right shoulder for V1, head relative to the pelvis for V2) carries 3-5x
+     less speed power above 3 Hz than the retargeted angles. Median over 20 clips: 0.031 in world space, 0.048 relative to the origin; the
+     lamp path under the stage-1 angles 0.150; the angles 0.129. This confirms Kosta's viewing judgement.
+   - **Q2:** the C04_V2 shoulder offset is gravity sag in the servo model, about 5 deg on the shoulder. Hardware note: the real shoulder needs
+     higher stiffness as well as torque (see 7.52.6).
+   - **Step B:** V3 passed 0/20 gates at 1.25. The causes are geometry (V3b shoulder on its -110 deg stop with the arm pointing up; V3a
+     folding into the column, elbow and wrist at their stops) and IK noise (IK output 9.5-14.3 direction changes per second). Realised V3 was
+     about equal to V1/V2 + H1. The target mapping was a planner spec error.
+   - **Step C** did not run.
+2. **Q3:** 7.54.9 confirmed (the human origin maps onto the shoulder joint p1).
+3. **Q2:** the V3 code and report are merged as a report-only tool. They are not in the look-test path. **No V3 round 2.**
+4. **Q1 (a), the fix to test:**
+   - A zero-phase low-pass on the stage-1 angles of V1 and V2.
+   - **Cutoff by the stated rule:** the cutoff at which the lamp path under the filtered angles has no more power above 3 Hz than the human
+     end point it came from (median over the clips), computed per variant and stated in the rules file before any render.
+   - H1 kept (the round-1 spinal layer before the limiter). Gate at 1.25. The jitter measures are reported per stage as before.
+   - **Blind re-look:**
+     - C04_V2 and C10_V1, plus 2-4 more by seeded pick (a clip whose fixed version fails the gate is replaced by the next seeded pick,
+       reported);
+     - pairs old vs fixed, order checked to be mixed;
+     - question "which looks more like a person dancing?" with first / second / same, and an optional note.
+5. **After the session: report and stop.** If Kosta judges the fixed version at least as good, this pipeline becomes the training-data
+   pipeline and the retargeting work ends; the planner then writes the imitation-training plan (7.49 a). No further retarget variants
+   without Kosta's ruling.
+6. **Out of scope:** training, music conditioning, gain modulation, limiter redesign, hardware, monitor, uploads. Standing rules unchanged.
+7. **Overseer notes (operational defaults, not rulings; Kosta may amend):**
+   - **Cutoff wording, corrected.** The brief and the ruling say "the *lowest* cutoff at which the filtered lamp path has no more power above
+     3 Hz than the human". A lower cutoff always smooths more, so that wording would select the bottom of any search range. The wording error
+     was the overseer's (`PLANNER_BRIEF_V3.md`). The intended rule is **the highest cutoff (the least smoothing) at which the median over the
+     variant's clips of the lamp path's power share above 3 Hz is <= the median of the human end point's**.
+   - **Human reference:** the end point relative to its origin, column (0r) of Step A (right wrist relative to the right shoulder for V1,
+     head relative to the pelvis for V2). This is the signal the retargeting maps from.
+   - **Filter:** 2nd-order Butterworth applied forward and backward (`scipy.signal.filtfilt`, zero phase), at 30 fps, on the stage-1 angles
+     (base yaw and wrist roll unwrapped). It runs over each whole sequence before windowing, so no window-edge effects.
+   - **Cutoff search:** grid 0.5-14.5 Hz in 0.25 Hz steps; measured on the 10 look-test windows of each variant. The chosen value, the curve
+     (cutoff vs median power) and the human medians go into the rules note before any render.
+   - **Re-look clips:** C04_V2 and C10_V1, plus 4 more by seeded pick (seed 32071) from the other 18 shown clips, so 6 pairs in total. A
+     clip whose fixed version fails the 1.25 gate is replaced by the next seeded pick, and the replacement is reported. "Old" = the
+     look-test mp4 as shown (stage 4 baseline, no H1). "Fixed" = low-pass + H1, rendered with the same camera, lamp head, column and music.
+     The fixed version plays first in exactly 3 of 6 pairs.
+   - **Tool:** in look-test mode, pair answers are "first / second / same" (the tool's current "neither" is renamed for look-test pairs
+     only; other modes unchanged; a test covers it).
