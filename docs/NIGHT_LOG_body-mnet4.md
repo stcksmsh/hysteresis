@@ -46,3 +46,5 @@ Round-1 S03 reference at 30 s per song: all 5 pass the gates (none dropped).
 - B5 one-of-these-days: new S01 hand 0.071, yaw 22.4, shoulder 5.0; round-1 S03 hand 0.126, yaw 10.7; ear energy raw -0.30 (input -0.38), arousal raw -0.694 (input -1.36)
 
 Files: scripts `motornet2.py`, `motornet2_fit.py`, `motornet2_lanes.py`, `motornet2_energy.py`, `motornet2_run.py`, `motornet2_job.sh`, `motornet2_render.sh`. Data `/secondary/hyst-data/body/motornet_toy2/` (clips/, manifest.json in clips/, settings.json, numbers.json, work/, lanes/, motornet2_fit.json). No audio in git. FOR USER: none.
+
+CLIPS READY cd617f2
