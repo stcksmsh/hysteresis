@@ -94,7 +94,19 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-13 ~21:15 (clock) — newest, read first
+## UPDATE 2026-11-13 ~21:25 (clock) — newest, read first
+
+**Planner = BRAIN_SPEC 7.55 (body f5e44d6):** V3 closed (report-only tool, no round 2); 7.54.9 confirmed; fix = zero-phase low-pass on
+stage-1 angles of V1/V2, cutoff by rule (overseer note 7.55.7: HIGHEST cutoff with median lamp-path power >3 Hz <= human 0r median; the
+brief's "lowest" was the overseer's wording error, flag to planner next brief), + H1, gate 1.25; blind re-look C04_V2 + C10_V1 + 4 seeded
+(rng 32071), old vs LP pairs, LP first 3/6 (rng 32081), answers first/second/same. After session: report + stop; if fixed >= old, this is
+the training-data pipeline and retargeting ends (planner writes imitation-training plan 7.49 a).
+Prompt docs/BUILDER_PROMPT_WO36_LOWPASS_RELOOK.md (body 4c418bd) SENT to agent 1 [0b1684] (branch body-lowpass). Overseer next: review
+rules note (n) (cutoff curve, human medians) before render; on CLIPS READY: own recompute of cutoff rule on 2-3 grid points, gates from
+lowpass/work CSVs, picks/skips vs rng, pair order, clips (dur/audio/frames), tool test; then build the session (tool from body-lowpass
+archive, seed new e.g. 32091) on 8765 as unit hyst-wo36-session, key 404; tell Kosta.
+
+## UPDATE 2026-11-13 ~21:15 (clock)
 
 V3 READY 27e482d (body-v3) VERIFIED (realised medians recomputed equal; stop frames counted) and MERGED into body (report-only code, V1/V2
 paths untouched). Brief docs/PLANNER_BRIEF_V3.md SENT: Step A human end point 3-5x less >3 Hz power than retargeted angles; Q2 gravity sag;
