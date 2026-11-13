@@ -2081,3 +2081,21 @@ PROPOSAL = planner, not yet ruled.
    - *Step C pairs:* from the passing clips, seed 32061, 3 V3a-vs-V1 and 3 V3b-vs-V2, always including C10 (V3a vs V1) and C04 (V3b vs V2)
      when they pass (Kosta's earlier re-look picks); V3 first in exactly 3 of 6.
    - *The C04_V2 offset check (Q2)* is part of the same work order, report-only.
+9. **Overseer correction to 7.54.8, 2026-11-13 (before any V3 run; flagged to the planner in the next brief):**
+   - **Workspace centre.** Round 1's centre pose puts the lamp 0.673 m from the shoulder joint p1, and the arm reaches 0.69 m. That
+     "centre" sits 1.7 cm inside the edge of reach, so most motion around it would be unreachable. The 7.54.8 default "centre = lamp at
+     round 1's centre pose" is withdrawn.
+   - **Replacement:** the human origin (right shoulder for V3a, pelvis for V3b) maps onto the robot's shoulder joint p1. Lamp target =
+     p1 + s x A x rel, with no median shift. With the uniform scale of 7.54.5 (human p98 reach -> 80 % of the arm's reach), 98 % of the
+     targets lie within 0.55 m of p1, inside the 0.69 m reach by construction. This is the literal reading of "relative to the human
+     shoulder / pelvis, scaled so the reach fills 80 % of the arm's reach": for a reach measured from p1, the workspace centre is p1.
+   - **Consequence, stated:** V3b's lamp sits mostly high (head about 0.6 m above the pelvis -> about 0.54 m above p1). V3a's lamp often
+     hangs below p1 beside the column (arm at the dancer's side), handled by the column penalty, projection and guard. Both are counted and
+     reported, never tuned.
+   - **Builder's rules note (m) (body-v3 66e72b4), reviewed:** the heading frame (pelvis yaw removed), the orientation projection, the IK
+     numbers from stated rules (damping 3.604e-4 from the 90 % step rule, lam 1 % of reach, mu, w_o 0.05, w_c 1, step cap 0.351 rad,
+     N = 3 from the 1 cm and 5 cm probes run before any clip) and the scales (V3a 1.0824, V3b 0.8909) are accepted. The median-centred
+     offset at c0 in (m) is replaced by the line above.
+   - **Q2 answered (WO35, report only):** the C04_V2 shoulder offset is gravity sag in the servo model: mean +4.8 deg (-4.4 to +12.4) over
+     seconds 8-12, +0.1 deg with gravity off, 5.3 deg predicted from gravity torque 1.55 N m / kp 16.86 N m/rad. Not the limiter, guard, end
+     stops or column.
