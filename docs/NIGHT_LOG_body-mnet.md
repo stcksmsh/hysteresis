@@ -44,4 +44,4 @@ straightness 0.71-0.96. Hand extents (p5-p95, max axis): 0.16-0.67 m.
 - FOR USER: Part 3 (music) still waits for the audio files and excerpt start times; the path is tested on a synthetic click track only.
 - FOR USER: S11 and S12 are not shown (they fail gates); Part 1 has 10 clips, not 12.
 
-CLIPS READY (commit hash below)
+CLIPS READY 265fe79
