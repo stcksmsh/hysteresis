@@ -61,7 +61,9 @@ def build(manifest_path, out, seed=None, parts=None):
 
     items, key = [], {}
     for clip in clips:
-        meta = {k: clip.get(k) for k in ("id", "set", "intent", "effector", "dials", "part", "setting", "round1_id", "song", "excerpt_start_s", "arousal_raw", "arousal_std")}
+        meta = {k: clip.get(k) for k in ("id", "set", "intent", "effector", "dials", "part", "setting", "round1_id", "song", "excerpt_start_s", "arousal_raw", "arousal_std", "ear_energy")}
+        if not (clip.get("set") == "D" or clip.get("files")):
+            meta["file"] = clip.get("file") or clip.get("round1_file")
         if clip.get("set") == "D" or clip.get("files"):
             first, second = list(clip["files"])
             sets = list(clip.get("setting") or [None, None])
@@ -235,7 +237,7 @@ def main():
     if not a.out:
         ap.error("--out is required to serve")
     if a.clips:
-        build(a.clips, a.out, a.seed, {int(x) for x in a.parts.split(",")} if a.parts else None)
+        build(a.clips, a.out, a.seed, {int(x) if x.isdigit() else x for x in a.parts.split(",")} if a.parts else None)
     if a.serve or not a.clips:
         srv = make_server(a.out, a.port)
         print(f"open http://127.0.0.1:{srv.server_address[1]}/  (Ctrl-C to stop; answers are saved at once)")
