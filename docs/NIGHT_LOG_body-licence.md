@@ -15,4 +15,4 @@ Headlines (see the file for exact quotes):
 
 FOR USER: Kosta decides which source is usable. Questions that need the owners are listed at the end of the licence file.
 
-LICENCES READY (commit hash is in the git log of this branch; see the line below once pushed)
+LICENCES READY 7c320ce
