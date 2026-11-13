@@ -1736,3 +1736,9 @@ Marked DEFAULT = planner choice Kosta did not overrule; PROPOSAL = undecided.
 5. **Part 3 report adds**, per pair: the mean hand speed of both renders and the cortex arousal over the excerpt (mean of `arousal_b7`
    in the shown 12 s, raw and as the standardised network input), so picks can be compared with energy.
 6. **Standing rules unchanged.**
+7. **Overseer note, 2026-11-13 (applying 7.44.3.4, not a new ruling):** 3 of the 10 Part 3 renders failed the gates with music input
+   although the same settings passed silent: Blue Lagoon S04 (contact 13 substeps, acceleration 1.18x limit), Epitaph S02 (contact 339,
+   acceleration 7.32x), One of These Days S06 (contact 180, acceleration 1.96x). Per 7.44.3.4 a failing setting is discarded and replaced
+   by the next sampled one: the same generator `default_rng(29031)` continues after the original draws; for each failing render, in song
+   order, draw one setting at a time from S01-S10, skip the pair's other setting and any setting already failed for that song, and take the
+   first that passes. Every failure and replacement goes into the report, so Kosta sees which settings fail with music.
