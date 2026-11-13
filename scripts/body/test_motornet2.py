@@ -75,6 +75,22 @@ class Tool(unittest.TestCase):
         r2 = r.copy(); r2[:, :100] = r2[:, :1]
         self.assertLess(mm.measure2(r2, np.zeros((T, 3)) + np.arange(T)[:, None] * 1e-3, q, [0] * 100 + [1] * 100)["pr_slow"], 1.5)
 
+    def test_pair_populations_and_single_population_render(self):
+        r = np.random.default_rng(3).standard_normal((T, 200)); q = np.zeros((T, 5))
+        m = mm.measure2(r, np.arange(T)[:, None] * [1e-3, 0, 0], q, [0] * 200)
+        self.assertTrue(m["single_population"]); self.assertIsNone(m["pr_fast"]); self.assertGreater(m["pr_slow"], 50)
+        self.assertFalse(mm.measure2(r, np.arange(T)[:, None] * [1e-3, 0, 0], q, [0] * 100 + [1] * 100)["single_population"])
+        man = json.loads(self.manifest.read_text())
+        for c in man["clips"]:
+            if c["part"] == "B":
+                c["population"] = [[0] * 100 + [1] * 100, [0] * 200]
+        mf = self.root / "m2.json"; mf.write_text(json.dumps(man))
+        out = self.root / "m.json"
+        subprocess.run([sys.executable, str(Path(mm.__file__)), "--manifest", str(mf), "--out", str(out), "--round2"], check=True, capture_output=True)
+        res = json.loads(out.read_text())
+        self.assertFalse(res["B_0a"]["single_population"]); self.assertIsNotNone(res["B_0a"]["pr_fast"])
+        self.assertTrue(res["B_0b"]["single_population"]); self.assertIsNone(res["B_0b"]["pr_fast"])
+        
     def test_cli_and_report_synthetic(self):
         meas = self.root / "meas.json"
         subprocess.run([sys.executable, str(Path(mm.__file__)), "--manifest", str(self.manifest), "--out", str(meas), "--round2"], check=True, capture_output=True)
@@ -86,8 +102,9 @@ class Tool(unittest.TestCase):
         with open(out / "answers.csv", "w", newline="") as f:
             w = csv.writer(f)
             w.writerow([code[("A", "A_S01")], "tense", "slow|ish", "t", 0]); w.writerow([code[("B", "B_epitaph")], "second", "n", "t", 0])
-        (self.root / "settings.json").write_text(json.dumps({"settings": [dict(id="S01", values=[1.0, 2.0])],
-                                                            "discards": [dict(draw=3, song="breathe", gates=["contact"]), dict(draw=5, song="silent", gates=["limits"])]}))
+        (self.root / "settings.json").write_text(json.dumps({"settings": [dict(id="S01", values=[1.0, 2.0], draw_index=2)],
+                                                            "discards": [dict(draw_index=3, values=[1, 2], failed=[dict(run="breathe", gates=["contact"])])],
+                                                            "discards_per_gate": {"contact": 1}, "stop_rule_hit": False}))
         text = rep.report2(out, meas, self.root / "settings.json")
         for h in ("## Part A: silent, 30 s", "## Part B: which render fits the music", "## Discards by gate", "## Network and body parameters"):
             self.assertEqual(text.count(h), 1, h)
@@ -96,7 +113,7 @@ class Tool(unittest.TestCase):
         k = key[code[("B", "B_epitaph")]]
         self.assertIn(f"| epitaph | first {k['first_setting']}, second {k['second_setting']} | second | {k['second_setting']} | n |", text)
         self.assertIn("2.5 | 0.2 | 1", text)  # ear energy, arousal raw, std of the epitaph pair (i = 2)
-        self.assertIn("breathe", text); self.assertIn("contact", text); self.assertIn("MOTORNET2_RULES.md", text)
+        self.assertIn("| 3 | 1, 2 | breathe | contact |", text); self.assertIn("| contact | 1 |", text); self.assertIn("MOTORNET2_RULES.md", text)
         for w in ("worth building", "viable", "correct", "pass"):
             self.assertNotIn(w, text)
 

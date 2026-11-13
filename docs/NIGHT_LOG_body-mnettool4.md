@@ -41,3 +41,15 @@ COMPARISON READY 1c59ea3
   `test_motornet.py` 12, `test_dialstudy.py` 5, `test_ear_energy.py` 6, each in its own process on cores 12-17. The synthetic report was generated and read.
 
 TOOL READY e9c67ab
+
+## Fix (real round-2 manifest)
+
+- `motornet_measure.py --round2`: pair items take `population[i]` per render; a render whose units are all population 0 (round-1 S03) reports `pr_slow`
+  = PR of all units, `pr_fast` = null, `single_population: true`. Single items unchanged.
+- `motornet_report.py --round2` reads the real `settings.json` (`discards` with `failed` runs and gates, `discards_per_gate`, `discards_per_run`,
+  `stop_rule_hit`, `round1_s03_gates`, `settings` with `draw_index`) and `numbers.json` (`songs`: `ear_energy_raw`, `arousal_raw`, `arousal_input`).
+- Checked on the real manifest (measurements written to the job tmp, not motornet_toy2): Part A values equal numbers.json (e.g. S01 PR 2.32 / 3.12, yaw
+  30.8); report generated from a synthetic session on the real manifest and read: each section once.
+- Tests: `test_motornet2.py` 4 OK (new: pair populations, single-population render), `test_motornet` 12, `test_dialstudy` 5, `test_ear_energy` 6.
+
+FIX READY a8f7b6a

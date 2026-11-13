@@ -151,27 +151,31 @@ def report2(session, measurements, settings=None, numbers=None):
         sett = [k.get("first_setting"), k.get("second_setting")]
         sp = [meas.get(stem(k.get("first")), {}).get("hand_speed"), meas.get(stem(k.get("second")), {}).get("hand_speed")]
         sg = songs.get(k.get("song"), {})
-        ear, ar, ars = (k.get("ear_energy") if k.get("ear_energy") is not None else sg.get("ear_energy"),
+        ear, ar, ars = (k.get("ear_energy") if k.get("ear_energy") is not None else sg.get("ear_energy_raw", sg.get("ear_energy")),
                         k.get("arousal_raw") if k.get("arousal_raw") is not None else sg.get("arousal_raw"),
-                        k.get("arousal_std") if k.get("arousal_std") is not None else sg.get("arousal_std"))
+                        k.get("arousal_std") if k.get("arousal_std") is not None else sg.get("arousal_input", sg.get("arousal_std")))
         chosen = "(not answered)" if not a else {"first": sett[0], "second": sett[1]}.get(a[1], "neither")
         rows.append([k.get("song"), f"first {sett[0]}, second {sett[1]}", a[1] if a else "(not answered)", chosen, note(c),
                      f"first {cell(sp[0])}, second {cell(sp[1])}", ear, ar, ars])
     out += ["## Part B: which render fits the music", "",
             table(["song", "settings as shown", "pick", "chosen setting", "note", "mean hand speed (m/s)", "mean ear energy", "mean arousal_b7 raw", "arousal_b7 standardised"], rows) if rows else "No Part B pairs in this session.", ""]
-    disc = st.get("discards") or []
     out += ["## Discards by gate", ""]
-    if isinstance(disc, dict):
-        disc = [dict(gate=g, count=n) for g, n in disc.items()]
-    if disc:
-        cols = list(dict.fromkeys(k for d in disc for k in d))
-        out += [table(cols, [[d.get(k) if not isinstance(d.get(k), (dict, list)) else json.dumps(d.get(k)) for k in cols] for d in disc]), ""]
-    else:
-        out += ["None listed.", ""]
+    if "stop_rule_hit" in st:
+        out += [f"Stop rule hit: {st['stop_rule_hit']}. Draws: {st.get('draws')}, kept: {st.get('kept')}.", ""]
+    for name, k in (("per gate", "discards_per_gate"), ("per run", "discards_per_run")):
+        if st.get(k):
+            out += [f"Discards {name}:", "", table(["gate" if name == "per gate" else "run", "count"], sorted(st[k].items())), ""]
+    rows = []
+    for d in st.get("discards") or []:
+        for f in d.get("failed") or [{}]:
+            rows.append([d.get("draw_index"), values_text(d.get("values")), f.get("run"), ", ".join(f.get("gates") or []), f.get("extent_m")])
+    out += [table(["draw", "values", "run", "failed gates", "extent m"], rows) if rows else "No discards listed.", ""]
+    if st.get("round1_s03_gates"):
+        out += ["Round-1 S03 gates (rendered as the reference):", "", table(["song", "passed", "failed"], [[g.get("song"), g.get("passed"), ", ".join(g.get("failed") or [])] for g in st["round1_s03_gates"]]), ""]
     out += ["## Network and body parameters", "", "Rules and every fixed number: `docs/MOTORNET2_RULES.md` (round 1: `docs/MOTORNET_PARAMS.md`).", ""]
     sv = st.get("settings")
     if isinstance(sv, list):
-        out += [table(["setting", "values"], [[(e.get("id") or e.get("setting")), values_text(e.get("values", e.get("c")))] for e in sv]), ""]
+        out += [table(["setting", "values", "draw index"], [[(e.get("id") or e.get("setting")), values_text(e.get("values", e.get("c"))), e.get("draw_index")] for e in sv]), ""]
     return "\n".join(out)
 
 
