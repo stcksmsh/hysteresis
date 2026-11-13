@@ -94,14 +94,44 @@ def measure(r, h, hz=HZ):
                 hand_speed=float(hand_speed(h, hz).mean()), hand_height=float(h[:, 2].mean()), straightness=straightness(h, hz)[0], straightness_min=straightness(h, hz)[1])
 
 
+def drift(base_yaw, hz=HZ):
+    """(mean base yaw over the last 3 s - mean over the first 3 s, range of the 3 s moving mean of base yaw), degrees"""
+    n = round(3 * hz)
+    q = np.asarray(base_yaw, float)
+    ma = np.convolve(q, np.ones(n) / n, "valid")
+    return float(q[-n:].mean() - q[:n].mean()), float(ma.max() - ma.min())
+
+
+def measure2(r, h, q, population, hz=HZ):
+    """Round 2 (WO30A, BRAIN_SPEC 7.47.4.7): measure() plus base yaw and shoulder p5-p95 range (deg; q = joint angles, columns 0 and 1),
+    facing drift, and the participation ratio per population (population: 0 slow, 1 fast, per unit)."""
+    pop = np.asarray(population)
+    q = np.asarray(q, float)
+    d, dr = drift(q[:, 0], hz)
+    rng = lambda a: float(np.percentile(a, 95) - np.percentile(a, 5))
+    return dict(measure(r, h, hz), pr_slow=participation_ratio(r[:, pop == 0]), pr_fast=participation_ratio(r[:, pop == 1]),
+                yaw_range=rng(q[:, 0]), shoulder_range=rng(q[:, 1]), drift=d, drift_range=dr)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--manifest", required=True); ap.add_argument("--out", required=True)
+    ap.add_argument("--round2", action="store_true", help="round 2 manifest (parts A and B, pairs; keyed by clip file stem, adds yaw/shoulder range, drift, PR per population)")
     a = ap.parse_args()
     mp = Path(a.manifest)
     data = json.loads(mp.read_text())
     clips = data["clips"] if isinstance(data, dict) else data
     res = {}
+    if a.round2:
+        for c in clips:
+            two = isinstance(c["csv"], list)
+            for cs, ac in zip(c["csv"] if two else [c["csv"]], c["activity"] if two else [c["activity"]]):
+                q = read_csv(mp.parent / cs)
+                pop = c.get("population") or [0] * (np.load(mp.parent / ac).shape[1] // 2) + [1] * (np.load(mp.parent / ac).shape[1] // 2)
+                res[Path(cs).stem] = measure2(np.load(mp.parent / ac).astype(float), hand_path(mp.parent / cs), q, pop)
+        Path(a.out).write_text(json.dumps(res, indent=1))
+        print("wrote", a.out, len(res), "clips")
+        return
     for c in clips:
         if c.get("part") != 1:
             continue
