@@ -40,4 +40,4 @@ COMPARISON READY 1c59ea3
 - Tests: `test_motornet2.py` 3 OK (session, measures, CLI and a report generated on a synthetic session, section headings counted once), plus
   `test_motornet.py` 12, `test_dialstudy.py` 5, `test_ear_energy.py` 6, each in its own process on cores 12-17. The synthetic report was generated and read.
 
-TOOL READY
+TOOL READY e9c67ab
