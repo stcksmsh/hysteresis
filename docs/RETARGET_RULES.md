@@ -133,3 +133,12 @@ Overseer-accepted rules above are unchanged (mapping, scale rule). This note rep
 - **Genre spelling:** `style2` has 17 spellings; compared **case-insensitively** (jazz = Jazz), **16 genres**, sorted lowercase names, permuted by `default_rng(32011)`. The genre shown in the manifest is the lowercase name.
 - **Sequence length filter** (clarifies (e)): a sequence is eligible if at least 25.0 s long (a 5.0 s lead-in plus the 20 s window); the "26.5 s" in (e) is withdrawn. The window start is uniform in `[5.0, len - 20.0]`.
 - **Data root:** `/secondary/hyst-data/datasets/finedance/data/finedance/` (`motion`, `music_wav`, `label_json`).
+
+## (i) Dated note 2026-11-13: reference frame of yaw and twist is the window start (changed before the scale step)
+
+Found while computing the scale, from joint angles only (nothing rendered or viewed). With the 5 s-of-sequence reference of (b), the pooled yaw of the dataset is the dancers' accumulated
+spin: sequences reach 1,000 to 10,000 deg unwrapped (real turning, not a flip: the torso forward vector stays horizontal, root up vector is +y), so the pooled p2-p98 of (c) became a half-span of
+4,356 deg and a scale of 0.04, a robot that barely turns. Change: **base yaw and wrist roll (twist) are measured relative to the frame at the start of the clip window** (for the scale pooling:
+relative to the start of every 20 s window, window starts every 5 s from 5 s on, 4,603 windows in 203 sequences, all frames of each window). Everything else in (b) and (c) is unchanged (mapping, centre, target half-spans, 80 %, +-180, +-150, `mid`, `s`).
+The sign, the unwrapping over the sequence and the pre-roll are unchanged; the pre-roll rows have negative window-relative time. Result in `docs/RETARGET_SCALE.json`: base yaw half-span of the pooled windows 776 deg (V1) and 774 deg (V2), so the base scale is 0.23: the robot turns a quarter
+as far as the dancer (heavy-tailed; a window with several spins is compressed). Accepted as the stated rule; reported, not tuned. Section (b)'s "reference frame" paragraph reads "window start" from here on.
