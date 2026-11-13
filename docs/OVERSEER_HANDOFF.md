@@ -94,7 +94,17 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## CURRENT STATE (2026-11-12 23:55; earlier '00:05' stamp was wrong) — read this block first
+## CURRENT STATE (2026-11-13 ~12:10) — read this block first
+
+**MOTORNET PARTS 1/2/4 DONE; WAITING FOR THE PLANNER.** Kosta labelled all 16 (session_2026-11-13, 11:51-11:56; "unsure of all the
+results, imperfect probably"). body-mnet + body-mnettool MERGED into body (f78a90a); report `docs/MOTORNET_REPORT.md` (body 77cc84c);
+overseer join answers x key 16/16 match, hand speed/height recomputed match. Session unit stopped. Brief
+`docs/PLANNER_BRIEF_MOTORNET_RESULTS.md` SENT (Q1 next step [rec (a) Part 3 when audio], Q2 low PR ~2 [rec keep for Part 3], Q3 record as
+7.46). Facts: Part 1 energetic 6 / tense 2 / light 2, no glitch labels; by mean hand speed: tense 0.25-0.32, light 0.34-0.39, energetic
+0.49-0.86 (no overlap, 10 clips); ball=lamp for S01/S02; Part 4 2/4 same as round 1. Part 3 still needs Kosta's audio + excerpt times.
+Builders idle. NEXT: planner answers -> BRAIN_SPEC 7.46 on body first.
+
+## STATE (2026-11-12 23:55)
 
 **DIAL STUDY CLOSED; WO29 MOTOR-NETWORK TOY TEST SENT.** Planner/Kosta answers recorded as **BRAIN_SPEC 7.44** (body d1795e4): dial study
 closed; new direction "lean more into the dynamic NN humanlike angle" (Stroud et al. 2018 gain modulation); toy test only, proposal NOT
