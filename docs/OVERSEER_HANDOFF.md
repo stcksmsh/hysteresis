@@ -94,7 +94,19 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-13 ~21:15 — newest, read first
+## UPDATE 2026-11-13 ~21:25 — newest, read first
+
+**Planner/Kosta = BRAIN_SPEC 7.54 (body 177ad2e):** Kosta watched the viewing video: human hand/spine do not jitter -> jitter is created by
+the retargeting. Q1 session HELD. Q2 (C04 offset check) + record stand. STEP A (end-point vs joint-angle smoothness), STEP B (V3 space
+retarget: V3a lamp follows right wrist rel. shoulder, V3b head rel. pelvis; uniform scale p98 reach -> 80 % arm reach; DLS IK with change
+penalty from stated rule; then H1 spinal -> limiter -> servo -> v2p -> gates 1.25), STEP C blind 6 pairs only after Kosta's go. Overseer
+defaults 7.54.8 (joints 21/15, origins 17/0, columns 0w/0r/1/1e, reach pooled 4,603 windows, centre = round-1 centre pose lamp, IK at 100 Hz,
+residual >2 cm count, Step C seed 32061 incl. C10 V3a and C04 V3b, V3 first 3/6).
+Prompt docs/BUILDER_PROMPT_WO35_SPACE_RETARGET.md (body 75ab635) SENT ~21:25 to agent 1 [0b1684] (branch body-v3). Overseer next: on STEP
+A READY check numbers (own FK of wrist/head on 2 clips); REVIEW rules note (m) the moment it is pushed (rules stated, nothing tuned by eye);
+on V3 READY recompute gates/measures from v3/work CSVs; then brief PLANNER_BRIEF_V3.md + tell Kosta numbers for his go on Step C.
+
+## UPDATE 2026-11-13 ~21:15
 
 VIEWING READY (body-viewing 4452518, merged into body) VERIFIED: jitter_viewing.mp4 1920x1080 30 fps h264+aac 40.0 s; music -12/-14 dB in
 the 1x parts, -91 dB (silent) in 0.5x; 4 labelled panels (stick figure, stage 1 kinematic, stage 4, H1); slices C05_V1 7.3-13.3 s (overseer
