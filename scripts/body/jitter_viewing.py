@@ -87,7 +87,7 @@ def stick_page(path, seq, var, start_s, a, label):
         rt = np.cross(fw, [0, 0, 1])
         rt /= np.linalg.norm(rt)
         up = np.cross(rt, fw)
-        pts = np.concatenate([W.reshape(-1, 3), np.array([[2, 2, 0], [-2, -2, 0], [2, -2, 0], [-2, 2, 0]], float)])
+        pts = np.concatenate([W.reshape(-1, 3), np.array([[1.2, 1.2, 0], [-1.2, -1.2, 0], [1.2, -1.2, 0], [-1.2, 1.2, 0]], float)])
         v = pts - eye
         dep = v @ fw
         sx, sy = 640 + (v @ rt) * 1800 / dep, 315 - (v @ up) * 1800 / dep
@@ -105,7 +105,7 @@ function pr(p){{const v=sub(p,eye),d=dot(v,fw),s=1800/Math.max(d,.1);return [640
 function pose(ts){{let i=0;while(i<T.length-2&&T[i+1]<ts)i++;const a=Math.min(1,Math.max(0,(ts-T[i])/(T[i+1]-T[i])));return P[i].map((p,j)=>p.map((v,k)=>v+(P[i+1][j][k]-v)*a));}}
 function draw(t){{
   const g=ctx.createLinearGradient(0,0,0,720);g.addColorStop(0,'#070b10');g.addColorStop(1,'#111b25');ctx.fillStyle=g;ctx.fillRect(0,0,1280,720);
-  const fl=[[-2,-2,0],[2,-2,0],[2,2,0],[-2,2,0]].map(pr);ctx.fillStyle='#16242d';ctx.beginPath();fl.forEach((q,i)=>i?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1]));ctx.closePath();ctx.fill();
+  const fl=[[-1.2,-1.2,0],[1.2,-1.2,0],[1.2,1.2,0],[-1.2,1.2,0]].map(pr);ctx.fillStyle='#16242d';ctx.beginPath();fl.forEach((q,i)=>i?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1]));ctx.closePath();ctx.fill();
   const J=pose(START+t);ctx.lineCap='round';
   const order=[...Array(22).keys()].slice(1).sort((a,b)=>pr(J[b])[2]-pr(J[a])[2]);
   for(const j of order){{const a=pr(J[PARENT[j]]),b=pr(J[j]);ctx.strokeStyle=GOLD.has(j)?'#efb869':'#aebcc4';ctx.lineWidth=GOLD.has(j)?9:6;ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke();}}
