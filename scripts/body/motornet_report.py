@@ -36,7 +36,31 @@ def values_text(v):
     return ", ".join(f"{x:.3g}" for x in v) if isinstance(v, (list, tuple)) else str(v)
 
 
-def report(session, measurements, round1=ROUND1):
+def replaced_section(manifest, sessions):
+    """Part 3 items' `replaced` field (one list per slot a, b): renders that failed the gates and were redrawn (7.46.7)."""
+    paths = [Path(manifest)] if manifest else sorted({sd.parent / "clips" / "manifest.json" for sd in sessions})
+    rows = []
+    for mp in paths:
+        if not mp.is_file():
+            continue
+        data = json.loads(mp.read_text())
+        for it in (data["clips"] if isinstance(data, dict) else data):
+            if it.get("part") != 3:
+                continue
+            for slot, fails in zip("ab", it.get("replaced") or []):
+                for f in fails:
+                    bad = [n for n, ok in (f.get("parts") or {}).items() if not ok]
+                    g = f.get("gates") or {}
+                    rows.append([it.get("song"), slot, f.get("setting"), ", ".join(bad) or "-",
+                                 f"contact_substeps {cell(g.get('contact_substeps'))}, accel_ratio {cell(g.get('accel_ratio'))}",
+                                 (it.get("setting") or [None, None])["ab".index(slot)]])
+    head = ["## Settings that failed the gates with music (replaced, 7.46.7)", ""]
+    if not rows:
+        return head + ["None.", ""]
+    return head + [table(["song", "slot", "failed setting", "failed gates", "values", "replacement"], rows), ""]
+
+
+def report(session, measurements, round1=ROUND1, manifest=None):
     sessions = [Path(x) for x in ([session] if isinstance(session, (str, Path)) else session)]
     session = sessions[0]
     key, ans = {}, {}
@@ -80,7 +104,7 @@ def report(session, measurements, round1=ROUND1):
                          f"first {cell(sp[0])}, second {cell(sp[1])}", k.get("arousal_raw"), k.get("arousal_std")])
         out += ["## Part 3: which render fits the music", "",
                 table(["song", "settings as shown", "pick", "chosen setting", "note", "mean hand speed (m/s)", "cortex arousal raw", "arousal standardised"], rows), ""]
-        out += ["## Part 3: which render fits the music", "", table(["song", "settings", "pick", "chosen setting", "note"], rows), ""]
+        out += replaced_section(manifest, sessions)
     else:
         out += ["## Part 3", "", "Not run (no pairs in this session).", ""]
 
@@ -102,10 +126,10 @@ def report(session, measurements, round1=ROUND1):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--session", required=True, action="append", help="repeatable: Parts 1/2/4 session and a Part 3 session"); ap.add_argument("--measurements", required=True); ap.add_argument("--round1", default=ROUND1)
+    ap.add_argument("--session", required=True, action="append", help="repeatable: Parts 1/2/4 session and a Part 3 session"); ap.add_argument("--measurements", required=True); ap.add_argument("--round1", default=ROUND1); ap.add_argument("--manifest", help="Part 3 manifest (default: <session>/../clips/manifest.json)")
     ap.add_argument("--out", default=str(Path(__file__).resolve().parents[2] / "docs" / "MOTORNET_REPORT.md"))
     a = ap.parse_args()
-    Path(a.out).write_text(report(a.session, a.measurements, a.round1) + "\n")
+    Path(a.out).write_text(report(a.session, a.measurements, a.round1, a.manifest) + "\n")
     print("wrote", a.out)
 
 
