@@ -1,5 +1,9 @@
 # Night log body-retarget (WO32B, WO32C)
 
+## WO32D step A: LIMITER FIXED (see the commit that carries this line; rules notes (k) and (l))
+
+A bug, not a measurement artefact: the command limiter clamps its target to the joint range with no braking for the edge and a stale velocity state (wind-up). Limiter output over the 290 candidate/variant pairs, gate measure: > 1.05 x the acceleration limit on 35 (shoulder 35: V1 8, V2 27; elbow 21, wrist bend 29; continuous joints 0); worst candidate 30 (V2) **3.20 x before, 1.000 x after**; after the fix **no joint exceeds 1.0 x on any of the 290**. Fix and test: `scripts/body/retarget_limiter.py`, `test_retarget_limiter.py` (4 tests, one fails on the round-1 limiter). Round-1 files untouched. Diagnostic: `retarget_limiter_diag.py`. Re-gate (tolerance 1.25, pick rule) follows.
+
 ## MORNING SUMMARY (WO32C)
 **CLIPS READY d0644f0** (code commit; this log is the next commit on `body-retarget`). Clips are not shown to the user; the overseer checks first.
 
