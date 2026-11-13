@@ -25,7 +25,7 @@ REACH_M = float(np.linalg.norm(sum(LINKS[1:], np.zeros(3)) + LINKS[0] - LINKS[0]
 FD_STEP = 1e-4                                                                                   # rad, forward-difference Jacobian
 
 # the numbers of rules note (m); set by `derive()` rules, written there, never tuned
-PARAMS = dict(lam2=None, mu=None, w_o=0.05, w_c=1.0, iters=None, first_frame_iters=50, proj_steps=10)
+PARAMS = dict(lam2=None, mu=None, w_o=0.05, w_c=1.0, iters=None, first_frame_iters=50, proj_steps=10, step_cap_rad=0.1)
 
 
 def rot(axis, ang):
@@ -48,11 +48,25 @@ def fk_batch(Q):
     return np.stack(pts, 1), B
 
 
+def signed_col_dist(p):
+    """signed distance of points (..., 3) to the solid column x, y in +-COL_HALF, z <= TOP: positive outside, negative inside (the penetration depth). The gate's `make_arm_v2p._col_dist` is 0 inside, which has
+    no gradient; the IK needs one to get out"""
+    d = np.stack([np.abs(p[..., 0]) - P.COL_HALF, np.abs(p[..., 1]) - P.COL_HALF, p[..., 2] - P.TOP], -1)
+    return np.linalg.norm(np.maximum(d, 0), axis=-1) + np.minimum(d.max(-1), 0)
+
+
+NEED = np.array([P.MARGIN, P.MARGIN, P.MARGIN, P.HAND_MARGIN])
+
+
 def col_rows(pts):
-    """column clearance violations (n, 4): p2, p3, p4 against 0.05 m, the hand against 0.11 m (metres inside the margin, 0 when clear)"""
-    d = P._col_dist(pts[:, 2:6])
-    need = np.array([P.MARGIN, P.MARGIN, P.MARGIN, P.HAND_MARGIN])
-    return np.maximum(0.0, need - d)
+    """column clearance violations (n, 4): p2, p3, p4 against 0.05 m, the hand against 0.11 m (metres inside the margin, 0 when clear), on the signed distance"""
+    return np.maximum(0.0, NEED - signed_col_dist(pts[:, 2:6]))
+
+
+def col_margin(Q):
+    """Q (n, 5) deg -> smallest signed margin (n,) over p2, p3, p4 and the hand (>= 0 clear): the gate's margins on the signed distance"""
+    pts, _ = fk_batch(Q)
+    return (signed_col_dist(pts[:, 2:6]) - NEED).min(1)
 
 
 def residual(Q, pt, Rt, w_o, w_c):
@@ -75,22 +89,30 @@ def solve_frame(q_prev, pt, Rt, iters, prm=PARAMS):
         J = (F[1:] - f0).T / FD_STEP                                                             # (9, 5), per radian
         A = J.T @ J + damp * np.eye(5)
         dq = np.linalg.solve(A, -J.T @ f0 - prm["mu"] * np.radians(q - q_prev))
+        nrm = np.linalg.norm(dq)
+        if nrm > prm["step_cap_rad"]:                                                           # trust region (rules (m): 2 x 1 cm / sigma_c)
+            dq *= prm["step_cap_rad"] / nrm
         q = np.clip(q + np.degrees(dq), LIM_LO, LIM_HI)
     return q
 
 
 def project_column(q, steps=10):
-    """if a column margin is still violated, move the joints along the margin's gradient until it is clear (at most `steps` Newton steps on the smallest margin)"""
+    """if a column margin is still violated, move the joints along the margin's gradient (Newton step on the smallest signed margin, at most `steps` steps) and return the best pose seen
+    (never worse than the input)"""
     h = np.degrees(FD_STEP)
+    best, best_m = q.copy(), float(col_margin(q[None])[0])
     for _ in range(steps):
-        m0 = float(P.margins(q[None])[0])
-        if m0 >= 0:
-            return q
-        g = np.array([(float(P.margins((q + h * np.eye(5)[j])[None])[0]) - m0) / FD_STEP for j in range(5)])
+        if best_m >= 0:
+            break
+        m0 = float(col_margin(q[None])[0])
+        g = np.array([(float(col_margin((q + h * np.eye(5)[j])[None])[0]) - m0) / FD_STEP for j in range(5)])
         if np.linalg.norm(g) < 1e-9:
-            return q
+            break
         q = np.clip(q + np.degrees(-m0 * g / (g @ g) * 1.05), LIM_LO, LIM_HI)
-    return q
+        m1 = float(col_margin(q[None])[0])
+        if m1 > best_m:
+            best, best_m = q.copy(), m1
+    return best
 
 
 def run_path(pts_t, R_t, q0=CENTRE_POSE, prm=PARAMS):
@@ -105,3 +127,14 @@ def run_path(pts_t, R_t, q0=CENTRE_POSE, prm=PARAMS):
         Q[i] = q
         err[i] = np.linalg.norm(fk_batch(q[None])[0][0, 5] - pts_t[i])
     return Q, err
+
+
+def load_params(path="/secondary/hyst-data/body/retarget_look/v3/ik_params.json"):
+    """fill PARAMS from the file written by v3_derive.py (the rules-note numbers)"""
+    import json
+    d = json.loads(Path(path).read_text())
+    PARAMS.update(lam2=d["lam2"], mu=d["mu"], w_o=d["w_o"], w_c=d["w_c"], iters=d["iters"], step_cap_rad=d.get("step_cap_rad", PARAMS["step_cap_rad"]))
+    return PARAMS
+
+
+load_params()

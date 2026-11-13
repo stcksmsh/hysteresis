@@ -4,6 +4,7 @@ Rules:
             (undamped) solution in the weakest direction there: sigma^2 / (sigma^2 + d) >= 0.9.
   lam    = 1 % of the arm's reach (0.0069), the DLS damping that keeps the solve stable near singular poses; lam^2 = (0.01 * 0.69)^2.
   mu     = d_total - lam^2 (the per-frame joint-change penalty takes the rest of d_total, so a stationary target, whose previous solution is already the minimiser, gives zero motion).
+  step cap = 2 x (1 cm / sigma_c) rad per iteration = 0.35 rad (a trust region that never binds on a 1 cm step in the weakest direction, where the exact joint move is 1 cm / sigma_c = 0.18 rad).
   w_o    = 0.05 m/rad: a 1 rad orientation error costs as much as a 5 cm position error (position first).   w_c = 1: a column violation of d metres costs as a d metre position error.
   N      = the smallest iteration count for which, on 1,000 random target steps of 1 cm and of 5 cm (5 cm = the largest per-frame end-point step expected: a hand at 5 m/s at 100 Hz; only the steps whose target lies inside the arm's reach, 0.66 m from the shoulder, since beyond it the optimum is a singular full extension where convergence is slow by nature) from the centre pose
            (warm start = centre pose), the end point after N iterations is within 1 mm of the end point after 50 iterations. (The 1 cm probe alone gave N = 1; the 5 cm probe was added before any clip was run.)
@@ -33,7 +34,8 @@ def derive():
     lam2 = (0.01 * K.REACH_M) ** 2
     mu = d_total - lam2
     assert mu > 0
-    prm = dict(K.PARAMS, lam2=lam2, mu=mu)
+    cap = 2 * 0.01 / sigma_c
+    prm = dict(K.PARAMS, lam2=lam2, mu=mu, step_cap_rad=cap)
     rng = np.random.default_rng(35001)
     p0 = K.fk_batch(q0[None])[0][0, 5]
     R0 = K.fk_batch(q0[None])[1][0]
@@ -65,7 +67,7 @@ def derive():
     maxdiff = {n: float(np.max(v)) for n, v in diffs.items()}
     maxdiff5 = {n: float(np.max(v)) for n, v in diffs5.items()}
     N = next(n for n in range(1, 11) if maxdiff[n] < 1e-3 and maxdiff5[n] < 1e-3)
-    out = dict(sigma_singular_values_centre_pose=sig.tolist(), sigma_c=sigma_c, d_total=d_total, lam=0.01 * K.REACH_M, lam2=lam2, mu=mu, w_o=0.05, w_c=1.0, iters=N, reach_m=K.REACH_M, probes_5cm_reachable=n5,
+    out = dict(sigma_singular_values_centre_pose=sig.tolist(), sigma_c=sigma_c, d_total=d_total, lam=0.01 * K.REACH_M, lam2=lam2, mu=mu, w_o=0.05, w_c=1.0, step_cap_rad=cap, iters=N, reach_m=K.REACH_M, probes_5cm_reachable=n5,
                probe_max_endpoint_diff_to_50_iterations_m_1cm=maxdiff, probe_max_endpoint_diff_to_50_iterations_m_5cm=maxdiff5, one_iteration_response_fraction_min_median=[float(np.min(frac)), float(np.median(frac))])
     return out
 
