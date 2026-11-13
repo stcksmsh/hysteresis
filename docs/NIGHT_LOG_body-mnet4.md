@@ -48,3 +48,11 @@ Round-1 S03 reference at 30 s per song: all 5 pass the gates (none dropped).
 Files: scripts `motornet2.py`, `motornet2_fit.py`, `motornet2_lanes.py`, `motornet2_energy.py`, `motornet2_run.py`, `motornet2_job.sh`, `motornet2_render.sh`. Data `/secondary/hyst-data/body/motornet_toy2/` (clips/, manifest.json in clips/, settings.json, numbers.json, work/, lanes/, motornet2_fit.json). No audio in git. FOR USER: none.
 
 CLIPS READY cd617f2
+
+## Manifest fix (overseer request)
+
+`clips/manifest.json` rewritten for 30A's session tool (script `scripts/body/motornet2_manifest_fix.py`; the per-clip file is kept as `clips/manifest_perclip.json`). Part A: 8 items with `file` (string) and `population`. Part B: 5 pair items B1-B5 in the 7.46.4 song order with `files`, `setting` [new, "R1_S03"], `csv`, `activity`, `population` [[100 zeros then 100 ones], [200 zeros]], `song`, `excerpt_start_s`, `ear_energy` (mean raw ear energy over the 30 s), `arousal_raw`, `arousal_std` (mean standardised input), plus `hand_speed` [new, S03] and `gates`. Round-1 S03 is one population of 200, so its population is all zeros. No clip, setting or number changed.
+Throwaway session built (not served) with `dialstudy_session.py --clips <manifest> --seed 1` after merging origin/body-mnettool4: 13 items = 8 single + 5 pair; deleted.
+FOR USER: `motornet_measure.py --round2` does NOT handle the list-of-lists population of the pairs (it does `np.asarray(pop) == 0` on a 2 x 200 array and uses it as a column mask, which fails or mis-selects). Not edited (30A's code). It works if run on `manifest_perclip.json`-style per-clip entries, or after a per-element fix in 30A's code.
+
+MANIFEST FIXED
