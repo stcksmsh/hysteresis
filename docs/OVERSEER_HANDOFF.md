@@ -94,7 +94,18 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-13 20:30 — newest, read first
+## UPDATE 2026-11-13 ~20:45 — newest, read first
+
+**Planner answered = BRAIN_SPEC 7.53 (body 2d5ab1f):** results recorded (no "no"; C04_V2 first clip above v47; imitation works in principle);
+next problem = Kosta's "micro-movements, too frequent changes of direction, robotic unhuman stuff"; keep V1 + V2; energy/timing -> step 3;
+JITTER DIAGNOSIS report-only on the 20 clips: stages 30 fps / 100 Hz / limiter / realised; H1 spinal before limiter, H2 limiter chatter, H3
+resampling, H1+H3; then STOP, Kosta rules; afterwards blind re-look 4-6 clips incl. C04_V2 + C10_V1, old vs fixed pairs. Overseer note 7.53.8:
+H3 premise FALSE (to_100hz is already CubicSpline) -> H3 = stage 2 vs 1 + linear control. Mention to the planner in the next brief.
+Prompt docs/BUILDER_PROMPT_WO33_JITTER_DIAGNOSIS.md (body 31fff7d) SENT ~20:45 to agent 1 [0b1684] (branch body-jitter; notify_when_idle).
+Overseer on JITTER READY: baseline reproduction diff, own recompute of the stage-4 measures from work CSVs (overseer_retarget_check.py-style
+code), spot-check H1 with own code, read the report, plots; then brief PLANNER_BRIEF_JITTER.md.
+
+## UPDATE 2026-11-13 20:30
 
 **LOOK TEST DONE; WAITING FOR THE PLANNER on `docs/PLANNER_BRIEF_RETARGET_RESULTS.md` (body).** Kosta answered 27/27. Singles V1 yes 4 /
 sort of 6 / no 0; V2 2/8/0; S03 refs 0/2/0. Pairs V1 3, V2 2. C04_V2 "best one so far, even better than v47". Notes: jitter/micro-movements
