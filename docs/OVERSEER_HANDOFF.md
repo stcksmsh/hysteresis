@@ -94,7 +94,15 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-13 ~21:10 (clock) — newest, read first
+## UPDATE 2026-11-13 ~21:15 (clock) — newest, read first
+
+V3 READY 27e482d (body-v3) VERIFIED (realised medians recomputed equal; stop frames counted) and MERGED into body (report-only code, V1/V2
+paths untouched). Brief docs/PLANNER_BRIEF_V3.md SENT: Step A human end point 3-5x less >3 Hz power than retargeted angles; Q2 gravity sag;
+V3 0/20 (V3b shoulder at -110 stop, V3a column/end stops); IK output itself noisy (9.5-14.3 changes/s); realised V3 ~= V1/V2 + H1. Qs: Q1 (a)
+low-pass stage-1 angles to human end-point smoothness by rule, keep H1, then held re-look [rec] / (b) V3 round 2 / (c) both; Q2 merge V3 as
+report-only [rec]; Q3 confirm 7.54.9; Q4 record 7.55. Step C not run. Builders idle.
+
+## UPDATE 2026-11-13 ~21:10 (clock)
 
 V3 Step B run DONE (hyst-wo35-run, 21:04): 0/20 pass gates at 1.25. V3b all 10 fail 'endstop' only (shoulder pinned at -110: C01 585/1001
 frames >=105 deg; head 0.54 m above p1 -> arm straight up). V3a all fail contact+endstop+limits (7 also clearance): elbow/wrist at +-110,
