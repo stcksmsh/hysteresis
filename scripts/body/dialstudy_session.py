@@ -25,12 +25,16 @@ PAIR_LABELS = ["first", "second", "neither"]
 FIELDS = ["code", "answer", "note", "timestamp", "replays"]
 
 
-def build(manifest_path, out, seed=None):
+def build(manifest_path, out, seed=None, parts=None):
     manifest_path, out = Path(manifest_path), Path(out)
     if (out / "order.json").exists():
         raise SystemExit(f"{out} already holds a session")
     data = json.loads(manifest_path.read_text())
     clips = data["clips"] if isinstance(data, dict) else data
+    if parts:
+        clips = [c for c in clips if c.get("part") in parts]
+        if not clips:
+            raise SystemExit(f"no manifest items with part in {sorted(parts)}")
     v2 = any("part" in c for c in clips)
     seed = secrets.randbits(32) if seed is None else int(seed)
     rng = random.Random(seed)
@@ -57,16 +61,18 @@ def build(manifest_path, out, seed=None):
 
     items, key = [], {}
     for clip in clips:
-        meta = {k: clip.get(k) for k in ("id", "set", "intent", "effector", "dials", "part", "setting", "round1_id", "song")}
+        meta = {k: clip.get(k) for k in ("id", "set", "intent", "effector", "dials", "part", "setting", "round1_id", "song", "excerpt_start_s", "arousal_raw", "arousal_std")}
         if clip.get("set") == "D" or clip.get("files"):
             first, second = list(clip["files"])
             sets = list(clip.get("setting") or [None, None])
+            speeds = list(clip.get("hand_speed") or [None, None])
             if rng.random() < 0.5:
                 first, second = second, first
-                sets.reverse()
+                sets.reverse(); speeds.reverse()
             codes = [place(first), place(second)]
             item = {"code": code(), "kind": "pair", "clips": codes}
-            key[item["code"]] = {**meta, "first": first, "second": second, "first_setting": sets[0], "second_setting": sets[1]}
+            key[item["code"]] = {**meta, "first": first, "second": second, "first_setting": sets[0], "second_setting": sets[1],
+                         "first_hand_speed": speeds[0], "second_hand_speed": speeds[1]}
         else:
             c = place(clip.get("file") or clip["round1_file"])
             item = {"code": c, "kind": "single", "clips": [c]}
@@ -221,7 +227,7 @@ def make_server(out, port=8765):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--clips"); ap.add_argument("--out"); ap.add_argument("--seed")
+    ap.add_argument("--clips"); ap.add_argument("--out"); ap.add_argument("--seed"); ap.add_argument("--parts", help="comma list, e.g. 3: build only manifest items of these parts")
     ap.add_argument("--serve", action="store_true"); ap.add_argument("--port", type=int, default=8765)
     a = ap.parse_args()
     if a.clips and not a.out:
@@ -229,7 +235,7 @@ def main():
     if not a.out:
         ap.error("--out is required to serve")
     if a.clips:
-        build(a.clips, a.out, a.seed)
+        build(a.clips, a.out, a.seed, {int(x) for x in a.parts.split(",")} if a.parts else None)
     if a.serve or not a.clips:
         srv = make_server(a.out, a.port)
         print(f"open http://127.0.0.1:{srv.server_address[1]}/  (Ctrl-C to stop; answers are saved at once)")
