@@ -52,6 +52,20 @@ class Look(unittest.TestCase):
         a = self.root / "a"; ses.build(self.manifest, a, seed=7)
         self.assertEqual((a / "order.json").read_text(), (self.root / "s7" / "order.json").read_text())
 
+    def test_look_pairs_answer_first_second_same(self):
+        out = self.root / "p"; ses.build(self.manifest, out, seed=3)
+        self.assertEqual(json.loads((out / "pair_labels.json").read_text()), ["first", "second", "same"])
+        srv = ses.make_server(out, 0)
+        threading.Thread(target=srv.serve_forever, daemon=True).start(); self.addCleanup(srv.shutdown)
+        base = f"http://127.0.0.1:{srv.server_address[1]}"
+        self.assertEqual(json.loads(urllib.request.urlopen(base + "/api/state").read())["pairLabels"], ["first", "second", "same"])
+        sess = ses.Session(out)
+        pair = next(i for i in sess.items if i["kind"] == "pair")
+        self.assertEqual(sess.answer({"code": pair["code"], "answer": "neither"}), 400)
+        self.assertEqual(sess.answer({"code": pair["code"], "answer": "same"}), 200)
+        single = next(i for i in sess.items if i["kind"] == "single")
+        self.assertEqual(sess.answer({"code": single["code"], "answer": "same"}), 400)
+
     def test_serve_answers_and_hidden_key(self):
         out = self.root / "s"; ses.build(self.manifest, out, seed=1)
         srv = ses.make_server(out, 0)

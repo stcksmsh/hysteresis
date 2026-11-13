@@ -24,6 +24,7 @@ LABELS2 = ["calm", "sad", "tense", "energetic", "light", "nothing, glitching", "
 LOOK_LABELS = ["yes", "sort of", "no"]  # WO32A, retarget look test (manifest items with kind "single" / "pair")
 LOOK_Q = {"single": "Does this look like dancing?", "pair": "Which looks more like a person dancing?"}
 PAIR_LABELS = ["first", "second", "neither"]
+LOOK_PAIR_LABELS = ["first", "second", "same"]  # WO36: look-test pairs (kind "pair" manifests) answer first / second / same; every other mode keeps "neither"
 FIELDS = ["code", "answer", "note", "timestamp", "replays"]
 
 
@@ -88,6 +89,8 @@ def build(manifest_path, out, seed=None, parts=None):
     (out / "key" / "key.json").write_text(json.dumps({"seed": seed, "key": key}, indent=1))
     (out / "order.json").write_text(json.dumps(items))
     (out / "labels.json").write_text(json.dumps(LOOK_LABELS if look else LABELS2 if v2 else LABELS))
+    if look:
+        (out / "pair_labels.json").write_text(json.dumps(LOOK_PAIR_LABELS))
     (out / "answers.csv").write_text("")
     print(f"session built: {len(items)} items, seed {seed}, in {out}")
 
@@ -100,6 +103,8 @@ class Session:
         self.path = self.out / "answers.csv"
         lf = self.out / "labels.json"
         self.labels = json.loads(lf.read_text()) if lf.is_file() else LABELS
+        pf = self.out / "pair_labels.json"
+        self.pair_labels = json.loads(pf.read_text()) if pf.is_file() else PAIR_LABELS
         self.path.touch()
 
     def answered(self):
@@ -110,13 +115,13 @@ class Session:
         done = self.answered()
         todo = [i for i in self.items if i["code"] not in done]
         return {"total": len(self.items), "done": len(self.items) - len(todo), "item": (todo[0] if todo else None),
-                "labels": self.labels, "pairLabels": PAIR_LABELS}
+                "labels": self.labels, "pairLabels": self.pair_labels}
 
     def answer(self, body):
         code, ans, note = body.get("code"), body.get("answer"), str(body.get("note", ""))[:2000]
         with self.lock:
             item = next((i for i in self.items if i["code"] == code), None)
-            allowed = PAIR_LABELS if item and item["kind"] == "pair" else self.labels
+            allowed = self.pair_labels if item and item["kind"] == "pair" else self.labels
             if item is None or ans not in allowed:
                 return 400
             if code in self.answered():
