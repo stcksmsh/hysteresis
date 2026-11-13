@@ -21,4 +21,4 @@ values reproduce 29C's manifest values (0.485 / -0.227, 1.405 / 0.659, ...). Ins
 axis, column 2; take stopped at about 329 s), marked TRY1 everywhere. Check songs: features from the full mp3, lanes from round 1's `work3`.
 Taps: not correlated (none recorded in dial2). No verdict.
 
-COMPARISON READY
+COMPARISON READY 1c59ea3
