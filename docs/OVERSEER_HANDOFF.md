@@ -94,7 +94,17 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-13 ~15:45 — newest, read first
+## UPDATE 2026-11-13 20:30 — newest, read first
+
+**LOOK TEST DONE; WAITING FOR THE PLANNER on `docs/PLANNER_BRIEF_RETARGET_RESULTS.md` (body).** Kosta answered 27/27. Singles V1 yes 4 /
+sort of 6 / no 0; V2 2/8/0; S03 refs 0/2/0. Pairs V1 3, V2 2. C04_V2 "best one so far, even better than v47". Notes: jitter/micro-movements
+12/27, aggressive flicks 10, energy wrong for song 4, timing 5, C03_V1 too low. Overseer numbers: acc sign changes 2-8/s retarget vs ~1/s S03;
+>3 Hz speed power 0.4-10 % vs 0.1-0.2 %; speed saturation does not track the jitter notes. Report docs/RETARGET_REPORT.md (body d683cf6, incl.
+overseer table). body-retarget + body-data MERGED into body (527fd83), keys-decide has body. Session unit stopped. Brief Qs: Q1 (a) jitter
+diagnosis report-only first [rec] / (b) go to training / (c) fixed filter; Q2 V1/V2 keep both [rec]; Q3 energy/timing/height record only; Q4
+record 7.53. FIRST ACTION on the answer: BRAIN_SPEC 7.53 on body. Builders idle.
+
+## UPDATE 2026-11-13 ~15:45
 
 **Planner answered = BRAIN_SPEC 7.52 (body 7c18503):** Q3 first (agent 1 explains the limiter's own shoulder overshoot; bug -> fix + record,
 not a bug -> report + HOLD); Q1 (a) speed/acc tolerance 1.25, look-test exception only (not a hardware margin); Q2 max 1 window per sequence,
