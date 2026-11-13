@@ -115,6 +115,11 @@ v2p_1.25_aborted/, restart as hyst-wo32d-clips2. FOR USER note: S03 reference no
 On restart: verify the commit, then that clips.log has no empty-parts FAIL lines.
 **15:52:** verdict fix a831803 accepted (passed = all(parts)). But hyst-wo32d-clips2 CRASHED at start (NameError 'human' in sim_variant,
 line 110), 0 candidates. Sent back: fix, gate test + 2-candidate dry run, read log 1 min after start, restart as hyst-wo32d-clips3.
+**15:55:** 0be1f71 (human() restored + smoke test). Gating at 1.25 DONE (ran outside a hyst-wo32d unit): 27 candidates, pass V1 14, V2 16,
+both 11, 1 skipped (kun 028 again). Picks: kun 028, urban 204, korean 206, dunhuang 021, miao 136, hantang 044, dunhuang 051, jazz 125,
+dai 045, breaking 054 = 10 distinct seqs, max 2/genre; no empty-parts FAIL lines. Discards V1 limits 12, endstop 2; V2 limits 8, endstop 7,
+contact/guard/clearance 1 each. hyst-wo32d-render running. Next on CLIPS READY: own gate recompute at 1.25 on CSVs, S03 ref status,
+shoulder table vs CSVs, pair order 2-3, audio alignment, frames -> session.
 
 ## CURRENT STATE (2026-11-13 15:26, saved for a clear) — superseded by the update above
 
