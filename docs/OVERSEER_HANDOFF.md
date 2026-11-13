@@ -102,7 +102,8 @@ overseer join answers x key 16/16 match, hand speed/height recomputed match. Ses
 `docs/PLANNER_BRIEF_MOTORNET_RESULTS.md` SENT (Q1 next step [rec (a) Part 3 when audio], Q2 low PR ~2 [rec keep for Part 3], Q3 record as
 7.46). Facts: Part 1 energetic 6 / tense 2 / light 2, no glitch labels; by mean hand speed: tense 0.25-0.32, light 0.34-0.39, energetic
 0.49-0.86 (no overlap, 10 clips); ball=lamp for S01/S02; Part 4 2/4 same as round 1. Part 3 still needs Kosta's audio + excerpt times.
-Builders idle. NEXT: planner answers -> BRAIN_SPEC 7.46 on body first.
+Builders idle.
+**12:20:** planner answered = **BRAIN_SPEC 7.46** (body ec64f85): Part 3 GO, network unchanged, extra numbers per pair (hand speed both renders, arousal raw+std). Kosta excerpt times: Blue Lagoon 0:20, Schizoid 0:58, Epitaph 5:45?, Breathe 1:17?, OOTD 3:57? (used as given). Audio present (5 mp3, 48 kHz). Builders OFFLINE (ListAgents: agent 1 [2145a7], agent 2 [9c1f10] offline) -> prompts `docs/BUILDER_PROMPT_WO29C_MOTORNET_MUSIC.md` (branch body-mnet3, cores 6-11) and `docs/BUILDER_PROMPT_WO29D_MOTORNET_TOOL3.md` (body-mnettool3, cores 12-17) given to the user to paste. Pick 29031 from shown S01-S10. On PART3 READY: gates recompute (overseer_mnet_check2.py on P3 CSVs), frames, audio window check (ffprobe, 12 s, aac), then session with --parts 3, report combined, brief.
 
 ## STATE (2026-11-12 23:55)
 
