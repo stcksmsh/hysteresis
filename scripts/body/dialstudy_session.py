@@ -21,6 +21,8 @@ from pathlib import Path
 
 LABELS = ["tense", "heavy", "calm", "angry", "light", "nothing, glitching", "something, can't name it"]
 LABELS2 = ["calm", "sad", "tense", "energetic", "light", "nothing, glitching", "something, can't name it"]  # WO29B, motor-network manifests
+LOOK_LABELS = ["yes", "sort of", "no"]  # WO32A, retarget look test (manifest items with kind "single" / "pair")
+LOOK_Q = {"single": "Does this look like dancing?", "pair": "Which looks more like a person dancing?"}
 PAIR_LABELS = ["first", "second", "neither"]
 FIELDS = ["code", "answer", "note", "timestamp", "replays"]
 
@@ -35,7 +37,8 @@ def build(manifest_path, out, seed=None, parts=None):
         clips = [c for c in clips if c.get("part") in parts]
         if not clips:
             raise SystemExit(f"no manifest items with part in {sorted(parts)}")
-    v2 = any("part" in c for c in clips)
+    look = any(c.get("kind") in ("single", "pair") for c in clips)
+    v2 = any("part" in c for c in clips) and not look
     seed = secrets.randbits(32) if seed is None else int(seed)
     rng = random.Random(seed)
     (out / "clips").mkdir(parents=True)
@@ -61,29 +64,30 @@ def build(manifest_path, out, seed=None, parts=None):
 
     items, key = [], {}
     for clip in clips:
-        meta = {k: clip.get(k) for k in ("id", "set", "intent", "effector", "dials", "part", "setting", "round1_id", "song", "excerpt_start_s", "arousal_raw", "arousal_std", "ear_energy")}
+        meta = {k: clip.get(k) for k in ("id", "set", "intent", "effector", "dials", "part", "setting", "round1_id", "song", "excerpt_start_s", "arousal_raw", "arousal_std", "ear_energy",
+                                                                       "kind", "variant", "variants", "clip", "genre", "source_seq", "window_start_s", "csv", "music_credit")}
         if not (clip.get("set") == "D" or clip.get("files")):
             meta["file"] = clip.get("file") or clip.get("round1_file")
         if clip.get("set") == "D" or clip.get("files"):
             first, second = list(clip["files"])
             sets = list(clip.get("setting") or [None, None])
             speeds = list(clip.get("hand_speed") or [None, None])
-            if rng.random() < 0.5:
+            if not look and rng.random() < 0.5:  # a look-test manifest fixes the pair order (balanced by its builder): never reshuffled
                 first, second = second, first
                 sets.reverse(); speeds.reverse()
             codes = [place(first), place(second)]
-            item = {"code": code(), "kind": "pair", "clips": codes}
+            item = {"code": code(), "kind": "pair", "clips": codes, **({"q": LOOK_Q["pair"]} if look else {})}
             key[item["code"]] = {**meta, "first": first, "second": second, "first_setting": sets[0], "second_setting": sets[1],
                          "first_hand_speed": speeds[0], "second_hand_speed": speeds[1]}
         else:
             c = place(clip.get("file") or clip["round1_file"])
-            item = {"code": c, "kind": "single", "clips": [c]}
+            item = {"code": c, "kind": "single", "clips": [c], **({"q": LOOK_Q["single"]} if look else {})}
             key[c] = meta
         items.append(item)
     rng.shuffle(items)
     (out / "key" / "key.json").write_text(json.dumps({"seed": seed, "key": key}, indent=1))
     (out / "order.json").write_text(json.dumps(items))
-    (out / "labels.json").write_text(json.dumps(LABELS2 if v2 else LABELS))
+    (out / "labels.json").write_text(json.dumps(LOOK_LABELS if look else LABELS2 if v2 else LABELS))
     (out / "answers.csv").write_text("")
     print(f"session built: {len(items)} items, seed {seed}, in {out}")
 
@@ -149,7 +153,8 @@ async function load() {
   show(0);
   const labels = it.kind === 'pair' ? st.pairLabels : st.labels;
   $('buttons').innerHTML = '';
-  if (it.kind === 'pair') { $('bar').textContent += ' (two clips: which one fits the music?)'; }
+  if (it.kind === 'pair') { $('bar').textContent += ' (two clips: ' + (it.q || 'which one fits the music?') + ')'; }
+  else if (it.q) { $('bar').textContent += ' - ' + it.q; }
   const replay = document.createElement('button'); replay.textContent = it.kind === 'pair' ? 'play again from first' : 'replay';
   replay.onclick = () => { replays++; show(0); }; $('buttons').appendChild(replay);
   if (it.kind === 'pair') { const other = document.createElement('button'); other.textContent = 'show the other'; other.onclick = () => { replays++; show(which ? 0 : 1); }; $('buttons').appendChild(other); }
