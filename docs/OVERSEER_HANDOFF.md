@@ -102,7 +102,7 @@ OOTD neither, Schizoid neither; notes: loops, fixed facing, little base/shoulder
 Report script prints Part 3 twice + lacks replaced list -> fix sent to agent 2 [892bfc] (branch body-mnetfix, "FIX READY"); verify, merge,
 then commit regenerated docs/MOTORNET_REPORT.md. Brief `docs/PLANNER_BRIEF_MOTORNET_PART3.md` SENT (Q1 next step [rec (a) close toy,
 richer dynamics round 2 specified by planner], Q2 arousal vs Kosta [rec report-only vs dial recordings], Q3 record 7.47). Session unit
-stopped. Agent 1 [0b1684] idle. NEXT: planner answers -> BRAIN_SPEC 7.47 on body first.
+stopped. Agent 1 [0b1684] idle. **12:55:** report fix body-mnetfix 1df9ada VERIFIED (Part 3 once, replaced list matches, tests 12+5 OK) and MERGED into body; agent 2 idle. NEXT: planner answers -> BRAIN_SPEC 7.47 on body first.
 
 ## STATE (2026-11-13 ~12:10)
 
