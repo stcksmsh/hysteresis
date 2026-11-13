@@ -89,3 +89,19 @@ Measures: acceleration sign changes per second (second difference at 30 fps; ang
 | C09_V2 | 9.42 / 0.034 | 10.22 / 0.078 | 10.28 / 0.171 | 10.72 / 0.174 |
 | C10_V1 | 6.80 / 0.033 | 5.68 / 0.047 | 8.45 / 0.275 | 9.86 / 0.254 |
 | C10_V2 | 10.97 / 0.057 | 12.47 / 0.092 | 11.55 / 0.158 | 12.19 / 0.299 |
+
+## Q2. C04_V2 shoulder offset (seconds 8-12), report only
+
+Script `scripts/body/v3_q2.py`; data `/secondary/hyst-data/body/retarget_look/v3/q2.json`. The shown clip was rebuilt and matches `work/C04_V2.csv` to 5e-07 deg, then the same clip was re-simulated with bookkeeping.
+
+| check | result |
+|---|---|
+| command vs limiter output (shoulder, window mean) | -40.64 vs -40.69 deg: mean difference -0.05 deg, largest 2.8 deg (the limiter is not the source) |
+| realised vs command (window) | realised mean -35.85 vs command -40.64: **realised is +4.8 deg higher (less negative = the upper arm sags toward the horizontal)**, range -4.4 to +12.4 deg across the window, +4.9 deg mean over the whole clip |
+| gravity switched off, same clip | realised minus command in the window **+0.10 deg** mean (whole clip -0.09 deg); the offset disappears |
+| static servo model | gravity torque on the shoulder at the window's mean pose -1.55 N m (MuJoCo `qfrc_bias`), servo stiffness kp = 16.86 N m/rad (stall torque 2.94 N m at 10 deg error) -> -1.55 / 16.86 = **5.3 deg of sag** (measured mean 4.8 deg); in the window the gravity torque on the shoulder is -1.14 to -1.58 N m, i.e. 39-54 % of the stall torque |
+| guard | 0 frames held in the whole clip |
+| end stops | the shoulder stays between -48.3 and -28.0 deg (range +-110): 61.7 deg from the nearest limit |
+| column / floor contact | no contact of any geom pair in the whole clip |
+
+**Cause: gravity sag of the position servo model** (a proportional servo holding a load needs an error of torque / kp). The realised minus command spread (-4.4 to +12.4 deg) follows the pose-dependent gravity torque and the dynamics; the "about 10 deg" read from the plot was the upper part of that spread (mean 4.8 deg). Not the limiter, the guard, the end stops or the column.
