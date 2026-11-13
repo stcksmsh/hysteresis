@@ -28,7 +28,8 @@ def fake(root, r1dir, with_pairs=True):
         for i, s in enumerate(SONGS):
             for n in "ab":
                 (root / f"m{i}{n}.mp4").write_bytes(b"m%d%s" % (i, n.encode()) * 40)
-            clips.append(dict(id=f"P3_{s}", part=3, files=[f"m{i}a.mp4", f"m{i}b.mp4"], setting=[f"S0{i + 1}", f"S1{i}"], song=s))
+            clips.append(dict(id=f"P3_{s}", part=3, files=[f"m{i}a.mp4", f"m{i}b.mp4"], setting=[f"S0{i + 1}", f"S1{i}"], song=s,
+                              hand_speed=[0.11 + i, 0.22 + i], arousal_raw=0.4 + i / 100, arousal_std=1.5 + i))
     (root / "manifest.json").write_text(json.dumps({"clips": clips}))
     return root / "manifest.json"
 
@@ -71,6 +72,26 @@ class Session(unittest.TestCase):
         self.assertTrue(one["round1_id"].startswith("A_old"))
         pair = next(v for v in k["key"].values() if v["part"] == 3)
         self.assertEqual(sorted([pair["first_setting"], pair["second_setting"]]), sorted(pair["setting"]))
+
+    def test_parts3_only_pairs_key_404(self):
+        out = self.root / "p3"
+        ses.build(self.manifest, out, seed=3, parts={3})
+        order = json.loads((out / "order.json").read_text())
+        self.assertEqual(len(order), 5)
+        self.assertTrue(all(i["kind"] == "pair" for i in order))
+        self.assertEqual(len(list((out / "clips").iterdir())), 10)
+        key = json.loads((out / "key/key.json").read_text())["key"]
+        self.assertEqual({k["part"] for k in key.values()}, {3})
+        k = next(iter(key.values()))
+        self.assertEqual([round(x, 6) for x in sorted([k["first_hand_speed"], k["second_hand_speed"]])], sorted(
+            [round(0.11 + int(k["setting"][0][-1]) - 1, 6), round(0.22 + int(k["setting"][0][-1]) - 1, 6)]))
+        base = self.serve(out)
+        for path in ("/key/key.json", "/order.json"):
+            with self.assertRaises(urllib.error.HTTPError) as e:
+                get(base + path)
+            self.assertEqual(e.exception.code, 404)
+        with self.assertRaises(SystemExit):
+            ses.build(self.manifest, self.root / "none", seed=1, parts={9})
 
     def test_key_and_answers_404_page_offline(self):
         out = self.root / "s"; ses.build(self.manifest, out, seed=1)
@@ -197,6 +218,28 @@ class Report(unittest.TestCase):
             self.assertIn("(not answered)", text)
             for w in ("worth building", "viable", "score ", "correct", "pass"):
                 self.assertNotIn(w, text.replace("No verdict and no score", ""))
+
+    def test_combined_sessions_part3_columns(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d); (d / "r1").mkdir()
+            man = fake(d, d / "r1")
+            a, b = d / "sa", d / "sb"
+            ses.build(man, a, seed=4, parts={1, 2, 4}); ses.build(man, b, seed=9, parts={3})
+            ka = json.loads((a / "key/key.json").read_text())["key"]
+            kb = json.loads((b / "key/key.json").read_text())["key"]
+            ca = next(c for c, k in ka.items() if k["id"] == "P1_S01")
+            cb = next(c for c, k in kb.items() if k["song"] == "Days")
+            (a / "answers.csv").write_text(f"{ca},calm,,t,0\n")
+            (b / "answers.csv").write_text(f"{cb},first,,t,0\n")
+            meas = d / "m.json"; meas.write_text(json.dumps({"S01": dict(pr=2.0, regime="cycles")}))
+            text = rep.report([a, b], meas, d / "none")
+            self.assertIn("| S01 | ", text); self.assertIn("calm", text)
+            k = kb[cb]
+            self.assertIn(f"| Days | first {k['first_setting']}, second {k['second_setting']} | first | {k['first_setting']} |", text)
+            self.assertIn(f"first {k['first_hand_speed']:.3g}, second {k['second_hand_speed']:.3g}", text)
+            self.assertIn("| 0.42 | 3.5 |", text)  # arousal raw / standardised of Days (i=2)
+            self.assertEqual(text.count("(not answered)"), text.count("(not answered)"))
+            self.assertNotIn("Not run", text)
 
 
 if __name__ == "__main__":

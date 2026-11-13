@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Join a motor-network session's answers with its key and the measurements into docs/MOTORNET_REPORT.md (WO29B).
 
-  motornet_report.py --session SESSION_DIR --measurements measurements.json [--round1 ROUND1_SESSION_DIR] [--out docs/MOTORNET_REPORT.md]
+  motornet_report.py --session SESSION_DIR [--session PART3_SESSION_DIR ...] --measurements measurements.json [--round1 ROUND1_SESSION_DIR] [--out docs/MOTORNET_REPORT.md]
 
 Tables only. No verdict, no score, no counts of correct answers. The setting values are read from settings.json next to the
 clips folder (SESSION_DIR/../settings.json) when it exists.
@@ -37,9 +37,12 @@ def values_text(v):
 
 
 def report(session, measurements, round1=ROUND1):
-    session = Path(session)
-    key = json.loads((session / "key" / "key.json").read_text())["key"]
-    ans = answers(session)
+    sessions = [Path(x) for x in ([session] if isinstance(session, (str, Path)) else session)]
+    session = sessions[0]
+    key, ans = {}, {}
+    for i, sd in enumerate(sessions):  # codes may repeat across sessions: key them by (index, code)
+        key.update({(i, c): k for c, k in json.loads((sd / "key" / "key.json").read_text())["key"].items()})
+        ans.update({(i, c): r for c, r in answers(sd).items()})
     label = lambda c: ans[c][1] if c in ans else "(not answered)"
     note = lambda c: ans[c][2] if c in ans else ""
     meas = json.loads(Path(measurements).read_text())
@@ -71,8 +74,12 @@ def report(session, measurements, round1=ROUND1):
         for c, k in sorted(pairs.items(), key=lambda kv: str(kv[1].get("song"))):
             a = ans.get(c)
             sett = [k.get("first_setting"), k.get("second_setting")]
+            sp = [k.get("first_hand_speed"), k.get("second_hand_speed")]
             chosen = "(not answered)" if not a else {"first": sett[0], "second": sett[1]}.get(a[1], "neither")
-            rows.append([k.get("song"), ", ".join(map(str, sorted(map(str, sett)))), a[1] if a else "(not answered)", chosen, note(c)])
+            rows.append([k.get("song"), f"first {sett[0]}, second {sett[1]}", a[1] if a else "(not answered)", chosen, note(c),
+                         f"first {cell(sp[0])}, second {cell(sp[1])}", k.get("arousal_raw"), k.get("arousal_std")])
+        out += ["## Part 3: which render fits the music", "",
+                table(["song", "settings as shown", "pick", "chosen setting", "note", "mean hand speed (m/s)", "cortex arousal raw", "arousal standardised"], rows), ""]
         out += ["## Part 3: which render fits the music", "", table(["song", "settings", "pick", "chosen setting", "note"], rows), ""]
     else:
         out += ["## Part 3", "", "Not run (no pairs in this session).", ""]
@@ -95,7 +102,7 @@ def report(session, measurements, round1=ROUND1):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--session", required=True); ap.add_argument("--measurements", required=True); ap.add_argument("--round1", default=ROUND1)
+    ap.add_argument("--session", required=True, action="append", help="repeatable: Parts 1/2/4 session and a Part 3 session"); ap.add_argument("--measurements", required=True); ap.add_argument("--round1", default=ROUND1)
     ap.add_argument("--out", default=str(Path(__file__).resolve().parents[2] / "docs" / "MOTORNET_REPORT.md"))
     a = ap.parse_args()
     Path(a.out).write_text(report(a.session, a.measurements, a.round1) + "\n")
