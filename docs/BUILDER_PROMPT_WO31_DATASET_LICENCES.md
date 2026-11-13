@@ -37,9 +37,14 @@ waiting. You start with no context: everything you need is named below.
    - **2-3 alternative public music-dance datasets with 3D motion AND music** (e.g. FineDance; find others from primary sources, prefer ones
      with a real licence file). For each: size (hours, number of sequences, dancers, genres), motion format (e.g. SMPL, joint positions, BVH),
      licence of the motion, licence of the music, and the same three questions.
+   - **Scope of licences (Kosta, 2026-11-13):** the work is never sold or ticketed. Include datasets under non-commercial licences (e.g. CC
+     BY-NC) and research-only or academic-only terms, not only open ones. For each, classify the restriction exactly as worded:
+     "commercial allowed", "non-commercial only", "research/academic only", "other (quote)". Do not treat "non-commercial" and "research
+     only" as the same: report whether the wording covers a public, non-commercial art exhibition, or "unclear" if it does not say.
 3. **Output: `docs/DATASET_LICENCES.md`:**
-   - one table: dataset | size | motion format | motion licence | music licence | video licence | local training allowed? | public exhibition
-     of a trained model allowed? | registration/agreement required? Each cell says "yes", "no" or "unclear" plus a short pointer to the quote;
+   - one table: dataset | size | motion format | motion licence (with restriction class) | music licence (with restriction class) | video
+     licence | local training allowed? | public exhibition of a trained model allowed? | registration/agreement required? Each cell says
+     "yes", "no" or "unclear" plus a short pointer to the quote;
    - then, per dataset, the exact quotes (verbatim, in quotation marks, with the URL and date read);
    - where terms are silent, contradictory, or need a lawyer's reading, write "unclear" and say why. **Do not guess and do not give a verdict**;
    - a short list of what could only be answered by registering or asking the dataset owners (not done).
