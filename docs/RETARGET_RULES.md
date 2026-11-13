@@ -203,3 +203,77 @@ V1, V2, the shown clips, `RETARGET_SCALE.json`'s old keys, rules (a)-(l), the se
 - **Tests:** `test_v3_lib.py` (position measures on known signals, T-pose FK), `test_v3_ik.py` (stationary target gives zero motion; the 90 % step response; a reachable target converges to 2 mm; joint limits hold; the step cap bounds an unreachable target's motion; projection never worsens a margin and clears at least 85 % of small violations, FK equals the rig's `fk_points`).
 
 **(m) dated line, offset per 7.54.9 (2026-11-13, before any V3 run; replaces the "Offset (centre)" and "Reachability note" bullets above, which stay for the record):** the overseer rejected both the median shift and the c0 centre (c0 is 1.7 cm inside reach). **The human origin (right shoulder for V3a, pelvis for V3b) maps onto the robot's shoulder joint p1 = (0, 0, 0.08); the lamp target = p1 + s x A x rel**, `rel` the end-point vector from its origin in the heading frame, A the axis map, s the scales above (V3a 1.0824, V3b 0.8909), no median subtraction. 98 % of targets are within 0.55 m of p1, reachable by construction. Expect V3b mostly high (the head is 0.6 m above the pelvis, so the lamp is about 0.5 m above p1) and V3a often below p1 beside the column: the IK residual > 2 cm count, the guard share and the clearance are reported per clip and nothing is tuned. The starting pose of the first IK frame is still round 1's centre pose. The `r_med_*` keys in `RETARGET_SCALE.json` stay but are not used.
+
+
+## (n) Dated note 2026-11-13: low-pass to the human's smoothness (work order 36, BRAIN_SPEC 7.55 and 7.55.7); written and pushed before any render
+
+V1 and V2 keep their mappings, scales, windows and the look-test clips; this is a new, separate pipeline stage. Scripts: `scripts/body/lowpass_cutoff.py` (the cutoff, this note), `lowpass_run.py` (the 20 windows), `lowpass_render.sh`. Output `/secondary/hyst-data/body/retarget_look/lowpass/`.
+
+- **Filter.** 2nd-order Butterworth (`scipy.signal.butter(2, fc / 15)`), applied forward and backward (`scipy.signal.filtfilt`, zero phase, default odd padding), at the dataset's **30 fps**, on the **stage-1 angles** (the V1 / V2 retargeted commands, base yaw and wrist roll unwrapped as in `retarget.human_angles`), over the **whole sequence before windowing** (so no window-edge effect). Stage 1 is an affine function of the human angles per joint, so filtering the command and filtering the angles are the same thing.
+- **Cutoff rule (7.55.7, the highest cutoff, not the lowest):** per variant, the **highest** cutoff on the grid 0.5-14.5 Hz in 0.25 Hz steps at which the **median over the variant's 10 look-test windows** of the lamp path's share of speed power above 3 Hz is **<=** the median over the same 10 windows of the human end point's (column (0r) of Step A: right wrist relative to the right shoulder for V1, head relative to the pelvis for V2). The lamp path is the arm FK (point p5) of the filtered stage-1 angles at 30 fps over the shown 20 s; the measure is `v3_lib.pos_measures` (Welch, Hann, 5 s segments, power of the speed vector over the three axes).
+- **Human medians (power share above 3 Hz, median over the 10 windows): V1 0.0290, V2 0.0851.** Unfiltered lamp path (stage 1 as shown): V1 0.1833, V2 0.1466.
+- **Chosen cutoffs: V1 2.50 Hz, V2 5.75 Hz.** (Both curves are monotone in the cutoff; 9 grid points meet the rule for V1, 22 for V2.) The curve (median lamp power above 3 Hz of the filtered stage-1 angles against cutoff):
+
+| cutoff Hz | V1 median power > 3 Hz | V2 median power > 3 Hz |
+|---|---|---|
+| 0.50 | 0.0000 (<= human) | 0.0000 (<= human) |
+| 0.75 | 0.0000 (<= human) | 0.0000 (<= human) |
+| 1.00 | 0.0001 (<= human) | 0.0000 (<= human) |
+| 1.25 | 0.0006 (<= human) | 0.0001 (<= human) |
+| 1.50 | 0.0022 (<= human) | 0.0004 (<= human) |
+| 1.75 | 0.0055 (<= human) | 0.0011 (<= human) |
+| 2.00 | 0.0107 (<= human) | 0.0023 (<= human) |
+| 2.25 | 0.0174 (<= human) | 0.0042 (<= human) |
+| 2.50 | 0.0254 (<= human) | 0.0068 (<= human) |
+| 2.75 | 0.0344 | 0.0101 (<= human) |
+| 3.00 | 0.0440 | 0.0140 (<= human) |
+| 3.25 | 0.0540 | 0.0185 (<= human) |
+| 3.50 | 0.0643 | 0.0236 (<= human) |
+| 3.75 | 0.0746 | 0.0291 (<= human) |
+| 4.00 | 0.0846 | 0.0360 (<= human) |
+| 4.25 | 0.0942 | 0.0430 (<= human) |
+| 4.50 | 0.1013 | 0.0499 (<= human) |
+| 4.75 | 0.1077 | 0.0567 (<= human) |
+| 5.00 | 0.1136 | 0.0632 (<= human) |
+| 5.25 | 0.1190 | 0.0693 (<= human) |
+| 5.50 | 0.1239 | 0.0750 (<= human) |
+| 5.75 | 0.1284 | 0.0804 (<= human) |
+| 6.00 | 0.1324 | 0.0854 |
+| 6.25 | 0.1360 | 0.0899 |
+| 6.50 | 0.1392 | 0.0941 |
+| 6.75 | 0.1422 | 0.0980 |
+| 7.00 | 0.1448 | 0.1016 |
+| 7.25 | 0.1472 | 0.1049 |
+| 7.50 | 0.1493 | 0.1079 |
+| 7.75 | 0.1512 | 0.1107 |
+| 8.00 | 0.1530 | 0.1133 |
+| 8.25 | 0.1546 | 0.1157 |
+| 8.50 | 0.1560 | 0.1180 |
+| 8.75 | 0.1573 | 0.1201 |
+| 9.00 | 0.1585 | 0.1221 |
+| 9.25 | 0.1595 | 0.1240 |
+| 9.50 | 0.1605 | 0.1257 |
+| 9.75 | 0.1615 | 0.1274 |
+| 10.00 | 0.1631 | 0.1290 |
+| 10.25 | 0.1647 | 0.1305 |
+| 10.50 | 0.1661 | 0.1320 |
+| 10.75 | 0.1675 | 0.1334 |
+| 11.00 | 0.1688 | 0.1348 |
+| 11.25 | 0.1701 | 0.1360 |
+| 11.50 | 0.1712 | 0.1373 |
+| 11.75 | 0.1723 | 0.1384 |
+| 12.00 | 0.1732 | 0.1395 |
+| 12.25 | 0.1741 | 0.1405 |
+| 12.50 | 0.1750 | 0.1414 |
+| 12.75 | 0.1758 | 0.1422 |
+| 13.00 | 0.1765 | 0.1430 |
+| 13.25 | 0.1772 | 0.1436 |
+| 13.50 | 0.1780 | 0.1442 |
+| 13.75 | 0.1787 | 0.1447 |
+| 14.00 | 0.1796 | 0.1452 |
+| 14.25 | 0.1806 | 0.1457 |
+| 14.50 | 0.1817 | 0.1461 |
+
+- **Pipeline after the filter:** filtered stage-1 angles at 30 fps -> cubic spline to 100 Hz (`retarget.to_100hz`, as the look test) -> the 7.51 guard -> round-1 `motornet.spinal` (3 Hz, zeta 0.7, unchanged, "H1") -> the fixed limiter (k) -> servo -> v2p body -> gates at 1.25 (l) (every other gate as run), 1.5 s pre-roll, the same 20 s windows and FineDance music as the look test.
+- **Measures** (`docs/LOWPASS_REPORT.md`, `lowpass/numbers.json`): per stage (stage 1 filtered, spline, spinal, limiter, realised) the joint measures of `JITTER_DIAGNOSIS.md`, plus the lamp-path power above 3 Hz at each stage; the 7.52 gate and the shoulder numbers of 7.52.5; medians next to the V1/V2 baseline, baseline + H1 and the S03 references.
+- **Re-look clips (7.55.7):** C04_V2 and C10_V1, plus 4 by `default_rng(32071)`: a permutation of the other 18 shown clip ids (sorted order of the ids, then permuted), taken in order; a clip whose fixed version fails the 1.25 gate is skipped and the next taken (every skip logged); if C04_V2 or C10_V1 fails: "HOLD <clip> <failed parts>". Fixed clips are rendered as the look-test clips (same camera, lamp head, v2p column, 20 s, music, 1280x720) to `lowpass/clips/<id>_LP.mp4`. Manifest: 6 pairs old (the shown look-test mp4, absolute path) vs LP, LP first in exactly 3 of 6 (`default_rng(32081).choice(6, 3, replace=False)` over the pair positions in the order C04_V2, C10_V1, then the 4 picks).
