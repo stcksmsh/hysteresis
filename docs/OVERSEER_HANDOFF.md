@@ -94,7 +94,19 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-13 ~21:25 (clock) — newest, read first
+## UPDATE 2026-11-13 ~21:45 (clock) — newest, read first
+
+**RE-LOOK SESSION LIVE for Kosta (7.55).** WO36 CLIPS READY (body-lowpass f1d1906; NOT merged yet, merge after report) VERIFIED: cutoffs
+V1 2.50 Hz, V2 5.75 Hz reproduced by own filter+measure with the builder's window (V1 0.0254 <= 0.0290 < 0.0344 at 2.75; V2 0.0804 <=
+0.0851 < 0.0854 at 6.0 - V2 boundary within 0.0003; a 601-frame window moves it to 6.0: disclose); gates own recompute 19/20 (C10_V2 accel
+1.283, not picked); picks reproduced rng 32071 (C09_V2, C09_V1, C04_V1, C06_V2 + C04_V2, C10_V1); LP first 3/6; LP clips 20 s 1280x720,
+audio lag 0.0 vs old; frames same framing. Realised wrist-bend changes/s: V1 2.70 (baseline 5.09, +H1 3.67), V2 3.60 (4.95, 3.60).
+Session: tool archive lowpass/tool_f1d1906, session `/secondary/hyst-data/body/retarget_look/lowpass/session_2026-11-13/` seed 32091, 6 pairs,
+hashes equal, pairLabels first/second/same; unit hyst-wo36-session (cores 18-19) http://127.0.0.1:8765/; key/answers/order/labels 404.
+AFTER Kosta: join answers x key (LP vs old per pair), report (append to docs/LOWPASS_REPORT.md or new RELOOK section) with notes verbatim;
+merge body-lowpass into body; stop unit; brief PLANNER_BRIEF_LOWPASS_RELOOK.md (mention 7.55.7 wording correction, V2 cutoff sensitivity).
+
+## UPDATE 2026-11-13 ~21:25 (clock)
 
 **Planner = BRAIN_SPEC 7.55 (body f5e44d6):** V3 closed (report-only tool, no round 2); 7.54.9 confirmed; fix = zero-phase low-pass on
 stage-1 angles of V1/V2, cutoff by rule (overseer note 7.55.7: HIGHEST cutoff with median lamp-path power >3 Hz <= human 0r median; the
