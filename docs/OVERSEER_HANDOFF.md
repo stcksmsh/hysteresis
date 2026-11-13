@@ -1,4 +1,4 @@
-# Overseer handoff — 2026-11-13 (13:00)
+# Overseer handoff — 2026-11-13 (12:55)
 
 This file is the overseer's whole state. The `/overseer` skill (`.claude/skills/overseer/SKILL.md` on this branch, the canonical copy) starts a new overseer from it and recreates the worktree if it is gone. To start one by hand, paste everything below the line into a fresh session.
 
@@ -94,7 +94,23 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## CURRENT STATE (2026-11-13 ~13:00, saved for a clear) — read this block first
+## CURRENT STATE (2026-11-13 12:55) — read this block first
+
+**Planner answered the Part 3 brief = BRAIN_SPEC 7.47 (body 63cd2c8):** toy round 1 closed; **toy round 2** (two populations: slow tau 300
+ms -> base/shoulder, fast tau 75 ms -> elbow/wrist/roll; inputs beat phase, L4 projection to slow, ear energy + arousal_b7 to both; first 8
+settings passing gates on silent AND all 5 songs; Part A 8 silent 30 s, Part B 5 pairs new vs round-1 S03 at 30 s; stop rule PR<3 both pops
+AND base yaw <20 deg) and a **report-only comparison** of arousal_b7 and a plain ear energy (cols 40 onset + 41 rms) vs Kosta's dial
+recordings + 5 excerpts. Overseer defaults in 7.47.6 (coupling row-scaling, per-population drive ratio, L4 = out[3] complex -> 4 signals seed
+30002, gate windows, S03 fail -> pair dropped, drift def, lags -2..+4 s all reported, Instant Crush pass A from dial-ic-try1.json).
+**Prompts written, NOT SENT** (body f6cc7bf, merged keys-decide): `docs/BUILDER_PROMPT_WO30A_EAR_ENERGY_AND_TOOL.md` (agent 2, branch
+body-mnettool4, cores 12-17: ENERGY READY first -> COMPARISON READY -> TOOL READY) and `docs/BUILDER_PROMPT_WO30B_MOTORNET2_CLIPS.md` (agent 1,
+branch body-mnet4, cores 6-11: rules file MOTORNET2_RULES.md, waits for ENERGY READY before music lanes; seeds 30001/30002/30011/30031;
+out `/secondary/hyst-data/body/motornet_toy2/`; CLIPS READY). Waiting for the user's "send".
+**Overseer checks to come:** ENERGY READY commit precedes any comparison commit and any dial read; review EAR_ENERGY_RULES + MOTORNET2_RULES
+when pushed; on CLIPS READY recompute gates on all 6 windows per setting (overseer_mnet_check2.py, new glob), PR per population, base yaw
+range, stop rule, audio alignment (overseer_p3_audio_check.py at 30 s), frames; then session; then report + brief.
+
+## PREVIOUS STATE (2026-11-13 ~13:00, saved for a clear)
 
 **Motor-network toy test (BRAIN_SPEC 7.44-7.46) is COMPLETE. Waiting for the planner's answers to `docs/PLANNER_BRIEF_MOTORNET_PART3.md`
 (sent to the user 12:50).** The user will paste them right after restarting the overseer. FIRST ACTION: record them as **BRAIN_SPEC 7.47** on
