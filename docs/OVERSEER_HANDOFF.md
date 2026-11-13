@@ -106,6 +106,14 @@ share. Recorded: human dance commands 9-22x the STS3215 shoulder acc; stronger s
 Review rules note (l) before render. On CLIPS READY: gates recomputed at 1.25 by own code on CSVs, 10 distinct sequences, <= 2 per genre,
 pair order 2-3 V1-first, audio alignment, frames, per-clip shoulder table -> then session (agent 2's tool, port 8765, detached unit).
 
+**15:50:** LIMITER FIXED d8c4409 ACCEPTED: real bug (range clamp stops position, velocity state kept -> one-frame dead stop, up to 5.8x;
+only ranged joints); fix in new retarget_limiter.py (edge braking 0.9 x stopping distance + velocity = step taken), round-1 files untouched;
+overseer ran test_retarget_limiter 4/4 OK on archive. Rules (k)/(l) accepted. BUT re-gate unit hyst-wo32d-clips ran UNCOMMITTED code and
+gated limits at 1.05: gates_v2p ANDs dialstudy.judge's ok (limits 1.05, line 185) into passed; 24/93 log lines "FAIL {V1: [], V2: []}".
+Sent agent 1: stop, passed = all(parts), unit test 1.2 pass / 1.3 fail, commit+push before run, keep aborted outputs in
+v2p_1.25_aborted/, restart as hyst-wo32d-clips2. FOR USER note: S03 reference now runs through the fixed limiter (not byte-identical to round 1).
+On restart: verify the commit, then that clips.log has no empty-parts FAIL lines.
+
 ## CURRENT STATE (2026-11-13 15:26, saved for a clear) — superseded by the update above
 
 **WAITING FOR THE PLANNER'S ANSWER to `docs/PLANNER_BRIEF_RETARGET_LIMITS.md`** (sent 15:24). The user will paste it right after restarting the
