@@ -113,6 +113,8 @@ gated limits at 1.05: gates_v2p ANDs dialstudy.judge's ok (limits 1.05, line 185
 Sent agent 1: stop, passed = all(parts), unit test 1.2 pass / 1.3 fail, commit+push before run, keep aborted outputs in
 v2p_1.25_aborted/, restart as hyst-wo32d-clips2. FOR USER note: S03 reference now runs through the fixed limiter (not byte-identical to round 1).
 On restart: verify the commit, then that clips.log has no empty-parts FAIL lines.
+**15:52:** verdict fix a831803 accepted (passed = all(parts)). But hyst-wo32d-clips2 CRASHED at start (NameError 'human' in sim_variant,
+line 110), 0 candidates. Sent back: fix, gate test + 2-candidate dry run, read log 1 min after start, restart as hyst-wo32d-clips3.
 
 ## CURRENT STATE (2026-11-13 15:26, saved for a clear) — superseded by the update above
 
