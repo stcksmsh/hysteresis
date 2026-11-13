@@ -36,5 +36,20 @@ class Gates(unittest.TestCase):
         self.assertFalse(RR.judge_v2p(GOOD, MOTION, 0.2)["passed"])
 
 
+
+class Smoke(unittest.TestCase):
+    def test_one_candidate_runs_end_to_end(self):
+        """one real candidate through sim_variant (V1 and V2): the whole path imports and returns the five outputs"""
+        import numpy as np
+        cat = RR.catalogue()
+        order = [str(g) for g in np.random.default_rng(RR.SEED).permutation(sorted({v[0] for v in cat.values()}))]
+        c = RR.pick(0, order, cat)
+        for var in ("V1", "V2"):
+            q50, share, g, sh = RR.sim_variant(c, var)
+            self.assertEqual(q50.shape, (1001, 5))
+            self.assertIn("passed", g)
+            self.assertIn("p95", sh["commanded_accel_x_limit"])
+
+
 if __name__ == "__main__":
     unittest.main()

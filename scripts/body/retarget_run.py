@@ -90,6 +90,16 @@ def gates_v2p(q50, contact_substeps, guard_share=None):
     return judge_v2p(g, M.motion_values(q50), guard_share)
 
 
+_ANG = {}
+
+
+def human(seq):
+    import retarget as RT
+    if seq not in _ANG:
+        _ANG[seq] = RT.sequence_angles(FD / "motion" / f"{seq}.npy")
+    return _ANG[seq]
+
+
 def shoulder_numbers(G0, lim, q50, nw):
     """rules (l): commanded and realised shoulder acceleration (p50, p95, max, in multiples of the limit; 50 Hz rows, second difference x 2500 / limit), the limiter's share of 100 Hz
     frames that changed the shoulder command, and the shoulder RMS of (command - limiter output) in deg. G0: command rows (100 Hz, pre-roll included), lim: limiter output rows (same)."""
