@@ -1968,3 +1968,42 @@ PROPOSAL = planner, not yet ruled.
    - *Reference:* round-1 S03 is re-gated at the same 1.25 tolerance on v2p on the 2 seeded songs; a failing reference is logged, not replaced.
    - *Pair order:* V1 first in exactly 2 or 3 of the 5 pairs (7.50.8), checked before the session.
    - *Fewer than 10 picks within 200 candidates under the pick rule:* HOLD and report counts; no relaxation without Kosta.
+
+### 7.53 Retarget look test results; jitter diagnosis next, 2026-11-13, via Kosta + planner (answering `docs/PLANNER_BRIEF_RETARGET_RESULTS.md`)
+
+1. **Record (Q4).** Look test (7.49.5 / 7.51 / 7.52) at the 1.25 look-test tolerance, 10 clips from 10 FineDance sequences in 9 genres:
+   singles V1 yes 4 / sort of 6 / no 0, V2 2 / 8 / 0, round-1 S03 reference 0 / 2 / 0; pairs V1 3, V2 2. **No "no" answer.** C04_V2 is the
+   first clip Kosta rated above v47 ("its actually good"). The 7.52.6 shoulder-actuator note stands (human dance commands 9-22x the STS3215
+   shoulder acceleration; a stronger or higher-geared shoulder is likely needed; hardware decision deferred). Report:
+   `docs/RETARGET_REPORT.md`.
+2. **Planner reading (Kosta did not dispute):** imitation of human dance works on this body in principle.
+3. **The next problem (Kosta, verbatim):** "micro-movements, too frequent changes of direction, robotic unhuman stuff ... it is a robot
+   dancing, but it is dancing for a human audience".
+4. **Q2 (a):** keep V1 and V2.
+5. **Q3: record only.** Energy/timing-vs-song notes belong to step 3 (music conditioning). C03_V1 "too low" is recorded for later.
+6. **Q1 (a): JITTER DIAGNOSIS, report-only, the same 20 clips.**
+   - Measure at each stage: (1) raw FineDance motion after retargeting at 30 fps; (2) after 30 -> 100 Hz resampling; (3) after the limiter;
+     (4) after the servo/body (realised).
+   - Per stage and per joint: acceleration sign changes per second, jerk RMS, share of joint-speed power above 3 Hz and above 6 Hz.
+   - Hypotheses, each reported separately (which stage adds what; adopt nothing):
+     - **H1, missing muscle-like layer:** the retarget pipeline ran without the spinal spring-damper. Re-run stages 3-4 with the round-1
+       spinal layer (3 Hz, zeta 0.7) inserted before the limiter.
+     - **H2, limiter saturation chatter:** report the fraction of frames where the limiter output sits at +- the acceleration limit, and how
+       often it flips sign.
+     - **H3, resampling:** re-run with a smooth interpolant and compare (builder states which).
+   - Report each hypothesis separately and combined (H1 + H3). No verdict. **Then STOP;** Kosta rules on a fix.
+   - After the ruling: a blind re-look of 4-6 clips (must include C04_V2 and C10_V1), old vs fixed in pairs, pair order checked to be mixed.
+7. **Out of scope:** training, music conditioning, gain modulation, hardware, monitor, uploads. Standing rules unchanged.
+8. **Overseer notes (operational defaults, not rulings; Kosta may amend):**
+   - *H3 premise:* the resampling is already a cubic spline (`scripts/body/retarget.py` `to_100hz`, `CubicSpline`), not linear
+     interpolation, so it does not put acceleration impulses every 33 ms. H3 is therefore run as: stage 2 vs stage 1 numbers (what the
+     cubic spline adds), plus a linear-interpolation control to show the size of the effect the hypothesis describes. "H1 + H3 combined"
+     = H1 with the cubic spline as used. No new interpolant is adopted or tuned.
+   - *Like-for-like rates:* every measure is computed at each stage's own rate, and stages 2-4 are also sampled at the 30 fps instants, so
+     stage 1 compares like for like. Jerk RMS is in deg/s^3. Power shares are of the joint-speed spectrum (mean removed) over 0.2 Hz.
+   - *H1 spinal layer:* `scripts/body/motornet.py` `spinal` unchanged (3 Hz, zeta 0.7, as round 1), applied to the 100 Hz command before the
+     fixed limiter of 7.52 (rules note (k)).
+   - *H2 "at the limit":* |limiter output acceleration| >= 0.98 x the limit, on the 100 Hz frames and on the gate's 50 Hz measure; sign flips
+     per second of the limiter output acceleration.
+   - *Control:* the 2 round-1 S03 reference clips are measured at stages 3-4 as they are (they have no stages 1-2).
+   - *Gates:* every variant run is also gated as 7.52 (1.25), and the pass/fail is reported, not used to select.
