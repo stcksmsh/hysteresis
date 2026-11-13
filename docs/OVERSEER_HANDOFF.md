@@ -94,7 +94,15 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-13 ~21:00 — newest, read first
+## UPDATE 2026-11-13 ~21:10 — newest, read first
+
+Kosta asked (direct request, view only, before the Q1 session) for one jitter VIEWING video. Overseer picked by measure: C05_V1 (realised
+wrist-bend sign changes 8.39/s, highest; C10_V2 7.74 next) + C04_V2 (5.59) for contrast. Prompt docs/BUILDER_PROMPT_WO34_JITTER_VIEWING.md
+(body 1bb1fd4) SENT to agent 1 [0b1684] (branch body-viewing). On VIEWING READY: check slice choice by own count, 4 panels + labels, 1x with
+music / 0.5x muted, frames; tell Kosta /secondary/hyst-data/body/retarget_look/jitter/viewing/jitter_viewing.mp4. Still waiting for the
+planner on PLANNER_BRIEF_JITTER.md.
+
+## UPDATE 2026-11-13 ~21:00
 
 **JITTER DIAGNOSIS DONE (body-jitter a3d1bae, MERGED into body); WAITING FOR THE PLANNER on `docs/PLANNER_BRIEF_JITTER.md`.** Overseer
 verified: tests 6 OK; stage-4 medians recomputed from CSVs equal; stage 1/4/H1 for C04_V2 + C10_V1 recomputed independently (within 0.05/s);
