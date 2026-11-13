@@ -44,7 +44,7 @@ def heading_rel(P, G, var):
 
 def compute_scale():
     """pooled over the 4,603 eligible windows of RETARGET_SCALE.json (every 20 s window, starts every 5 s from 5 s, all frames): per variant the median r_med of rel, the p98 of |rel - r_med| (the reach used)
-    and, for the record, the literal p98 of |rel| from the origin; scale s = 0.8 * arm reach / reach"""
+    and the p98 of |rel| from the origin = the reach of 7.54.8 (the scale uses it: s = 0.8 * arm reach / that reach); the p98 from the median is kept for the record"""
     pool = {v: [] for v in VAR}
     nwin = 0
     for p in sorted((FD / "motion").glob("*.npy")):
@@ -62,8 +62,8 @@ def compute_scale():
         med = np.median(X, axis=0)
         h98 = float(np.percentile(np.linalg.norm(X - med, axis=1), 98))
         lit = float(np.percentile(np.linalg.norm(X, axis=1), 98))
-        out[var] = dict(r_med_human_heading_frame=med.tolist(), reach_p98_from_median_m=h98, reach_p98_from_origin_literal_m=lit, arm_reach_m=K.REACH_M, share=0.8,
-                        scale=0.8 * K.REACH_M / h98, scale_if_literal_origin_reach=0.8 * K.REACH_M / lit, frames=int(len(X)), windows=nwin)
+        out[var] = dict(r_med_human_heading_frame=med.tolist(), reach_p98_from_median_m=h98, reach_p98_from_origin_m=lit, arm_reach_m=K.REACH_M, share=0.8,
+                        scale=0.8 * K.REACH_M / lit, scale_if_reach_from_median=0.8 * K.REACH_M / h98, frames=int(len(X)), windows=nwin)
     return out
 
 
