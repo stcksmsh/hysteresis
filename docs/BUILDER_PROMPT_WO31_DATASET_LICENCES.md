@@ -41,6 +41,10 @@ waiting. You start with no context: everything you need is named below.
      BY-NC) and research-only or academic-only terms, not only open ones. For each, classify the restriction exactly as worded:
      "commercial allowed", "non-commercial only", "research/academic only", "other (quote)". Do not treat "non-commercial" and "research
      only" as the same: report whether the wording covers a public, non-commercial art exhibition, or "unclear" if it does not say.
+   - **Research/academic use (Kosta, 2026-11-13):** Kosta is a software engineering student, so the work may count as student research. For
+     every research- or academic-only term, report exactly what it requires: who may apply (individual, student, institution), whether a
+     supervisor, institutional signature or institutional email is needed, and whether research use still allows a public showing of the
+     results or of a trained model. Never name Kosta or his university anywhere.
 3. **Output: `docs/DATASET_LICENCES.md`:**
    - one table: dataset | size | motion format | motion licence (with restriction class) | music licence (with restriction class) | video
      licence | local training allowed? | public exhibition of a trained model allowed? | registration/agreement required? Each cell says
