@@ -5,8 +5,10 @@ Floor and stage move to z = F (0.053 - 1.0), the pedestal becomes a 0.14 m squar
 and the arm's shadow land on the new floor, the plumb line from the hand is dropped. The camera is unchanged.
 """
 import sys
+from pathlib import Path
 
-import make_arm_v2p as P
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import make_arm_v2p as P  # noqa: E402
 
 F = P.FLOOR
 H = P.COL_HALF
@@ -35,7 +37,7 @@ def patch(s):
     s = rep(s, "[[-1.65,-1.65,0],[1.65,-1.65,0],[1.65,1.65,0],[-1.65,1.65,0]]", f"[[-1.65,-1.65,{F}],[1.65,-1.65,{F}],[1.65,1.65,{F}],[-1.65,1.65,{F}]]")
     s = rep(s, "const centre=project([0,0,0]),", f"const centre=project([0,0,{F}]),")
     s = rep(s, "line([r*Math.cos(a),r*Math.sin(a),.004],[r*Math.cos(b),r*Math.sin(b),.004],", f"line([r*Math.cos(a),r*Math.sin(a),{F}+.004],[r*Math.cos(b),r*Math.sin(b),{F}+.004],")
-    s = rep(s, "const toFloor=-from[2]/out[2];", f"const toFloor=({F}-from[2])/out[2];")
+    s = rep(s, "toFloor=-from[2]/out[2];", f"toFloor=({F}-from[2])/out[2];")
     s = rep(s, "const cast=p=>{const s=PROJECTOR[2]/(PROJECTOR[2]-p[2]);return [p[0]*s,p[1]*s,.003];};",
             f"const cast=p=>{{const s=(PROJECTOR[2]-({F}))/(PROJECTOR[2]-p[2]);return [p[0]*s,p[1]*s,{F}+.003];}};")
     s = rep(s, "under=project([hand[0],hand[1],0])", f"under=project([hand[0],hand[1],{F}])")

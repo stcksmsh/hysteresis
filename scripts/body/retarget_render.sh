@@ -9,7 +9,7 @@ mkdir -p "$W/pages" "$C"
 IDS=("$@"); [ ${#IDS[@]} -gt 0 ] || IDS=($(cd "$W" && ls C??_V?.json C??_R1S03.json | sed 's/\.json$//'))
 one() {
   local id=$1 clip=${1%%_*}
-  while [ "$(cat /sys/class/power_supply/ADP1/online)" != 1 ]; do sleep 30; done
+  [ "${HYST_BATTERY_OK:-0}" = 1 ] || while [ "$(cat /sys/class/power_supply/ADP1/online)" != 1 ]; do sleep 30; done
   [ -f "$C/$id.mp4" ] && return 0
   python3 -I -c "import json,sys; sys.exit(0 if json.load(open('$W/$id.json'))['gates']['passed'] else 1)" || { echo "$id: gates failed, not rendered" >&2; return 1; }
   "$CARGO_TARGET_DIR/release/examples/ensemble_preview" "$W/pages/$id.raw.html" "$W/$clip.m4a" --implement lamp --joint-csv "$W/$id.csv" > "$W/pages/$id.log" 2>&1 || { echo "$id page failed" >&2; return 1; }
