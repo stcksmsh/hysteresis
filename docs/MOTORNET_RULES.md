@@ -15,7 +15,7 @@ no verdict by the builder. Written and pushed before any clip is rendered. Code:
 - **Inputs** (3): `cos` and `sin` of the beat-band phase, and arousal. Silent clips: phase `2 pi t 100/60` (fixed 100 BPM, t = network time from
   the start of the warm-up), arousal 0. Music clips: the cortex lanes `l3_cos`, `l3_sin` (0.5 s blocks, linearly interpolated to 100 Hz) and
   `arousal_b7` (10 Hz, interpolated; standardised with one fixed mean and sd taken over the three danced songs' lanes, clipped to +-3). Input
-  weights `Win` (N x 3): iid standard normal, seed 29001 stream 1, fixed.
+  weights `Win` (N x 3): iid standard normal, seed 29001 stream 1, multiplied by the one input scale `s` of (b), fixed.
 - **Control units**: **4**. Each owns a random subset of **80 neurons (40 %)** (seed stream 2, drawn without replacement per unit; subsets overlap).
   Neuron gain `g_i = prod_k c_k ^ m_ki` (m = 1 if neuron i is in unit k's subset). **No global gain** (not used). Each `c_k` ranges over
   **[0.5, 2.0]**, sampled **log-uniform** (symmetric in log). A setting = the 4 values (c1..c4); c = 1 everywhere is the reference gain 1.
@@ -26,15 +26,22 @@ no verdict by the builder. Written and pushed before any clip is rendered. Code:
 
 At gain 1 (all c = 1) run the silent network for 10 s warm-up + 12 s; per joint take the mean `m_j` and sd `s_j` of `y_j` over the 12 s.
 Joint target (deg) = `centre_j + CAL_FRAC * AMP_j * (y_j - m_j) / (2 s_j)` with `centre = (0, -60, 30, -15, 0)` (round 1's neutral centre),
-`AMP = (30, 12, 16, 16, 45)` (round 1's neutral amplitudes), **CAL_FRAC = 1.0**: the gain-1 mean maps to the neutral centre and +-2 sd maps to
-+-100 % of round 1's neutral amplitudes. Fixed for every clip. Nothing else is fitted.
+`AMP = (30, 12, 16, 16, 45)` (round 1's neutral amplitudes), **CAL_FRAC = 0.6**: the gain-1 mean maps to the neutral centre and +-2 sd maps to
++-60 % of round 1's neutral amplitudes. Fixed for every clip. Nothing else is fitted.
 
-*Deviation from the default (+-60 %), for feasibility:* at +-60 % the gain-1 silent run reached a hand extent of 0.056 m, under the minimum-
-motion gate. The values 0.6, 1.0 and 1.5 were each tried once, at gain 1 only (the calibration run, not a sampled setting): extent 0.056, 0.084
-and 0.062 m. 1.0 is the natural round-1 reading ("+-2 sd = the neutral amplitude") and the largest of the three. Logged FOR USER.
-*Cause, restated (overseer, 2026-11-12):* the round-1 command limiter (mainly base and shoulder acceleration) cuts the amplitude of the
-1.66 Hz beat-rate command, then servo lag cuts it further; base yaw p5-p95 at gain 1: 47.5 (target) -> 41.7 (spring-damper) -> 13.4 (limiter
-output) -> 5.4 deg (realised). Realised speeds stay under 0.9 of their limits because the lag has already reduced them. See the night log.
+**Re-run (BRAIN_SPEC 7.45, 2026-11-13), steps in the order of 7.45.10 (script `scripts/body/motornet_fit.py`, gain 1 silent only; result in
+PARAMS):**
+1. *Input scale s*: `Win` (as drawn, seed 29001 stream 1) is multiplied by one scalar `s` so that, in the gain-1 silent run over the shown 12 s,
+   the mean-over-units std over time of `Win u` is 0.25 x that of `W r` (fixed-point iteration `s <- s * 0.25 * rec / in`, stopped within 0.5 %,
+   the allowed 2 % being looser). The same `s` is used for music clips.
+2. Calibrate at +-60 % (CAL_FRAC 0.6).
+3. Gain 1 silent: p5-p95 of the target against p5-p95 of the command-limiter output (round-1 limiter alone, no physics) for base yaw and
+   shoulder; if either output is below half the target, the spinal spring-damper is set to 1.5 Hz for the whole study and the calibration redone
+   at +-60 %. The limiter's share (output range / target range) is reported for all 5 joints either way.
+4. If the gain-1 hand extent at +-60 % is >= 0.10 m on one axis, +-60 % and the 0.10 m gate are used; else +-100 % and 0.05 m.
+5. Redraw S01-S10 (seed 29011), re-gate S11/S12 (shown only if they pass, not replaced), render Parts 1 and 2; Part 4 unchanged; Part 3 not run.
+The v1 study (CAL_FRAC 1.0, s = 1, gate 0.05 m; its clips in `clips_v1/`) is superseded; its stated cause for the small hand extent (limiter on the
+1.66 Hz command, then servo lag: base yaw 47.5 -> 41.7 -> 13.4 -> 5.4 deg) is the reason for the input scale.
 
 ## (c) Spinal layer and body
 
@@ -56,11 +63,9 @@ Round 1's gates (`DIALSTUDY_RULES.md` (d)), same code (`dialstudy.gate_values`, 
 reversals <= 6 /s per joint; no stricter value was needed): clearance (FK points 1-4 >= 0.05 m, hand >= 0.11 m above z = 0), no contact at any
 substep (from 1.5 s before the shown clip, the end of round 1's pre-roll equivalent; the earlier warm-up seconds are not counted), end stops
 (no ranged joint within 3 deg of a limit for 6 or more consecutive 50 Hz samples), jitter (hf power share above 8 Hz, reversals), speed and
-acceleration within `LIMITS` (5 % tolerance), finite. **Plus minimum motion**: hand-point p5-p95 extent **>= 0.05 m** on at least one axis over
-the 12 s, and **no 3 s stretch** with mean hand speed below **0.01 m/s**.
-
-*Deviation from the default (0.10 m), for feasibility:* the default is above the hand extent the network reached at the reference gain
-(0.084 m; cause: the command limiter and servo lag cut the beat-rate amplitude, see (b)); round 1's lowest-vigour clip has 0.094 m, its neutral 0.29 m. 0.05 m still excludes a static arm. Logged FOR USER.
+acceleration within `LIMITS` (5 % tolerance), finite. **Plus minimum motion**: hand-point p5-p95 extent **>= 0.10 m** on at least one axis over
+the 12 s, and **no 3 s stretch** with mean hand speed below **0.01 m/s** (the default values; step 4 of (b) confirmed them: the gain-1 extent
+at +-60 % is 0.182 m).
 
 A failing setting is discarded and replaced by the next sampled one; discards are counted per gate (a setting can fail several; all failed
 gates are counted). Three frames per clip and a contact sheet are looked at by the builder before a clip is listed, never to select or reshape a

@@ -17,8 +17,24 @@ SEED_NET = 29001                                      # W, Win, masks, Wout draw
 WARM_S, SHOW_S = 10.0, 12.0
 BPM_SILENT = 100.0
 CENTRE = D.POST[0]                                    # round-1 neutral centre pose
-CAL_FRAC = 1.0                                        # +-2 sd of an output maps to +-CAL_FRAC * round-1 neutral amplitude
+CAL_FRAC = 0.6                                        # +-2 sd of an output maps to +-CAL_FRAC * round-1 neutral amplitude
 SPINAL_F, SPINAL_ZETA = 3.0, 0.7
+INPUT_S = 0.04278085684427462                                         # one scalar on Win (7.45.1); set by motornet_fit.py, value in docs/MOTORNET_PARAMS.md
+
+
+def limiter_out(S):
+    """the round-1 command limiter alone (no physics) on spinal output rows S (n, 5) deg at 100 Hz -> limited target rows"""
+    lo_t, hi_t = D.LO + D.CLIP_MARGIN, D.HI - D.CLIP_MARGIN
+    tgt, tv = S[0].copy(), np.zeros(5)
+    out = np.empty_like(S)
+    for i, g in enumerate(S):
+        e = np.clip(g, lo_t, hi_t) - tgt
+        v = np.sign(e) * np.minimum(D.LIM_V, np.sqrt(2 * D.LIM_A * np.abs(e) + 1e-12))
+        v = np.where(np.abs(v) * DT > np.abs(e), e / DT, v)
+        tv = np.clip(tv + np.clip(v - tv, -D.LIM_A * DT, D.LIM_A * DT), -D.LIM_V, D.LIM_V)
+        tgt = np.clip(tgt + tv * DT, lo_t, hi_t)
+        out[i] = tgt
+    return out
 
 
 def build_net():
@@ -51,7 +67,7 @@ def run_net(c, u_fn, n_steps):
     """-> y (n_steps+1, 5) raw readout and r (n_steps+1, N) rates at the 100 Hz control rate; network time 0 = start of warm-up, x = 0."""
     g = gains(c)
     x = np.zeros(N)
-    W, Win, Wout = NET["W"], NET["Win"], NET["Wout"]
+    W, Win, Wout = NET["W"], NET["Win"] * INPUT_S, NET["Wout"]
     sub = round(DT / DT_NET)
     Y, Rt = np.empty((n_steps + 1, 5)), np.empty((n_steps + 1, N))
     for i in range(n_steps + 1):
@@ -132,7 +148,7 @@ def simulate_goals(G, kp_scale=1.0, zeta=1.5):
 
 
 # ------------------------------------------------------------------------------------------------ gates
-MIN_EXTENT_M, MIN_SPEED, STRETCH_S = 0.05, 0.01, 3.0
+MIN_EXTENT_M, MIN_SPEED, STRETCH_S = 0.10, 0.01, 3.0
 
 
 def motion_values(q50):
