@@ -109,6 +109,7 @@ out `/secondary/hyst-data/body/motornet_toy2/`; CLIPS READY). Overseer watches p
 **Overseer checks to come:** ENERGY READY commit precedes any comparison commit and any dial read; review EAR_ENERGY_RULES + MOTORNET2_RULES
 when pushed; on CLIPS READY recompute gates on all 6 windows per setting (overseer_mnet_check2.py, new glob), PR per population, base yaw
 range, stop rule, audio alignment (overseer_p3_audio_check.py at 30 s), frames; then session; then report + brief.
+**12:58:** 30A ENERGY READY 9d99a8e (body-mnettool4, pushed 12:54, before any comparison commit) VERIFIED: tests 6 OK on archive; overseer recomputed Instant Crush features from audio (cols 40/41 max diff 2e-6 vs builder feat.npy) and all 6 norm constants from the rules text with own code (match to 6 decimals). Not merged yet (merge with the rest after report).
 
 ## PREVIOUS STATE (2026-11-13 ~13:00, saved for a clear)
 
