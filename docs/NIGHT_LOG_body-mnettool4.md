@@ -10,4 +10,4 @@ Formula `docs/EAR_ENERGY_RULES.md`, code `scripts/body/ear_energy.py`, constants
 danced songs' features; no dial value read, no correlation computed). Tests `scripts/body/test_ear_energy.py` 6 OK. Use
 `ear_energy.network_input(feats)` for the network.
 
-ENERGY READY
+ENERGY READY 9d99a8e
