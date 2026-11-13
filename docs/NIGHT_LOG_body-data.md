@@ -15,3 +15,4 @@
 - MOTORICA BLOCKED: kth-my.sharepoint.com folder, plain HTTPS 403 (needs a browser session). Not attempted further (STOP rule).
 - AIOZ: HF page aiozai/AIOZ-GDANCE is ungated; 12.4 GB zip fetched, sizes match. Disk before: 392 GB free.
 - AIST++: motions.zip and keypoints3d.zip from the page's release links, no form.
+- TOOL READY 6bffdd3 (tool code and tests); log final at the commit after d25ca8d.
