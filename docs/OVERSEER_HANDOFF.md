@@ -94,7 +94,16 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-13 ~21:25 — newest, read first
+## UPDATE 2026-11-13 ~21:40 — newest, read first
+
+WO35: STEP A READY 886ef28 (V1: hand rel. shoulder 5.43 changes/s, >3 Hz 0.029 vs robot lamp FK of stage-1 8.75 / 0.183; V2: head rel.
+pelvis 9.03 / 0.085 vs 8.75 / 0.147 -> hypothesis holds for V1 power, weakly for V2). Q2: C04_V2 offset = gravity sag (4.8 deg mean;
+0.1 with gravity off; 5.3 predicted). Rules note (m) body-v3 66e72b4 REVIEWED: overseer CORRECTION 7.54.9 (body b3e749e): origin -> p1,
+target = p1 + s A rel, no median, c0 centre withdrawn (c0 was 1.7 cm inside reach). Accepted: heading frame, orientation, IK numbers
+(damping 3.604e-4, w_o 0.05, w_c 1, cap 0.351, N 3), scales V3a 1.0824 / V3b 0.8909. GO sent to agent 1. Next: V3 READY -> verify
+(gates + measures from v3/work CSVs, residual counts) -> brief PLANNER_BRIEF_V3.md (mention 7.54.9 correction) + numbers for Kosta's Step C go.
+
+## UPDATE 2026-11-13 ~21:25
 
 **Planner/Kosta = BRAIN_SPEC 7.54 (body 177ad2e):** Kosta watched the viewing video: human hand/spine do not jitter -> jitter is created by
 the retargeting. Q1 session HELD. Q2 (C04 offset check) + record stand. STEP A (end-point vs joint-angle smoothness), STEP B (V3 space
