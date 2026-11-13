@@ -94,7 +94,15 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-13 ~21:40 — newest, read first
+## UPDATE 2026-11-13 ~21:10 (clock) — newest, read first
+
+V3 Step B run DONE (hyst-wo35-run, 21:04): 0/20 pass gates at 1.25. V3b all 10 fail 'endstop' only (shoulder pinned at -110: C01 585/1001
+frames >=105 deg; head 0.54 m above p1 -> arm straight up). V3a all fail contact+endstop+limits (7 also clearance): elbow/wrist at +-110,
+hand below p1 beside column; IK >2 cm 125-1140 of 2001 frames. Overseer reading: the 7.54.9 p1 origin keeps targets within reach by distance
+but not within joint ranges; neither centring works as specified -> planner question (do not iterate: 2 rounds max). Waiting agent 1's
+V3 READY report (jitter per stage). Then brief PLANNER_BRIEF_V3.md.
+
+## UPDATE 2026-11-13 ~21:40
 
 WO35: STEP A READY 886ef28 (V1: hand rel. shoulder 5.43 changes/s, >3 Hz 0.029 vs robot lamp FK of stage-1 8.75 / 0.183; V2: head rel.
 pelvis 9.03 / 0.085 vs 8.75 / 0.147 -> hypothesis holds for V1 power, weakly for V2). Q2: C04_V2 offset = gravity sag (4.8 deg mean;
