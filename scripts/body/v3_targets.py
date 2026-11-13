@@ -14,7 +14,7 @@ from scipy.interpolate import CubicSpline
 from scipy.spatial.transform import Rotation as Rot, RotationSpline
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import jitter_diag as J  # noqa: E402
+import retarget as RT  # noqa: E402
 import v3_ik as K  # noqa: E402
 import v3_lib as L  # noqa: E402
 
@@ -37,7 +37,7 @@ def heading_rel(P, G, var):
     v = VAR[var]
     F = G[:, 0] @ np.array([0.0, 0.0, 1.0])
     yaw = np.degrees(np.arctan2(F[:, 0], F[:, 2]))
-    Rinv = J._ry(-yaw)
+    Rinv = RT._ry(-yaw)
     rel = np.einsum("nij,nj->ni", Rinv, P[:, v["end"]] - P[:, v["origin"]])
     return rel, Rinv @ G[:, v["end"]]
 
