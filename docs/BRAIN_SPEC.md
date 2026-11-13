@@ -1869,3 +1869,37 @@ PROPOSAL = planner, not yet ruled.
    lines; frozen `src/` and `tools/` read-only; data, models, audio and video outside git; nothing uploaded; free compute only, no spending,
    no posting/emailing/submitting, no accounts or registrations without Kosta's go-ahead; never drive hardware; if unclear, stop and ask
    Kosta.
+
+### 7.50 Dataset licences ruled; downloads approved; step 2 with FineDance, 2026-11-13, via Kosta + planner (answering `docs/PLANNER_BRIEF_DATASET_LICENCES.md`)
+
+1. **Context (Kosta):** this is research. It will first be an undergraduate final paper; the art piece is the end goal in the sense of making
+   it as good as possible. Nothing is commercial. Kosta is a student.
+2. **Usable sources:** all five (FineDance, AIOZ-GDANCE, Motorica Dance, AIST++ motion, AIST Dance DB) are usable for local research / thesis
+   use under their own terms (`docs/DATASET_LICENCES.md`). The planner checked the AIOZ-GDANCE licence, Motorica terms and the AIST++ site
+   directly; the FineDance LICENSE and AIST terms rest on the overseer's verbatim quotes.
+3. **Obligations, recorded and followed:** no redistribution or upload of any dataset content; cite each dataset/paper in any publication;
+   credit music where clips with music are shown (Motorica requires it); nothing used for surveillance, military or commercial purposes.
+4. **Open item for later** (before any public exhibition of a trained model): Motorica and AIST are research-only; ask the owners, or
+   exhibit a model trained only on FineDance / AIOZ-GDANCE / AIST++ motion. Kosta's action, not now.
+5. **Downloads approved:** FineDance public part, AIOZ-GDANCE, Motorica Dance, AIST++ motion annotations. If any download needs an account,
+   login, form or client install, STOP and ask Kosta (this includes Baidu NetDisk and gated Hugging Face pages). The AIST Dance DB
+   application form: Kosta fills it in himself if he wants; the overseer and builders do not. Storage:
+   `/secondary/hyst-data/datasets/<name>/`, outside git, with the licence text and the download date saved next to each.
+6. **Step 2** (retarget look test, 7.49.5) proceeds as ordered, with FineDance. If FineDance cannot be downloaded without an account, use
+   Motorica Dance (single dancer, music included) instead and report the switch; do not wait.
+7. **Standing rules unchanged.**
+8. **Overseer notes (operational defaults for step 2, not rulings; Kosta may amend):**
+   - *No SMPL body model:* the SMPL / SMPL-H model files need a registration, so they are not used. Retargeting works from the datasets'
+     local joint rotations with canonical T-pose bone directions (arms along +-x, spine, neck and head along +y). If a variant cannot be
+     built without the model file, STOP and report.
+   - *Body path:* retargeted angles -> the existing command limiter -> servo -> v2f sim, as round 1, without the spinal spring-damper (the
+     human motion is the movement source). Commands at 100 Hz from the dataset's frame rate by cubic interpolation.
+   - *Scaling rule* (one per variant, written in the rules file before any clip is viewed): each human angle is mapped linearly so that its
+     pooled p2-p98 over all sequences of the downloaded set fills a stated share of the robot joint's range around round 1's centre. The
+     builder states the share and every axis definition; the overseer reviews them before rendering.
+   - *Clip pick:* seeded, across genres (one per genre in seeded genre order, until 10); the 20 s window start seeded inside each sequence
+     after its first 5 s. A clip failing a gate in either variant is replaced by the next seeded pick, and the failure is reported.
+   - *Pair order (the 7.48 lesson):* in the 5 V1-vs-V2 pairs, V1 plays first in exactly 2 or 3, chosen by seed, so the order is balanced by
+     design.
+   - *Reference:* round-1 S03 is rendered on 2 of the 10 clips' music (seeded), 20 s, round-1 network and inputs unchanged, cortex lanes
+     computed from that audio.
