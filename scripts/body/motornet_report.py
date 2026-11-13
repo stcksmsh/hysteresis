@@ -124,11 +124,73 @@ def report(session, measurements, round1=ROUND1, manifest=None):
     return "\n".join(out)
 
 
+MEAS2 = ["pr_slow", "pr_fast", "yaw_range", "shoulder_range", "drift", "drift_range", "hand_speed", "hand_height", "freq_hz", "straightness"]
+
+
+def report2(session, measurements, settings=None, numbers=None):
+    """Round 2 report (WO30A).  measurements: {clip file stem: measure2 dict}; settings: settings.json of 30B (S01-S08 values, draw indices,
+    discards); numbers: optional numbers.json with songs: {song: {ear_energy, arousal_raw, arousal_std}} when the manifest items lack them."""
+    session = Path(session)
+    key = json.loads((session / "key" / "key.json").read_text())["key"]
+    ans = answers(session)
+    meas = json.loads(Path(measurements).read_text())
+    st = json.loads(Path(settings).read_text()) if settings and Path(settings).is_file() else {}
+    songs = (json.loads(Path(numbers).read_text()).get("songs", {}) if numbers and Path(numbers).is_file() else {})
+    label = lambda c: ans[c][1] if c in ans else "(not answered)"
+    note = lambda c: ans[c][2] if c in ans else ""
+    stem = lambda f: Path(str(f)).stem
+    out = ["# Motor-network toy test, round 2: report", "",
+           "Kosta's labels next to the setting and the measured numbers. No verdict and no score here: what it means is Kosta's call.", ""]
+    singles = {c: k for c, k in key.items() if k.get("part") == "A"}
+    pairs = {c: k for c, k in key.items() if k.get("part") == "B"}
+    rows = [[k.get("setting"), label(c), note(c)] + [meas.get(stem(k.get("file")), {}).get(x) for x in MEAS2] for c, k in sorted(singles.items(), key=lambda kv: str(kv[1].get("setting")))]
+    out += ["## Part A: silent, 30 s", "", table(["setting", "label", "note"] + MEAS2, rows) if rows else "No Part A clips in this session.", ""]
+    rows = []
+    for c, k in sorted(pairs.items(), key=lambda kv: str(kv[1].get("song"))):
+        a = ans.get(c)
+        sett = [k.get("first_setting"), k.get("second_setting")]
+        sp = [meas.get(stem(k.get("first")), {}).get("hand_speed"), meas.get(stem(k.get("second")), {}).get("hand_speed")]
+        sg = songs.get(k.get("song"), {})
+        ear, ar, ars = (k.get("ear_energy") if k.get("ear_energy") is not None else sg.get("ear_energy_raw", sg.get("ear_energy")),
+                        k.get("arousal_raw") if k.get("arousal_raw") is not None else sg.get("arousal_raw"),
+                        k.get("arousal_std") if k.get("arousal_std") is not None else sg.get("arousal_input", sg.get("arousal_std")))
+        chosen = "(not answered)" if not a else {"first": sett[0], "second": sett[1]}.get(a[1], "neither")
+        rows.append([k.get("song"), f"first {sett[0]}, second {sett[1]}", a[1] if a else "(not answered)", chosen, note(c),
+                     f"first {cell(sp[0])}, second {cell(sp[1])}", ear, ar, ars])
+    out += ["## Part B: which render fits the music", "",
+            table(["song", "settings as shown", "pick", "chosen setting", "note", "mean hand speed (m/s)", "mean ear energy", "mean arousal_b7 raw", "arousal_b7 standardised"], rows) if rows else "No Part B pairs in this session.", ""]
+    out += ["## Discards by gate", ""]
+    if "stop_rule_hit" in st:
+        out += [f"Stop rule hit: {st['stop_rule_hit']}. Draws: {st.get('draws')}, kept: {st.get('kept')}.", ""]
+    for name, k in (("per gate", "discards_per_gate"), ("per run", "discards_per_run")):
+        if st.get(k):
+            out += [f"Discards {name}:", "", table(["gate" if name == "per gate" else "run", "count"], sorted(st[k].items())), ""]
+    rows = []
+    for d in st.get("discards") or []:
+        for f in d.get("failed") or [{}]:
+            rows.append([d.get("draw_index"), values_text(d.get("values")), f.get("run"), ", ".join(f.get("gates") or []), f.get("extent_m")])
+    out += [table(["draw", "values", "run", "failed gates", "extent m"], rows) if rows else "No discards listed.", ""]
+    if st.get("round1_s03_gates"):
+        out += ["Round-1 S03 gates (rendered as the reference):", "", table(["song", "passed", "failed"], [[g.get("song"), g.get("passed"), ", ".join(g.get("failed") or [])] for g in st["round1_s03_gates"]]), ""]
+    out += ["## Network and body parameters", "", "Rules and every fixed number: `docs/MOTORNET2_RULES.md` (round 1: `docs/MOTORNET_PARAMS.md`).", ""]
+    sv = st.get("settings")
+    if isinstance(sv, list):
+        out += [table(["setting", "values", "draw index"], [[(e.get("id") or e.get("setting")), values_text(e.get("values", e.get("c"))), e.get("draw_index")] for e in sv]), ""]
+    return "\n".join(out)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--session", required=True, action="append", help="repeatable: Parts 1/2/4 session and a Part 3 session"); ap.add_argument("--measurements", required=True); ap.add_argument("--round1", default=ROUND1); ap.add_argument("--manifest", help="Part 3 manifest (default: <session>/../clips/manifest.json)")
     ap.add_argument("--out", default=str(Path(__file__).resolve().parents[2] / "docs" / "MOTORNET_REPORT.md"))
+    ap.add_argument("--round2", action="store_true", help="round 2 report -> docs/MOTORNET2_REPORT.md; --measurements is the round 2 measurement json")
+    ap.add_argument("--settings"); ap.add_argument("--numbers")
     a = ap.parse_args()
+    if a.round2:
+        out = a.out if a.out != str(Path(__file__).resolve().parents[2] / "docs" / "MOTORNET_REPORT.md") else str(Path(a.out).with_name("MOTORNET2_REPORT.md"))
+        Path(out).write_text(report2(a.session[0], a.measurements, a.settings, a.numbers) + "\n")
+        print("wrote", out)
+        return
     Path(a.out).write_text(report(a.session, a.measurements, a.round1, a.manifest) + "\n")
     print("wrote", a.out)
 
