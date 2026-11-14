@@ -94,7 +94,16 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-14 ~15:45 (clock) — newest, read first
+## UPDATE 2026-11-14 ~16:50 (clock) — newest, read first
+
+T0 READY 62b7c79 VERIFIED + MERGED into body (+ body-t0-aioz). Own check (job tmp t0check.py): 403 groups / 231 yt ids none in 2 splits;
+1852 AIOZ per-clip weights equal; hours equal (4-copy sums: FD train 14.1 / val 2.5 / test 2.3; AIOZ 37.1 / 2.9 / 11.4); token row fd_001
+k=37 equal to lanes (<1e-7); lookahead stored (ear 0.023 s, ear_energy 1.0 s, beat phase 0). Flags: 31 % train tokens with a masked
+surprisal layer (AIOZ short clips); AIOZ jitter close to FineDance (V1 wrist sign changes 4.01 vs 3.68/s; V2 7.33 vs 6.89); B7 inputs use
+the offline whole-song beat grid (as in all earlier rounds). WO38 (T1a rules + tests + timing + ESTIMATE, then STOP) SENT to A [725326].
+Next: review T1A_RULES.md; on T1A ESTIMATE tell Kosta, go for full T1a (local if <= ~10 h).
+
+## UPDATE 2026-11-14 ~15:45 (clock)
 
 BRAIN_SPEC 7.60 (body 05577f7): AIOZ calibrated prune (1,852 dancers, 19.28 h, borderline), weight cap per CLIP (8.36 h effective), split by
 id; safeguards report-only: AIOZ vs FineDance jitter in T0; T1a per-source reconstruction/jitter; S1 = 2 AIOZ + 4 FineDance clips (seeded).
