@@ -2385,3 +2385,33 @@ marked PROPOSAL were accepted by Kosta unless struck.
    - T1a: reconstruction error and jitter reported separately for FineDance-sourced and AIOZ-sourced validation chunks.
    - S1 rebuild check: of the 6 clips, 2 from AIOZ (seeded pick from held-out ids), 4 from FineDance.
 5. Everything else in 7.59 stands. T0 continues. Standing rules unchanged.
+
+### 7.61 T1a retrain: data balance check, velocity/acceleration loss, spline decoder, residual run; 2026-11-14, via Kosta + planner (answering `docs/PLANNER_BRIEF_T1A_RESULTS.md`)
+
+1. **Record.** T1a round 1: K = 1024 by the size rule; three sizes were still improving at the 40-epoch cap. Jitter stop rule failed (7-10x
+   direction changes, 17-110x power above 3 Hz); usage, ranges, gates passed. Planner reading (Kosta did not dispute): the ripple is the
+   smaller problem; 88 % of the error is shape error, and AIOZ (72 % of train chunks, 2.5x lower error) may be teaching small, soft motion.
+2. **Step 1, report-only, before any retrain:** variance explained by the K = 1024 reconstruction per joint (1 - error variance / signal
+   variance of the gesture), FineDance and AIOZ separately; gesture amplitude (RMS and p5-p95 per joint) of FineDance vs kept AIOZ after the
+   same retargeting and filtering; effective training-weight share by dataset after the per-clip cap.
+3. **Dataset share rule (fixed now):** if Step 1 shows kept-AIOZ gesture RMS below 70 % of FineDance's on 3 or more joints, AIOZ is capped
+   at 50 % of total training weight in both runs. Report which applied.
+4. **Step 2, retrain (both runs, same data unless rule 3 applies):**
+   - Run A: K = 1024 single codebook, velocity + acceleration loss terms as in Bailando's VQ-VAE (quoted and used as written); the decoder
+     outputs 25 Hz control points through a fixed cubic B-spline to 100 Hz (stated in the rules); 80-epoch cap.
+   - Run B: as Run A with 2-stage residual quantisation (2 x 1024: coarse + correction).
+   - Report for each: variance explained per joint and per dataset, all T1a stop measures, jitter.
+5. **Stop rules:** unchanged (usage >= 60 %, jitter <= 1.1x, ranges within 10 %, gates at 1.25), plus **variance explained >= 0.85 on every
+   joint on FineDance validation chunks**. S1 runs on the smaller passing model (A before B). If neither passes: report and hold. Report
+   and stop before S1.
+6. Standing rules unchanged.
+7. **Overseer notes (operational defaults, not rulings):**
+   - Variance explained per joint j and dataset: 1 - var(recon_j - gesture_j) / var(gesture_j), pooled over all chunks of the split, in
+     degrees (unweighted); Step 1 on validation and test; the 0.85 stop rule on FineDance validation.
+   - Weight share = sum over kept windows of (npz weight x chunks) per dataset / total. The 50 % cap scales every AIOZ weight by one factor
+     so AIOZ's sum equals FineDance's.
+   - Bailando's loss: read from the paper (arXiv 2203.13055) and its official repository; quote the terms and weights in the rules note;
+     velocity and acceleration are first and second differences of the 100 Hz decoded gesture (joint angles here, positions in Bailando).
+   - B-spline: uniform cubic B-spline, control points every 4 rows (40 ms); a row depends on 4 control points, so the extra lookahead is at
+     most 80 ms; the decoder's total right reach stays <= 0.25 s (stated and tested).
+   - Runs A and B in parallel (cores 6-13 and 14-19, 4 threads each), resumable per epoch; same seeds as round 1 where applicable.
