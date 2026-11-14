@@ -94,7 +94,15 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-14 ~15:50 (clock) — newest, read first
+## UPDATE 2026-11-14 15:25 (clock) — newest, read first
+
+B: AIOZ CHECKED 6427977 (body-t0-aioz). Literal 7.59.2.4 prune keeps 168/6011 persons (2.8 %, 1.52 of 60.77 h) -> HOLD aioz; the literal
+rule (2) also prunes 58 % of FineDance itself (union over 20 joints; overseer default 7.56.10 was wrong). Calibrated variant (thresholds
+(2)/(3) = max(1 %, FineDance p95): 5.78 % / 1 %), written in T0_AIOZ_RULES.md at 15:14 before AIOZ measures (15:16): 1852 (30.8 %,
+19.28 h). Overseer recomputed both from aioz_measures.json: equal. ASKED KOSTA: adopt calibrated? A (body-t0, pushes from body-t0-w):
+T0_RULES pushed (NOT yet reviewed), lanes repro 5.7e-6, look window 4.7e-12 deg, estimate 0.14 h; FineDance lanes running ~30 min.
+
+## UPDATE 2026-11-14 ~15:50 (clock)
 
 WO37 SENT (body 238cd58, split in two): Builder A = agent 1 [725326] (main T0, branch body-t0, cores 6-13); Builder B = agent 1 [7fd046]
 (AIOZ check only, branch body-t0-aioz, cores 14-17, stop at "AIOZ CHECKED"). Both named "agent 1": use refs. User: preserve usage. Next:
