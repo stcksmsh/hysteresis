@@ -94,7 +94,14 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-13 ~21:45 (clock) — newest, read first
+## UPDATE 2026-11-14 14:20 (clock) — newest, read first
+
+Machine rebooted (boot 14:12; previous boot ended 11:46). hyst-wo36-session died with it. Kosta had answered 2 of 6 re-look pairs
+(answers.csv last write 21:47 on 11-13). Overseer restarted the SAME session dir with the same tool archive as unit hyst-wo36-session2
+(cores 18-19, MemoryMax 2G) on http://127.0.0.1:8765/; a reload resumes at the first unanswered item; key/answers/order/labels 404.
+No builders running. Everything else as in the 21:45 entry below (after Kosta: join, report, merge body-lowpass, stop unit, brief).
+
+## UPDATE 2026-11-13 ~21:45 (clock)
 
 **RE-LOOK SESSION LIVE for Kosta (7.55).** WO36 CLIPS READY (body-lowpass f1d1906; NOT merged yet, merge after report) VERIFIED: cutoffs
 V1 2.50 Hz, V2 5.75 Hz reproduced by own filter+measure with the builder's window (V1 0.0254 <= 0.0290 < 0.0344 at 2.75; V2 0.0804 <=
