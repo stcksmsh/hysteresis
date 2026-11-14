@@ -17,3 +17,11 @@
 FOR USER: vigour floor 0.05 and decoder smoothing box +-7 steps are my defaults (no data behind them yet); the decoder sees zero neighbours at window edges in training; the stop-measure evaluation code (jitter, ranges, gates on reconstructed windows, section 5 of the rules) is specified but not yet written, to be added before the full run; losses are on scaled gesture units, weighted by the T0 dancer weight (AIOZ clips are 72 % of train chunks before weighting).
 
 T1A ESTIMATE
+
+## Full training and stop measures (2026-11-14)
+
+- Trained K = 1024, 512 (then 256, 128), 4 threads per unit, units `hyst-wo38-k<K>`; 1024, 512, 256 reached the 40-epoch cap (error still falling at the cap), 128 stopped early at epoch 27. Size rule: K = 1024 (ratios 1.104 / 1.118 / 1.151, none within 5 percent; checked in `t1a_eval.pick_size`, tested).
+- Stop measures on the 2,455 test windows (`docs/T1A_REPORT.md`): code usage 0.999 (>= 0.60 holds); joint ranges 0.946-1.000 of the original (within 10 percent holds); gate pass share 0.980 (control, the original windows: 1.000; FineDance 0.951, AIOZ 0.986); **jitter ratios far above 1.1: acceleration sign changes 7-10 x, power above 3 Hz 17-110 x the original (all four sizes, both sources)**. The numbers are in the report; no verdict here.
+- FOR USER: the jitter excess comes from the reconstruction (the originals are low-passed to 2.5 / 5.75 Hz); the gates still pass 98 percent because the spinal layer and limiter smooth the commands. Pre-roll rows of the gate use the original targets; yaw and roll are re-referenced to the window start (approximation of the T0 gate, control 1.000).
+
+T1A READY
