@@ -94,7 +94,14 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-14 ~16:50 (clock) — newest, read first
+## UPDATE 2026-11-14 ~17:00 (clock) — newest, read first
+
+T1A ESTIMATE d7710a3 (body-t1a): 7.22 h serial upper bound (1.65/1.80/1.87/1.90 h for K 128/256/512/1024, 40-epoch cap), ~1.1 GB peak;
+checked vs time.log. T1A_RULES accepted (decoder right reach 0.21 s; test split 83 % AIOZ chunks: note when reading stop rules). Kosta GO,
+PARALLEL: 2 units at a time (cores 6-13 / 14-19, 4 threads), K1024+512 then 256+128, units hyst-wo38-k<K>; A adds stop-measure eval +
+per-epoch checkpoints first. Next: watch units; on T1A READY verify size rule + stop measures from saved values.
+
+## UPDATE 2026-11-14 ~16:50 (clock)
 
 T0 READY 62b7c79 VERIFIED + MERGED into body (+ body-t0-aioz). Own check (job tmp t0check.py): 403 groups / 231 yt ids none in 2 splits;
 1852 AIOZ per-clip weights equal; hours equal (4-copy sums: FD train 14.1 / val 2.5 / test 2.3; AIOZ 37.1 / 2.9 / 11.4); token row fd_001
