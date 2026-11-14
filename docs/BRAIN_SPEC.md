@@ -2214,3 +2214,33 @@ PROPOSAL = planner, not yet ruled.
    - **Report:** per variant, per split and per genre: windows kept / dropped by failed part, usable hours; cortex lane coverage; run time.
    - **Compute:** each long step in its own detached systemd unit with MemoryMax, 8 threads (§0); a time estimate from one song before the
      full run; T0 stops at its report. T1 starts only after the overseer has reviewed T1's rules note and Kosta has seen the T0 numbers.
+9. **Kosta's amendments, 2026-11-14 (strikes the DEFAULT "FineDance only"):**
+   - **AIOZ-GDANCE is added, checked and pruned first.** Licence wording ("non-commercial artistic projects") matches FineDance's
+     (`DATASET_LICENCES.md`). T0 runs a report-only validity check on AIOZ before it enters any training set, with the prune rule stated
+     in `T0_RULES.md` before any AIOZ number is looked at (overseer defaults below). AIOZ hours are always reported separately.
+   - **V1 and V2 together** (Kosta's question: both variants as one training set, "human dance movement in general"). Not decided; T0 makes
+     both, so it is a T1 question for the planner. Overseer note for that brief: the two variants are the same human motion mapped two ways,
+     not twice the motion; the same robot joint means different body parts in each (e.g. shoulder = arm shoulder in V1, torso lean in V2).
+     Mixed without a label, the model would switch between the two mappings unpredictably; with a variant input (0/1), it can share timing
+     to music across both and be run in either. The ruling "one model, one variant" would change.
+10. **Overseer defaults for AIOZ in T0 (not rulings; Kosta may amend):**
+    - **Safety:** the `.pkl` files are untrusted; open them only with a restricted unpickler that allows numpy arrays and plain containers
+      and nothing else (a test proves a crafted pickle is refused).
+    - **Format:** `smpl_poses` (persons x frames x 72, SMPL 24 joints axis-angle), `root_trans`. The frame rate is not stated: the builder
+      derives it from music length / frame count on every sequence and reports the distribution; a sequence off by > 2 % from the mode is
+      dropped and counted. Each person is a separate sequence; the first 22 SMPL joints map onto FineDance's SMPL-H body joints (same
+      order) for the existing retarget code, the adapter tested on a FineDance sequence converted to axis-angle and back (max abs angle
+      difference reported).
+    - **Song unit:** the YouTube id (first name field); all clips and persons of one id go to the same split. AIOZ's own split files are
+      not used; one seeded split (seed 33001) over FineDance songs and AIOZ ids together, same 15 / 10 % shares, with the audio-hash check
+      against FineDance and the check songs.
+    - **Validity check (per person-sequence, before the low-pass), report-only, with FineDance as the reference distribution:**
+      (1) human end-point power above 3 Hz (the Step A measure, both end points); (2) share of frames where any body joint's angular speed
+      exceeds FineDance's p99.9 for that joint; (3) root jumps: share of frames with root speed above FineDance's p99.9; (4) frozen
+      frames: share of frames with all joints still (< 1 deg/s). Also the per-person mean height and its vertical drift.
+    - **Prune rule:** drop a person-sequence if (1) is above FineDance's p95 for either end point, or (2) or (3) exceeds 1 % of frames, or
+      (4) exceeds 20 %. Counts dropped per reason and per style are reported. The remaining AIOZ data then goes through the same
+      low-pass (V1 2.50 Hz, V2 5.75 Hz, the cutoffs are NOT recomputed), H1, windows and 1.25 gates as FineDance; the lamp-path power
+      above 3 Hz of AIOZ vs FineDance after the low-pass is reported.
+    - The AIOZ check report is a stop point: T0 continues to the full AIOZ run only if at least 30 % of AIOZ person-sequences survive the
+      prune; otherwise "HOLD aioz <share>", and FineDance continues alone.
