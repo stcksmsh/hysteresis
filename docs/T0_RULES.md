@@ -104,3 +104,7 @@ Where this note picks a detail the spec leaves open, it is marked **(default)** 
 - AIOZ non-30 fps resampled to 30 by slerp; mode reported.
 - Ear-energy and beat-phase lanes keep their recorded smoothing, so a token's feature can reach up to 1 s past its end (the 7.59.8 "frames up to the token's end" holds for all other columns).
 - Stored targets are referenced at sequence frame 0; windows are re-referenced only for the gate.
+
+## Addendum (overseer review)
+
+`token_lookahead_s` (per column, seconds past the token end a feature can see; `t0_lib.TOKEN_LOOKAHEAD_S`) is stored in `token_norm.json` and in every npz: ear 0.0232 s (half STFT window), modes / surprisal / arousal_b7 / beat phase 0, ear energy 1.0 s. The beat phase rests on the offline whole-song beat grid (not a lookahead of its stamps). Weighting is the single function `t0_lib.hours_of_dancers` (rerunnable once the AIOZ cap unit is chosen).
