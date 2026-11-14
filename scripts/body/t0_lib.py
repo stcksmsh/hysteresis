@@ -144,6 +144,10 @@ def pool_tokens(ear, h_abs, sur, aro, ee, y, n_tok):
 
 TOKEN_COLS = ([f"ear{i}" for i in range(44)] + [f"mode_l{l + 1}g{g}" for l in range(4) for g in range(8)] + [f"surprisal_l{l + 1}" for l in range(4)]
               + ["arousal_b7", "ear_energy", "beat_cos_start", "beat_cos_mid", "beat_sin_start", "beat_sin_mid"])
+# seconds past the token's end that a column can see: ear = half of the 2048-sample STFT window; modes, surprisal (stamped where its target completes), arousal_b7 and the block-aligned
+# beat phase (block k ends at the token end; start value interpolates blocks k-1, k) are causal; ear energy = 1 s (2 s onset-density window centred, plus the loudness mean's 0.5 s).
+# The offline beat grid under the beat phase uses the whole song (not a lookahead of this lane's stamps; flagged in the report).
+TOKEN_LOOKAHEAD_S = [1024 / 44100] * 44 + [0.0] * 32 + [0.0] * 4 + [0.0, 1.0] + [0.0] * 4
 NORM_FROM = 44                                                          # columns 0..43 are already standardised by bd.stats; clipped only
 
 
@@ -155,7 +159,7 @@ def fit_token_norm(tokens_masks):
     for c in range(NORM_FROM, X.shape[1]):
         v = X[~M, c] if 76 <= c < 80 else X[:, c]
         mean[c], sd[c] = float(v.mean()), float(max(v.std(), 1e-8))
-    return dict(columns=TOKEN_COLS, mean=mean.tolist(), sd=sd.tolist(), clip=3.0, n_tokens=int(len(X)), n_masked=int(M.sum()))
+    return dict(columns=TOKEN_COLS, mean=mean.tolist(), sd=sd.tolist(), clip=3.0, token_lookahead_s=TOKEN_LOOKAHEAD_S, n_tokens=int(len(X)), n_masked=int(M.sum()))
 
 
 def standardise_tokens(tok, nm):

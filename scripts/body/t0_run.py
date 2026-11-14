@@ -113,7 +113,7 @@ def one(args):
             continue
         t0 = time.time()
         r = C.process(mrot if copy.endswith("m") else rot, trans, copy, gate=gate)
-        np.savez_compressed(str(p) + ".tmp.npz", tokens=tok, token_cols=np.array(T.TOKEN_COLS), token_mask=mask, weight=c["weight"], fps=30.0, split=sp[c["key"]][1], group=sp[c["key"]][0],
+        np.savez_compressed(str(p) + ".tmp.npz", tokens=tok, token_cols=np.array(T.TOKEN_COLS), token_lookahead_s=np.array(T.TOKEN_LOOKAHEAD_S, np.float32), token_mask=mask, weight=c["weight"], fps=30.0, split=sp[c["key"]][1], group=sp[c["key"]][0],
                             win_start_tok=np.arange(r["n_win"]) * T.WIN_TOK, **r)
         Path(str(p) + ".tmp.npz").replace(p)
         out.append((copy, time.time() - t0, r["n_win"], int(r["win_pass"].sum())))
