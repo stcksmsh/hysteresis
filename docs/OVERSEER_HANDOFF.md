@@ -94,7 +94,17 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-14 14:25 (clock) — newest, read first
+## UPDATE 2026-11-14 ~14:45 (clock) — newest, read first
+
+Planner answered = BRAIN_SPEC 7.56 (body fa13a4e): LP + H1 is the training-data pipeline, retargeting ENDS; jitter = known gap; training
+windows gated at 1.25. Imitation-training plan T0 (data) / T1 (256-unit RNN + 4 gain units + MDN, TBPTT on CPU) / T2 (checks, stop rules)
+/ T3 (Kosta blind look after go). DEFAULTs Kosta may strike: V2 variant, FineDance only. Overseer notes 7.56.8: split by SONG (181 names
+for 203 seqs, 22 songs twice), seed 33001 -> 27/18/136; lanes via toy recipe (analyze_mix beats, B7 epoch_006.pt, l3 cos/sin, L4 proj seed
+30002, ear_energy.py), standardise on train songs; T0 makes BOTH V1 and V2 targets (H1 output before limiter). Prompt
+docs/BUILDER_PROMPT_WO37_T0_TRAINING_DATA.md (body) NOT SENT: waiting for the user's "send" (builders offline -> paste). On T0 rules note:
+review; on T0 READY: recompute split, a lane reproduction, gate counts from window tables, hours.
+
+## UPDATE 2026-11-14 14:25 (clock)
 
 RE-LOOK DONE. Kosta 6/6 (pairs 3-6 on 11-14 after reboot). Overseer join: LP picked C04_V1, C10_V1, C04_V2, C06_V2; old C09_V2; same
 C09_V1 -> LP 4 / old 1 / same 1; notes on pairs 3-6 all "close/unsure". Report section 4 in docs/LOWPASS_REPORT.md; body-lowpass MERGED
