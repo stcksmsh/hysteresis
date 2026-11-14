@@ -102,9 +102,14 @@ def cmd_repro():
     for name, (wav, bj, ref) in cases.items():
         x = bd.danced_inputs(name) if wav is None else b2.build_inputs(ff.fast_features(ff.load_mono(str(wav))), json.loads(bj.read_text())["beats"], mean, std)
         z = D.song_lanes(model, x)
-        res[name] = {k: float(np.abs(z[k] - ref[k]).max()) for k in ("arousal_b7", "s10") if k in ref.files and k in z}
+        res[name] = {k: float(np.nanmax(np.abs(z[k] - ref[k]))) for k in ("arousal_b7", "s10") if k in ref.files and k in z}
+        res[name]["nan_pattern_equal"] = bool(np.array_equal(np.isnan(z["s10"]), np.isnan(ref["s10"])))
+        l4 = np.load(f"/secondary/hyst-data/body/motornet_toy2/lanes/{name}.npz")["l4"]                  # stored L4 state: [real, imag] (nb10, 512)
+        stored = np.abs(l4[:, :256] + 1j * l4[:, 256:]).reshape(len(l4), 8, 32).mean(-1)
+        _, habs = lanes_of(model, x)
+        res[name]["l4_abs_groups"] = float(np.abs(habs[:len(stored), 24:32] - stored[:len(habs)]).max())
         print(name, res[name], flush=True)
-    worst = max(v for d in res.values() for v in d.values())
+    worst = max(v for d in res.values() for k, v in d.items() if k != "nan_pattern_equal")
     print("max abs diff", worst, "HOLD lanes" if worst > 1e-4 else "lanes reproduce")
     (OUT / "lanes_repro.json").write_text(json.dumps(res))
 
