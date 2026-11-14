@@ -8,3 +8,5 @@ name = "hyst"
 path = "src/main.rs"
 
 [dependencies]
+hyst-compile = { path = "../hyst-compile" }
+serde_json.workspace = true

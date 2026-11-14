@@ -1,0 +1,90 @@
+{
+ "bodyTrack": {
+  "version": 1,
+  "source": "authored-state",
+  "map": "authored:fixture",
+  "dims": [
+   "curl_extension",
+   "height",
+   "arch",
+   "time",
+   "weight",
+   "flow",
+   "space",
+   "succession_direction",
+   "succession_delay",
+   "initiation",
+   "breath_depth",
+   "breath_rate",
+   "size",
+   "energy",
+   "rhythm"
+  ],
+  "authored": [],
+  "phrases": [
+   {
+    "start": 0,
+    "end": 8,
+    "body": [
+     0.5,
+     0.049118,
+     0.5,
+     0.5,
+     0.5,
+     0.5,
+     0.5,
+     0.5,
+     0.5,
+     0.5,
+     0.5,
+     0.5,
+     0.558942,
+     0.5,
+     0.5
+    ]
+   },
+   {
+    "start": 8,
+    "end": 16,
+    "body": [
+     0.5,
+     0.249026,
+     0.5,
+     0.5,
+     0.5,
+     0.5,
+     0.5,
+     0.5,
+     0.5,
+     0.5,
+     0.5,
+     0.5,
+     0.798832,
+     0.5,
+     0.5
+    ]
+   },
+   {
+    "start": 16,
+    "end": 20,
+    "body": [
+     0.5,
+     0.415607,
+     0.5,
+     0.5,
+     0.5,
+     0.5,
+     0.5,
+     0.5,
+     0.5,
+     0.5,
+     0.5,
+     0.5,
+     0.970759,
+     0.5,
+     0.5
+    ]
+   }
+  ]
+ }
+}

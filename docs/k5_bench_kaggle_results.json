@@ -1,0 +1,47 @@
+{
+ "host": "a11a4721c21c",
+ "python": "3.13.16",
+ "jax": "0.11.1",
+ "backend": "gpu",
+ "devices": [
+  "cuda:0",
+  "cuda:1"
+ ],
+ "cpu_count": 4,
+ "x64": true,
+ "mujoco": "3.17.0",
+ "mjx_import": true,
+ "calibrate_s": 142.60614347457886,
+ "round_s_all": [
+  712.2770807743073,
+  452.15781140327454,
+  451.9411406517029
+ ],
+ "round_s_first_incl_compile": 712.2770807743073,
+ "round_s": 452.0494760274887,
+ "grad_step": {
+  "16": {
+   "s_per_step": 15.219297170639038,
+   "steps_per_s": 0.06570605651417288,
+   "window_blocks_per_s": 8.410375233814129
+  },
+  "64": {
+   "s_per_step": 17.596802234649658,
+   "steps_per_s": 0.05682850705856725,
+   "window_blocks_per_s": 29.09619561398643
+  },
+  "256": {
+   "s_per_step": 21.029107093811035,
+   "steps_per_s": 0.04755313649500148,
+   "window_blocks_per_s": 97.38882354176303
+  }
+ },
+ "eval_s_per_window": 0.7677057348191738,
+ "observer_fit_s": 6.120530366897583,
+ "projection_h": {
+  "pass_training": 122.68120502190457,
+  "validations_5": 0.3081192247931742,
+  "check_argmax_3_policies": 0.7312221161555499,
+  "one_try_pass_plus_check": 123.7205463628533
+ }
+}
