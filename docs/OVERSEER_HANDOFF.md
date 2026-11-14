@@ -94,7 +94,14 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-14 ~17:00 (clock) — newest, read first
+## UPDATE 2026-11-14 22:50 (clock) — newest, read first
+
+T1a training ALL DONE 22:47 (units ok). Best val err (weighted): 1024 0.4158 (ep 37/40), 512 0.4592 (39/40), 256 0.5133 (39/40), 128 0.5906
+(ep 21, early stop at 27). FineDance err ~2.5x AIOZ. Ratios to next larger 1.104/1.118/1.151 -> size rule gives K=1024. Rule flaw noted
+(literal "smallest within 5 % of next larger" could skip a large gain; moot here). Sent A: confirm K, run stop measures, T1A_REPORT, T1A
+READY. Next: verify stop measures from saved values; then S1 (Kosta blind rebuild, 6 clips: 2 AIOZ + 4 FineDance seeded) needs a WO.
+
+## UPDATE 2026-11-14 ~17:00 (clock)
 
 T1A ESTIMATE d7710a3 (body-t1a): 7.22 h serial upper bound (1.65/1.80/1.87/1.90 h for K 128/256/512/1024, 40-epoch cap), ~1.1 GB peak;
 checked vs time.log. T1A_RULES accepted (decoder right reach 0.21 s; test split 83 % AIOZ chunks: note when reading stop rules). Kosta GO,
