@@ -94,7 +94,12 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-14 ~15:00 (clock) — newest, read first
+## UPDATE 2026-11-14 ~15:10 (clock) — newest, read first
+
+Kosta RULED 7.56.11 (body): V1 + V2 of every clip pooled in ONE training set, NO variant label ("a dance is freedom"); supersedes the
+15:00 note's "deferred to T1". T2 adds a report-only nearest-V1/V2 distance per output window. T0 unchanged (builds both). WO37 NOT SENT.
+
+## UPDATE 2026-11-14 ~15:00 (clock)
 
 Kosta struck "FineDance only": AIOZ-GDANCE added, checked + pruned first (BRAIN_SPEC 7.56.9-10, body bd7a36b): restricted unpickler,
 fps derived, persons = sequences, split unit = YouTube id (joint seed-33001 split with FineDance), validity (end-point >3 Hz power vs
