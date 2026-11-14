@@ -19,7 +19,12 @@ PARENT_ALL = {**RT.PARENT, 13: 9, 16: 13, 18: 16, 20: 18}
 
 def load_rot(path):
     """FineDance motion npy -> (dict joint -> (T,3,3) local rotations for ROT_JOINTS, root translation (T,3))"""
-    a = np.load(path).astype(np.float64)
+    return rot_from_array(np.load(path))
+
+
+def rot_from_array(a):
+    """(T, 315) motion array (cols 0:3 translation, then 52 x 6D) -> as load_rot"""
+    a = np.asarray(a, np.float64)
     r6 = a[:, 3:].reshape(len(a), 52, 6)
     return {j: RT.six_to_matrix(r6[:, j]) for j in ROT_JOINTS}, a[:, :3]
 

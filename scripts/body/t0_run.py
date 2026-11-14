@@ -93,6 +93,30 @@ def cmd_norm():
     print("token norm from", len(cat), "train sequences,", nm["n_tokens"], "tokens,", nm["n_masked"], "masked")
 
 
+AIOZ = Path("/secondary/hyst-data/datasets/aioz/data")
+
+
+def aioz_rot(c):
+    """AIOZ person-sequence -> (rotations, translation) through B's restricted unpickler and adapter"""
+    import t0_aioz as A
+    d = A.load_pkl(AIOZ / "motions_smpl" / f"{c['seq']}.pkl")
+    return T.rot_from_array(A.to_retarget_input(np.asarray(d["smpl_poses"])[c["person"]], np.asarray(d["root_trans"])[c["person"]]))
+
+
+def cmd_aioz():
+    """calibrated keep list (BRAIN_SPEC 7.60) -> t0/catalogue_aioz.json (one entry per dancer), t0/lanes_list_aioz.json (one per clip wav)"""
+    keep = json.loads((OUT / "aioz_keep_calibrated.json").read_text())
+    hs, cat = {}, []
+    for k in keep:
+        if k["id"] not in hs:
+            hs[k["id"]] = sha(AIOZ / "musics" / f"{k['id']}.wav")
+        cat.append(dict(key=f"aioz_{k['id']}_p{k['person']}", dataset="aioz", seq=k["id"], person=k["person"], clip=k["id"], name=k["id"][:11], genre=k["style"].lower(), style1=k["style"],
+                        t30=int(k["frames"]), fps=k["fps"], hours=k["frames"] / 30 / 3600, hash=hs[k["id"]], lane_key=f"aioz_{k['id']}", motion=str(AIOZ / "motions_smpl" / f"{k['id']}.pkl")))
+    (OUT / "catalogue_aioz.json").write_text(json.dumps(cat, indent=1))
+    (OUT / "lanes_list_aioz.json").write_text(json.dumps([dict(key=f"aioz_{i}", wav=str(AIOZ / "musics" / f"{i}.wav")) for i in sorted(hs)]))
+    print("aioz dancers", len(cat), "clips", len(hs), "hours", round(sum(c["hours"] for c in cat), 2))
+
+
 def one(args):
     """one dancer, all four copies: -> list of (copy, seconds, n_win, n_pass)"""
     c, gate = args
@@ -100,7 +124,7 @@ def one(args):
     seq = Path(c["motion"])
     sp = split_of()
     nm = json.loads((OUT / "token_norm.json").read_text())
-    rot, trans = T.load_rot(seq) if c["dataset"] == "finedance" else __import__("t0_aioz").load_rot(c)
+    rot, trans = T.load_rot(seq) if c["dataset"] == "finedance" else aioz_rot(c)
     mrot, _ = T.mirror(rot, trans)
     (OUT / "seq" / c["dataset"]).mkdir(parents=True, exist_ok=True)
     n = min(T.n_tokens(c["t30"]), int(np.load(OUT / "lanes" / f"{c['song_lane']}.npz")["n_frames"]) // 50)
@@ -123,8 +147,8 @@ def one(args):
 def dancers():
     cat = [c for c in load_catalogue() if c["key"] in split_of()]
     byg = {}
-    for c in cat:
-        byg.setdefault(split_of()[c["key"]][0], []).append(c)
+    for c in cat:                                                               # weight cap: per AIOZ clip (7.60.3), per song group for FineDance
+        byg.setdefault(c["clip"] if c["dataset"] == "aioz" else split_of()[c["key"]][0], []).append(c)
     for g in byg.values():
         w = T.hours_of_dancers([(c["key"], c["hours"]) for c in g])
         for c in g:
@@ -147,4 +171,4 @@ def cmd_seq(argv):
 
 if __name__ == "__main__":
     a = sys.argv[1:]
-    {"catalogue": cmd_catalogue, "split": cmd_split, "norm": cmd_norm, "seq": lambda: cmd_seq(a[1:])}[a[0]]()
+    {"catalogue": cmd_catalogue, "aioz": cmd_aioz, "split": cmd_split, "norm": cmd_norm, "seq": lambda: cmd_seq(a[1:])}[a[0]]()
