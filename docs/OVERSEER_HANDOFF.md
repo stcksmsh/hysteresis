@@ -94,7 +94,14 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-14 15:25 (clock) — newest, read first
+## UPDATE 2026-11-14 ~15:45 (clock) — newest, read first
+
+BRAIN_SPEC 7.60 (body 05577f7): AIOZ calibrated prune (1,852 dancers, 19.28 h, borderline), weight cap per CLIP (8.36 h effective), split by
+id; safeguards report-only: AIOZ vs FineDance jitter in T0; T1a per-source reconstruction/jitter; S1 = 2 AIOZ + 4 FineDance clips (seeded).
+Sent to A [725326]. T0_RULES reviewed: accepted + token_lookahead_s per column (sent). B [7fd046] done (stopped). Next: T0 READY -> verify
+split/weights/token row/gates/hours, AIOZ jitter table.
+
+## UPDATE 2026-11-14 15:25 (clock)
 
 B: AIOZ CHECKED 6427977 (body-t0-aioz). Literal 7.59.2.4 prune keeps 168/6011 persons (2.8 %, 1.52 of 60.77 h) -> HOLD aioz; the literal
 rule (2) also prunes 58 % of FineDance itself (union over 20 joints; overseer default 7.56.10 was wrong). Calibrated variant (thresholds
