@@ -94,7 +94,15 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-14 23:10 (clock) — newest, read first
+## UPDATE 2026-11-14 ~23:25 (clock) — newest, read first
+
+Planner = BRAIN_SPEC 7.61 (body): Step 1 report-only (variance explained per joint FD/AIOZ, gesture RMS FD vs AIOZ, weight share); rule:
+AIOZ RMS < 70 % of FD on >= 3 joints -> AIOZ capped at 50 % weight; Run A (K1024 + Bailando vel/acc loss + 25 Hz B-spline decoder, 80
+epochs) and Run B (2x1024 residual), parallel; new stop rule VE >= 0.85 every joint FD validation; S1 on smaller passing (A first); else
+hold. Overseer notes 7.61.7. WO39 (body a2e5527) SENT to A [725326]. Next: verify STEP1 numbers + rule application; review T1A2_RULES
+(Bailando quote, spline reach); watch units; on T1A2 READY recompute VE + jitter from saved recon.
+
+## UPDATE 2026-11-14 23:10 (clock)
 
 T1A READY 3f1b568 merged into body. STOP RULE FIRES: jitter 7-10x (acc sign changes), 17-110x (>3 Hz power); usage 0.999, ranges
 0.946-1.0, gates 0.98 pass. Overseer recompute (job tmp t1acheck.py, K1024, 200 test windows): ~40 changes/s vs 4-5; decoder ripple RMS
