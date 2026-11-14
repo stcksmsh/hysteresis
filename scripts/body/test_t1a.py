@@ -77,3 +77,45 @@ def test_full_model_shapes_and_straight_through_grad():
     loss = (o["recon"] - w).pow(2).mean() + o["commit"]
     loss.backward()
     assert all(p.grad is not None for p in m.enc.parameters())                    # gradient reaches the encoder through the quantiser
+
+
+def test_measures_identity_smoothing_and_sources():
+    import t1a_eval as E
+    r = np.random.default_rng(0)
+    t = np.arange(2001) / 100.0
+    orig = np.stack([np.stack([np.sin(2 * np.pi * (0.5 + 0.1 * i) * t) * 10 + r.normal(0, 0.3, 2001) for i in range(5)], 1) for _ in range(6)])
+    src = np.array([0, 0, 0, 1, 1, 1])
+    jit = lambda x: [dict(acc_sign_changes_per_s=float(np.sum(np.diff(np.sign(np.diff(x[:, i], 2))) != 0)) / 20.0, p_gt3=float(np.var(np.diff(x[:, i])))) for i in range(5)]
+    same = E.measures(orig, orig, src, jit)
+    assert set(same) == {"all", "finedance", "aioz"}
+    assert all(abs(same["all"][j]["range_p5_p95"]["ratio"] - 1) < 1e-12 and abs(same["aioz"][j]["acc_sign_changes_per_s"]["ratio"] - 1) < 1e-12 for j in E.JN)
+    k = np.ones(9) / 9
+    sm = np.stack([np.stack([np.convolve(o[:, i], k, "same") for i in range(5)], 1) for o in orig])
+    res = E.measures(orig, sm, src, jit)
+    assert all(res["all"][j]["acc_sign_changes_per_s"]["ratio"] < 1.0 and res["all"][j]["range_p5_p95"]["ratio"] <= 1.0 for j in E.JN)
+
+
+def test_codebook_size_rule():
+    import t1a_eval as E
+    assert E.pick_size({128: 1.04, 256: 1.0, 512: 0.9, 1024: 0.8}) == 128           # 128 within 5 % of 256
+    assert E.pick_size({128: 1.30, 256: 1.04, 512: 1.0, 1024: 0.8}) == 256
+    assert E.pick_size({128: 2.0, 256: 1.5, 512: 1.2, 1024: 1.0}) == 1024           # none qualifies: the largest
+
+
+def test_training_resumes_from_checkpoint(tmp_path, monkeypatch):
+    import json
+    import t1a_train as TR
+    r = np.random.default_rng(0)
+    d = dict(g=r.normal(0, 3, (8, 2000, 5)).astype(np.float32), w=np.ones(8, np.float32), src=np.array([0, 1] * 4, np.int8))
+    monkeypatch.setattr(TR.DD, "load", lambda s: d)
+    monkeypatch.setattr(TR.DD, "scale", lambda: np.ones(5, np.float32))
+    monkeypatch.setattr(TR, "OUT", tmp_path)
+    monkeypatch.setattr(TR, "BATCH", 4)
+    monkeypatch.setattr(TR, "EPOCH_CAP", 1)
+    TR.cmd_train(16, 2)
+    assert (tmp_path / "k16" / "ckpt.pt").exists() and (tmp_path / "k16" / "done.json").exists()
+    (tmp_path / "k16" / "done.json").unlink()
+    monkeypatch.setattr(TR, "EPOCH_CAP", 2)
+    TR.cmd_train(16, 2)
+    log = json.loads((tmp_path / "k16" / "log.json").read_text())
+    assert [e["epoch"] for e in log] == [0, 1]

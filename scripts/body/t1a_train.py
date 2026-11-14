@@ -1,7 +1,7 @@
 """WO38 T1a training loop and timing run (rules docs/T1A_RULES.md sections 4 and 6). Brain env, 8 threads.
 
     t1a_train.py time           each K for 40 steps on the real train set -> t1a/timing.json (seconds per step / epoch, memory)
-    t1a_train.py train K        FULL training of one size (NOT run in work order 38; starts only on the overseer's go) -> t1a/k<K>/{best.pt,log.json}
+    t1a_train.py train K [THREADS]   full training of one size, checkpoint each epoch, resumable -> t1a/k<K>/{best.pt,ckpt.pt,log.json,done.json}
 """
 import json
 import math
@@ -120,31 +120,48 @@ def cmd_time():
     print("projected hours, all four to the epoch cap:", round(out["projected_hours_all_four_to_cap"], 2))
 
 
-def cmd_train(k):
-    torch.set_num_threads(8)
+def cmd_train(k, threads=8):
+    """full training of one size; threads stated by the caller. Checkpoints every epoch (ckpt.pt, atomic) and resumes from it; done.json marks the end (cap or early stop)."""
+    torch.set_num_threads(threads)
     k = int(k)
     tr, va, sd = DD.load("train"), DD.load("validation"), DD.scale()
     d = OUT / f"k{k}"
     d.mkdir(parents=True, exist_ok=True)
+    if (d / "done.json").exists():
+        print(k, "done already")
+        return
     model, rng, gen = make(k), np.random.default_rng(SEEDS["shuffle"]), torch.Generator().manual_seed(SEEDS["reset"])
     opt = torch.optim.Adam(model.parameters(), lr=LR0, betas=(0.9, 0.99))
-    spe, step, best, bad, log = math.ceil(len(tr["g"]) / BATCH), 0, float("inf"), 0, []
-    for ep in range(EPOCH_CAP):
+    spe, step, best, bad, log, ep0 = math.ceil(len(tr["g"]) / BATCH), 0, float("inf"), 0, [], 0
+    if (d / "ckpt.pt").exists():
+        c = torch.load(d / "ckpt.pt", weights_only=False)
+        model.load_state_dict(c["model"])
+        opt.load_state_dict(c["opt"])
+        rng.bit_generator.state, gen = c["rng"], gen
+        gen.set_state(c["gen"])
+        step, best, bad, log, ep0 = c["step"], c["best"], c["bad"], c["log"], c["epoch"] + 1
+        print(k, "resumed after epoch", c["epoch"], flush=True)
+    stopped = "cap"
+    for ep in range(ep0, EPOCH_CAP):
         t0 = time.time()
         step += epoch(model, opt, tr["g"], tr["w"], sd, step, spe * EPOCH_CAP, rng, gen)
         ev = evaluate(model, va, sd)
-        log.append(dict(epoch=ep, seconds=time.time() - t0, **ev))
-        (d / "log.json").write_text(json.dumps(log, indent=1))
+        log.append(dict(epoch=ep, seconds=time.time() - t0, threads=threads, **ev))
         print(k, log[-1], flush=True)
         if ev["err_weighted"] < best:
             best, bad = ev["err_weighted"], 0
             torch.save(model.state_dict(), d / "best.pt")
         else:
             bad += 1
-            if bad >= PATIENCE:
-                break
+        torch.save(dict(model=model.state_dict(), opt=opt.state_dict(), rng=rng.bit_generator.state, gen=gen.get_state(), step=step, best=best, bad=bad, log=log, epoch=ep), d / "ckpt.tmp")
+        (d / "ckpt.tmp").replace(d / "ckpt.pt")
+        (d / "log.json").write_text(json.dumps(log, indent=1))
+        if bad >= PATIENCE:
+            stopped = "early_stop"
+            break
+    (d / "done.json").write_text(json.dumps(dict(stopped=stopped, epochs=len(log), best_err_weighted=best, threads=threads)))
 
 
 if __name__ == "__main__":
     a = sys.argv[1:]
-    cmd_time() if a[0] == "time" else cmd_train(a[1])
+    cmd_time() if a[0] == "time" else cmd_train(a[1], int(a[2]) if len(a) > 2 else 8)
