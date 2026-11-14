@@ -132,3 +132,23 @@ Lamp-path speed power above 3 Hz at each stage (V2, median): filtered stage 1 0.
 | wrist_roll | jerk RMS | 10030 | 18574 | 11046 | 762 |
 | wrist_roll | power > 3 Hz | 0.011 | 0.025 | 0.013 | 0.000 |
 | lamp path | power > 3 Hz (FK of realised angles) | 0.0023 | 0.0052 | 0.0028 | 0.0000 |
+
+## 4. Blind re-look (7.55.4), Kosta, 2026-11-13 21:46 to 2026-11-14 14:19
+
+Session `/secondary/hyst-data/body/retarget_look/lowpass/session_2026-11-13/` (seed 32091, tool archive `lowpass/tool_f1d1906`). 6 pairs,
+"Which looks more like a person dancing?", first / second / same. LP = low-pass + H1; old = the look-test mp4 as shown. LP played first in
+3 of 6. Pairs 1-2 were answered on 2026-11-13; the machine rebooted, and pairs 3-6 were answered on 2026-11-14 in the same session
+(it resumes at the first unanswered item). Joined by the overseer from `answers.csv` and `key/key.json`.
+
+| order | pair | first / second | answer | picked | replays | note (verbatim) |
+|---|---|---|---|---|---|---|
+| 1 | C04_V1 | old / LP | second | LP | 1 | |
+| 2 | C10_V1 | old / LP | second | LP | 0 | |
+| 3 | C04_V2 | LP / old | first | LP | 1 | Almost the same, perhaps first a bit better, unsure |
+| 4 | C06_V2 | LP / old | first | LP | 0 | First may be a bit better, very close |
+| 5 | C09_V2 | LP / old | second | old | 0 | Similar, perhaps second? |
+| 6 | C09_V1 | old / LP | same | same | 0 | cant tell... |
+
+Totals: LP 4, old 1, same 1. By variant: V1 LP 2, same 1; V2 LP 2, old 1. By position: first 2, second 3, same 1. LP was picked in 2 of
+the 3 pairs where it played first, and in 2 of the 3 where it played second. The notes on pairs 3-6 say the two were close or that Kosta
+was unsure; pairs 1-2 have no note.
