@@ -94,7 +94,14 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-14 ~23:25 (clock) — newest, read first
+## UPDATE 2026-11-14 23:30 (clock) — newest, read first
+
+STEP1 f140c1c verified (own RMS ratio on every 4th train window 0.69/0.77/0.71/0.47/0.52 vs builder 0.67/0.78/0.69/0.46/0.51 -> >=3
+joints < 0.70 either way; FD weight share 0.423): AIOZ capped 50 %. Round-1 VE FD val 0.63-0.74. T1A2_RULES accepted (Bailando loss from
+official code: L1 recon + vel + acc weights 1/1/1, commit 0.02; spline reach 0.24 s tested). Units hyst-wo39-runA/B running since ~23:25
+(80-epoch cap). Overseer watcher (job tmp watch_t1a2.sh, background). ETA ~06:00-07:00. Then verify VE + jitter from saved recon.
+
+## UPDATE 2026-11-14 ~23:25 (clock)
 
 Planner = BRAIN_SPEC 7.61 (body): Step 1 report-only (variance explained per joint FD/AIOZ, gesture RMS FD vs AIOZ, weight share); rule:
 AIOZ RMS < 70 % of FD on >= 3 joints -> AIOZ capped at 50 % weight; Run A (K1024 + Bailando vel/acc loss + 25 Hz B-spline decoder, 80
