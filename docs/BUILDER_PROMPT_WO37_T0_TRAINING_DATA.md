@@ -7,6 +7,16 @@ instead of waiting. If you start fresh, everything is named below.
 §7.50. **T0 only: no model, no training, no clips, no uploads, no verdict.** The installation is ONE arm. If anything is unclear or conflicts
 with the repo docs, stop and ask (log "HOLD unclear <what>", push, stop).
 
+**Two builders (2026-11-14). Read only your part; keep messages and logs short (usage is tight).**
+- **Builder A (main, branch `body-t0`, cores 6-13):** everything below except the AIOZ loader and step 3. Before the full run, merge
+  `origin/body-t0-aioz` once B has pushed "AIOZ CHECKED"; if B holds, continue with FineDance alone.
+- **Builder B (AIOZ, branch `body-t0-aioz` from `origin/body`, cores 14-17, `MemoryMax=8G`, units `hyst-wo37b-*`):** only the AIOZ part:
+  `scripts/body/t0_aioz.py` with the restricted unpickler (+ test refusing a crafted pickle), the adapter to the retarget code's input
+  (+ round-trip test on one FineDance sequence), derived frame rate, the FineDance reference percentiles (written to `docs/T0_AIOZ_RULES.md`
+  and pushed BEFORE any AIOZ measure is computed), the validity measures and prune (7.56.10 / 7.59.2.4), and step 3 below. Output
+  `t0/aioz_keep.json` (kept dancers: id, person, frames, fps, style). No retargeting of AIOZ, no split, no tokens: A does those. Then push
+  "AIOZ CHECKED <commit>" in `docs/NIGHT_LOG_body-t0-aioz.md` and STOP.
+
 **Header rules:**
 - In your current worktree: `git fetch origin && git checkout -b body-t0 origin/body`. Absolute paths; no new worktrees.
 - Cores 6-13 (8 threads, §0). Jobs longer than 2 minutes run as detached, memory-capped units (`hyst-wo37-<fresh-name>`, `MemoryMax=16G`,
