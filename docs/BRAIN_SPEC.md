@@ -2145,3 +2145,72 @@ PROPOSAL = planner, not yet ruled.
      The fixed version plays first in exactly 3 of 6 pairs.
    - **Tool:** in look-test mode, pair answers are "first / second / same" (the tool's current "neither" is renamed for look-test pairs
      only; other modes unchanged; a test covers it).
+
+### 7.56 Re-look closed; low-pass + H1 is the training-data pipeline; imitation-training plan (7.49 a), 2026-11-14, via Kosta + planner (answering `docs/PLANNER_BRIEF_LOWPASS_RELOOK.md`)
+
+1. **Record.** Re-look (6 pairs): low-pass + H1 picked 4, old 1, same 1. Four of six answers were noted "close / unsure". The remaining
+   jitter is not removed: low-pass + H1 stays 3-4x the round-1 S03 references on acceleration direction changes.
+2. **Q4:** the highest-cutoff rule of 7.55.7 is confirmed (the 7.55 wording "lowest" was an error); V2 cutoff 5.75 Hz and V1 2.50 Hz stand
+   as recorded.
+3. **Q1 (a):** low-pass + H1 meets 7.55.5. It is the training-data pipeline. **Retargeting work ends.**
+4. **Q2 (a):** the remaining jitter is a known gap, judged again on the trained model's output.
+5. **Q3 (a):** training windows are gated the same way (1.25 look-test tolerance); failures are dropped and counted.
+6. **Imitation training plan (planner proposal; items marked DEFAULT are Kosta's to strike).**
+   - **Retarget variant:** V2 (DEFAULT; Kosta may choose V1). One model, one variant.
+   - **Data:** FineDance public part only (DEFAULT). Split by SEQUENCE and by SONG: no song in both train and test. 15 % of songs held out
+     for test, 10 % for validation, seeded. Kosta's check songs are never used for training or tuning.
+   - **T0, data pipeline (no training):**
+     - run the frozen cortex (B7 epoch 6) on every FineDance song locally: beat-band phase (cos, sin), arousal_b7, ear energy (formula as
+       recorded), L4 slow-state projection (fixed random, 4 dims); 100 Hz;
+     - retarget all sequences with the low-pass + H1 pipeline, target stage (joint targets before the limiter), aligned to the cortex lanes
+       at 100 Hz;
+     - gate 20 s windows as Q3; report counts kept / dropped per genre;
+     - report total usable hours.
+   - **T1, model (fixed in a rules note before training):**
+     - motor-cortex recurrent network, 256 rate units (tau 75 ms); inputs = the cortex lanes above + its own previous output
+       (autoregressive) + a proprioceptive copy of the previous joint target;
+     - 4 gain-control units as in the toy tests, driven by a small learned map from [energy, arousal_b7, L4 slow state]; they scale the
+       gains of overlapping neuron subsets. Trained jointly here. Later Kosta-feedback learning trains ONLY this map (core frozen);
+     - output: a mixture-density head (e.g. a 5-component Gaussian mixture) over the next joint-target step, sampled at run time (plain
+       average-error training is known to collapse dance to a frozen mean pose);
+     - training: truncated backprop through time on the laptop CPU (state threads); Kaggle T4 only if CPU is impractical (estimate reported
+       first). Early stopping on validation likelihood.
+   - **T2, checks before Kosta sees anything (numbers reported; stop rules):**
+     - on held-out songs: joint range p5-p95 per joint vs the human data (stop if any joint < 50 % of the data's); jitter measures vs the
+       training data (stop if > 1.5x); a beat-alignment score (a standard one from the music-to-dance literature; the builder states which)
+       vs the human data on the same songs; between-song difference (stop if the model's outputs on different songs differ less than the
+       human data's, by a stated measure); frozen-pose check (stop if hand speed < 0.05 m/s for > 3 s anywhere);
+     - gates at 1.25 through limiter, servo, v2p body.
+   - **T3, Kosta's blind look (only after Kosta has seen the T2 numbers and says go):** 6 held-out songs, 20 s: model vs retargeted human
+     (same song) vs round-1 S03; singles "does this look like dancing?" + pairs model vs human "which looks more like a person dancing?".
+     Then the model on Kosta's 5 check songs, singles only.
+   - No verdict from builder or overseer. Kosta decides.
+7. **Out of scope:** Kosta-feedback learning, limbic module, hardware, monitor, uploads, other datasets. Standing rules unchanged.
+8. **Overseer notes (operational defaults for T0, not rulings; Kosta may amend):**
+   - **Songs, not sequences.** FineDance has 203 motion sequences but 181 distinct song names (label_json `name`, compared stripped and
+     lower-case); 22 songs have two sequences (e.g. killthislove 006/200, gudian1 022/032). The split unit is the song; both sequences of a
+     song go to the same split. The builder also hashes the decoded audio (mono 44.1 kHz) and merges any two names whose audio is
+     identical, reported. Split: seeded shuffle of songs, seed **33001**; test = round(0.15 x songs), validation = round(0.10 x songs), the
+     rest train (181 songs -> 27 / 18 / 136). Genre counts per split are reported. FineDance's own @Genre split is not used (the ruling
+     asks for a seeded split).
+   - **Check songs:** Epitaph, 21st Century Schizoid Man, One of These Days, Breathe, Blue Lagoon (7.47 round 1); also the three danced
+     songs (Instant Crush, Five Years, Presence). None is in FineDance; T0 asserts no name or audio-hash match.
+   - **Cortex lanes, same recipe as the toy rounds** (`scripts/body/motornet_part3.py` / `motornet_music.py` / `motornet2_lanes.py`):
+     FineDance `music_wav` -> ffmpeg mono 44.1 kHz; beats by `analyze.structure.analyze_mix`; `b2.build_inputs`; B7 epoch 6 =
+     `/secondary/hyst-data/brain/b7/ckpt/phase/epoch_006.pt`, state carried across 6000-frame chunks. Before any FineDance run the builder
+     reproduces the stored lanes of one check song and one danced song (max abs difference reported).
+     - beat-band phase = `l3_cos`, `l3_sin` (cortex lane y columns 2, 3), as in MOTORNET2_RULES;
+     - arousal_b7 and the L4 state at frames 9::10 (10 Hz), linearly interpolated to 100 Hz;
+     - L4 projection: the toy-2 matrix (seed 30002, 512 x 4);
+     - ear energy: `scripts/body/ear_energy.py` as recorded (`EAR_ENERGY_RULES.md`, fixed norm constants), 10 Hz lane interpolated to 100 Hz;
+     - standardisation of L4 projection and arousal_b7: one mean and sd per signal pooled over the TRAIN songs only, clipped +-3 (the toy
+       rounds pooled the three danced songs; training needs train-split statistics). Constants written once to a JSON file.
+   - **Retarget targets:** both V1 (2.50 Hz) and V2 (5.75 Hz) are produced in T0 (cheap; keeps Kosta's variant choice open), each as the
+     H1 spinal-layer output at 100 Hz (the stage before the limiter), from the same code as WO36 (`body-lowpass`, merged). Motion frame k
+     is at k / 30 s; music time 0 = motion frame 0 (look-test audio offset 0.0 s). Lanes and targets cut to the shorter length.
+   - **Windows:** non-overlapping 20 s windows from each sequence start; a tail under 20 s is dropped and counted. Each window gated
+     through limiter, servo, v2p body at 1.25 (all parts: limits, end stop, contact, clearance, guard), per variant. Kept windows are the
+     training segments; no state is carried across a dropped window.
+   - **Report:** per variant, per split and per genre: windows kept / dropped by failed part, usable hours; cortex lane coverage; run time.
+   - **Compute:** each long step in its own detached systemd unit with MemoryMax, 8 threads (§0); a time estimate from one song before the
+     full run; T0 stops at its report. T1 starts only after the overseer has reviewed T1's rules note and Kosta has seen the T0 numbers.
