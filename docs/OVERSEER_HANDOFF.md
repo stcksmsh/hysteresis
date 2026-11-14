@@ -94,7 +94,16 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-14 14:20 (clock) — newest, read first
+## UPDATE 2026-11-14 14:25 (clock) — newest, read first
+
+RE-LOOK DONE. Kosta 6/6 (pairs 3-6 on 11-14 after reboot). Overseer join: LP picked C04_V1, C10_V1, C04_V2, C06_V2; old C09_V2; same
+C09_V1 -> LP 4 / old 1 / same 1; notes on pairs 3-6 all "close/unsure". Report section 4 in docs/LOWPASS_REPORT.md; body-lowpass MERGED
+into body (c975ac5) and body into keys-decide; session unit stopped. WAITING FOR THE PLANNER on docs/PLANNER_BRIEF_LOWPASS_RELOOK.md (Q1
+meets 7.55.5? (a) yes -> training-data pipeline, imitation-training plan [rec]; Q2 remaining jitter 3-4x S03 -> carry into plan [rec];
+Q3 C10_V2 gate fail -> gate training windows; Q4 confirm highest-cutoff + V2 5.75; Q5 record 7.56). FIRST ACTION on answer: BRAIN_SPEC
+7.56 on body. Builders offline.
+
+## UPDATE 2026-11-14 14:20 (clock)
 
 Machine rebooted (boot 14:12; previous boot ended 11:46). hyst-wo36-session died with it. Kosta had answered 2 of 6 re-look pairs
 (answers.csv last write 21:47 on 11-13). Overseer restarted the SAME session dir with the same tool archive as unit hyst-wo36-session2
