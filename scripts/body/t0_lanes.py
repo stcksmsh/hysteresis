@@ -41,7 +41,7 @@ def lanes_of(model, x):
             cols = []
             for o in out:
                 h = o["h"][0].abs()[9::10]                                   # frames a + 9, a + 19, ... (CHUNK % 10 == 0)
-                cols.append(h.reshape(len(h), 8, -1).mean(-1).numpy())
+                cols.append(h.reshape(len(h), 8, 32).mean(-1).numpy())
             habs.append(np.concatenate(cols, 1))
     habs = np.concatenate(habs)[:nb10]
     return z, habs.astype(np.float32)
