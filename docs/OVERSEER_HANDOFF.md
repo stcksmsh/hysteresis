@@ -94,7 +94,13 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-14 ~15:40 (clock) — newest, read first
+## UPDATE 2026-11-14 ~15:50 (clock) — newest, read first
+
+WO37 SENT (body 238cd58, split in two): Builder A = agent 1 [725326] (main T0, branch body-t0, cores 6-13); Builder B = agent 1 [7fd046]
+(AIOZ check only, branch body-t0-aioz, cores 14-17, stop at "AIOZ CHECKED"). Both named "agent 1": use refs. User: preserve usage. Next:
+review T0_AIOZ_RULES.md (FineDance percentiles pushed before AIOZ numbers) and T0_RULES.md when pushed; watch units hyst-wo37-*.
+
+## UPDATE 2026-11-14 ~15:40 (clock)
 
 Planner/Kosta = BRAIN_SPEC 7.59 (body 6ec5829): imitation training REDESIGNED as motor vocabulary (VQ over 0.5 s gesture chunks, codebook
 128-1024 by rule) + GRU sequencer (2 tokens/s, attention over 32 tokens), retrieval control C; supersedes 7.56 T1-T3 (7.57/7.58 never
