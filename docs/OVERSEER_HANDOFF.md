@@ -94,7 +94,15 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-14 22:50 (clock) — newest, read first
+## UPDATE 2026-11-14 23:10 (clock) — newest, read first
+
+T1A READY 3f1b568 merged into body. STOP RULE FIRES: jitter 7-10x (acc sign changes), 17-110x (>3 Hz power); usage 0.999, ranges
+0.946-1.0, gates 0.98 pass. Overseer recompute (job tmp t1acheck.py, K1024, 200 test windows): ~40 changes/s vs 4-5; decoder ripple RMS
+>8 Hz 0.1-0.9 deg; not at chunk edges; 6 Hz LP -> ~8/s. Brief docs/PLANNER_BRIEF_T1A_RESULTS.md (body) SENT: Q1 (a) vel+acc loss terms
+as Bailando + cap 80, retrain K1024 [rec] / (b) + output FIR LP / (c) residual VQ; Q2 keep 1.1x; Q3 S1 only after pass; Q4 7.61.
+A [725326] idle. Waiting for the planner.
+
+## UPDATE 2026-11-14 22:50 (clock)
 
 T1a training ALL DONE 22:47 (units ok). Best val err (weighted): 1024 0.4158 (ep 37/40), 512 0.4592 (39/40), 256 0.5133 (39/40), 128 0.5906
 (ep 21, early stop at 27). FineDance err ~2.5x AIOZ. Ratios to next larger 1.104/1.118/1.151 -> size rule gives K=1024. Rule flaw noted
