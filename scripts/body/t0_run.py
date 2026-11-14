@@ -86,8 +86,8 @@ def cmd_norm():
     cat = [c for c in load_catalogue() if c["key"] in sp and sp[c["key"]][1] == "train"]
     tm = []
     for c in cat:
-        n = min(T.n_tokens(c["t30"]), int(np.load(OUT / "lanes" / f"{c['key']}.npz")["n_frames"]) // 50)
-        tm.append(song_tokens(c["key"], n))
+        n = min(T.n_tokens(c["t30"]), int(np.load(OUT / "lanes" / f"{c.get('lane_key', c['key'])}.npz")["n_frames"]) // 50)
+        tm.append(song_tokens(c.get("lane_key", c["key"]), n))
     nm = T.fit_token_norm(tm)
     (OUT / "token_norm.json").write_text(json.dumps(nm))
     print("token norm from", len(cat), "train sequences,", nm["n_tokens"], "tokens,", nm["n_masked"], "masked")

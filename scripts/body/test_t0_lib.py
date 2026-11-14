@@ -67,7 +67,7 @@ def test_token_pooling_synthetic():
     y[:, 2] = np.arange(n_tok)
     tok, m = T.pool_tokens(ear, h, sur, np.arange(n10, dtype=float), np.ones(n10), y, n_tok)
     assert tok.shape == (n_tok, 86) and len(T.TOKEN_COLS) == 86
-    assert m.tolist() == [1, 0, 0, 0] and tok[0, 76] == 0.0
+    assert m.tolist() == [1, 0, 0, 0] and np.isnan(tok[0, 76]) and T.standardise_tokens(tok, dict(mean=[0.0] * 86, sd=[1.0] * 86))[0, 76] == 0.0
     assert abs(tok[1, 76] - np.mean([7, 8, 9])) < 1e-6 and abs(tok[2, 44] - 12) < 1e-6      # token 2 holds stamps 10..14
     assert abs(tok[1, 0] - (50 + 99) / 2 / 50) < 1e-6
     assert abs(tok[2, 84] - 2.0) < 1e-6 and abs(tok[2, 82] - 1.5) < 1e-6                     # mid 1.25 s = block 2's stamp; start 1.0 s halfway between blocks 1 and 2

@@ -133,13 +133,12 @@ def pool_tokens(ear, h_abs, sur, aro, ee, y, n_tok):
         if s.start < n10:
             tok[k, 44:76] = h_abs[s].mean(0)
             ss = sur[s]
-            ok = ~np.isnan(ss).all(1)
-            if ok.any():
-                tok[k, 76:80] = np.nanmean(ss[ok], 0)
-            else:
-                mask[k] = 1
+            cnt = (~np.isnan(ss)).sum(0)                                  # per layer: NaN stamps excluded; a layer with none stays NaN until standardise_tokens (-> 0) and sets the mask bit
+            tok[k, 76:80] = np.where(cnt > 0, np.nansum(ss, 0) / np.maximum(cnt, 1), np.nan)
+            mask[k] = int((cnt == 0).any())
             tok[k, 80], tok[k, 81] = aro[s].mean(), ee[s].mean()
         else:
+            tok[k, 76:80] = np.nan
             mask[k] = 1
         t0, tm = k * TOK_S, k * TOK_S + TOK_S / 2
         for c, col in enumerate((2, 3)):
@@ -162,10 +161,11 @@ def fit_token_norm(tokens_masks):
     M = np.concatenate([m for _, m in tokens_masks]).astype(bool)
     mean, sd = np.zeros(X.shape[1]), np.ones(X.shape[1])
     for c in range(NORM_FROM, X.shape[1]):
-        v = X[~M, c] if 76 <= c < 80 else X[:, c]
+        v = X[:, c][~np.isnan(X[:, c])]                                   # surprisal NaN (layer undefined in the token) excluded
         mean[c], sd[c] = float(v.mean()), float(max(v.std(), 1e-8))
     return dict(columns=TOKEN_COLS, mean=mean.tolist(), sd=sd.tolist(), clip=3.0, token_lookahead_s=TOKEN_LOOKAHEAD_S, n_tokens=int(len(X)), n_masked=int(M.sum()))
 
 
 def standardise_tokens(tok, nm):
-    return np.clip((tok - np.array(nm["mean"], np.float32)) / np.array(nm["sd"], np.float32), -3, 3).astype(np.float32)
+    z = np.clip((tok - np.array(nm["mean"], np.float32)) / np.array(nm["sd"], np.float32), -3, 3).astype(np.float32)
+    return np.nan_to_num(z, nan=0.0)                                      # undefined surprisal layers -> 0 (the mask bit marks the token)
