@@ -94,7 +94,15 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-15 00:05 (clock) — newest, read first
+## UPDATE 2026-11-15 ~00:25 (clock) — newest, read first
+
+REALISED DONE feb002f merged (body-t1a2 into body). Realised-stage jitter: rebuilds at/below original (ratios 0.44-1.00) except base yaw
+power 1.26-1.29x of 0.00016. Gate fails B: limits 37, endstop 5 of 2455. Brief docs/PLANNER_BRIEF_T1A2_RESULTS.md SENT: Q1 (a) B to S1
+with jitter measured at realised stage, S1 only gate-passing windows [rec] / (b) fix wiggle + rerun; Q2 gate rule >= 0.95 overall [rec];
+Q3 7.62. Waiting for the planner. Next if (a): S1 WO (6 held-out clips: 2 AIOZ + 4 FD seeded, original vs Run B rebuild, full body
+pipeline, first/second/same, order mixed) on agent 1 or 2.
+
+## UPDATE 2026-11-15 00:05 (clock)
 
 T1A2 READY 5094659: no S1 candidate. Both early-stopped (A ep 26, B ep 19; 37 / 82 s per epoch). Overseer recompute (job tmp
 t1a2check.py, FD val): VE A 0.659-0.765 FAIL, B 0.855-0.889 PASS; acc sign changes 14-15/s recon vs 3.4-4.6 orig (both fail); but B's
