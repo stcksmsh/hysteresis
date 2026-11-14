@@ -94,7 +94,15 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-14 ~14:45 (clock) — newest, read first
+## UPDATE 2026-11-14 ~15:00 (clock) — newest, read first
+
+Kosta struck "FineDance only": AIOZ-GDANCE added, checked + pruned first (BRAIN_SPEC 7.56.9-10, body bd7a36b): restricted unpickler,
+fps derived, persons = sequences, split unit = YouTube id (joint seed-33001 split with FineDance), validity (end-point >3 Hz power vs
+FineDance p95, joint/root speed outliers > 1 %, frozen > 20 %), stop point "AIOZ CHECKED" (HOLD if < 30 % survive). V1+V2 together =
+Kosta's question, deferred to the T1 planner brief (needs a variant input; changes "one model, one variant"). WO37 prompt updated
+(body), still NOT SENT: waiting for "send".
+
+## UPDATE 2026-11-14 ~14:45 (clock)
 
 Planner answered = BRAIN_SPEC 7.56 (body fa13a4e): LP + H1 is the training-data pipeline, retargeting ENDS; jitter = known gap; training
 windows gated at 1.25. Imitation-training plan T0 (data) / T1 (256-unit RNN + 4 gain units + MDN, TBPTT on CPU) / T2 (checks, stop rules)
