@@ -92,7 +92,7 @@ def make_groups(units):
         return x
     seen = {}
     for u in units:
-        for tag in (("n", "".join(c for c in u["name"].lower() if c.isalnum())), ("h", u["hash"])):
+        for tag in (("n", "".join(c for c in str(u["name"]).lower() if c.isalnum())), ("h", u["hash"])):
             if not tag[1]:
                 continue
             if tag in seen:

@@ -56,11 +56,11 @@ def load_catalogue():
 def cmd_split():
     cat = load_catalogue()
     ex_hash = {sha(p): p.name for d in EXCL_WAV for p in d.glob("*.wav")} if any(d.exists() for d in EXCL_WAV) else {}
-    strip = lambda s: "".join(c for c in s.lower() if c.isalnum())
+    strip = lambda s: "".join(c for c in str(s).lower() if c.isalnum())
     ex_names = {strip(n) for n in EXCL}
     hits = [c["key"] for c in cat if strip(c["name"]) in ex_names or c["hash"] in ex_hash]
     cat = [c for c in cat if c["key"] not in hits]
-    units = [dict(key=c["key"], name=c["name"], hash=c["hash"]) for c in cat]
+    units = [dict(key=c["key"], name=str(c["name"]), hash=c["hash"]) for c in cat]
     groups = T.make_groups(units)
     sp = T.split_groups(groups)
     by = {c["key"]: c for c in cat}
