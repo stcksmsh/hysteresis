@@ -2244,3 +2244,10 @@ PROPOSAL = planner, not yet ruled.
       above 3 Hz of AIOZ vs FineDance after the low-pass is reported.
     - The AIOZ check report is a stop point: T0 continues to the full AIOZ run only if at least 30 % of AIOZ person-sequences survive the
       prune; otherwise "HOLD aioz <share>", and FineDance continues alone.
+11. **Kosta's ruling, 2026-11-14 (replaces "one model, one variant" in point 6 and settles the open question in 9):** V1 and V2 of every
+    clip go into ONE training set as separate examples, with **no variant label**. Kosta: the body and the arm move very differently but
+    both are valid; a dance is not one solution, it is freedom; one style at run time, with the mixture head's sampling as its freedom.
+    Both versions of a clip are always in the same split (the split unit is the song). Overseer note (report only, not a stop rule): T2 also
+    reports, per 20 s output window on held-out songs, the distance to the nearest V1 and the nearest V2 target window of the same song,
+    so Kosta can see whether the model uses both, switches, or averages them; the existing T2 stop rules (range < 50 %, frozen pose) cover
+    collapse to a mean pose.
