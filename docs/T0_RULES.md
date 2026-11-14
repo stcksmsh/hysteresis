@@ -108,3 +108,5 @@ Where this note picks a detail the spec leaves open, it is marked **(default)** 
 ## Addendum (overseer review)
 
 `token_lookahead_s` (per column, seconds past the token end a feature can see; `t0_lib.TOKEN_LOOKAHEAD_S`) is stored in `token_norm.json` and in every npz: ear 0.0232 s (half STFT window), modes / surprisal / arousal_b7 / beat phase 0, ear energy 1.0 s. The beat phase rests on the offline whole-song beat grid (not a lookahead of its stamps). Weighting is the single function `t0_lib.hours_of_dancers` (rerunnable once the AIOZ cap unit is chosen).
+
+2026-11-14 (BRAIN_SPEC 7.60): AIOZ enters with the calibrated prune (`t0/aioz_keep_calibrated.json`, 1,852 dancers); the weight cap is per AIOZ clip (w = hours of its longest dancer; dancers of one clip share it), FineDance stays per song; the split stays by YouTube id (first 11 characters of the clip name). AIOZ fps is taken as 30 (derived mode 30.0, no off-mode sequence; clip fps differ from 30 by under 0.1 percent). Report-only addition: jitter measures per joint (acceleration direction changes per second, power above 3 Hz) of the kept AIOZ dancers vs FineDance on the stored targets.
