@@ -2251,3 +2251,120 @@ PROPOSAL = planner, not yet ruled.
     reports, per 20 s output window on held-out songs, the distance to the nearest V1 and the nearest V2 target window of the same song,
     so Kosta can see whether the model uses both, switches, or averages them; the existing T2 stop rules (range < 50 %, frozen pose) cover
     collapse to a mean pose.
+
+### 7.59 Imitation training redesigned: motor vocabulary + sequencer (Bailando family), 2026-11-14, via Kosta + planner
+
+**Supersedes** the training-plan parts of 7.56 (points 6-7 and 11's T2 note: T1-T3, the per-step motor RNN, gain units, mixture head)
+and the unrecorded 7.57 (chunk mixture head) and 7.58 (phrase planner); neither was ever recorded here. The 7.56 re-look decisions
+(points 1-5) stand. 7.56.9-11 (AIOZ added, V1 + V2 pooled without a label) are carried into this entry. Decisions are Kosta's; items
+marked PROPOSAL were accepted by Kosta unless struck.
+
+1. **Why this design.**
+   - Kosta's requirements: actual dance that fits humans, with phrase-level planning and repetition across about 10 s, and an architecture
+     that can actually be trained here.
+   - Rejected: per-step motor RNN with gain units, mixture-density chunk head, jointly learned phrase latents (they stack untested parts;
+     next-pose models are known to collapse to frozen or mean poses).
+   - Families compared: A learned motion vocabulary + sequencer (Bailando, CVPR 2022, arXiv 2203.13055); B diffusion over the 5-joint
+     sequence; C retrieval of human clips matched to music. **A chosen**: the only option strong on looks, learning and brain mapping, with a
+     clean slot for Kosta-feedback learning later.
+   - Switch rule: if Kosta's S1 rebuild check (point 4.2) fails even with the residual fallback, the next design is B, scaled to 5 joints
+     (needs a ruling).
+   - Brain mapping, for the record: vocabulary = learned motor chunks (basal ganglia chunking, Graybiel 1998); sequencer = premotor
+     planning + action selection; vigour = movement vigour; posture vs gesture = postural vs focal movement control; cortex = frozen
+     auditory cortex (B7 epoch 6).
+2. **Data (T0).**
+   1. Sources: FineDance public part + AIOZ-GDANCE. Licences as recorded in 7.50 (`DATASET_LICENCES.md`).
+   2. Retargeting: the low-pass pipeline of 7.55/7.56: stage-1 angles, zero-phase low-pass (V1 2.50 Hz, V2 5.75 Hz), cubic spline to
+      100 Hz. **Training targets are joint targets BEFORE the spinal layer (H1) and the limiter.** Spinal layer, limiter, servo and v2p body
+      are applied only when rendering or gating.
+   3. V1 and V2 pooled with no label: every clip gives two training examples. Plus **mirror augmentation**: left/right mirror of the human
+      motion before retargeting (V1 uses the left arm when mirrored; base yaw sign flips). Counted separately.
+   4. AIOZ prune rule, fixed before any AIOZ number is seen. Drop a dancer if any of: wrist/head path power above 3 Hz > FineDance p95;
+      > 1 % of frames with joint or root speed > FineDance p99.9; > 20 % of frames frozen. If < 30 % of AIOZ dancers survive, AIOZ is
+      dropped. FineDance cutoffs reused. Hours always reported per dataset.
+   5. Split: one seeded split over both datasets by song (FineDance) / YouTube id (AIOZ): **75 % train, 10 % validation, 15 % test**. No
+      song in two splits. Kosta's 5 check songs never used for training or tuning.
+   6. Weighting: cap each song's (YouTube id's) total training weight at the weight of its single longest dancer, so multi-dancer group
+      songs do not dominate.
+   7. Gating: 20 s windows rendered through spinal layer, limiter, servo, v2p body at the 1.25 look-test tolerance. Failing windows
+      dropped and counted per dataset and genre.
+   8. Music features, from the music only (frozen cortex run locally on every song), per 0.5 s token (pooling fixed in the rules before
+      training): pooled 44 ear features; cortex summary (per-layer pooled mode amplitudes in 8 groups x 4 layers, surprisal per layer,
+      arousal_b7); ear energy (formula as recorded); beat-band phase cos/sin at token start and middle.
+   9. Posture/gesture split of every target sequence: posture(t) = zero-phase low-pass of the joint targets, cutoff 0.5 Hz;
+      gesture(t) = target(t) - posture(t).
+   Report: usable hours per dataset after pruning and gating, tokens per split.
+3. **Model.**
+   1. **T1a motor vocabulary (stage 1):** vector-quantised autoencoder over 0.5 s GESTURE chunks (50 steps x 5 joints at 100 Hz). Each
+      chunk is normalised by its amplitude; the amplitude is the token's "vigour" scalar; shape and timing (snap vs smooth) stay in the
+      code. Codebook size by rule: train 128, 256, 512 and 1024; choose the smallest whose validation reconstruction error is within 5 % of
+      the next larger one; report error and code usage for all four. EMA codebook updates with dead-code reset. Decoder: convolutional,
+      sees neighbouring tokens so joins are smooth, causal with at most 0.25 s lookahead. Fallback (needs a ruling): 2-stage residual
+      quantisation (coarse + correction).
+   2. **T1b sequencer (stage 2):** GRU, 256 units, stepped once per token (2 per second). Inputs: the current token's music features;
+      embedding of its previous code, its vigour and its posture; single-head attention over its own last 32 tokens (16 s), its memory for
+      planning and repetition. Outputs per token: categorical over the codes; log-normal over vigour; Gaussian over the change in posture
+      (5 joints) for the next 0.5 s. Training: next-token likelihood with teacher forcing, noise on the fed-back inputs (rule fixed before
+      training), dropout, early stopping on validation. Causal: music only up to decision time; the decision for a chunk is made 0.25 s
+      before it starts. Run time: movement = posture + vigour x decoded gesture. Sampling: nucleus p = 0.9 for codes, median vigour, mean
+      posture change (fixed here, not tuned by eye).
+   3. **Retrieval control (C), training split only:** for each 0.5 s token of a held-out song, pick the training chunk (posture + gesture
+      + vigour) with the nearest music features (cosine, same per-token features); transition cost = joint-space jump at the boundary,
+      weight fixed in the rules; solved by Viterbi over the song. Same body pipeline and gates.
+   4. Later, not now: Kosta-feedback learning adjusts only the sequencer (reward on its choices, dopamine role); the vocabulary stays frozen.
+4. **Checks** (in order; each stage only after the previous passes).
+   1. **T1a numeric (stop rules):** >= 60 % of codes in use on validation; reconstruction on held-out songs: jitter measures <= 1.1x the
+      input's, joint ranges within 10 % of the input's; passes gates at 1.25.
+   2. **S1, Kosta's blind rebuild check:** 6 held-out clips, original retarget vs vocabulary reconstruction, both through the full body
+      pipeline; "which looks more like a person dancing?" + "same"; pair order checked to be mixed. Expected: "same". T1b starts only on
+      Kosta's go.
+   3. **T2 numeric checks on held-out songs** (STOP = stop rule; others report only): STOP music matters (validation likelihood with the
+      true music vs another song's music; stop if no gap); cortex ablation (ear features only vs ear + cortex summary); STOP repetition
+      (correlation of music self-similarity with movement self-similarity vs the human data on the same songs; stop if below half the
+      human value); beat-alignment score (builder states which) vs human data; vigour vs ear-energy correlation vs human data; posture
+      range and posture-change rate vs human data; STOP joint range p5-p95 per joint (stop if any joint < 50 % of the human data's); STOP
+      jitter (stop if > 1.5x the training data's); STOP frozen pose (hand speed < 0.05 m/s for > 3 s anywhere); V1/V2 nearest-style share
+      and style switches per minute; how often posture + gesture hits joint limits; how often high vigour saturates the limiter; gates at
+      1.25 through the full body pipeline.
+   4. **T3, Kosta's blind look** (only after Kosta sees T2 and says go): 6 held-out songs, 20 s each. Singles "does this look like
+      dancing?" (yes / sort of / no + note) for sequencer, retargeted human (same song), retrieval control, round-1 S03. Pairs "which
+      looks more like a person dancing?" + "same": sequencer vs retargeted human; sequencer vs retrieval; order checked to be mixed. Then
+      the sequencer on Kosta's 5 check songs, singles only. Planner reading rule, for Kosta's use: if the sequencer does not beat or tie
+      retrieval, the learning adds nothing yet.
+   No verdict from builder or overseer at any stage. Kosta decides.
+5. **Compute.** Laptop CPU first; a short timing run and an estimate for T1a and T1b before full training; threads stated. Kaggle T4 as
+   fallback, with Kosta's go-ahead per run. Kaggle uploads: private dataset, DERIVED FEATURES ONLY (cortex/ear token features and
+   retargeted joint targets); never raw FineDance/AIOZ files, never audio. Record: the licences' third-party clause makes Kaggle a grey
+   zone; Kosta chose derived-features-only.
+6. **Out of scope:** Kosta-feedback learning, limbic module, gain modulation, cortex changes (B7 epoch 6 stays frozen), hardware, brain
+   monitor, any upload except the Kaggle rule above, emails, registrations.
+7. **Standing rules unchanged:** branches keys-decide / body (sub-branches merged into body), never master; plain commit messages with no
+   co-author or attribution lines; frozen src/ and tools/ read-only; v47 byte-identical in Off; data, models, audio, video outside git;
+   free compute only; no posting, emailing or submitting; never drive hardware; if anything is unclear or conflicts with repo docs, stop
+   and ask Kosta.
+8. **Overseer notes (operational defaults for T0, not rulings; Kosta may amend).** 7.56.8 and 7.56.10 stay in force where 7.59 does not
+   change them: song grouping by stripped lower-case name + audio hash, check-song exclusion, B7 checkpoint
+   `/secondary/hyst-data/brain/b7/ckpt/phase/epoch_006.pt` and the toy-round lane recipe (`analyze_mix` beats, `b2.build_inputs`), lane
+   reproduction before any run, the restricted unpickler, derived AIOZ frame rate, persons as separate dancers, AIOZ adapter round trip,
+   non-overlapping 20 s windows. Changed or added by 7.59:
+   - **Split:** seed 33001, shares 75 / 10 / 15 (train / validation / test) over FineDance songs and AIOZ ids together; rounding: test =
+     round(0.15 n), validation = round(0.10 n), rest train.
+   - **Targets:** the stage after spline and guard, before H1 (`motornet.spinal`). Gating still runs the full chain (H1, limiter, servo,
+     v2p). One npz per dancer and variant copy.
+   - **Mirror:** reflect across the human's sagittal plane: swap left/right joints, reflect each joint rotation (R' = M R M with M the
+     reflection of the lateral axis), negate the root's lateral translation. The builder identifies the lateral axis from the data and
+     tests: mirror twice = identity (max abs difference reported); a mirrored frame's left wrist = the original's right wrist reflected.
+     Four copies per dancer (V1, V2, V1 mirrored, V2 mirrored), counted separately.
+   - **Weighting (2.6):** per song / id, w_song = hours of its longest dancer (human motion, before the 4 copies); each of its dancers
+     weighted by w_song / (sum of its dancers' hours) if that sum exceeds w_song, else 1. Applies to FineDance too (22 songs danced twice).
+     The 4 copies share their dancer's weight. Weights written per npz.
+   - **Token features (2.8):** tokens on a fixed 0.5 s grid from motion frame 0. Ear features = mean over the token of the 44 standardised
+     fast features. Mode amplitudes: |h| of each layer's 256 complex modes at the 10 Hz stamps, modes split into 8 contiguous groups of 32
+     in index order, mean over group and token. Surprisal: `b2.surprisal_lanes` per layer, mean over the token (NaN stamps excluded; a
+     token with none gets 0 and a mask bit). arousal_b7 and ear energy: mean over the token. Beat phase cos/sin: values at the token's
+     start and middle frames. All standardised with train-split mean and sd per feature, clipped +-3, constants in one JSON. Features use
+     only frames up to the token's end (the sequencer's 0.25 s decision lead is applied in T1b, not here).
+   - **Posture/gesture (2.9):** 2nd-order Butterworth filtfilt at 0.5 Hz on the 100 Hz targets (base yaw and wrist roll unwrapped), per
+     whole dancer sequence before windowing.
+   - **T0 report** adds tokens per split and dataset, and copy counts (V1 / V2 / mirrored).
+   - **Kaggle:** nothing is uploaded in T0.
