@@ -2368,3 +2368,20 @@ marked PROPOSAL were accepted by Kosta unless struck.
      whole dancer sequence before windowing.
    - **T0 report** adds tokens per split and dataset, and copy counts (V1 / V2 / mirrored).
    - **Kaggle:** nothing is uploaded in T0.
+
+### 7.60 AIOZ prune calibrated; weight cap per clip, 2026-11-14, via Kosta + planner (answering `docs/PLANNER_BRIEF_T0_AIOZ.md`)
+
+1. **Record (Q3).** The original prune thresholds of 7.56.10 / 7.59.2.4 were the overseer's error: rule (2) takes a union over 20 joints,
+   so "> 1 % of frames" would drop 58 % of FineDance itself, and AIOZ kept only 168 dancers (2.8 %, 1.52 h).
+2. **Q1 (a):** the calibrated prune variant as written in `T0_AIOZ_RULES.md` (fixed before any AIOZ number): the thresholds of rules (2) and
+   (3) = max(1 %, FineDance's p95 of the same share) = 5.78 % and 1 %; the dead foot joints (10, 11) are excluded from rule (2); rules (1)
+   and (4) unchanged. AIOZ kept: 1,852 dancers, 19.28 h (`t0/aioz_keep_calibrated.json`). Note: 30.8 % is just above the 30 % stop;
+   AIOZ is borderline data.
+3. **Q2 (a):** weight cap per CLIP: dancers on screen together share weight (per AIOZ clip, w = hours of its longest dancer; FineDance
+   unchanged, capped per song). The split stays by YouTube id. Replaces the weighting line of 7.59.2.6 / 7.59.8.
+4. **Safeguards (report-only, adopt nothing):**
+   - T0: after retargeting and the low-pass, the jitter measures (acceleration direction changes per second, power above 3 Hz, per joint)
+     of kept AIOZ dancers vs FineDance.
+   - T1a: reconstruction error and jitter reported separately for FineDance-sourced and AIOZ-sourced validation chunks.
+   - S1 rebuild check: of the 6 clips, 2 from AIOZ (seeded pick from held-out ids), 4 from FineDance.
+5. Everything else in 7.59 stands. T0 continues. Standing rules unchanged.
