@@ -92,3 +92,42 @@ Epochs 19 (early_stop); best validation error (weighted MSE, scaled, capped weig
 | B | True | False | True | True | True | False |
 
 S1 candidate (smaller passing model, A before B): **none: neither run passes; report and hold**.
+
+## Realised-stage jitter (appended; report only)
+
+Stage: after guard, spinal layer (H1), limiter, servo and v2p body (the gate's own simulation, `q50` at 50 Hz), test windows (2,455), medians over windows; the rebuilds go through the same chain as the original windows (Run A / Run B reconstructions).
+
+| source | joint | metric | original | Run A | Run B | A / original | B / original |
+|---|---|---|---|---|---|---|---|
+| all | base_yaw | acc sign changes /s | 2.1978 | 1.7982 | 1.8981 | 0.82 | 0.86 |
+| all | base_yaw | power > 3 Hz | 0.0002 | 0.0002 | 0.0002 | 1.29 | 1.29 |
+| all | shoulder | acc sign changes /s | 2.7972 | 2.5475 | 2.5974 | 0.91 | 0.93 |
+| all | shoulder | power > 3 Hz | 0.0010 | 0.0007 | 0.0007 | 0.66 | 0.68 |
+| all | elbow | acc sign changes /s | 2.7972 | 2.5475 | 2.5974 | 0.91 | 0.93 |
+| all | elbow | power > 3 Hz | 0.0010 | 0.0008 | 0.0008 | 0.81 | 0.80 |
+| all | wrist_bend | acc sign changes /s | 3.7463 | 3.1469 | 3.2967 | 0.84 | 0.88 |
+| all | wrist_bend | power > 3 Hz | 0.0064 | 0.0036 | 0.0041 | 0.56 | 0.64 |
+| all | wrist_roll | acc sign changes /s | 3.6464 | 3.0969 | 3.1968 | 0.85 | 0.88 |
+| all | wrist_roll | power > 3 Hz | 0.0080 | 0.0037 | 0.0040 | 0.46 | 0.50 |
+| finedance | base_yaw | acc sign changes /s | 2.0979 | 1.8482 | 1.9481 | 0.88 | 0.93 |
+| finedance | base_yaw | power > 3 Hz | 0.0001 | 0.0002 | 0.0002 | 1.58 | 1.54 |
+| finedance | shoulder | acc sign changes /s | 2.4476 | 2.4476 | 2.4476 | 1.00 | 1.00 |
+| finedance | shoulder | power > 3 Hz | 0.0007 | 0.0006 | 0.0006 | 0.80 | 0.81 |
+| finedance | elbow | acc sign changes /s | 2.5475 | 2.5475 | 2.4975 | 1.00 | 0.98 |
+| finedance | elbow | power > 3 Hz | 0.0008 | 0.0007 | 0.0007 | 0.97 | 0.86 |
+| finedance | wrist_bend | acc sign changes /s | 3.2967 | 3.0470 | 3.1469 | 0.92 | 0.95 |
+| finedance | wrist_bend | power > 3 Hz | 0.0047 | 0.0033 | 0.0035 | 0.70 | 0.74 |
+| finedance | wrist_roll | acc sign changes /s | 3.3467 | 3.0969 | 3.1469 | 0.93 | 0.94 |
+| finedance | wrist_roll | power > 3 Hz | 0.0074 | 0.0042 | 0.0051 | 0.56 | 0.68 |
+| aioz | base_yaw | acc sign changes /s | 2.1978 | 1.7982 | 1.8981 | 0.82 | 0.86 |
+| aioz | base_yaw | power > 3 Hz | 0.0002 | 0.0002 | 0.0002 | 1.25 | 1.26 |
+| aioz | shoulder | acc sign changes /s | 2.8472 | 2.5475 | 2.5974 | 0.89 | 0.91 |
+| aioz | shoulder | power > 3 Hz | 0.0012 | 0.0007 | 0.0007 | 0.59 | 0.62 |
+| aioz | elbow | acc sign changes /s | 2.7972 | 2.5974 | 2.5974 | 0.93 | 0.93 |
+| aioz | elbow | power > 3 Hz | 0.0011 | 0.0009 | 0.0009 | 0.77 | 0.78 |
+| aioz | wrist_bend | acc sign changes /s | 3.8961 | 3.1469 | 3.3467 | 0.81 | 0.86 |
+| aioz | wrist_bend | power > 3 Hz | 0.0077 | 0.0037 | 0.0042 | 0.47 | 0.55 |
+| aioz | wrist_roll | acc sign changes /s | 3.6963 | 3.0969 | 3.1968 | 0.84 | 0.86 |
+| aioz | wrist_roll | power > 3 Hz | 0.0081 | 0.0036 | 0.0039 | 0.44 | 0.47 |
+
+Gate share (realised simulation, same windows): original: all 1.000, FineDance 1.000, AIOZ 1.000; runA: all 0.979, FineDance 0.948, AIOZ 0.985; runB: all 0.983, FineDance 0.948, AIOZ 0.990.
