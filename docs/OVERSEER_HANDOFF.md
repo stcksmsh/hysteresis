@@ -94,7 +94,18 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-14 ~15:10 (clock) — newest, read first
+## UPDATE 2026-11-14 ~15:40 (clock) — newest, read first
+
+Planner/Kosta = BRAIN_SPEC 7.59 (body 6ec5829): imitation training REDESIGNED as motor vocabulary (VQ over 0.5 s gesture chunks, codebook
+128-1024 by rule) + GRU sequencer (2 tokens/s, attention over 32 tokens), retrieval control C; supersedes 7.56 T1-T3 (7.57/7.58 never
+recorded). T0: FineDance + AIOZ (prune), V1+V2 pooled + mirror (4 copies), targets BEFORE H1, split 75/10/15 seed 33001, song weight cap,
+0.5 s token features (44 ear + 32 mode-amp groups + 4 surprisal + arousal + energy + beat cos/sin x2), posture 0.5 Hz / gesture.
+Overseer notes 7.59.8 (mirror, weights formula, token pooling). Checks: T1a stop rules -> S1 Kosta rebuild blind -> T1b -> T2 stops -> T3.
+Kaggle only derived features, per-run go. WO37 rewritten for 7.59 (body), NOT SENT: waiting for "send". On T0 rules note: review mirror
+test, FineDance percentiles written before AIOZ numbers, token pooling, weights; on AIOZ CHECKED + T0 READY: recompute split/weights/a
+token row/gate counts.
+
+## UPDATE 2026-11-14 ~15:10 (clock)
 
 Kosta RULED 7.56.11 (body): V1 + V2 of every clip pooled in ONE training set, NO variant label ("a dance is freedom"); supersedes the
 15:00 note's "deferred to T1". T2 adds a report-only nearest-V1/V2 distance per output window. T0 unchanged (builds both). WO37 NOT SENT.
