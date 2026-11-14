@@ -94,7 +94,16 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-14 23:30 (clock) — newest, read first
+## UPDATE 2026-11-15 00:05 (clock) — newest, read first
+
+T1A2 READY 5094659: no S1 candidate. Both early-stopped (A ep 26, B ep 19; 37 / 82 s per epoch). Overseer recompute (job tmp
+t1a2check.py, FD val): VE A 0.659-0.765 FAIL, B 0.855-0.889 PASS; acc sign changes 14-15/s recon vs 3.4-4.6 orig (both fail); but B's
+RMS >3 Hz <= original (0.12/0.37/0.75/1.03/1.36 vs 0.12/0.37/0.74/1.27/1.88 deg), RMS >8 Hz 0.03-0.31 vs 0.02-0.16 deg: sub-degree
+wiggle, likely the 40 ms spline knots (unconfirmed). Gates A 0.979 / B 0.983 (FD 0.948 both, under builder's default >= 0.95 per source?
+-> question). Asked A (report-only) for realised-stage jitter (after H1/limiter/servo) orig vs A vs B -> "REALISED DONE". Then brief
+PLANNER_BRIEF_T1A2_RESULTS.md: Q accept B for S1 if realised jitter <= 1.1x / gate rule definition / else fix.
+
+## UPDATE 2026-11-14 23:30 (clock)
 
 STEP1 f140c1c verified (own RMS ratio on every 4th train window 0.69/0.77/0.71/0.47/0.52 vs builder 0.67/0.78/0.69/0.46/0.51 -> >=3
 joints < 0.70 either way; FD weight share 0.423): AIOZ capped 50 %. Round-1 VE FD val 0.63-0.74. T1A2_RULES accepted (Bailando loss from
