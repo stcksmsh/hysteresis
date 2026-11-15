@@ -2442,3 +2442,49 @@ marked PROPOSAL were accepted by Kosta unless struck.
      FineDance `music_wav`, AIOZ `musics/`), audio offset 0.
    - Pair order: rebuild first in exactly 3 of 6, set by `default_rng(35011)`.
    - Session: the overseer builds and serves it (look-test mode, first / second / same), key not served.
+
+### 7.64 T1b architecture: listener over the full cortex state, planner over tokens; no source separation; 2026-11-15, via Kosta + planner
+
+Recorded before 7.63, whose text has not yet reached the overseer (7.64 refers to it for "FineDance only" and for the categorical heads).
+This 7.64 replaces the planner's earlier 7.64 draft (Demucs stems, per-token pooled features), which was never recorded.
+
+Kosta: no source separation. The model should track the music the way an ear does, from the feel and properties of the sound, without
+naming instruments. It needs memory far longer than half a second. The per-token pooled summary threw away most of what the cortex hears.
+The planner agrees; the pooled summary was the planner's simplification.
+
+1. **Input:** the frozen cortex (B7 epoch 6) full state at 100 Hz for every song: all 4 layers' mode states (amplitude and phase as
+   cos/sin, or real/imag), per-layer surprisal and precision, arousal_b7, plus the 44 ear features. Precomputed and stored per song
+   (outside git).
+2. **Listener (new, trained):** learned linear input projection to 128 dims, dropout 0.2, then a recurrent network at 50 Hz (cortex state
+   downsampled by averaging), 256 units with learned per-unit time constants initialised log-uniform from 0.1 s to 30 s. Runs continuously
+   over the whole song.
+3. **Planner (the former sequencer):** GRU 256, stepped every 0.5 s, decision made 0.25 s before the chunk starts. Inputs: listener state
+   at decision time; embedding of its previous code, vigour bin and posture-change entry; attention over its own last 32 tokens (16 s).
+   Outputs: categorical code (vocabulary 2 x 1024 residual; the builder states how the two stages are predicted), vigour (32 bins),
+   posture change (256-entry posture vocabulary).
+4. **Training:** listener + planner trained jointly by the three cross-entropies; truncated backprop through 60 s windows; teacher
+   forcing with input noise (rule fixed before training); early stopping on validation; train/validation gap reported per epoch.
+   FineDance only (7.63). Cortex and vocabulary frozen.
+5. **Dropped:** Demucs/stems; per-token pooled music features; any instrument labels.
+6. **T2 additions:**
+   - **STOP, swapped-music test:** likelihood with the true music vs a tempo-matched other song (tempo within 5 %); stop if no gap.
+   - Event response (report): around strong onsets, energy jumps and cortex slow-state changes (detected by a fixed rule), movement change
+     of model vs human data on the same songs.
+   - Ablation (report): listener fed ear features only (no cortex state). If it equals the full model, record that the cortex adds
+     nothing.
+   - Long memory (report): effect on likelihood of truncating the listener's history to 2 s vs full.
+7. **Emotion:** every Kosta viewing from here includes swapped-music pairs and feeling labels as in the planner's previous draft (Kosta
+   labels music and movement separately, blind).
+8. **Retrieval control (7.59.3.3):** listener-free: cosine on the 0.5 s-averaged cortex state + ear features.
+9. Everything else in 7.59-7.63 stands.
+10. **Overseer notes (operational defaults, not rulings):**
+    - WO41 waits for the 7.63 text (heads, FineDance only, vigour/posture bins) and for the earlier draft's feeling-label protocol (7.7),
+      which the overseer has not seen.
+    - Storage first: the builder reports the per-frame width of the cortex state and the total size (float16 vs float32) before
+      precomputing; data under `/secondary/hyst-data/body/t1b/`.
+    - Mirror copies share the same (unmirrored) music input.
+    - Listener state starts at zero at song start and is carried (detached) across consecutive 60 s windows of the same song; the builder
+      states it in the rules note.
+    - "Listener state at decision time" = the last 50 Hz listener step at or before chunk start - 0.25 s (causal).
+    - Swapped-music pairs: tempo from the offline beat grid; pairs chosen by a seeded rule fixed in the rules note before training; the
+      number of songs with no partner within 5 % is reported.
