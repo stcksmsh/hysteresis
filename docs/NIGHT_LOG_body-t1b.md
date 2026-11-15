@@ -30,3 +30,18 @@ Code: scripts/body/t1b_labelclips.py.
 
 `docs/T1B_FACTS.md`: 44-feature definitions (global normalisation), alignment checks, parameter counts (1,820,192; residual posture 1,926,944), genres per split, the two feature forms.
 Finding: 5 sequences have audio shorter than motion by > 0.5 s, two by 18-20 s (fd_043 validation, fd_059 train); E1 drops tokens past the audio end. Onset/movement lag: no systematic offset or drift, but per-sequence correlation is only about 0.05, so sub-0.1 s alignment per sequence is not confirmed.
+
+## STORAGE (2026-11-15)
+
+Per-frame width 2105: modes 2048 (4 layers x re/im x 256), surprisal 4, surprisal-valid 4, log-precision 4, arousal 1, ear 44. 100 Hz, 203 FineDance sequences, 7.656 h = 2,756,221 frames.
+- float16: 421 kB/s, 57.2 MB per song, **11.6 GB** total (on disk 11 G). float32: 23.2 GB. (50 Hz averaged form would be half.) Disk free 258 GB.
+- Reproduction of fd_001 against T0 lanes: ear 0, arousal 0, s10 0, h_abs 2.9e-6 (< 1e-5). float16 round trip of h: max abs 0.0625 (relative about 5e-4).
+- Beat-grid fact (all 203 songs): median inter-beat interval 0.51 s; mean time from a frame to the next beat 0.76 s (inflated by tracker gaps); longest gap 71 s (a beat-less passage), so the beat-phase input can look far ahead there.
+- Files: t1b/cortex/<fd_NNN>.npy, t1b/cortex/beats/<fd_NNN>.json, t1b/cortex_norm.npz (train mean/sd).
+
+## T1B ESTIMATE (2026-11-15)
+
+Timing run, 3 trainers in parallel (cores 6-9 / 10-13 / 14-17, 4 threads each, 4 slots x 4 copies): about 8.4-9.2 s per 60 s window step (includes first-read of the data); peak memory 1.23 GB per run (limit 8 G).
+One epoch = about 115 window steps (154 train sequences, 4 slots) = about 17 min + validation and train-subset evaluation about 3 min = **about 20 min per epoch**.
+Early stopping typically 15-30 epochs = **5-10 h**; the epoch cap of 60 = **20 h**. Three seeds in parallel: **<= 24 h in every case, so they run locally** (Kaggle package ready in t1b/kaggle/, not uploaded).
+Not started: waiting for the posture ruling (7.70).

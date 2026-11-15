@@ -6,6 +6,7 @@
 A song is one T0 FineDance sequence (fd_NNN): 4 copies (V1, V2, V1m, V2m) share its music. Slots: SLOTS songs advance in lockstep, one 60 s window per optimiser step.
 """
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -17,7 +18,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import t1b_model as M  # noqa: E402
 
-OUT = Path("/secondary/hyst-data/body/t1b")
+OUT = Path(os.environ.get("HYST_T1B", "/secondary/hyst-data/body/t1b"))
 COPIES = ("V1", "V2", "V1m", "V2m")
 WIN_FR, WIN_TOK, WIN_ST = 6000, 120, 3000
 SLOTS, CLIP_X = 4, 5.0
