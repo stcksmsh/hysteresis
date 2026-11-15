@@ -2732,3 +2732,6 @@ Standing rules unchanged.
   of any content; music has its own copyright holders; attribution and two citations required. Operational default until Kosta rules:
   Motorica data and anything derived from it stay on this laptop (no Kaggle, not even a private dataset), and it gets steps 1-3 of 7.69
   like PhantomDance. **Open for Kosta:** whether Hysteresis counts as non-commercial research under these terms.
+- **Kosta ruled 2026-11-15:** Hysteresis is non-commercial research (unpaid, not a commission, not a product), so Motorica may be used
+  for training under its licence. The no-redistribution term still holds: Motorica and anything derived from it stay on this laptop (no
+  Kaggle, not even a private dataset). Attribution and the two citations go into any write-up that uses it.
