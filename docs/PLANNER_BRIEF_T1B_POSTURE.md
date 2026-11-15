@@ -31,8 +31,8 @@ Builder's reading: the deltas are heavy-tailed (kurtosis 5.6-12.7) and nearly un
   human made (correlation is small, 0.14, but not zero).
 - (d) Keep 256 and lower the threshold to 0.83 (post hoc).
 
-**Q2.** If (a): the two posture stages are predicted the same way the builder predicts the two gesture stages (stated in `T1B_RULES.md`);
-loss = sum of the cross-entropies with equal weights (now four heads: code coarse, code residual, vigour, posture coarse + residual, as the
-builder defines code prediction). Confirm, or fix the weights.
+**Q2.** If (a): the two posture stages are predicted the same way as the two gesture-code stages (stated in `T1B_RULES.md`), and the
+loss stays the sum of the cross-entropies with equal weights, one term per head (gesture coarse, gesture residual, vigour, posture coarse,
+posture residual). Confirm, or fix the weights. **[recommended: confirm]**
 
 **Q3.** Record as 7.70.
