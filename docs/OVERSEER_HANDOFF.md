@@ -94,7 +94,16 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-15 ~12:50 (clock) — newest
+## UPDATE 2026-11-15 ~13:00 (clock) — newest
+
+Brief docs/PLANNER_BRIEF_T1B_PRE.md (body) SENT to Kosta: Q1 causality (cortex beat input = offline whole-song grid; ear 0.023 s, ear
+energy 1.0 s lookahead) (a) token-causal only, disclose [rec] / (b) strict, retrain B7 / (c) deliberate lookahead; Q2 style ID reverses
+7.56.11 -> variant only after Kosta rules [rec]; Q3 split 3b into E4 then structured input [rec]; Q4 ablations for E1 + final only [rec];
+Q5 swapped-music STOP threshold bootstrap CI by song [rec], partners fill from val then half/double tempo; Q6 affect tests report-only, no
+conclusion < 10 pairs [rec]; Q7 offset soft targets decoded in neighbour context [rec]; Q8 one answer set A/B/tie/both poor + confidence
+[rec]; Q9 7.68. WO41 may be sent before the answer only if Q1 = (a) is assumed (step 1 would otherwise "fix" inputs).
+
+## UPDATE 2026-11-15 ~12:50 (clock)
 
 7.63 (verbatim + categorical-heads amendment) and 7.66 (external reviews; E1 = T1b baseline; T2 additions; 7.66.2 lookups) RECORDED on
 body e4d1ba7; 7.65.6 defaults corrected to 7.63.8 (log-spaced vigour bins, nucleus 0.9 all heads). 7.67 notes: causality check BEFORE E1
