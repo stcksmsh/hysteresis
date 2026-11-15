@@ -2736,11 +2736,24 @@ Standing rules unchanged.
   for training under its licence. The no-redistribution term still holds: Motorica and anything derived from it stay on this laptop (no
   Kaggle, not even a private dataset). Attribution and the two citations go into any write-up that uses it.
 
+### 7.70 Posture head = residual 2 x 256; five equal cross-entropies; GO for E1; 2026-11-15, via Kosta + planner (answering `docs/PLANNER_BRIEF_T1B_POSTURE.md`)
+
+1. **Q1 (a):** posture head = residual 2 x 256 (coarse + correction given coarse), built like the gesture vocabulary; 0.967 variance
+   explained on validation (0.971 train; the 7.63.8 STOP at 0.9 is met). Reason: joints stay coupled; posture (droop/lift) is part of the
+   emotional channel (7.71) and must move as one body.
+2. **Q2: confirm.** The two posture stages are predicted the same way as the two gesture stages (stated in `T1B_RULES.md`). Loss = sum of
+   five cross-entropies with equal weights (gesture coarse, gesture residual, vigour, posture coarse, posture residual). Report each head's
+   training and validation loss separately per epoch.
+3. **GO:** resume WO41 (E1 baseline) with 7.68-7.71. Standing rules unchanged.
+
 ### 7.71 Music-label session cancelled; emotion carried by readable movement properties; 2026-11-15, via Kosta + planner (answering `docs/PLANNER_BRIEF_LABELS.md`)
 
 1. **Q1: none of (a)-(d). CANCEL the 117-clip music-label session.** Close the page; nothing was answered.
    Kosta: most FineDance songs carry no clear feeling ("modern pop slop"); deep, precise emotional state is not needed; emulating it
-   through movement properties people can read (size, speed, droop/lift, smooth vs abrupt) is enough.
+   through movement properties people can read (size, speed, droop/lift, smooth vs abrupt) is enough. Basis (planner): Saerbeck &
+   Bartneck 2010 (acceleration -> perceived energy, path curvature -> valence); Pollick et al. 2001 (arm movement: energy from
+   speed/acceleration, pleasantness from inter-segment timing); Reachy Mini 2026 (viewers read energy, anger and sadness from a low-DoF
+   robot; subtle feelings near chance).
 2. **Consequences:**
    - The T2 affect probe and the matched-passage test (7.65.2, 7.66.3, 7.68.6) are DROPPED for FineDance. No prefill, no audio-emotion
      encoder labels.
