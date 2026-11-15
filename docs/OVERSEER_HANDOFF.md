@@ -94,7 +94,16 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-15 ~14:45 (clock) — newest
+## UPDATE 2026-11-15 ~15:10 (clock) — newest
+
+WO41 (body-t1b 98f1964): CAUSAL, STORAGE (2105 wide, 11.6 GB f16; all 203 seqs precomputed, unit ended ok), T1B_RULES (posture pending),
+ESTIMATE ~20 min/epoch/seed (5-10 h, cap 20 h, 1.2 GB) -> 3 seeds local, FACTS DONE (fd_043 val / fd_059 train audio 18-20 s shorter than
+motion; tokens past audio end dropped), LABEL CLIPS READY (117 = 39 x 3). Residual 2x256 posture already fitted (0.971); trains at once on
+ruling (a). KOSTA LABEL SESSION LIVE: http://127.0.0.1:8765/ unit hyst-wo41-labelsession (cores 18-19), tool archive
+t1b/labels_tool_98f1964, session t1b/labels_session_2026-11-15 seed 41091; key/answers 404 checked. After Kosta: hand labels (key x
+answers) to agent 1; T2 must not be computed before. Not yet reviewed in detail: T1B_RULES, T1B_FACTS, T1B_CAUSAL.
+
+## UPDATE 2026-11-15 ~14:45 (clock)
 
 WO42 (agent 2, body-phantom 18cbbde) PROVENANCE + T0_PHANTOM_RULES verified: PhantomDance 260 pairs 9.502 h (3 files 44.1 kHz, rest 16 kHz;
 no genres; split by pair merged on audio hash, seed 42001); Motorica 74 music-paired seqs 3.558 h (47 BVH without music, all misc;
