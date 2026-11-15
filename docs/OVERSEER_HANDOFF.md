@@ -94,7 +94,14 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-15 ~16:00 (clock) — newest
+## UPDATE 2026-11-15 ~23:55 (clock) — newest
+
+7.70 RECORDED (body 7842425): posture residual 2x256, five equal CEs, per-head losses per epoch, GO resume WO41 with 7.68-7.71; 7.71
+basis (Saerbeck & Bartneck 2010, Pollick 2001, Reachy Mini 2026) added. WO42 PHANTOM READY 8acdc69 (~13:45, NOT yet verified by overseer):
+PhantomDance 19.28 usable h (4 copies), Motorica 9.66 h; 12 look clips ready (Kosta session not served; RC -> private page needs his yes).
+Recommended: keep agent 1 (has posture built, starts 3 seeds at once), clear agent 2 (done). GO to agent 1 on Kosta's "send".
+
+## UPDATE 2026-11-15 ~16:00 (clock)
 
 7.71 RECORDED (body): label session CANCELLED; affect probe + passage test dropped for FineDance; emotion = vigour / posture / move shape;
 T2 adds report-only vigour~ear energy and posture height~ear energy, model vs human; emotion judged later on Kosta's check songs + teaching
