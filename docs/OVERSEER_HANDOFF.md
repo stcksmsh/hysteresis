@@ -94,7 +94,16 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-15 ~13:00 (clock) — newest
+## UPDATE 2026-11-15 ~13:20 (clock) — newest
+
+7.68 (brief answers: all [rec] except Q6 (b) Kosta labels 40 songs x 3 passages BEFORE T2; 3 seeds per model; Kaggle GPU per-run go,
+derived only; GO WO41) and 7.69 (PhantomDance download now + T0 + Kosta look 6 clips; Motorica/AIST/FineDance-full = Kosta's own
+actions; E-data variant after E1) RECORDED on body. Notes 7.68.11 (39 test+val groups, not 40; Kaggle package prepared not uploaded;
+seeds cores 6-17) and 7.69 (PhantomDance 16 kHz: fast_features resamples, but no content > 8 kHz -> band-limit report). WO41 updated
+(ec969ac), WO42 PhantomDance written (cores 18-19, branch body-phantom). BOTH NOT SENT: waiting for "send" (WO41 -> agent 1, WO42 ->
+agent 2, both cleared). Overseer serves two Kosta sessions later: label clips (39 songs x 3 passages) and PhantomDance look (6 singles).
+
+## UPDATE 2026-11-15 ~13:00 (clock)
 
 Brief docs/PLANNER_BRIEF_T1B_PRE.md (body) SENT to Kosta: Q1 causality (cortex beat input = offline whole-song grid; ear 0.023 s, ear
 energy 1.0 s lookahead) (a) token-causal only, disclose [rec] / (b) strict, retrain B7 / (c) deliberate lookahead; Q2 style ID reverses
