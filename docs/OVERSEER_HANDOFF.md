@@ -94,7 +94,14 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-15 ~13:20 (clock) — newest
+## UPDATE 2026-11-15 ~13:35 (clock) — newest
+
+Kosta downloaded PhantomDance (~/Downloads/PhantomDanceDatav1.2.zip, folder inside v1.1, no licence/README in zip) and Motorica
+(~/Downloads/OneDrive_1_11-15-2026.zip: LICENSE.txt + 2 inner zips). Motorica licence: research only, no commercial use incl. ML training
+for commercial purposes, no redistribution. Default recorded (7.69 notes, body ba1c78d): Motorica local only, no Kaggle. ASKED KOSTA:
+is Hysteresis non-commercial research? WO42 now covers both sources from the local zips (body 2e802db). WO41 + WO42 still NOT SENT.
+
+## UPDATE 2026-11-15 ~13:20 (clock)
 
 7.68 (brief answers: all [rec] except Q6 (b) Kosta labels 40 songs x 3 passages BEFORE T2; 3 seeds per model; Kaggle GPU per-run go,
 derived only; GO WO41) and 7.69 (PhantomDance download now + T0 + Kosta look 6 clips; Motorica/AIST/FineDance-full = Kosta's own
