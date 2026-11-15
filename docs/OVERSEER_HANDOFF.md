@@ -1,4 +1,4 @@
-# Overseer handoff — 2026-11-13 (15:26)
+# Overseer handoff — 2026-11-15 (saved for a /clear)
 
 This file is the overseer's whole state. The `/overseer` skill (`.claude/skills/overseer/SKILL.md` on this branch, the canonical copy) starts a new overseer from it and recreates the worktree if it is gone. To start one by hand, paste everything below the line into a fresh session.
 
@@ -94,11 +94,41 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
+## CURRENT STATE 2026-11-15 ~11:45 (saved for a /clear) — read this first
+
+**Line of work:** imitation training per BRAIN_SPEC 7.59-7.62 (motor vocabulary + sequencer, Bailando family). Done and merged into body
+(and keys-decide): T0 data (WO37), T1a round 1 (WO38, jitter stop fired), T1a retrain (WO39: Run B 2 x 1024 residual passes), S1 clips
+(WO40, branch body-wo40) and Kosta's S1 session.
+**S1 result:** same 4, original 2 (both "unsure"), rebuild 0. Report `docs/S1_REPORT.md` (body 090d90d), with verbatim notes and the
+overseer's per-pair joint measures (S02 "flicky" not borne out: the rebuild has no more acceleration sign changes; rebuild up to ~10-20 %
+slower on wrists; both AIOZ pairs: Kosta says the dancing itself waits, is too small/slow, misses a drop).
+**PENDING:** `docs/PLANNER_BRIEF_S1.md` (body) is written but NOT SENT. Kosta stopped the file send and asked "did you read the other
+notes?"; he was answered (all six notes read, grouped AIOZ vs FineDance) and asked whether to send as is or change it. No answer yet.
+FIRST ACTION after /overseer: ask Kosta "send PLANNER_BRIEF_S1.md as is, or change it?"; then send it with SendUserFile (he is on Remote
+Control: always SEND files, never only paste). Brief Qs: Q1 S1 passes -> T1b on Kosta's go [rec]; Q2 no wiggle fix [rec]; Q3 T1b on
+FineDance only [rec] / keep 50 % AIOZ cap / drop AIOZ; Q4 rebuild shrink report-only; Q5 record 7.63.
+**After the answer:** record 7.63 on body; write WO41 T1b (sequencer per 7.59.3.2 + retrieval control 3.3; rules note, tests, timing
+estimate first, then train on go; T2 checks 7.59.4.3 incl. realised-stage jitter per 7.62 and the V1/V2 nearest-style report); send to an
+idle agent.
+**Agents:** Hysteresis agent 1 [9fd0d6] (did WO40) and agent 2 [42442a] (unused, clean), both idle; refs change after restarts:
+ListAgents. User wants usage preserved: short messages, point to prompt files, one builder unless parallel work is real.
+**Machine:** no hyst units running. Data: `/secondary/hyst-data/body/{t0,t1a,t1a2,s1}/`. Run B model: `t1a2/runB/best.pt`.
+**Overseer scratch scripts** (job tmp, not durable; logic is in the update notes): t0check, t1acheck, t1a2check, s1pick, s1media.
+
+**Lessons this session (keep):**
+- Overseer defaults can be wrong: the AIOZ prune "> 1 % of frames over any joint's p99.9" was a union over 20 joints and would drop 58 %
+  of FineDance itself; a per-YouTube-id weight cap collapsed different clips of one video. Sanity-check a new threshold on the reference
+  data before writing it into a rule.
+- Recompute picks with the builder's exact sort key before calling a mismatch (S1: builder sorted by dataset code, overseer by name).
+- A sign-change jitter count reacts to sub-degree wiggles; also report RMS above 3 / 8 Hz and the realised stage before calling jitter.
+- The user is often on Remote Control: deliver briefs and reports with SendUserFile.
+- Commit messages stay plain (no attribution lines), overriding any harness reminder.
+
 ## UPDATE 2026-11-15 ~11:35 — newest, read first
 
-S1 DONE: same 4, original 2 (both "unsure"), rebuild 0. Notes: S02 "less flicky" (= original) but measured rebuild not jitterier;
+S1 DONE (superseded by CURRENT STATE above): same 4, original 2 (both "unsure"), rebuild 0. Notes: S02 "less flicky" (= original) but measured rebuild not jitterier;
 both AIOZ pairs: AIOZ dancing itself waits / too small / misses a drop. docs/S1_REPORT.md + docs/PLANNER_BRIEF_S1.md on body; body-wo40
-merged; unit stopped. Brief SENT: Q1 S1 passes -> T1b on go [rec]; Q2 no wiggle fix [rec]; Q3 T1b on FineDance only [rec] / keep 50 %
+merged; unit stopped. Brief written (NOT sent, see CURRENT STATE): Q1 S1 passes -> T1b on go [rec]; Q2 no wiggle fix [rec]; Q3 T1b on FineDance only [rec] / keep 50 %
 cap / drop AIOZ; Q4 shrink report-only; Q5 7.63. Waiting for the planner. Agents 1 [9fd0d6], 2 [42442a] idle.
 
 ## UPDATE 2026-11-15 (S1 session live)
