@@ -2716,7 +2716,9 @@ Not now: InfiniteDance (licence unknown), SoulDance (on hold per its repo), PopD
 Standing rules unchanged.
 
 **Overseer notes (operational, not rulings):**
-- PhantomDance's audio is 16 kHz; the ear features and cortex were built on FineDance audio at its own rate. The builder states the sample
-  rate the ear features expect and resamples PhantomDance audio to it (stdlib / existing env only), reported.
+- PhantomDance's audio is 16 kHz. `scripts/brain/fast_features.py` resamples any input to 44.1 kHz itself (soxr), so nothing breaks, but
+  PhantomDance has no content above 8 kHz while FineDance does. Report-only: which of the 44 ear columns and which cortex inputs depend on
+  content above 8 kHz, and the size of the shift (FineDance features computed from audio low-passed at 8 kHz vs the original, on 5
+  songs). (Corrected the same day: an earlier wording of this note asked the builder to resample.)
 - Split by song with its own seed (fixed in the rules note); PhantomDance songs that also appear in FineDance (by name) are listed.
 - No installs. If the Google Drive download cannot be done with curl / the existing env, STOP and ask.
