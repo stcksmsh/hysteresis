@@ -94,7 +94,16 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-15 ~15:10 (clock) — newest
+## UPDATE 2026-11-15 ~15:30 (clock) — newest
+
+Kosta on RC -> label session moved to a PRIVATE claude.ai page (Kosta chose it; uploads the 117 coded 15 s FineDance excerpts, 28 MB):
+https://claude.ai/artifact/NcL5N9rcfNCRfwgachwCFx (db capability; collection `answers`, doc id = session code, fields answer / note /
+plays / ts / pos; resumes at first unanswered; order = session order.json, seed 41091; codes only, key stays local in
+t1b/labels_session_2026-11-15/key). Staged from main checkout target/labelpage (git-ignored). Local unit hyst-wo41-labelsession STOPPED.
+After Kosta: ArtifactData list answers (limit 1000) -> join with key/key.json -> labels per clip -> pass to agent 1 (song label = majority
+of 3 passages per 7.68.11). Empty store checked at publish.
+
+## UPDATE 2026-11-15 ~15:10 (clock)
 
 WO41 (body-t1b 98f1964): CAUSAL, STORAGE (2105 wide, 11.6 GB f16; all 203 seqs precomputed, unit ended ok), T1B_RULES (posture pending),
 ESTIMATE ~20 min/epoch/seed (5-10 h, cap 20 h, 1.2 GB) -> 3 seeds local, FACTS DONE (fd_043 val / fd_059 train audio 18-20 s shorter than
