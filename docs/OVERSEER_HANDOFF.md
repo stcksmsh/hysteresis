@@ -94,7 +94,15 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-15 ~13:35 (clock) — newest
+## UPDATE 2026-11-15 ~13:50 (clock) — newest
+
+Kosta: Hysteresis is non-commercial research (unpaid, no commission, no product) -> Motorica trainable, still local only (BRAIN_SPEC 7.69
+note, body 9f410d9). Cleanup on Kosta's request: removed 27 old worktrees + Hysteresis-b7 (all clean, merged or pushed; branches kept;
+body-m3d's 3-line uncommitted toy diff saved to /secondary/hyst-data/attic/body-m3d_uncommitted_2026-11-15.patch); failed units
+hyst-wo40-gate* reset. Left: main checkout (body-t0, 5.9 GB Rust target, not touched), body (overseer edits body here), dance-figures,
+wo37-t0, wo37b-aioz. /home caches (pip 8.1 GB, uv 9.5 GB) and the two Downloads zips (6.6 GB) left for Kosta. WO41 + WO42 NOT SENT.
+
+## UPDATE 2026-11-15 ~13:35 (clock)
 
 Kosta downloaded PhantomDance (~/Downloads/PhantomDanceDatav1.2.zip, folder inside v1.1, no licence/README in zip) and Motorica
 (~/Downloads/OneDrive_1_11-15-2026.zip: LICENSE.txt + 2 inner zips). Motorica licence: research only, no commercial use incl. ML training
