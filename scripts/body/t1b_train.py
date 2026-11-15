@@ -69,6 +69,7 @@ class Song:
         self.key, self.norm = key, norm
         self.x = np.load(OUT / "cortex" / f"{key}.npy", mmap_mode="r")
         self.cs, self.n = load_tokens(key)
+        self.n = min(self.n, int(len(self.x) / 50))                              # tokens whose chunk starts after the audio has ended are dropped (sync check: fd_043, fd_059 have 18-20 s less audio than motion)
         self.nwin = -(-self.n // WIN_TOK)
 
     def window(self, w):

@@ -25,3 +25,8 @@ Code: scripts/body/t1b_cortex.py, t1b_tokens.py (tokens encoded with runB, 812 f
 `/secondary/hyst-data/body/t1b/labels/` (`clips/`, `manifest.json` with labels calm / sad / tense / energetic / light, `passages.json` with group, sequence, start, split). Seed 36401.
 `dialstudy_session.py`: a manifest object may carry `"labels"` (the only change). Session build checked in a temp dir (117 items); no answers file touched. Overseer serves the session.
 Code: scripts/body/t1b_labelclips.py.
+
+## FACTS DONE (2026-11-15)
+
+`docs/T1B_FACTS.md`: 44-feature definitions (global normalisation), alignment checks, parameter counts (1,820,192; residual posture 1,926,944), genres per split, the two feature forms.
+Finding: 5 sequences have audio shorter than motion by > 0.5 s, two by 18-20 s (fd_043 validation, fd_059 train); E1 drops tokens past the audio end. Onset/movement lag: no systematic offset or drift, but per-sequence correlation is only about 0.05, so sub-0.1 s alignment per sequence is not confirmed.

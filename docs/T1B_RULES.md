@@ -14,7 +14,7 @@ Items marked **(default)** are listed under FOR USER; **[PENDING]** waits for a 
 
 ## 2. Targets, vocabulary, bins
 
-- Tokens: the T0 0.5 s grid from motion frame 0; token k = rows [50 k, 50 k + 50) of the 100 Hz target; only the n_win x 40 tokens of T0's 20 s windows; `ok` = its window passed the T0 gate. Loss only on `ok` tokens.
+- Tokens: the T0 0.5 s grid from motion frame 0 (tokens starting after the audio ends are dropped: fd_043 and fd_059 have 18-20 s less audio than motion, `T1B_FACTS.md`); token k = rows [50 k, 50 k + 50) of the 100 Hz target; only the n_win x 40 tokens of T0's 20 s windows; `ok` = its window passed the T0 gate. Loss only on `ok` tokens.
   Code pair (stage 1, stage 2) and vigour a_n from the frozen run-B encoder (`t1a2/runB/best.pt`), chunk scaling as T1a.
 - Vigour: 32 log-spaced bins between the train p0.5 and p99.5 of a_n (0.0500 to 3.45); outside values go to the end bins. The floor value 0.05 is the lowest bin's edge (0.83 % of tokens sit on the floor).
 - Posture change of token k = posture[50 (k+1)] - posture[50 k] (100 Hz posture target, raw units), standardised per joint with the train sd.
