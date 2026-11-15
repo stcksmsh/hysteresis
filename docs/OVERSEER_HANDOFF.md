@@ -94,6 +94,15 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
+## UPDATE 2026-11-15 ~11:50 (clock) — newest
+
+S1 brief went to the planner (via Kosta). Planner answered 7.63 (NOT pasted to overseer: FineDance only, categorical heads: vigour 32
+bins, posture 256 entries) and 7.64 (pasted; RECORDED body 98066c9): no Demucs; LISTENER (cortex B7 ep6 full state 100 Hz -> 50 Hz, proj
+128, 256 units, time constants 0.1-30 s) + PLANNER GRU every 0.5 s; joint training, 60 s TBPTT; T2 STOP swapped-music test + reports
+(event response, ear-only ablation, 2 s memory). Overseer notes 7.64.10. ASKED KOSTA for the 7.63 text and the earlier 7.64 draft's
+feeling-label protocol. Told Kosta: clear both agents (idle, nothing running). Next: record 7.63, write WO41 T1b (rules note + storage
+size + timing estimate first, STOP), send to one cleared agent on "send".
+
 ## CURRENT STATE 2026-11-15 ~11:45 (saved for a /clear) — read this first
 
 **Line of work:** imitation training per BRAIN_SPEC 7.59-7.62 (motor vocabulary + sequencer, Bailando family). Done and merged into body
