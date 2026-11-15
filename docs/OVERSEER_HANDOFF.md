@@ -94,7 +94,15 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-15 ~15:40 (clock) — newest
+## UPDATE 2026-11-15 ~16:00 (clock) — newest
+
+7.71 RECORDED (body): label session CANCELLED; affect probe + passage test dropped for FineDance; emotion = vigour / posture / move shape;
+T2 adds report-only vigour~ear energy and posture height~ear energy, model vs human; emotion judged later on Kosta's check songs + teaching
+pool. Agent 1 told. Label page NcL5N9rcfNCRfwgachwCFx NOT deleted: delete needs a confirmation Kosta cannot give over RC (rejections also
+cancelled parallel calls: never batch a delete with other calls) -> delete when Kosta is at the laptop. POSTURE brief re-sent to Kosta;
+7.70 still pending; E1 training waits only on it.
+
+## UPDATE 2026-11-15 ~15:40 (clock)
 
 Kosta: label session "torturous", most songs not emotional; asked for prefill. Brief docs/PLANNER_BRIEF_LABELS.md (body 4ab7a45) SENT:
 Q1 (a) no prefill, add "no clear feeling", passages grouped by song with one-tap "same as previous" [rec] / (b) prefill from scripts/emotion
