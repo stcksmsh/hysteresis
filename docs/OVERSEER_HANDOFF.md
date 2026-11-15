@@ -94,7 +94,16 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-15 ~13:50 (clock) — newest
+## UPDATE 2026-11-15 ~14:00 (clock) — newest
+
+WO41 SENT to agent 1 [9fd0d6] (E1, cores 6-17, branch body-t1b, night log NIGHT_LOG_body-t1b.md); WO42 SENT to agent 2 [42442a]
+(PhantomDance + Motorica, cores 18-19, branch body-phantom, NIGHT_LOG_body-phantom.md). Both with notify_when_idle. Cleanup: cargo
+clean main checkout (6.7 GB), uv cache (15.4 GB), pip cache (8.1 GB): /home 43 -> 61 GB free, /secondary 269 GB free. Downloads zips
+stay until WO42 has copied them. Overseer next: verify each milestone (CAUSAL list vs T0 lookahead; STORAGE; T1B_RULES vs 7.63-7.68;
+ESTIMATE; PROVENANCE hashes; T0_PHANTOM_RULES mapping), watch units with watch_unit.sh, serve the label session (39 songs x 3 passages)
+and the 12-clip look session when ready.
+
+## UPDATE 2026-11-15 ~13:50 (clock)
 
 Kosta: Hysteresis is non-commercial research (unpaid, no commission, no product) -> Motorica trainable, still local only (BRAIN_SPEC 7.69
 note, body 9f410d9). Cleanup on Kosta's request: removed 27 old worktrees + Hysteresis-b7 (all clean, merged or pushed; branches kept;
