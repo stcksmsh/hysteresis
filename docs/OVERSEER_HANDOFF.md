@@ -94,7 +94,19 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-15 ~00:40 (clock) — newest, read first
+## UPDATE 2026-11-15 (S1 session live) — newest, read first
+
+**S1 SESSION LIVE for Kosta.** S1 CLIPS READY 3f697b8 (branch body-wo40, log NIGHT_LOG_body-wo40.md; NOT merged yet, merge after report)
+VERIFIED: pool FD 385 / AIOZ 2029 (= gate shares); picks reproduced with own code (job tmp s1pick.py; builder sorts by src code, FD
+first) = S01 fd_176 V1 w2, S02 fd_089 V1m w2, S03 fd_128 V2m w1, S04 fd_137 V2m w2 (group fd_136), S05 aioz 3tHLWW--wh8_03 p3 V2m w0,
+S06 aioz 66CzFi5hLKI_07 p3 V2m w1 (4 of 6 V2m: disclose after); rebuild first S02/S03/S06 = default_rng(35011).choice(6,3); 12 clips
+20.0 s 1280x720 h264+aac, audio offset 0.0 vs source; frames same framing, no label leak. Session: tool archive s1/tool_3f697b8, session
+/secondary/hyst-data/body/s1/session_2026-11-15 seed 35021, 6 pairs first/second/same, order kept; unit hyst-wo40-session (cores
+18-19) http://127.0.0.1:8765/; key/answers/order/labels/manifest 404. AFTER Kosta: join answers x key (rebuild vs orig per pair),
+report section (docs/S1_REPORT.md) with notes verbatim, merge body-wo40 into body, stop unit, brief PLANNER_BRIEF_S1.md (if notes
+mention jitter -> wiggle fix per 7.62.3). Agent 1 [9fd0d6] idle, agent 2 [42442a] idle (unused).
+
+## UPDATE 2026-11-15 ~00:40 (clock)
 
 Planner = BRAIN_SPEC 7.62 (body): Run B to S1; jitter rule measured at realised stage (POST HOC, recorded); gate share >= 0.95 overall (POST
 HOC); wiggle source open report-only (fix only if S1 notes mention jitter); T1b only on Kosta's go. Overseer notes 7.62.5 (seed 35001 pool
