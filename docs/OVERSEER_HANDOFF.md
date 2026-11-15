@@ -94,7 +94,14 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-15 (S1 session live) — newest, read first
+## UPDATE 2026-11-15 ~11:35 — newest, read first
+
+S1 DONE: same 4, original 2 (both "unsure"), rebuild 0. Notes: S02 "less flicky" (= original) but measured rebuild not jitterier;
+both AIOZ pairs: AIOZ dancing itself waits / too small / misses a drop. docs/S1_REPORT.md + docs/PLANNER_BRIEF_S1.md on body; body-wo40
+merged; unit stopped. Brief SENT: Q1 S1 passes -> T1b on go [rec]; Q2 no wiggle fix [rec]; Q3 T1b on FineDance only [rec] / keep 50 %
+cap / drop AIOZ; Q4 shrink report-only; Q5 7.63. Waiting for the planner. Agents 1 [9fd0d6], 2 [42442a] idle.
+
+## UPDATE 2026-11-15 (S1 session live)
 
 **S1 SESSION LIVE for Kosta.** S1 CLIPS READY 3f697b8 (branch body-wo40, log NIGHT_LOG_body-wo40.md; NOT merged yet, merge after report)
 VERIFIED: pool FD 385 / AIOZ 2029 (= gate shares); picks reproduced with own code (job tmp s1pick.py; builder sorts by src code, FD
