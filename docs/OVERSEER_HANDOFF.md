@@ -94,7 +94,15 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-15 ~14:00 (clock) — newest
+## UPDATE 2026-11-15 ~14:30 (clock) — newest
+
+WO41 STOP (agent 1): posture vocabulary 256 explains 0.847 < 0.9 (7.63.8). Overseer recompute (job tmp pvcheck.py, from t1b/tokens +
+vocab.npz; centres are in raw units, divide by post_sd): 256 0.846/0.838 (train/val), 512 0.883/0.874, 1024 0.912/0.901, residual
+2x256 0.971/0.967, per-joint 16 bins 0.985/0.984. Brief docs/PLANNER_BRIEF_T1B_POSTURE.md (body 8faa1f8) SENT: Q1 (a) residual 2x256
+[rec] / (b) 1024 / (c) per joint / (d) lower threshold; Q2 equal-weight CE per head [rec]; Q3 7.70. Agent 1 told to hold training,
+continue cortex precompute (running), rules note, facts, label clips. CAUSAL pushed (docs/T1B_CAUSAL.md, body-t1b), not yet reviewed.
+
+## UPDATE 2026-11-15 ~14:00 (clock)
 
 WO41 SENT to agent 1 [9fd0d6] (E1, cores 6-17, branch body-t1b, night log NIGHT_LOG_body-t1b.md); WO42 SENT to agent 2 [42442a]
 (PhantomDance + Motorica, cores 18-19, branch body-phantom, NIGHT_LOG_body-phantom.md). Both with notify_when_idle. Cleanup: cargo
