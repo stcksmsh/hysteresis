@@ -94,7 +94,15 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-15 ~00:25 (clock) — newest, read first
+## UPDATE 2026-11-15 ~00:40 (clock) — newest, read first
+
+Planner = BRAIN_SPEC 7.62 (body): Run B to S1; jitter rule measured at realised stage (POST HOC, recorded); gate share >= 0.95 overall (POST
+HOC); wiggle source open report-only (fix only if S1 notes mention jitter); T1b only on Kosta's go. Overseer notes 7.62.5 (seed 35001 pool
+of gate-passing test windows, 1 per group, 4 FD + 2 AIOZ; rebuild first 3/6 seed 35011). WO40 S1 clips (body d312c24) written; builders
+OFFLINE -> user pastes. On S1 CLIPS READY: check picks vs seed, frames, audio, order; build session (look-test mode) on 8765, unit
+hyst-wo40-session, key 404; tell Kosta.
+
+## UPDATE 2026-11-15 ~00:25 (clock)
 
 REALISED DONE feb002f merged (body-t1a2 into body). Realised-stage jitter: rebuilds at/below original (ratios 0.44-1.00) except base yaw
 power 1.26-1.29x of 0.00016. Gate fails B: limits 37, endstop 5 of 2455. Brief docs/PLANNER_BRIEF_T1A2_RESULTS.md SENT: Q1 (a) B to S1
