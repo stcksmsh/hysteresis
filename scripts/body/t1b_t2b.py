@@ -42,6 +42,10 @@ def token_features(key, norm):
 
 def train_db(norm, max_seq=None):
     """database over the train split: music features (unique per seq, token), rows of the 4 copies: dict(feat (N, 2105) unit-norm, ref (N, 2) seq index / token, rows (4, N, 51, 5))"""
+    cache = OUT / "t2" / "db.npz"
+    if cache.exists():
+        z = np.load(cache)
+        return dict(feat=z["feat"].astype(np.float32), ref=z["ref"], rows=z["rows"], keys=list(z["keys"]))
     idx = TR.song_index()
     keys = sorted(k for k, v in idx.items() if v["split"] == "train")[:max_seq]
     feats, ref, rows = [], [], []
@@ -50,12 +54,17 @@ def train_db(norm, max_seq=None):
         zs = [np.load(T2.T0 / "seq" / "finedance" / f"{k}__{c}.npz") for c in TR.COPIES]
         nt = min(len(f), min(int(z["n_win"]) * 40 for z in zs))
         keep = np.arange(2, nt)
+        if not len(keep):
+            continue
         feats.append(f[keep])
         ref += [(si, int(t)) for t in keep]
         rows.append(np.stack([np.stack([np.asarray(z["targets"][50 * t:50 * t + 51], np.float32) for t in keep]) for z in zs]))
     feat = np.concatenate(feats)
     feat /= np.linalg.norm(feat, axis=1, keepdims=True) + 1e-9
-    return dict(feat=feat, ref=np.array(ref), rows=np.concatenate(rows, 1), keys=keys)
+    db = dict(feat=feat, ref=np.array(ref), rows=np.concatenate(rows, 1), keys=keys)
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    np.savez(cache, feat=feat.astype(np.float16), ref=db["ref"], rows=db["rows"], keys=np.array(keys))
+    return db
 
 
 def chain(db, music, rng, sd, use_music):

@@ -45,3 +45,9 @@ Timing run, 3 trainers in parallel (cores 6-9 / 10-13 / 14-17, 4 threads each, 4
 One epoch = about 115 window steps (154 train sequences, 4 slots) = about 17 min + validation and train-subset evaluation about 3 min = **about 20 min per epoch**.
 Early stopping typically 15-30 epochs = **5-10 h**; the epoch cap of 60 = **20 h**. Three seeds in parallel: **<= 24 h in every case, so they run locally** (Kaggle package ready in t1b/kaggle/, not uploaded).
 Not started: waiting for the posture ruling (7.70).
+
+## T2 code ready (2026-11-15)
+
+scripts/body/t1b_t2*.py: generation (nucleus 0.9, 8 samples), swapped-music + 2 s truncation likelihoods, retrieval and random-chunk controls (cached train database), realised simulation with gates on 3 x 20 s windows, all per-dance measures, affect probe and passage test, diversity, seed aggregation with STOP checks.
+Smoke-tested end to end on a throwaway 1-epoch model (deleted). Findings: 17 of 23 test songs give a 60 s dance from 10 s (audio >= 70 s); the human reference keeps all rows regardless of the T0 gate (most human windows fail some gate); likelihood is masked by ok.
+Not done: AIOZ held-out (needs cortex states for 41 test clips + token encoding of AIOZ dancers), AIOZ-only code share. Waiting for the posture ruling (7.70) before training.
