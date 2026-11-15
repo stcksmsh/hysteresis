@@ -104,7 +104,7 @@ def cmd_report(seeds):
         frozen = sum(1 for e in meas.values() if e["model"]["frozen_longest_s"] > 3.0)
         per_seed[s] = dict(ps=ps, swap={k: v for k, v in swap.items() if k != "songs"}, frozen_songs=frozen, n_songs=len(meas))
         st[s] = stops(ps, swap, meas, frozen)
-        for extra in ("diversity", "affect"):
+        for extra in ("diversity",):
             if (run / f"{extra}.json").exists():
                 per_seed[s][extra] = json.loads((run / f"{extra}.json").read_text())
     summ = dict(seeds=list(seeds), stops=st, per_seed={s: {k: v for k, v in d.items()} for s, d in per_seed.items()})

@@ -53,7 +53,7 @@ Items marked **(default)** are listed under FOR USER; **[PENDING]** waits for a 
   Transition cost = joint-space jump at the boundary (standardised joints, weight 1.0 relative to 1 - cosine), Viterbi over the song; same body pipeline and gates. Train split only.
 - **Random human chunks:** the same Viterbi with the same transition cost but music distance zero (no music). Both run for the T2 held-out songs, seed 36101.
 
-## 6. T2 protocol (run after training; Kosta's labels first)
+## 6. T2 protocol (run after training; no labels needed since 7.71)
 
 - Held-out songs = test split. 60 s window per song from the song's first full 60 s after 10 s (start = 10 s), one per song, fixed. Human reference = the T0 targets of the same song and window, the 4 copies averaged where a measure allows.
   AIOZ held-out: report-only, separate, same measures.
@@ -71,9 +71,8 @@ Items marked **(default)** are listed under FOR USER; **[PENDING]** waits for a 
 - Beat alignment: hand-speed minima within +-0.1 s of beats of the offline grid (share of beats), model vs human (Bailando's style score). Vigour vs ear-energy correlation (ear-energy lane of `ear_energy.py`, 0.5 s means) model vs human.
 - Posture range and posture-change rate; STOP joint range p5-p95 per joint < 50 % of the human data's (any joint); STOP jitter (acceleration sign changes per s and power above 3 Hz at the realised stage) > 1.5x the training data's; STOP frozen pose: hand speed < 0.05 m/s for > 3 s.
 - Endpoint (lamp) jerk and direction changes per s; V1/V2 nearest-style share and style switches per minute; joint-limit hits; limiter saturation share; AIOZ-only code share (codes seen only in AIOZ chunks); gates at 1.25 through the full body pipeline.
-- Affect probe (7.65.2, 7.68.6, report-only): Kosta's labels of 39 test+validation songs (3 passages of 15 s each, majority = song label, ties reported). Features = mean listener affect state (units 192-255) over the passage; 5-fold cross-validated
-  multinomial logistic regression (C = 1, standardised), accuracy vs a shuffled-label control (100 shuffles, seed 36301); folds grouped by song. Passage test (7.66.3): passage pairs matched on tempo (5 %) and RMS (10 %) with different labels:
-  fraction of pairs whose affect states are farther apart than the matched same-label pairs; shuffled-label control; no conclusion below 10 matched pairs.
+- Emotion channel (7.71, report-only): Pearson correlation over the dance's tokens of (a) vigour (bin centre) with ear energy (0.5 s mean of the `ee` lane) and (b) posture height (hand height, z up, of the 0.5 Hz low-passed commanded rows,
+  per-token mean) with ear energy, model vs human data on the same held-out FineDance songs and windows (mean over songs). The affect probe and matched-passage test (7.65.2, 7.66.3, 7.68.6) are DROPPED for FineDance (7.71); no labels are used.
 - Mean and spread (min, max, sd) over the 3 seeds for every T2 number; per-song values saved to `t1b/t2/`.
 
 ## FOR USER (defaults taken)

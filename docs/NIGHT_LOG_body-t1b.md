@@ -51,3 +51,7 @@ Not started: waiting for the posture ruling (7.70).
 scripts/body/t1b_t2*.py: generation (nucleus 0.9, 8 samples), swapped-music + 2 s truncation likelihoods, retrieval and random-chunk controls (cached train database), realised simulation with gates on 3 x 20 s windows, all per-dance measures, affect probe and passage test, diversity, seed aggregation with STOP checks.
 Smoke-tested end to end on a throwaway 1-epoch model (deleted). Findings: 17 of 23 test songs give a 60 s dance from 10 s (audio >= 70 s); the human reference keeps all rows regardless of the T0 gate (most human windows fail some gate); likelihood is masked by ok.
 Not done: AIOZ held-out (needs cortex states for 41 test clips + token encoding of AIOZ dancers), AIOZ-only code share. Waiting for the posture ruling (7.70) before training.
+
+## 7.71 applied (2026-11-15)
+
+Label session cancelled: affect probe and matched-passage test removed from T1B_RULES and the code (t1b_t2c.py deleted); added report-only vigour-vs-ear-energy and posture-height-vs-ear-energy correlations (model vs human). T2 no longer waits for labels. Label clips stay on disk unused. Training still waits for 7.70.

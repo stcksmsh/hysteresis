@@ -228,6 +228,7 @@ def dance_measures(q50, rows, tok, gest, mus, vig_centres, sd):
     ss = {f"selfsim_{w}tok": L.selfsim_corr(feat, tmove, w) for w in (4, 16, 60)}
     post = post_of(rows)
     dp = np.linalg.norm(np.diff(post[::50], axis=0) / sd, axis=1)
+    ph = bdesc.hand_points(post[:-1].astype(float))[:, 2].reshape(120, 50).mean(1)          # posture height: hand height (z up) of the posture-only trajectory, per token
     ev_on, ev_up = L.detect_events(ear)
     ev_sl = L.slow_changes(h4)
     vig = vig_centres[np.asarray(tok["v"])]
@@ -235,7 +236,7 @@ def dance_measures(q50, rows, tok, gest, mus, vig_centres, sd):
                 hand_speed_mean=float(sp.mean()), beat_alignment=L.beat_alignment(sp, 50.0, beats), ident_repeat=L.ident_repeat_share(tok["c1"], tok["c2"]),
                 triples_per_min=L.triples_per_min(tok["c1"], tok["c2"], tok["v"], tok["p"], 1.0), approx_repeat=L.approx_repeat(gest),
                 vigour_energy_corr=float(np.corrcoef(vig, eet)[0, 1]) if np.std(vig) > 0 and np.std(eet) > 0 else None, **ss,
-                posture_range=L.range_p5_p95(post).tolist(), posture_change_per_token=float(dp.mean()),
+                posture_height_energy_corr=float(np.corrcoef(ph, eet)[0, 1]) if np.std(ph) > 0 and np.std(eet) > 0 else None, posture_range=L.range_p5_p95(post).tolist(), posture_change_per_token=float(dp.mean()),
                 event_onset=L.event_response(sp, 50.0, ev_on), event_energy=L.event_response(sp, 50.0, ev_up), event_slow=L.event_response(sp, 50.0, ev_sl),
                 n_events=[int(len(ev_on)), int(len(ev_up)), int(len(ev_sl))],
                 cmd_vs_real_rms=np.sqrt((((q50 - rows[::2][:len(q50)]) - (q50 - rows[::2][:len(q50)]).mean(0)) ** 2).mean(0)).tolist())
