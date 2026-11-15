@@ -2722,3 +2722,13 @@ Standing rules unchanged.
   songs). (Corrected the same day: an earlier wording of this note asked the builder to resample.)
 - Split by song with its own seed (fixed in the rules note); PhantomDance songs that also appear in FineDance (by name) are listed.
 - No installs. If the Google Drive download cannot be done with curl / the existing env, STOP and ask.
+- **2026-11-15, Kosta downloaded both by browser** to `~/Downloads/`: `PhantomDanceDatav1.2.zip` (2.65 GB; 260 motion json + 260 wav;
+  the folder inside is named `PhantomDanceDatav1.1`, and the zip holds no licence or README) and `OneDrive_1_11-15-2026.zip` = Motorica
+  (4.02 GB: `LICENSE.txt`, `motorica_dance_dataset.zip`, `motorica_dance_dataset_features.zip`). No Google Drive download is needed; the
+  PhantomDance licence and README are fetched from the GitHub repository (7.69.1). Copies go to `/secondary/hyst-data/`; the files in
+  Downloads are left in place.
+- **Motorica licence (LICENSE.txt, read 2026-11-15):** motion (c) Motorica AB, all rights reserved; research use only, no commercial use
+  (explicitly including "training machine-learning algorithms for commercial purposes") without written consent; no redistribution
+  of any content; music has its own copyright holders; attribution and two citations required. Operational default until Kosta rules:
+  Motorica data and anything derived from it stay on this laptop (no Kaggle, not even a private dataset), and it gets steps 1-3 of 7.69
+  like PhantomDance. **Open for Kosta:** whether Hysteresis counts as non-commercial research under these terms.
