@@ -35,10 +35,10 @@ def window_desc(x, w):
     return np.stack([x[i:i + w].reshape(-1) for i in range(len(x) - w + 1)])
 
 
-def selfsim_corr(music, move, w):
-    """correlation of the music and movement self-similarity matrices (cosine of mean-removed w-token window descriptors), upper triangle with start lag >= w tokens (non-overlapping windows)"""
+def selfsim_corr(music, move, w, min_lag=2):
+    """correlation of the music and movement self-similarity matrices (cosine of mean-removed w-token window descriptors), upper triangle with start lag >= min_lag tokens (1 s)"""
     a, b = _cos(window_desc(music, w)), _cos(window_desc(move, w))
-    i, j = np.triu_indices(len(a), k=w)
+    i, j = np.triu_indices(len(a), k=min_lag)
     if len(i) < 3:
         return float("nan")
     return float(np.corrcoef(a[i, j], b[i, j])[0, 1])
