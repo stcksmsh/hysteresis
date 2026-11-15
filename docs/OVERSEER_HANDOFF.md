@@ -94,7 +94,14 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-15 ~23:55 (clock) — newest
+## UPDATE 2026-11-16 ~00:05 (clock) — newest
+
+E1 TRAINING STARTED 23:59 (body-t1b 474b4ef; rules d3ce3aa match 7.70, 1.93 M params): units hyst-wo41-e1-s1/s2/s3 (seeds
+41101/41102/41103, cores 6-9/10-13/14-17, 4 threads, T1B_POST=2), logs /secondary/hyst-data/body/t1b/logs/e1_seed4110{1,2,3}.log.
+ETA 5-10 h typical, cap 20 h. LAPTOP ON BATTERY at start (82 %): Kosta told. Overseer Monitor (all 3 units + power) re-arm every 30 min.
+On end: per-head train/val losses per epoch, early-stop epochs, seed spread; then T2 (no label wait, 7.71).
+
+## UPDATE 2026-11-15 ~23:55 (clock)
 
 7.70 RECORDED (body 7842425): posture residual 2x256, five equal CEs, per-head losses per epoch, GO resume WO41 with 7.68-7.71; 7.71
 basis (Saerbeck & Bartneck 2010, Pollick 2001, Reachy Mini 2026) added. WO42 PHANTOM READY 8acdc69 (~13:45, NOT yet verified by overseer):
