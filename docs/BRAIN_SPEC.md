@@ -2415,3 +2415,30 @@ marked PROPOSAL were accepted by Kosta unless struck.
    - B-spline: uniform cubic B-spline, control points every 4 rows (40 ms); a row depends on 4 control points, so the extra lookahead is at
      most 80 ms; the decoder's total right reach stays <= 0.25 s (stated and tested).
    - Runs A and B in parallel (cores 6-13 and 14-19, 4 threads each), resumable per epoch; same seeds as round 1 where applicable.
+
+### 7.62 Run B goes to S1; jitter measured at the realised stage; gate share defined, 2026-11-15, via Kosta + planner (answering `docs/PLANNER_BRIEF_T1A2_RESULTS.md`)
+
+1. **Q1 (a):** Run B (2 x 1024 residual) goes to S1.
+   - The jitter stop rule is measured at the **realised stage** (after H1, limiter, servo, v2p body). **Recorded honestly: this is a post-hoc
+     change of where the rule is measured, made after seeing the numbers.** Justification: the rule protects what the arm does; at the
+     realised stage Run B is at or below the original except base-yaw power above 3 Hz (1.29x of a very small value); on the rebuilt
+     targets the remaining difference is a sub-degree wiggle (likely from the 40 ms spline knots, unchecked). Kosta's S1 viewing is the
+     deciding test.
+   - S1 picks only windows whose rebuild passes the gates at 1.25: 6 held-out clips, 4 FineDance + 2 AIOZ by seeded pick, original
+     retarget vs Run B rebuild, both through the full body pipeline. Question "which looks more like a person dancing?" + "same",
+     optional note. Pair order checked to be mixed.
+2. **Q2 (a):** gate rule = >= 0.95 of windows overall, per source reported. **Recorded as a post-hoc definition** (the original rule had
+   no share). Run B: 0.983 overall (FineDance 0.948, AIOZ 0.990).
+3. **Open, report-only, no action now:** the source of the rebuilt-target wiggle (spline knot spacing). Fix only if Kosta's S1 notes
+   mention jitter.
+4. Then report S1 and stop. T1b starts only on Kosta's go. Standing rules unchanged.
+5. **Overseer notes (operational defaults, not rulings):**
+   - Pool: test-split windows whose Run B rebuild passes the gates at 1.25 (the original windows all pass by construction). At most one
+     window per song group (FineDance song / AIOZ YouTube id). Picks by `numpy.random.default_rng(35001)` permutation of the pool, sorted by
+     (dataset, dancer, copy, window) before permuting; the first 4 FineDance and first 2 AIOZ taken. Any of the 4 copies may be picked; the
+     copy is reported (and shown to Kosta only after the session).
+   - Rebuild = posture + Run B decoded gesture (vigour x shape) at 100 Hz; original = the stored target. Both through guard, H1, limiter,
+     servo, v2p, rendered exactly as the look-test clips (camera, lamp head, column, 20 s, 1280x720 h264 + aac, the window's own music:
+     FineDance `music_wav`, AIOZ `musics/`), audio offset 0.
+   - Pair order: rebuild first in exactly 3 of 6, set by `default_rng(35011)`.
+   - Session: the overseer builds and serves it (look-test mode, first / second / same), key not served.
