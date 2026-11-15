@@ -2536,3 +2536,59 @@ Amends 7.64. Then start T1b.
      song (a still frame), labels calm / sad / tense / energetic / light only, through `scripts/body/dialstudy_session.py` (a label-set
      option is the only allowed change). The overseer serves the session; the builder never sees the answers before the probe is run.
    - Retrieval control (7.64.8) is built and run on the held-out songs in T2 (for T3 later); its numbers reported beside the model's.
+
+### 7.67 Second review round (ChatGPT, Gemini): order of work, sync check, features, structured listener, ablations, style, timing, teacher stage; 2026-11-15, via Kosta + planner
+
+Amends 7.66 items 4-6. **7.66 has not reached the overseer and is not recorded here yet**; 7.67 is recorded first so it stands before any
+result. "E1 baseline" is defined in 7.66.
+
+Order (one change at a time against the E1 baseline, same splits): 1 finish E1 baseline; 2 verify FineDance audio-motion sync; 3 structured
+listener input; 4 listener ablations; 5 V1/V2 style per song; 6 offset supervision; 7 timing head; 8 first 40-60 preference comparisons;
+9 100-150 comparisons + generalisation check; 10 first constrained fine-tune (150-250 comparisons).
+
+2. **Sync check (blocks 6-7):** document per FineDance sequence: audio and motion start offsets, any trimming, whether alignment holds over
+   the whole clip (e.g. beat/onset vs movement-onset cross-correlation drift between first and last minute), and that training and
+   evaluation use identical preprocessing.
+3. **Features:** report the 44 ear features (7.66 2a). Provide two forms where meaningful: globally normalised (statistics from the training
+   split only) and within-song relative (vs a causal recent window). Verify every feature is causal (no centred or future windows); list any
+   that are not and fix them.
+   3b. **Structured listener** (variant vs the 128-dim baseline): each cortex layer compressed separately to 16 dims (64 total) + auxiliary
+   signals (per-layer surprisal, precision, arousal) kept as separate inputs + a separate 32-dim embedding of the ear features; listener
+   total 256 units, fast 0.1-0.5 / medium 1-4 / slow 8-30 s.
+4. **Ablations:** ear only / cortex only / ear + cortex / ear + cortex TIME-SHIFTED by a fixed offset (state it, e.g. 4 s) instead of
+   shuffled. Comparable parameter budgets. Keep the combined listener only if it improves held-out music responsiveness or blind
+   preference, not only likelihood.
+5. **Style:** explicit V1/V2 ID input to the planner; one style sampled per song at start and held. V1/V2/mirror copies of one performance
+   share a performance ID in splits and evaluation.
+6-7. **Timing:** offsets supervised by soft targets from local alignment (for each token, reconstruction error of the decoded chunk shifted
+   -200..+200 ms in 25 ms steps vs the human trajectory, softmax with a temperature fixed in the rules); 17-way categorical head; offsets as
+   corrections to a shared timeline with a penalty on neighbouring-offset differences; monotonic boundaries with at least 0.1 s separation;
+   boundary control points blended over 50 ms; report realised timing.
+8-10. **Teacher stage:**
+   - Pools: teaching songs (split into preference-train and preference-validation songs, whole songs only) and a final evaluation pool never
+     taught on (pending Kosta's confirmation).
+   - Per song, generate 4 candidates, compare 2 (same music, genuinely different). Mark comparisons as holistic or diagnostic; mostly
+     holistic.
+   - Answers: A / B / tie / both poor + confidence. Sessions: 20-30 new pairs + 3-5 hidden repeats, spaced; 10-15 teaching songs, 8-15
+     comparisons each, V1 and V2 both present.
+   - Preference model: linear Bradley-Terry (Davidson extension for ties; "both poor" kept as a separate rejection signal) on a small fixed
+     feature set of the REALISED dance in relation to its music (endpoint trajectory, curvature, acceleration, jerk, commanded vs realised,
+     motion change around musical events, spatial expansion, code repetition, interactions with listener states). L1 + weight decay. 2-layer
+     MLP (32 hidden) only if linear fails.
+   - Gates before any fine-tune: held-out pairwise accuracy >= 65 % with calibration reported; not explained by amplitude alone; repeat
+     agreement reported; transfer across preference-validation songs.
+   - Fine-tune: DPO on planner action sequences (code, vigour, posture, offset heads) vs a frozen reference snapshot, plus the original
+     FineDance likelihood as anchor (weight fixed in rules). Trainable: heads first; then heads + small adapter; full GRU only if needed.
+     Cortex and vocabulary frozen. Low LR, early stopping. No PPO, no adversarial critic.
+   - Every fine-tuned model must beat the pre-feedback baseline in blind viewing on the final evaluation pool. Lower loss is not evidence.
+
+Deferred: Gemini's MMD genre adapter between cortex and listener (only if check songs fail); Gemini's slowness penalty and FiLM-to-
+vigour/posture for affect units (optional variant). Standing rules unchanged.
+
+**Overseer notes (operational, not rulings):**
+- WO41 (`docs/BUILDER_PROMPT_WO41_T1B.md`, e710b4b) was never sent and is superseded; it is rewritten after 7.66 arrives.
+- Item 3, known candidates: T0 recorded per-column lookahead (`token_lookahead_s`): ear features 0.023 s, ear energy 1.0 s
+  (verified 2026-11-14). Both must appear in the causality list.
+- Item 5: the T0 split already groups V1, V2 and mirror copies by song (FineDance) / YouTube id (AIOZ), 403 groups, none in two splits
+  (verified 2026-11-14). Evaluation must group the same way.
+- Item 4 default: time shift = 4 s, cortex + ear state delayed (the listener hears the music 4 s late); stated in the rules note.
