@@ -2443,15 +2443,41 @@ marked PROPOSAL were accepted by Kosta unless struck.
    - Pair order: rebuild first in exactly 3 of 6, set by `default_rng(35011)`.
    - Session: the overseer builds and serves it (look-test mode, first / second / same), key not served.
 
-### 7.63 S1 answer (text not received by the overseer), 2026-11-15, via Kosta + planner (answering `docs/PLANNER_BRIEF_S1.md`)
+### 7.63 S1 passes; T1b on FineDance only; categorical heads; 2026-11-15, via Kosta + planner (answering `docs/PLANNER_BRIEF_S1.md`)
 
-The planner's 7.63 text did not reach the overseer. Known only through what 7.64 and 7.65 refer to: S1 passed and T1b goes ahead;
-T1b trains on FineDance only; the planner's vigour and posture-change heads are categorical (vigour 32 bins, 256-entry posture-change
-vocabulary). Replace this entry with the planner's verbatim text if it arrives.
+1. **Q1 (a):** the vocabulary (Run B, 2 x 1024 residual) passes S1 (same 4, original 2 with "Idk"/"Unsure", rebuild 0). Vocabulary frozen
+   from here.
+2. **Q2 (a):** no wiggle fix.
+3. **Q3 (a):** T1b trains and validates on FineDance only (4 copies: V1, V2, mirrored). AIOZ stays in the vocabulary only. T2 reports
+   FineDance held-out songs as the main result; AIOZ held-out reported separately, report-only. Kosta's notes recorded: AIOZ dancing waits,
+   does nothing for periods, misses obvious music events (drops), is small.
+4. **Q4:** rebuild shrink report-only; covered by T2 joint-range and vigour checks.
+5. **T1b additions (fixed in the rules before training):**
+   - Data caveat recorded: about 140 training songs; mirrored copies are near-duplicates. Keep the sequencer as specified (GRU 256 +
+     attention) or smaller; no size increase without a ruling.
+   - Report the train vs validation likelihood gap per epoch; early stopping on validation as specified.
+   - Report how many train songs per FineDance genre.
+6. **T3 note for later:** Kosta's check songs (prog rock, jazz fusion, city pop) are outside FineDance's genres; their results are a stretch
+   test, reported separately from held-out FineDance songs.
+7. **Go:** T1b, then T2 numbers. Report and stop before T3.
+8. **Amendment (recorded with 7.63).** Kosta: for any music there are many valid dances (V1, V2, mirrored, left/right); the model must not
+   learn "one right answer". Use normalised (softmax) outputs instead of bell curves; all sequencer outputs are categorical choices, which
+   represent many valid answers without averaging and without shape assumptions.
+   - Code head: categorical over the vocabulary.
+   - Vigour head: categorical over 32 log-spaced bins spanning the training data's p0.5-p99.5 vigour. Bin edges fixed from training data
+     before training.
+   - Posture head: a posture-change vocabulary: k-means (or VQ) on the 0.5 s posture-change vectors (all 5 joints together) of the training
+     split, 256 entries, fit before T1b training and then frozen; the sequencer outputs a categorical over these. Report the variance of
+     posture change explained by the 256 entries (**STOP if < 0.9**).
+   - Run time: sample all three heads with nucleus p = 0.9 (fixed).
+   - Loss: sum of the three cross-entropies, equal weights (fixed).
+   - T2 addition (report-only): diversity across samples: for each held-out song, generate 8 samples; report the share nearest to V1-style,
+     V2-style, mirrored or not, and the mean pairwise distance between samples vs between human copies of the same song.
+   - Planned, NOT now (T1c, needs Kosta's go after T2): adversarial critic fine-tuning. Superseded in 7.66/7.67 by the preference-based
+     teacher stage; the adversarial critic is postponed.
 
 ### 7.64 T1b architecture: listener over the full cortex state, planner over tokens; no source separation; 2026-11-15, via Kosta + planner
 
-Recorded before 7.63, whose text has not yet reached the overseer (7.64 refers to it for "FineDance only" and for the categorical heads).
 This 7.64 replaces the planner's earlier 7.64 draft (Demucs stems, per-token pooled features), which was never recorded.
 
 Kosta: no source separation. The model should track the music the way an ear does, from the feel and properties of the sound, without
@@ -2484,8 +2510,6 @@ The planner agrees; the pooled summary was the planner's simplification.
 8. **Retrieval control (7.59.3.3):** listener-free: cosine on the 0.5 s-averaged cortex state + ear features.
 9. Everything else in 7.59-7.63 stands.
 10. **Overseer notes (operational defaults, not rulings):**
-    - WO41 waits for the 7.63 text (heads, FineDance only, vigour/posture bins) and for the earlier draft's feeling-label protocol (7.7),
-      which the overseer has not seen.
     - Storage first: the builder reports the per-frame width of the cortex state and the total size (float16 vs float32) before
       precomputing; data under `/secondary/hyst-data/body/t1b/`.
     - Mirror copies share the same (unmirrored) music input.
@@ -2529,18 +2553,54 @@ Amends 7.64. Then start T1b.
      stage (7.62); V1/V2 nearest-style report (7.56.11).
    - Held-out songs = FineDance test split; 60 s dances from a fixed start (the song's first full 60 s after 10 s), one per song, seed fixed
      in the rules note. Human comparison = the T0 targets of the same songs and windows, all 4 copies averaged where a measure allows.
-   - Vigour bins: 32 equal-count bins of log vigour on the training split; posture vocabulary: k-means (k = 256, fixed seed) on training
-     posture-change vectors. Run-time choice: vigour = median bin of the predicted distribution, posture change = probability-weighted mean
-     of the entry vectors, codes nucleus p = 0.9 (7.59.3.2 carried over to categorical heads).
+   - Vigour bins, posture vocabulary, run-time sampling and loss: as 7.63.8 (log-spaced vigour bins, k-means posture vocabulary, nucleus
+     p = 0.9 on all three heads). (Corrected 2026-11-15: an earlier version of this note said equal-count bins and median/mean choices,
+     written before the 7.63 text arrived.)
    - Kosta's music-label probe: 20 FineDance test songs (validation songs fill up if test has fewer), seeded pick; one 30 s audio clip per
      song (a still frame), labels calm / sad / tense / energetic / light only, through `scripts/body/dialstudy_session.py` (a label-set
      option is the only allowed change). The overseer serves the session; the builder never sees the answers before the probe is run.
    - Retrieval control (7.64.8) is built and run on the held-out songs in T2 (for T3 later); its numbers reported beside the model's.
 
+### 7.66 Two external architecture reviews: proceed, no pivot; E1 baseline; T2 additions; variants; 2026-11-15, via Kosta + planner (brief `claude/hysteresis-arch-review-brief.md`)
+
+1. Do NOT stop the running T1b. It is the BASELINE (E1). All changes below are tested against it, one at a time, same splits.
+   (Overseer: T1b was not yet running when this arrived; E1 = T1b as specified in 7.63-7.65 plus the 7.66.3 T2 additions.)
+2. **Facts for the reviewers, report back (no work beyond lookup):** a) exact definition of the 44 ear features (what each is;
+   normalisation per song or global); b) how FineDance audio and motion are aligned (original timestamps, offsets, any manual alignment;
+   checked how); c) trainable parameter counts: cortex projection, listener, planner, heads; d) FineDance genres and dancers per split.
+3. **T2 additions for the baseline and every variant:**
+   - Ablations (same architecture otherwise): ear features only; cortex only; ear + cortex; ear + cortex with cortex states time-shuffled
+     within the song. (Amended by 7.67.4: time-SHIFTED, not shuffled.)
+   - Controls in viewings: retrieval (as 7.59.3.3) AND random human chunks with the same transition cost (no music).
+   - Swapped-music test against 3 tempo-matched songs, not 1.
+   - Self-similarity correlation at 3 timescales (2 s, 8 s, 30 s windows).
+   - Endpoint (lamp) jerk and direction changes, alongside joint measures.
+   - Approximate repetition: nearest-neighbour gesture distance within a dance, not only identical code pairs.
+   - All aesthetic numbers on REALISED trajectories (after spinal layer, limiter, servo); report commanded vs realised difference.
+   - Affect test: passages matched on tempo (within 5 %) and RMS energy (within 10 %) that Kosta labels differently (blind): do affect
+     states separate them better than a shuffled-label control?
+   - Vocabulary: share of codes used only by AIOZ chunks (report).
+4. **Variants after baseline** (each needs Kosta's go, rules fixed before training): E3 timing: planner outputs an onset offset per token,
+   categorical over -0.2..+0.2 s in 25 ms bins; decoder shifts the chunk; overlap handled by the existing blending. E4 listener timescales:
+   three groups, fast 0.1-0.5 s / medium 1-4 s / slow 8-30 s (replaces rhythm/affect split). E5 V1/V2 style: pending Kosta's ruling (style ID
+   sampled per song/phrase vs pooled). Audio pitch-shift augmentation (+-2 semitones, motion unchanged) in all variants after baseline.
+   (Amended by 7.67.)
+5. **Viewing protocol from now:** 2-3 repeated pairs per session (consistency), confidence mark per answer, tie option, separate sessions for
+   "looks like dance" and "fits the music", no re-watching a pair until a preference appears. (Amended by 7.67.)
+6. **Teacher stage** (after baseline + variants): blind pairs of the model's own dances on teaching songs ("A better / B better / both
+   poor" + optional timeline notes) -> small preference model -> planner fine-tune with a likelihood anchor to human motion; vocabulary
+   frozen. Teaching songs and final evaluation songs are separate pools (pending Kosta's confirmation). Adversarial critic postponed.
+   (Amended by 7.67.)
+7. **Wording in BRAIN_SPEC from now:** cortex = multi-timescale predictive recurrent model inspired by auditory processing (not
+   anatomical); vigour = movement amplitude selection (no dopamine claim); affect units = slow modulatory state, "limbic-inspired" only if
+   the affect test passes; spinal layer = spinal-inspired compliant control layer.
+
+Rejected, for the record: contrastive grounding of affect units to valence features (needs emotion labels; reverses Kosta's ruling;
+contrastive objectives failed before); unspecified "style adapter"; dropping AIOZ without evidence. Standing rules unchanged.
+
 ### 7.67 Second review round (ChatGPT, Gemini): order of work, sync check, features, structured listener, ablations, style, timing, teacher stage; 2026-11-15, via Kosta + planner
 
-Amends 7.66 items 4-6. **7.66 has not reached the overseer and is not recorded here yet**; 7.67 is recorded first so it stands before any
-result. "E1 baseline" is defined in 7.66.
+Amends 7.66 items 4-6.
 
 Order (one change at a time against the E1 baseline, same splits): 1 finish E1 baseline; 2 verify FineDance audio-motion sync; 3 structured
 listener input; 4 listener ablations; 5 V1/V2 style per song; 6 offset supervision; 7 timing head; 8 first 40-60 preference comparisons;
@@ -2586,9 +2646,17 @@ Deferred: Gemini's MMD genre adapter between cortex and listener (only if check 
 vigour/posture for affect units (optional variant). Standing rules unchanged.
 
 **Overseer notes (operational, not rulings):**
-- WO41 (`docs/BUILDER_PROMPT_WO41_T1B.md`, e710b4b) was never sent and is superseded; it is rewritten after 7.66 arrives.
+- WO41 (`docs/BUILDER_PROMPT_WO41_T1B.md`) rewritten 2026-11-15 for E1 under 7.63-7.67; the e710b4b version was never sent.
 - Item 3, known candidates: T0 recorded per-column lookahead (`token_lookahead_s`): ear features 0.023 s, ear energy 1.0 s
   (verified 2026-11-14). Both must appear in the causality list.
 - Item 5: the T0 split already groups V1, V2 and mirror copies by song (FineDance) / YouTube id (AIOZ), 403 groups, none in two splits
   (verified 2026-11-14). Evaluation must group the same way.
 - Item 4 default: time shift = 4 s, cortex + ear state delayed (the listener hears the music 4 s late); stated in the rules note.
+- Causality before E1: E1 must be causal (7.59.3.2), so the item 3 causality check runs BEFORE E1 trains; any non-causal ear feature or
+  cortex input is fixed (shifted to causal) first and listed. The other item 2-3 reports (7.66.2 lookups, sync check, the two feature forms)
+  run while E1 trains and change nothing in E1.
+- E1 = the ear + cortex model of 7.64/7.65 only. The four ablations are step 4, after E1; the 7.65.6 "ear-only ablation trained beside E1"
+  is withdrawn.
+- Affect: the 7.65.2 song probe (20 songs) and the 7.66.3 passage test both stand. Kosta labels in one session: one 30 s clip per probe
+  song and three 15 s passages per song (seeded starts); the passage test uses passage pairs matched on tempo (5 %) and RMS (10 %) that
+  received different labels.
