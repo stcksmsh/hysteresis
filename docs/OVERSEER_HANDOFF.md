@@ -94,7 +94,17 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-15 ~12:30 (clock) — newest
+## UPDATE 2026-11-15 ~12:50 (clock) — newest
+
+7.63 (verbatim + categorical-heads amendment) and 7.66 (external reviews; E1 = T1b baseline; T2 additions; 7.66.2 lookups) RECORDED on
+body e4d1ba7; 7.65.6 defaults corrected to 7.63.8 (log-spaced vigour bins, nucleus 0.9 all heads). 7.67 notes: causality check BEFORE E1
+(T0 lookahead ear 0.023 s, ear energy 1.0 s), ablations are step 4 (not with E1), song probe + passage test in one Kosta label session.
+WO41 REWRITTEN for E1 (body, latest commit): causal check -> storage/precompute -> T1B_RULES -> estimate (start if <= 24 h, cores 6-13)
+-> during training: T1B_FACTS (7.66.2 + sync + feature forms) and label clips (cores 14-19) -> T2 -> T1B READY. NOT SENT: waiting
+for "send" to one cleared agent. Overseer verifies CAUSAL, STORAGE, T1B_RULES, ESTIMATE, FACTS, LABEL CLIPS READY (then serve label
+session), T1B READY.
+
+## UPDATE 2026-11-15 ~12:30 (clock)
 
 Planner 7.67 (second review round; order E1 baseline -> sync check -> structured listener -> ablations -> style -> timing -> teacher
 stage) RECORDED on body. 7.66 (defines E1, "2a" ear-feature report, items 4-6 that 7.67 amends) NEVER RECEIVED: asked Kosta to paste it.
