@@ -2443,6 +2443,12 @@ marked PROPOSAL were accepted by Kosta unless struck.
    - Pair order: rebuild first in exactly 3 of 6, set by `default_rng(35011)`.
    - Session: the overseer builds and serves it (look-test mode, first / second / same), key not served.
 
+### 7.63 S1 answer (text not received by the overseer), 2026-11-15, via Kosta + planner (answering `docs/PLANNER_BRIEF_S1.md`)
+
+The planner's 7.63 text did not reach the overseer. Known only through what 7.64 and 7.65 refer to: S1 passed and T1b goes ahead;
+T1b trains on FineDance only; the planner's vigour and posture-change heads are categorical (vigour 32 bins, 256-entry posture-change
+vocabulary). Replace this entry with the planner's verbatim text if it arrives.
+
 ### 7.64 T1b architecture: listener over the full cortex state, planner over tokens; no source separation; 2026-11-15, via Kosta + planner
 
 Recorded before 7.63, whose text has not yet reached the overseer (7.64 refers to it for "FineDance only" and for the categorical heads).
@@ -2488,3 +2494,45 @@ The planner agrees; the pooled summary was the planner's simplification.
     - "Listener state at decision time" = the last 50 Hz listener step at or before chunk start - 0.25 s (causal).
     - Swapped-music pairs: tempo from the offline beat grid; pairs chosen by a seeded rule fixed in the rules note before training; the
       number of songs with no partner within 5 % is reported.
+
+### 7.65 Repertoire checks, affect part of the listener, viewings, teacher stage; GO for T1b; 2026-11-15, via Kosta + planner
+
+Amends 7.64. Then start T1b.
+
+1. **Repertoire (Kosta):** a learned move repertoire is acceptable only if it is vast and varied, with moves different each time (start/end
+   location and scale vary). The design meets this through 2 x 1024 residual shapes (about 1M pairs), 32 vigour bins, 256 posture shifts and
+   decoder blending with neighbours. T2 checks:
+   - **STOP identical-shape repetition:** in each generated 60 s dance on held-out songs, the share of tokens whose (coarse code, residual
+     code) pair already occurred earlier in the same dance. Stop if it exceeds the human data's share on the same songs by more than 2x.
+   - Report: distinct (shape, vigour bin, posture entry) triples per minute, model vs human data.
+2. **Emotion embedding** (Kosta: no named emotions; an abstract high-dimensional embedding is right). Amends 7.64 item 2; the listener is
+   split:
+   - RHYTHM part: 192 units, time constants initialised log-uniform 0.1-1 s.
+   - AFFECT part: 64 units, time constants initialised log-uniform 2-30 s. This is the emotion embedding: unlabeled, learned only from human
+     movement to music.
+   - Both parts receive the cortex projection and each other's state. The planner reads both.
+   - Report-only probe in T2: Kosta labels the feeling he hears in 20 held-out FineDance songs (calm / sad / tense / energetic / light),
+     blind to any model output, using the existing labelling tool. Report whether the affect states of those songs separate by his labels:
+     cross-validated linear probe vs a shuffled-label control. The labels never train the model.
+   - Monitor note for later: the affect space projected to 2D replaces the mockup feeling field (canvas board C3).
+3. **Viewings** (defines what 7.64.7 refers to). Every Kosta viewing of generated dance from here includes:
+   - swapped-music pairs: the same generated movement shown with its own song vs a tempo-matched other song (tempo within 5 %), "which fits
+     the music?" + "neither", order checked to be mixed;
+   - feeling labels for the movement (calm / sad / tense / energetic / light / nothing / can't name it), and separately, blind to the
+     movement, labels for the music; report agreement.
+4. **Teacher stage moves up:** directly after T2/T3 of the first trained version, the model dances to songs outside the dataset and Kosta
+   gives input. The form of input (pick the better of two / feeling labels / timeline marks) is Kosta's ruling later.
+5. **Go:** T1b training with 7.64 + 7.65. Report T2 and stop before T3. Standing rules unchanged.
+6. **Overseer notes (operational defaults, not rulings; the builder writes them into the rules note before training):**
+   - T2 is the 7.59.4.3 list as amended: "music matters" = the 7.64 swapped-music STOP; "cortex ablation" = the 7.64 ear-only listener (a
+     second trained model, same rules); repetition STOP of 7.59 stays and the 7.65.1 STOP is added; jitter STOP measured at the realised
+     stage (7.62); V1/V2 nearest-style report (7.56.11).
+   - Held-out songs = FineDance test split; 60 s dances from a fixed start (the song's first full 60 s after 10 s), one per song, seed fixed
+     in the rules note. Human comparison = the T0 targets of the same songs and windows, all 4 copies averaged where a measure allows.
+   - Vigour bins: 32 equal-count bins of log vigour on the training split; posture vocabulary: k-means (k = 256, fixed seed) on training
+     posture-change vectors. Run-time choice: vigour = median bin of the predicted distribution, posture change = probability-weighted mean
+     of the entry vectors, codes nucleus p = 0.9 (7.59.3.2 carried over to categorical heads).
+   - Kosta's music-label probe: 20 FineDance test songs (validation songs fill up if test has fewer), seeded pick; one 30 s audio clip per
+     song (a still frame), labels calm / sad / tense / energetic / light only, through `scripts/body/dialstudy_session.py` (a label-set
+     option is the only allowed change). The overseer serves the session; the builder never sees the answers before the probe is run.
+   - Retrieval control (7.64.8) is built and run on the held-out songs in T2 (for T3 later); its numbers reported beside the model's.
