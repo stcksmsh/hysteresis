@@ -2753,6 +2753,6 @@ Standing rules unchanged.
    - Teacher stage: preferences on these songs shape how size, speed and posture follow the music's feeling.
    - Optional later variant (needs a ruling): affect units modulate the vigour and posture heads directly (scale/shift), no labels.
 3. **Q2:** n/a. 7.70 (posture ruling) still pending. Standing rules unchanged.
-4. **Overseer notes (operational, not rulings):** the private page (claude.ai artifact NcL5N9rcfNCRfwgachwCFx) is deleted; the local
+4. **Overseer notes (operational, not rulings):** the private page (claude.ai artifact NcL5N9rcfNCRfwgachwCFx, 0 answers) is closed for use; deleting it needs Kosta to confirm on the laptop (not possible over Remote Control); the local
    session folder `t1b/labels_session_2026-11-15` and the clips stay on disk unused. WO41 step 5's label clips and the T2 wait for labels
    are void; T2 no longer waits for labels.
