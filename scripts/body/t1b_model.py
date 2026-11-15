@@ -57,26 +57,31 @@ class Planner(nn.Module):
         self.ec, self.ep = ec, ep
 
     def zero_state(self, B):
-        return dict(h=torch.zeros(B, self.d), mem=torch.zeros(B, 0, self.d), prev=None)
+        return dict(h=torch.zeros(B, self.d), mem=torch.zeros(B, MEM, self.d), mm=torch.zeros(B, MEM, dtype=torch.bool))
+
+    @staticmethod
+    def reset_rows(s, rows):
+        """start new songs in these batch rows (index tensor / bool mask): zero state, empty memory"""
+        s["h"][rows] = 0
+        s["mem"][rows] = 0
+        s["mm"][rows] = False
 
     def forward_step(self, s, lis, prev):
-        """s state, lis (B, 256), prev = (c1, c2, v, p) long tensors (B,) / p (B, stages), or None at the start -> (features (B, d), new state)"""
+        """s state, lis (B, 256), prev = (c1, c2, v, p, valid) with long (B,) / p (B, stages) and valid (B,) bool (False = song start: zero embedding), or None (all start)
+        -> (features (B, d), new state)"""
         B = len(lis)
         if prev is None:
             pe = torch.zeros(B, 2 * self.ec + self.e_v.embedding_dim + self.ep * len(self.n_post))
         else:
-            c1, c2, v, p = prev
-            pe = torch.cat([self.e_c1(c1), self.e_c2(c2), self.e_v(v)] + [e(p[:, i]) for i, e in enumerate(self.e_p)], -1)
+            c1, c2, v, p, ok = prev
+            pe = torch.cat([self.e_c1(c1), self.e_c2(c2), self.e_v(v)] + [e(p[:, i]) for i, e in enumerate(self.e_p)], -1) * ok[:, None].float()
         h = self.gru(torch.cat([lis, pe], -1), s["h"])
-        mem = s["mem"]
-        if mem.shape[1]:
-            att = torch.softmax((self.q(h)[:, None] * self.k(mem)).sum(-1) / math.sqrt(self.d), 1)
-            ctx = self.o((att[..., None] * self.v(mem)).sum(1))
-        else:
-            ctx = torch.zeros_like(h)
+        mem, mm = s["mem"], s["mm"]
+        sc = (self.q(h)[:, None] * self.k(mem)).sum(-1) / math.sqrt(self.d)
+        att = torch.softmax(sc.masked_fill(~mm, -1e9), 1) * mm.any(1, keepdim=True).float() * mm.float()
+        ctx = self.o((att[..., None] * self.v(mem)).sum(1)) * mm.any(1, keepdim=True).float()
         f = self.ln(h + ctx)
-        mem = torch.cat([mem, h[:, None]], 1)[:, -MEM:]
-        return f, dict(h=h, mem=mem)
+        return f, dict(h=h, mem=torch.cat([mem[:, 1:], h[:, None]], 1), mm=torch.cat([mm[:, 1:], torch.ones(B, 1, dtype=torch.bool)], 1))
 
     def logits(self, f, c1, p=None):
         """heads given the gold (or sampled) earlier stages: code stage 2 needs c1; posture stage 2 needs its stage 1"""
@@ -111,14 +116,15 @@ def run_window(model, lis, tok, state, prev, noise_p=0.0, gen=None):
     ce = dict(code=[], vig=[], post=[])
     for k in range(N):
         fed = prev
-        if fed is not None and noise_p > 0:                                    # input-noise rule: each fed-back component is replaced by a random index with probability noise_p
+        if fed is not None and noise_p > 0:
+            ok = fed[4]                                    # input-noise rule: each fed-back component is replaced by a random index with probability noise_p
             r = lambda x, n: torch.where(torch.rand(x.shape, generator=gen) < noise_p, torch.randint(0, n, x.shape, generator=gen), x)
-            fed = (r(fed[0], pl.k_code), r(fed[1], pl.k_code), r(fed[2], pl.n_vig), torch.stack([r(fed[3][:, i], n) for i, n in enumerate(pl.n_post)], 1))
+            fed = (r(fed[0], pl.k_code), r(fed[1], pl.k_code), r(fed[2], pl.n_vig), torch.stack([r(fed[3][:, i], n) for i, n in enumerate(pl.n_post)], 1), ok)
         f, state = pl.forward_step(state, lis[:, k], fed)
         c1, c2, v, p = tok["c1"][:, k], tok["c2"][:, k], tok["v"][:, k], tok["p"][:, k]
         lg = pl.logits(f, c1, p)
         ce["code"].append(F.cross_entropy(lg["c1"], c1, reduction="none") + F.cross_entropy(lg["c2"], c2, reduction="none"))
         ce["vig"].append(F.cross_entropy(lg["v"], v, reduction="none"))
         ce["post"].append(sum(F.cross_entropy(l, p[:, i], reduction="none") for i, l in enumerate(lg["p"])))
-        prev = (c1, c2, v, p)
+        prev = (c1, c2, v, p, torch.ones(B, dtype=torch.bool))
     return {k: torch.stack(v, 1) for k, v in ce.items()}, state, prev
