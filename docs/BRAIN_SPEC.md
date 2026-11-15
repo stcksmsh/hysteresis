@@ -2735,3 +2735,24 @@ Standing rules unchanged.
 - **Kosta ruled 2026-11-15:** Hysteresis is non-commercial research (unpaid, not a commission, not a product), so Motorica may be used
   for training under its licence. The no-redistribution term still holds: Motorica and anything derived from it stay on this laptop (no
   Kaggle, not even a private dataset). Attribution and the two citations go into any write-up that uses it.
+
+### 7.71 Music-label session cancelled; emotion carried by readable movement properties; 2026-11-15, via Kosta + planner (answering `docs/PLANNER_BRIEF_LABELS.md`)
+
+1. **Q1: none of (a)-(d). CANCEL the 117-clip music-label session.** Close the page; nothing was answered.
+   Kosta: most FineDance songs carry no clear feeling ("modern pop slop"); deep, precise emotional state is not needed; emulating it
+   through movement properties people can read (size, speed, droop/lift, smooth vs abrupt) is enough.
+2. **Consequences:**
+   - The T2 affect probe and the matched-passage test (7.65.2, 7.66.3, 7.68.6) are DROPPED for FineDance. No prefill, no audio-emotion
+     encoder labels.
+   - The emotional channel in the design is explicit: vigour head (size/speed), posture head (droop/lift), and move shape (smooth vs
+     abrupt). T2 reports, report-only, on held-out FineDance songs: correlation of vigour with ear energy and of posture height with ear
+     energy, model vs human data.
+   - Emotion is judged on music with clear feeling: Kosta's check songs and the teaching pool (Kosta picks teaching songs with clear
+     feeling, including his own genres). Every viewing keeps 7.65.3 / 7.68.8: Kosta labels the movement (calm / sad / tense / energetic /
+     light / nothing / can't name it) and, separately and blind, the music; report agreement.
+   - Teacher stage: preferences on these songs shape how size, speed and posture follow the music's feeling.
+   - Optional later variant (needs a ruling): affect units modulate the vigour and posture heads directly (scale/shift), no labels.
+3. **Q2:** n/a. 7.70 (posture ruling) still pending. Standing rules unchanged.
+4. **Overseer notes (operational, not rulings):** the private page (claude.ai artifact NcL5N9rcfNCRfwgachwCFx) is deleted; the local
+   session folder `t1b/labels_session_2026-11-15` and the clips stay on disk unused. WO41 step 5's label clips and the T2 wait for labels
+   are void; T2 no longer waits for labels.
