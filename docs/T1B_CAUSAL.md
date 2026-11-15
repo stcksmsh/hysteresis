@@ -45,7 +45,7 @@ Lookahead of every column: 1024 samples = **23.2 ms** (half a window). No column
 - The listener runs at 50 Hz on pairs of 100 Hz frames (mean of frames 2j and 2j+1). Step j has consumed frames up to 2j+1, i.e. audio up to
   (2j+1)/100 s + 23.2 ms (item A) and the beat fact of item B.2.
 - The planner for chunk k reads listener step **j_k = 25 k - 13** (= floor(50 d_k - 0.5): the last step with (2 j + 1)/100 <= d_k; equality for every k).
-  k = 0 and k = 1 have no step (j < 0); they read the zero state (the listener's start state), by rule.
+  Only k = 0 has no step (j < 0); it reads the zero state (the listener start state), by rule.
 - Residual lookahead the planner sees at decision time d_k, all listed: **23.2 ms** of audio (A) and up to **one inter-beat interval** through the beat grid (B.2).
 - Tests (`scripts/body/test_t1b.py`, written with the model code): (1) listener outputs at steps <= j are unchanged when the cortex input after frame 2j+1 changes;
   (2) the planner's logits for token k are unchanged when the cortex rows after 2(25k-13)+1 are replaced by noise; (3) the carried 60 s state equals the one-pass state.

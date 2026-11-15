@@ -9,7 +9,7 @@ Full list: `docs/T1B_CAUSAL.md`. Summary:
 - Cortex input = 44 ear + 2 beat-grid phase. The beat-grid phase is an offline whole-song fact (online PLL run over the whole file, then interpolated between beats, so the
   phase at t uses the next beat, up to one beat interval ahead). Cortex layers, hippocampus, surprisal and arousal are causal given their input.
 - Ear energy (1.0 s lookahead) is NOT an E1 input.
-- Planner for chunk k reads listener step 25k-13 (last 50 Hz step at or before chunk start - 0.25 s); k = 0, 1 read the zero state.
+- Planner for chunk k reads listener step 25k-13 (last 50 Hz step at or before chunk start - 0.25 s); k = 0 reads the zero state.
 - No input changed.
 
 ## STOP posture vocabulary (2026-11-15)

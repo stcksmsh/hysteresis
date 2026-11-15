@@ -1,7 +1,7 @@
 """WO41 T1b targets (docs/T1B_RULES.md section 2). Brain env.
 
     t1b_tokens.py encode [THREADS]   every FineDance T0 sequence (4 copies) -> t1b/tokens/<seq>.npz with the frozen vocabulary (t1a2/runB/best.pt)
-    t1b_tokens.py fit                vigour bins and posture vocabulary from the TRAIN split -> t1b/vocab.npz + vocab.json (STOP if posture variance explained < 0.9)
+    t1b_tokens.py fit [res]          vigour bins and posture vocabulary from the TRAIN split -> t1b/vocab.npz + vocab.json (STOP if posture variance explained < 0.9)
     t1b_tokens.py assign             vigour bin and posture entry for every token (needs vocab.npz) -> added to the token files
 
 Token k of a sequence covers rows [50 k, 50 k + 50) of the 100 Hz target. Only the n_win x 40 tokens of the T0 20 s windows are kept; `ok` = the token's window passed the T0 gate.
@@ -105,7 +105,7 @@ def load_tokens(split=None):
     return out
 
 
-def cmd_fit():
+def cmd_fit(res=False):
     tr = [z for _, z in load_tokens("train")]
     ok = np.concatenate([z["ok"] for z in tr])
     vig = np.concatenate([z["vig"] for z in tr])[ok]
@@ -121,7 +121,16 @@ def cmd_fit():
     ve = 1 - resid / ((x - x.mean(0)) ** 2).sum()
     ve_raw = 1 - (((pd - c[a] * psd) ** 2).sum() / ((pd - pd.mean(0)) ** 2).sum())
     ve_joint = (1 - ((pd - c[a] * psd) ** 2).sum(0) / ((pd - pd.mean(0)) ** 2).sum(0)).tolist()
-    np.savez(OUT / "vocab.npz", vig_edges=edges, vig_centres=centres, post_centres=c * psd, post_sd=psd)
+    extra = {}
+    if res:                                                                      # residual 2 x NP: stage 2 = k-means of x - stage-1 centre
+        r = x - c[a]
+        c2 = kmeans(r, NP, SEED_KM + 1)
+        a2 = nearest(r, c2)
+        ve = 1 - ((r - c2[a2]) ** 2).sum() / ((x - x.mean(0)) ** 2).sum()
+        ve_raw = 1 - (((pd - (c[a] + c2[a2]) * psd) ** 2).sum() / ((pd - pd.mean(0)) ** 2).sum())
+        ve_joint = (1 - ((pd - (c[a] + c2[a2]) * psd) ** 2).sum(0) / ((pd - pd.mean(0)) ** 2).sum(0)).tolist()
+        extra = dict(post_centres2=c2 * psd)
+    np.savez(OUT / "vocab.npz", vig_edges=edges, vig_centres=centres, post_centres=c * psd, post_sd=psd, **extra)
     res = dict(n_train_tokens=int(ok.sum()), vig_p0_5=float(lo), vig_p99_5=float(hi), vig_floor_share=float((vig <= 0.05 + 1e-9).mean()), posture_sd=psd.tolist(),
                posture_variance_explained_standardised=float(ve), posture_variance_explained_raw=float(ve_raw), per_joint_raw=ve_joint, entries_used=int(len(np.unique(a))),
                stop=bool(ve < 0.9))
@@ -137,7 +146,12 @@ def cmd_assign():
     for p in sorted((OUT / "tokens").glob("*.npz")):
         z = dict(np.load(p))
         z["vbin"] = np.clip(np.searchsorted(v["vig_edges"], z["vig"], side="right") - 1, 0, NV - 1).astype(np.int8)
-        z["pent"] = nearest(z["pdelta"].astype(np.float64) / v["post_sd"], v["post_centres"] / v["post_sd"]).astype(np.int16)
+        x = z["pdelta"].astype(np.float64) / v["post_sd"]
+        e1 = nearest(x, v["post_centres"] / v["post_sd"])
+        z["pent"] = e1.astype(np.int16)
+        if "post_centres2" in v.files:                                           # residual: shape (n, 2)
+            e2 = nearest(x - (v["post_centres"] / v["post_sd"])[e1], v["post_centres2"] / v["post_sd"])
+            z["pent"] = np.stack([e1, e2], 1).astype(np.int16)
         np.savez(str(p) + ".tmp.npz", **z)
         Path(str(p) + ".tmp.npz").replace(p)
     print("assigned", flush=True)
@@ -145,4 +159,4 @@ def cmd_assign():
 
 if __name__ == "__main__":
     a = sys.argv[1:]
-    {"encode": lambda: cmd_encode(int(a[1]) if len(a) > 1 else 2), "fit": cmd_fit, "assign": cmd_assign}[a[0]]()
+    {"encode": lambda: cmd_encode(int(a[1]) if len(a) > 1 else 2), "fit": lambda: cmd_fit("res" in a[1:]), "assign": cmd_assign}[a[0]]()
