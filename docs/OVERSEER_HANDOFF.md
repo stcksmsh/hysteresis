@@ -94,7 +94,15 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-15 ~14:30 (clock) — newest
+## UPDATE 2026-11-15 ~14:45 (clock) — newest
+
+WO42 (agent 2, body-phantom 18cbbde) PROVENANCE + T0_PHANTOM_RULES verified: PhantomDance 260 pairs 9.502 h (3 files 44.1 kHz, rest 16 kHz;
+no genres; split by pair merged on audio hash, seed 42001); Motorica 74 music-paired seqs 3.558 h (47 BVH without music, all misc;
+strata jazz 2 / street 4 by addendum before drawing), spine2 = identity (FOR USER), seed 42002. Zip SHA-256 of both Downloads files =
+provenance (overseer checked) -> Downloads zips deletable on Kosta's word. Units running: hyst-wo41-cortex (118/203 at 14:35, Monitor
+armed), hyst-wo42-lanes-a1 (runs a script from agent 2's job tmp: check it is committed at PHANTOM READY). Posture brief still waiting.
+
+## UPDATE 2026-11-15 ~14:30 (clock)
 
 WO41 STOP (agent 1): posture vocabulary 256 explains 0.847 < 0.9 (7.63.8). Overseer recompute (job tmp pvcheck.py, from t1b/tokens +
 vocab.npz; centres are in raw units, divide by post_sd): 256 0.846/0.838 (train/val), 512 0.883/0.874, 1024 0.912/0.901, residual
