@@ -34,6 +34,7 @@ def build(manifest_path, out, seed=None, parts=None):
         raise SystemExit(f"{out} already holds a session")
     data = json.loads(manifest_path.read_text())
     clips = data["clips"] if isinstance(data, dict) else data
+    custom = data.get("labels") if isinstance(data, dict) else None          # WO41: optional label-set override (manifest object with "labels")
     if parts:
         clips = [c for c in clips if c.get("part") in parts]
         if not clips:
@@ -88,7 +89,7 @@ def build(manifest_path, out, seed=None, parts=None):
     rng.shuffle(items)
     (out / "key" / "key.json").write_text(json.dumps({"seed": seed, "key": key}, indent=1))
     (out / "order.json").write_text(json.dumps(items))
-    (out / "labels.json").write_text(json.dumps(LOOK_LABELS if look else LABELS2 if v2 else LABELS))
+    (out / "labels.json").write_text(json.dumps(custom or (LOOK_LABELS if look else LABELS2 if v2 else LABELS)))
     if look:
         (out / "pair_labels.json").write_text(json.dumps(LOOK_PAIR_LABELS))
     (out / "answers.csv").write_text("")

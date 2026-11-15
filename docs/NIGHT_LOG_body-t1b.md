@@ -18,3 +18,10 @@ Full list: `docs/T1B_CAUSAL.md`. Summary:
 joints nearly uncorrelated; 1024 entries would give 0.914. No training until the overseer rules. Cortex precompute (running) and other independent steps continue.
 Cortex reproduction (fd_001 vs T0 lanes): ear 0, arousal 0, s10 0, h_abs 2.9e-6; float16 round trip of h: max abs 0.0625.
 Code: scripts/body/t1b_cortex.py, t1b_tokens.py (tokens encoded with runB, 812 files in t1b/tokens/).
+
+## LABEL CLIPS READY (2026-11-15)
+
+39 test+validation FineDance groups (19 test, 20 validation; one seeded sequence per group), 3 seeded 15 s passages each = 117 clips (still frame + audio, h264 + aac), in
+`/secondary/hyst-data/body/t1b/labels/` (`clips/`, `manifest.json` with labels calm / sad / tense / energetic / light, `passages.json` with group, sequence, start, split). Seed 36401.
+`dialstudy_session.py`: a manifest object may carry `"labels"` (the only change). Session build checked in a temp dir (117 items); no answers file touched. Overseer serves the session.
+Code: scripts/body/t1b_labelclips.py.
