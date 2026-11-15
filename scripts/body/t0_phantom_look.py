@@ -28,7 +28,7 @@ CREDIT = {"phantom": 'PhantomDance dataset (Li et al., AAAI 2022), used locally 
 
 def strata(source, cat):
     if source == "motorica":
-        return [("genre", g) for g in ("jazz", "street", "misc", "jazz", "street", "misc")]
+        return [("genre", g) for g in ("jazz", "street", "street", "jazz", "street", "street")]            # no "misc" among the 74 paired sequences (rules addendum 2026-11-15)
     ids = sorted(c["key"] for c in cat)
     parts = np.array_split(np.arange(len(ids)), N_CLIPS)
     return [("keys", {ids[i] for i in p}) for p in parts]

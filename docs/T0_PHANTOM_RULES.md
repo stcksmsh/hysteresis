@@ -65,6 +65,9 @@ Motorica song unit: the file stem (title and take number); merged by identical a
   Three frames per clip are looked at for a render check only. Manifest of singles (`kind` "single", `labels` "follow") for `dialstudy_session.py`:
   question "Does the dancer follow the music?", answers yes / partly / no + note (new label-set option; the default look set is unchanged). To `t0_phantom/look/`, `t0_motorica/look/`.
 
+**Addendum 2026-11-15 (before any Motorica clip beyond slot 1 was drawn or viewed):** all Motorica `misc` (gCA) BVH are among the 47 without music, so the paired set is jazz 17 + street 57 only and
+the misc strata were empty. Motorica strata become jazz, street, street, jazz, street, street (2 jazz, 4 street, roughly the set's own 17 : 57). Slots 0 and 1 are unchanged (same seeds, same strata).
+
 ## FOR USER (defaults taken)
 
 1. PhantomDance has no genre labels: look-clip strata are id sixths; the report's genre table is "unlabelled".
@@ -73,3 +76,4 @@ Motorica song unit: the file stem (title and take number); merged by identical a
 4. Tokens standardised with the FineDance constants (raw stored too).
 5. File 000 of PhantomDance is cut at its malformed frame.
 6. Look clips alternate V1 / V2 by slot.
+7. Motorica look strata are jazz x2, street x4 (no misc sequence has music), see the addendum.
