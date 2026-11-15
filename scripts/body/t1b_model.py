@@ -113,7 +113,7 @@ def run_window(model, lis, tok, state, prev, noise_p=0.0, gen=None):
     """lis (B, N, 256); tok c1, c2, v (B, N), p (B, N, S) -> ce dict of (B, N) tensors, new state, new prev (the last gold token)."""
     pl = model.planner
     B, N = lis.shape[:2]
-    ce = dict(code=[], vig=[], post=[])
+    ce = {}
     for k in range(N):
         fed = prev
         if fed is not None and noise_p > 0:
@@ -123,8 +123,8 @@ def run_window(model, lis, tok, state, prev, noise_p=0.0, gen=None):
         f, state = pl.forward_step(state, lis[:, k], fed)
         c1, c2, v, p = tok["c1"][:, k], tok["c2"][:, k], tok["v"][:, k], tok["p"][:, k]
         lg = pl.logits(f, c1, p)
-        ce["code"].append(F.cross_entropy(lg["c1"], c1, reduction="none") + F.cross_entropy(lg["c2"], c2, reduction="none"))
-        ce["vig"].append(F.cross_entropy(lg["v"], v, reduction="none"))
-        ce["post"].append(sum(F.cross_entropy(l, p[:, i], reduction="none") for i, l in enumerate(lg["p"])))
+        heads = dict(code1=(lg["c1"], c1), code2=(lg["c2"], c2), vigour=(lg["v"], v), **{f"posture{i + 1}": (l, p[:, i]) for i, l in enumerate(lg["p"])})
+        for name, (l, y) in heads.items():
+            ce.setdefault(name, []).append(F.cross_entropy(l, y, reduction="none"))
         prev = (c1, c2, v, p, torch.ones(B, dtype=torch.bool))
     return {k: torch.stack(v, 1) for k, v in ce.items()}, state, prev

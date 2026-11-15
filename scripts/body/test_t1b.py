@@ -77,7 +77,7 @@ def test_planner_window_carry_equals_one_pass():
 def test_two_stage_posture_runs():
     m = M.Model(n_post=(256, 256)).eval()
     ce, _, _ = M.run_window(m, torch.randn(1, 5, 256), tok(1, 5, (256, 256)), m.planner.zero_state(1), None)
-    assert ce["post"].shape == (1, 5)
+    assert ce["posture2"].shape == (1, 5) and set(ce) == {"code1", "code2", "vigour", "posture1", "posture2"}
 
 
 def test_counts():

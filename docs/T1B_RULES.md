@@ -2,7 +2,7 @@
 
 Written before any training. E1 = FineDance only, pooled V1/V2/mirrored copies, ear + cortex listener (rhythm 192 / affect 64), planner over the frozen 2 x 1024 vocabulary.
 No variants, no ablations, no pitch augmentation, no teacher stage, no verdict. One arm. Code: `scripts/body/t1b_*.py`. Data and models: `/secondary/hyst-data/body/t1b/` (outside git).
-Items marked **(default)** are listed under FOR USER; **[PENDING]** waits for a ruling.
+Items marked **(default)** are listed under FOR USER.
 
 ## 1. Input and causality
 
@@ -18,9 +18,9 @@ Items marked **(default)** are listed under FOR USER; **[PENDING]** waits for a 
   Code pair (stage 1, stage 2) and vigour a_n from the frozen run-B encoder (`t1a2/runB/best.pt`), chunk scaling as T1a.
 - Vigour: 32 log-spaced bins between the train p0.5 and p99.5 of a_n (0.0500 to 3.45); outside values go to the end bins. The floor value 0.05 is the lowest bin's edge (0.83 % of tokens sit on the floor).
 - Posture change of token k = posture[50 (k+1)] - posture[50 k] (100 Hz posture target, raw units), standardised per joint with the train sd.
-  **[PENDING, 7.70]** Single 256-entry k-means explains 0.847 train / 0.838 validation = STOP of 7.63.8. Recommended alternative (planner brief): residual 2 x 256 (stage 2 = k-means of the stage-1 residual), 0.971 / 0.967;
-  the planner predicts the two stages like the two code stages (stage 2 given stage 1, the stage-1 embedding fed to the stage-2 head). Loss stays the sum of one cross-entropy per head, equal weights
-  (code 1, code 2, vigour, posture 1, posture 2); the code in `t1b_model.py` groups them as code (1 + 2), vigour, posture (1 + 2) for reporting. Posture vocabulary fitted on the train split only, seed 36001.
+  **Ruled (7.70): residual 2 x 256** (stage 2 = k-means of the stage-1 residual; explains 0.971 train / 0.967 validation; the single 256-entry codebook explained 0.847 and failed the 0.9 STOP). The planner predicts the two posture stages like the two gesture-code stages
+  (stage 2 given stage 1, the stage-1 embedding fed to the stage-2 head). **Loss = sum of five equal cross-entropies: gesture coarse (code 1), gesture residual (code 2), vigour, posture coarse, posture residual.**
+  Train and validation loss are reported per head per epoch. Posture vocabulary fitted on the train split only, seed 36001.
 - Mirror copies share the unmirrored music (the same cortex file). V1, V2, V1m, V2m of one performance are one song unit in splits and in every evaluation (grouping by performance, 7.67.5).
 
 ## 3. Model (size fixed: nothing larger than 7.63.5 / 7.64 specify)
@@ -30,9 +30,9 @@ Items marked **(default)** are listed under FOR USER; **[PENDING]** waits for a 
   orthogonal init gain 0.9, U shared input for both parts. State starts at zero at song start and is carried detached across 60 s windows (7.64.10). The 50 Hz input is the mean of frame pairs.
 - **Planner** (7.64.3): GRUCell 256, one step per token. Input: listener state read at the decision step (256, both parts) + embeddings of the previous token (code 1: 32, code 2: 32, vigour bin: 16, posture entry/entries: 32 each).
   Single-head attention over the last 32 GRU states of the song (keys/values/query: Linear 256, output Linear 256, residual + LayerNorm); no positional encoding (**default**).
-  Heads: code 1 (1024), code 2 given code 1 (1024), vigour (32), posture stage 1 (256) [and stage 2 given stage 1].
+  Heads: code 1 (1024), code 2 given code 1 (1024), vigour (32), posture stage 1 (256), posture stage 2 given stage 1 (256).
 - Parameter counts (printed by `Model.counts()`, single-posture variant): listener projection 269,568; input U 33,024; recurrent W + tau 65,792; planner embeddings 74,240; GRU 480,768;
-  attention + LayerNorm 263,680; heads: code 1 263,168, code 2 295,936, vigour 8,224, posture 65,792. **Total 1,820,192** (about 1.82 M; the residual posture head adds 0.1 M).
+  attention + LayerNorm 263,680; heads: code 1 263,168, code 2 295,936, vigour 8,224, posture 65,792. single-posture variant 1,820,192; **E1 (residual posture) total 1,926,944** (about 1.93 M).
 - Generation (T2): nucleus p = 0.9 on every head (7.63.8, fixed), sampled in head order code 1, code 2, vigour, posture; the previous sampled token is fed back; posture accumulates by the entry's centre (start posture = the song's human posture at token 0, same for the 4 copies).
 
 ## 4. Training
@@ -80,4 +80,3 @@ Items marked **(default)** are listed under FOR USER; **[PENDING]** waits for a 
 - Log-precision as minus mean logvar; surprisal NaN -> 0 with valid bits.
 - No positional encoding in the attention; attention memory = last 32 GRU states.
 - Event-detection thresholds and the 2 s truncation implementation as stated in section 6.
-- Posture head: single vs residual awaiting 7.70.

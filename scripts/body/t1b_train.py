@@ -24,7 +24,7 @@ WIN_FR, WIN_TOK, WIN_ST = 6000, 120, 3000
 SLOTS, CLIP_X = 4, 5.0
 SEEDS = (41101, 41102, 41103)
 NOISE_P, LR, WD, CLIP_G, PATIENCE, MAXEP = 0.10, 1e-3, 0.01, 1.0, 5, 60
-N_POST = (256,) * int(os.environ.get("T1B_POST", "1"))                        # posture stages (7.70): 1 = single 256 entries, 2 = residual 2 x 256 (needs the matching vocab.npz and assigned tokens)
+N_POST = (256,) * int(os.environ.get("T1B_POST", "2"))                        # posture stages (7.70): 1 = single 256 entries, 2 = residual 2 x 256 (needs the matching vocab.npz and assigned tokens)
 
 
 def song_index():
@@ -119,7 +119,7 @@ class Runner:
         ps = pl.zero_state(B * 4)
         tail = torch.zeros(B, 25, M.NR + M.NA)
         prev = None
-        tot = dict(code=0.0, vig=0.0, post=0.0)
+        tot = {}
         wsum = 0.0
         nstep = 0
         while True:
@@ -173,8 +173,8 @@ class Runner:
             lh, tail = lh.detach(), st[:, -25:].detach()
             ps = {k: v.detach() for k, v in ps.items()}
             prev = tuple(t.detach() for t in prev)
-            for k in tot:
-                tot[k] += float(parts[k].detach()) * float(wt.sum())
+            for k in parts:
+                tot[k] = tot.get(k, 0.0) + float(parts[k].detach()) * float(wt.sum())
             wsum += float(wt.sum())
             nstep += 1
         return {k: v / max(wsum, 1e-9) for k, v in tot.items()}, nstep
