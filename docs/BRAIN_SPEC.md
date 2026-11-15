@@ -2660,3 +2660,63 @@ vigour/posture for affect units (optional variant). Standing rules unchanged.
 - Affect: the 7.65.2 song probe (20 songs) and the 7.66.3 passage test both stand. Kosta labels in one session: one 30 s clip per probe
   song and three 15 s passages per song (seeded starts); the passage test uses passage pairs matched on tempo (5 %) and RMS (10 %) that
   received different labels.
+
+### 7.68 Answers to the pre-E1 brief; compute and seeds; GO for WO41; 2026-11-15, via Kosta + planner (answering `docs/PLANNER_BRIEF_T1B_PRE.md`)
+
+1. **Q1 (a):** causal in the token sense only. The planner sees music only up to decision time; inputs may contain offline whole-song facts
+   (beat grid, ear energy 1.0 s lookahead, ear features 0.023 s) as long as they are listed in the rules and the report. No cortex retrain.
+   Basis: dance plays from offline sidecars (Kosta, 2026-10-04). 7.67.3's "fix every non-causal feature" is replaced by "list every
+   non-causal feature". (c) deliberate lookahead is a possible later variant, needs a ruling.
+2. **Q2 (a):** E1 stays pooled V1/V2 with no label (7.56.11). The per-song style ID (7.67.5) is a VARIANT tested against E1; adopting it
+   needs Kosta's ruling after seeing the result.
+3. **Q3 (a):** two variants: E4 timescale groups first (fast 0.1-0.5 / medium 1-4 / slow 8-30 s); then the structured input (per-layer
+   compression, separate auxiliary inputs, separate ear embedding) on the better listener.
+4. **Q4 (a):** full 4-way ablation for E1 and for the final candidate only; intermediate variants vs E1 only.
+5. **Q5 (a):** per held-out song, true-music log-likelihood minus the mean over 3 swaps; STOP if the bootstrap 95 % interval of the mean
+   over songs (resampled by song, fixed seed) includes 0. Swap partners: fill from validation songs, then allow half/double tempo; report
+   how many needed it.
+6. **Q6 (b):** Kosta labels 40 songs (test + validation), 3 passages each, blind to model output, with the existing labelling tool, before
+   T2 is computed. Both affect tests stay report-only; no conclusion below 10 matched passage pairs.
+7. **Q7 (a):** offset soft targets computed by decoding the whole local sequence per shift, in the real neighbours' context.
+8. **Q8 (a):** one answer set in every viewing: A / B / tie / both poor + confidence (low / medium / high).
+9. **Compute** (Kosta: Kaggle gives 30 h GPU + 20 h TPU per week):
+   - Use Kaggle GPU for T1b and variants when it is faster than the laptop (timing comparison first). Derived features only (cortex
+     states, ear features, joint targets, tokens); never raw FineDance/AIOZ files, never audio. Private datasets. Each Kaggle run still
+     needs Kosta's go-ahead.
+   - Use the extra compute for SEEDS, not size: E1 and every variant trained with 3 seeds; report mean and spread; a variant counts as
+     better only if its gain exceeds the seed spread. Model sizes unchanged without a ruling.
+   - TPU not used.
+10. **Go:** send WO41 (E1 baseline with these rulings). Standing rules unchanged.
+11. **Overseer notes (operational, not rulings):**
+    - Test + validation hold 39 FineDance song groups (19 + 20), not 40: all 39 are labelled (one sequence per group, seeded pick), 3
+      passages each; the 20-song probe of 7.65.2 uses these labels (song label = majority of its 3 passages, ties reported).
+    - Kaggle timing comparison needs an upload, which needs Kosta: the builder times the laptop and prepares a Kaggle package (derived
+      features + script, private dataset) without uploading. If 3 laptop seeds in parallel finish in <= 24 h, they run locally;
+      otherwise the builder STOPs with the package ready and Kosta decides.
+    - 3 E1 seeds in parallel on cores 6-17 (4 threads each); side tasks on cores 18-19.
+
+### 7.69 Data expansion: PhantomDance now, other sources by Kosta; 2026-11-15, via Kosta + planner
+
+Does not change E1 (FineDance only).
+
+1. **PhantomDance** (github.com/libuyu/PhantomDanceDataset): download now (direct Google Drive link, no account; if a login appears, STOP
+   and ask Kosta). Save the licence file and README with the data; record date and version (v1.2 expected: 260 pairs, ~9.5 h,
+   animator-made, 30 fps, wav 16 kHz). Record the licence as stated (repo MIT) and that music rights are not separately stated. Data
+   outside git, derived features only to Kaggle.
+2. Run it through T0 exactly as FineDance (retarget V1/V2 + mirror, LP cutoffs reused, posture/gesture split, gates at 1.25, cortex states
+   computed locally on its audio). Report hours kept, genres, jitter vs FineDance, gesture amplitude vs FineDance.
+3. **Look check before any planner use:** Kosta views 6 retargeted PhantomDance clips (seeded, across genres), single answer each: does the
+   dancer follow the music? (yes / partly / no) + note. Planner use only on Kosta's go.
+4. **Kosta's own actions** (overseer does none of these): Motorica download via browser login; AIST registration form (for AIST++ music);
+   email to FineDance authors asking for the full 14.6 h. When any arrives, same steps 1-3.
+5. **After E1:** variant E-data = planner trained on FineDance + approved new sources, same splits by song, 3 seeds, compared to E1. Report
+   per-source results on held-out songs.
+
+Not now: InfiniteDance (licence unknown), SoulDance (on hold per its repo), PopDanceSet (licence unknown), Kosta's own recordings.
+Standing rules unchanged.
+
+**Overseer notes (operational, not rulings):**
+- PhantomDance's audio is 16 kHz; the ear features and cortex were built on FineDance audio at its own rate. The builder states the sample
+  rate the ear features expect and resamples PhantomDance audio to it (stdlib / existing env only), reported.
+- Split by song with its own seed (fixed in the rules note); PhantomDance songs that also appear in FineDance (by name) are listed.
+- No installs. If the Google Drive download cannot be done with curl / the existing env, STOP and ask.
