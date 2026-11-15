@@ -55,3 +55,8 @@ Not done: AIOZ held-out (needs cortex states for 41 test clips + token encoding 
 ## 7.71 applied (2026-11-15)
 
 Label session cancelled: affect probe and matched-passage test removed from T1B_RULES and the code (t1b_t2c.py deleted); added report-only vigour-vs-ear-energy and posture-height-vs-ear-energy correlations (model vs human). T2 no longer waits for labels. Label clips stay on disk unused. Training still waits for 7.70.
+
+## E1 TRAINING STARTED (2026-11-15)
+
+Units hyst-wo41-e1-s1, -s2, -s3 (seeds 41101, 41102, 41103; cores 6-9 / 10-13 / 14-17, 4 threads, MemoryMax 8G, swap 0). Script scripts/body/t1b_run.sh IDX (resumable per epoch: rerun it after a stop). Logs t1b/logs/e1_seed<seed>.log, output t1b/e1/seed<seed>/ (ckpt.pt, best.pt, log.json, done.json).
+Posture head residual 2 x 256 (7.70); loss = five equal cross-entropies, per-head train and validation loss in every epoch record. Estimate 20 min per epoch, 5-10 h typical, 20 h at the 60-epoch cap.
