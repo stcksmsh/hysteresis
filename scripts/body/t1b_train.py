@@ -29,12 +29,18 @@ N_POST = (256,) * int(os.environ.get("T1B_POST", "2"))                        # 
 
 def song_index():
     """-> {key: dict(split, tok=[per copy dict], n)} for every song with 4 token files and a cortex file"""
-    out = {}
+    out, skipped = {}, []
     for p in sorted((OUT / "tokens").glob("fd_*__V1.npz")):
         key = p.stem.split("__")[0]
         if not (OUT / "cortex" / f"{key}.npy").exists():
             continue
-        out[key] = dict(split=str(np.load(p)["split"]))
+        z = np.load(p)
+        if len(z["code1"]) == 0:                                                  # a sequence shorter than one 20 s T0 window has no tokens (fd_192, 17 s)
+            skipped.append(key)
+            continue
+        out[key] = dict(split=str(z["split"]))
+    if skipped:
+        print("skipped zero-token songs:", skipped, flush=True)
     return out
 
 

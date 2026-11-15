@@ -60,3 +60,12 @@ Label session cancelled: affect probe and matched-passage test removed from T1B_
 
 Units hyst-wo41-e1-s1, -s2, -s3 (seeds 41101, 41102, 41103; cores 6-9 / 10-13 / 14-17, 4 threads, MemoryMax 8G, swap 0). Script scripts/body/t1b_run.sh IDX (resumable per epoch: rerun it after a stop). Logs t1b/logs/e1_seed<seed>.log, output t1b/e1/seed<seed>/ (ckpt.pt, best.pt, log.json, done.json).
 Posture head residual 2 x 256 (7.70); loss = five equal cross-entropies, per-head train and validation loss in every epoch record. Estimate 20 min per epoch, 5-10 h typical, 20 h at the 60-epoch cap.
+
+## fd_192 and E1 RESTARTED (2026-11-16)
+
+Seed 41102 crashed in load_tokens: fd_192 ("cheers_part2", 520 motion frames = 17 s) is shorter than one 20 s T0 window, so T0 kept 0 windows (n_win 0) and the token files have 0 tokens. It is the only song affected (scan of all 812 token files: exactly fd_192 x 4 copies; none with fewer than 10 tokens besides). It is a train song; 153 train, 26 validation, 23 test songs remain.
+Fix: song_index skips zero-token songs and prints their names. All three units stopped, old e1/ output and logs deleted, restarted from scratch so all seeds see identical data.
+
+## E1 RESTARTED
+
+Units hyst-wo41-e1b-s1, -s2, -s3 (seeds 41101-41103, cores 6-9 / 10-13 / 14-17), reason: fd_192 zero-token crash. Old units hyst-wo41-e1-s* stopped.
