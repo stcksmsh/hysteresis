@@ -38,7 +38,11 @@ def rows_b():
 def job(i, rows, z, cache):
     key = (int(z["dancer"][i]), int(z["copy"][i]))
     if key not in cache:
-        cache[key] = np.load(next((DD.T0 / "seq").glob(f"*/{z['dancers'][key[0]]}__{E.COPIES[key[1]]}.npz")))
+        pat = f"*/{z['dancers'][key[0]]}__{E.COPIES[key[1]]}.npz"
+        hit = list((DD.T0 / "seq").glob(pat))
+        assert hit, (i, pat, str(DD.T0))
+        with np.load(hit[0]) as f:
+            cache[key] = dict(targets=f["targets"], group=str(f["group"]))
     a = int(z["win"][i]) * DD.WIN_ROWS
     t = cache[key]["targets"]
     return (rows[i].astype(float), t[a - E.PRE:a].astype(float) if a >= E.PRE else None, E.COPIES[key[1]][:2])
@@ -68,7 +72,8 @@ def cmd_pick():
     def seqf(i):
         k = (int(z["dancer"][i]), int(z["copy"][i]))
         if k not in cache:
-            cache[k] = np.load(next((DD.T0 / "seq").glob(f"*/{names[k[0]]}__{E.COPIES[k[1]]}.npz")))
+            with np.load(next((DD.T0 / "seq").glob(f"*/{names[k[0]]}__{E.COPIES[k[1]]}.npz"))) as f:
+                cache[k] = dict(group=str(f["group"]))
         return cache[k]
     idx = [i for i in range(len(ok)) if ok[i]]
     idx.sort(key=lambda i: (int(src[i]), str(names[z["dancer"][i]]), E.COPIES[z["copy"][i]], int(z["win"][i])))
@@ -78,7 +83,7 @@ def cmd_pick():
     for p in perm:
         i = idx[p]
         s = int(src[i])
-        gk = (s, str(seqf(i)["group"]))
+        gk = (s, seqf(i)["group"])
         if len(take[s]) < (4 if s == 0 else 2) and gk not in groups:
             take[s].append(i)
             groups.add(gk)
@@ -99,7 +104,7 @@ def cmd_pick():
         subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", f"{win * SHOW_S:.3f}", "-t", f"{SHOW_S}", "-i", str(wav), "-ac", "2", "-ar", "48000", "-c:a", "aac", "-b:a", "192k", str(W / f"{cid}.m4a")], check=True)
         for tag, q in (("orig", q_o), ("rebuild", q_b[i])):
             (W / f"{cid}_{tag}.csv").write_text(arm_sim.csv_text(q, D.HZ, name=f"{cid}_{tag}"))
-        picks.append(dict(id=cid, dataset=ds, dancer=nm, copy=E.COPIES[z["copy"][i]], window=win, group=str(seqf(i)["group"]), audio=str(wav), start_s=win * SHOW_S,
+        picks.append(dict(id=cid, dataset=ds, dancer=nm, copy=E.COPIES[z["copy"][i]], window=win, group=seqf(i)["group"], audio=str(wav), start_s=win * SHOW_S,
                           genre=ds, orig_gate_passed=bool(okq)))
     (OUT / "picks.json").write_text(json.dumps(dict(seed=35001, pool_size=pool, pool_total=len(idx), picks=picks), indent=1))
     print(json.dumps(dict(pool=pool, picks=[(p["id"], p["dancer"], p["copy"], p["window"], p["orig_gate_passed"]) for p in picks])), flush=True)
