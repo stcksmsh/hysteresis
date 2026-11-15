@@ -94,7 +94,16 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-15 ~11:50 (clock) — newest
+## UPDATE 2026-11-15 ~12:10 (clock) — newest
+
+Planner 7.65 (GO T1b; repertoire STOP identical (coarse,residual) share <= 2x human; listener split rhythm 192 / affect 64; Kosta music
+labels probe on 20 FD songs; viewings = swapped-music pairs + feeling labels; teacher stage after T3). Recorded on body 2365130 with 7.63
+RECONSTRUCTED (text never received) and overseer notes 7.65.6. FD split: test 19 groups / 23 seqs, val 20, train 133. WO41
+`docs/BUILDER_PROMPT_WO41_T1B.md` (body) written, NOT SENT: waiting for "send" (one cleared agent). Builder runs full + ear-only ablation
+in parallel if each <= 24 h; prepares Kosta's 20 label clips (t1b/labels/); overseer serves that session (dialstudy_session.py, labels
+calm/sad/tense/energetic/light), passes labels to builder after. Verify on STORAGE / T1B_RULES / ESTIMATE / T1B READY.
+
+## UPDATE 2026-11-15 ~11:50 (clock)
 
 S1 brief went to the planner (via Kosta). Planner answered 7.63 (NOT pasted to overseer: FineDance only, categorical heads: vigour 32
 bins, posture 256 entries) and 7.64 (pasted; RECORDED body 98066c9): no Demucs; LISTENER (cortex B7 ep6 full state 100 Hz -> 50 Hz, proj
