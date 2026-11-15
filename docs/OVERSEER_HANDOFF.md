@@ -94,7 +94,13 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-15 ~12:10 (clock) — newest
+## UPDATE 2026-11-15 ~12:30 (clock) — newest
+
+Planner 7.67 (second review round; order E1 baseline -> sync check -> structured listener -> ablations -> style -> timing -> teacher
+stage) RECORDED on body. 7.66 (defines E1, "2a" ear-feature report, items 4-6 that 7.67 amends) NEVER RECEIVED: asked Kosta to paste it.
+WO41 (e710b4b) superseded, never sent; rewrite after 7.66. No builder branch/units for WO41 exist.
+
+## UPDATE 2026-11-15 ~12:10 (clock)
 
 Planner 7.65 (GO T1b; repertoire STOP identical (coarse,residual) share <= 2x human; listener split rhythm 192 / affect 64; Kosta music
 labels probe on 20 FD songs; viewings = swapped-music pairs + feeling labels; teacher stage after T3). Recorded on body 2365130 with 7.63
