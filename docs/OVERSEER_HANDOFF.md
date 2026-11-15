@@ -94,7 +94,13 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-16 ~00:05 (clock) — newest
+## UPDATE 2026-11-16 ~00:15 (clock) — newest
+
+E1 seed 41102 crashed 00:07: fd_192 ("cheers_part2", 17 s < one 20 s T0 window) has 0 tokens. Fix 3128eea (loader skips zero-token songs,
+prints names; 153 train / 26 val / 23 test songs). All 3 seeds RESTARTED from scratch as hyst-wo41-e1b-s1/s2/s3 (same seeds, cores, logs).
+Overseer Monitor re-armed on e1b units + power. Charger ON since 00:03 (82 %). ETA 5-10 h from ~00:08.
+
+## UPDATE 2026-11-16 ~00:05 (clock)
 
 E1 TRAINING STARTED 23:59 (body-t1b 474b4ef; rules d3ce3aa match 7.70, 1.93 M params): units hyst-wo41-e1-s1/s2/s3 (seeds
 41101/41102/41103, cores 6-9/10-13/14-17, 4 threads, T1B_POST=2), logs /secondary/hyst-data/body/t1b/logs/e1_seed4110{1,2,3}.log.
