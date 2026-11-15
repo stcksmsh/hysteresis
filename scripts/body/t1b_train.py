@@ -24,7 +24,7 @@ WIN_FR, WIN_TOK, WIN_ST = 6000, 120, 3000
 SLOTS, CLIP_X = 4, 5.0
 SEEDS = (41101, 41102, 41103)
 NOISE_P, LR, WD, CLIP_G, PATIENCE, MAXEP = 0.10, 1e-3, 0.01, 1.0, 5, 60
-N_POST = (256,)                                                                   # entries per posture stage; set by the ruling (rules note section 2)
+N_POST = (256,) * int(os.environ.get("T1B_POST", "1"))                        # posture stages (7.70): 1 = single 256 entries, 2 = residual 2 x 256 (needs the matching vocab.npz and assigned tokens)
 
 
 def song_index():
@@ -43,7 +43,7 @@ def load_tokens(key):
     for c in COPIES:
         z = np.load(OUT / "tokens" / f"{key}__{c}.npz")
         pe = z["pent"].astype(np.int64)
-        cs.append(dict(c1=z["code1"].astype(np.int64), c2=z["code2"].astype(np.int64), v=z["vbin"].astype(np.int64), p=pe.reshape(len(pe), -1), ok=z["ok"].astype(bool), w=float(z["weight"])))
+        cs.append(dict(c1=z["code1"].astype(np.int64), c2=z["code2"].astype(np.int64), v=z["vbin"].astype(np.int64), p=pe.reshape(len(pe), -1)[:, :len(N_POST)], ok=z["ok"].astype(bool), w=float(z["weight"])))
     n = min(len(c["c1"]) for c in cs)
     return cs, n
 
