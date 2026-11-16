@@ -94,7 +94,15 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-16 ~17:10 (clock) — newest
+## UPDATE 2026-11-16 ~17:40 (clock) — newest
+
+WO46 DIAG READY 0761c93 VERIFIED (rules ab8dd5e before run; 9 rows recomputed from diag/measures.json, all match; pytest 4/4) and MERGED
+(body fast-forward 0761c93). Most lamp >3 Hz excess and frozen share in the change-based posture-knot sequence (model 4.43 -> 1.71 with
+human posture; 2.35 with human gestures). Brief docs/PLANNER_BRIEF_DIAG.md SENT (Q1 GO for A after 7.75, add posture/gesture split check
+[rec]). Open planner answers: 7.75 (VIEWINGS) + DIAG. WO46 Part 2 (grids, metric) running on agent 2; WO45 on agent 1. Laptop on battery
+at 17:20 (told Kosta).
+
+## UPDATE 2026-11-16 ~17:10 (clock)
 
 7.76 RECORDED (body e20b27d): third external review; next = beat-phase/metrical analysis of human motion (decides B's targets); A in
 parallel with style embedding (dataset + V1/V2 + genre) + motif state (2 s) + coherence check; control refinements report-only; B/lookahead/
