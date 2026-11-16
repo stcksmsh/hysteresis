@@ -8,3 +8,7 @@
 
 BEATV READY
 CLICKS READY (/secondary/hyst-data/body/beatv/clicks/, manifest.json + key.json, 20 singles; not served). STOP.
+
+- V4 visual version (Kosta: clicks hard to hear): same 20 items, plain excerpt audio (no clicks), white disc (640x360, 60 fps, dark background) full-on at the first frame at/after each beat, linear fade 120 ms, same look for both grids; /secondary/hyst-data/body/beatv/clicks_visual/ with own manifest.json (question "Is the flash on the beat?", yes/partly/no) and key.json; old clicks folder untouched. Checked: frame at a beat (full white disc) and between beats (dark); A/V sync after encoding on a test excerpt with a click and a flash at 10.000 s: flash frame 10.0000 s, click 10.0008 s (-0.8 ms), both stream start times 0 (sync_check.json). Script beatv_clicks_visual.py pushed.
+
+CLICKS VISUAL READY
