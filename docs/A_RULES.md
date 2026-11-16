@@ -108,3 +108,10 @@ condition; rendered with the WO43 clip chain (`controls_clips.py` / `retarget_re
 5. Training sample = one 40-token window, no state carried between windows; token noise 0.10 as E1.
 6. Vigour bin kept as a head (decoder needs the amplitude), not a control.
 7. Pooled-train vigour bins (all four datasets), not the FineDance-only bins of E1.
+
+## Addendum 1 (2026-11-16, overseer GO, BRAIN_SPEC 7.75; pushed before training; 7.75 and 7.77 text and `DIAG_RULES.md` were not yet read in full when this was written, so items 2-4 follow the overseer's message literally)
+
+1. Intervention matrix (section 6.2) also reports two further output measures on the realised trajectory: direction-change rate (changes of the lamp velocity direction per second, as `endpoint_jerk_dirchanges`) and base-rotation speed (RMS of the base-yaw angular speed, deg/s). Same effect-size and bootstrap treatment.
+2. No V1 default: the style triple including the copy is sampled per song at generation (section 3). S-B candidates add a sharpness-matched V1 vs V2 comparison: pairs of the same held-out start, one V1 and one V2 style, matched so that the sharpness of the generated realised motion differs by less than 0.05 (token mean) where possible, chosen by seeded search over samples; the residual difference is reported.
+3. S-B excerpts only where the song's RMS in the excerpt is >= the song's own median RMS and not in the first or last 10 s; the same excerpt across all conditions.
+4. A check added: the posture/gesture split of 7.74 Q4: lamp power above 3 Hz and frozen share for A's posture + human gestures, and A's gestures + human posture, by the DIAG method (`docs/DIAG_RULES.md`), against A and the re-joined human.
