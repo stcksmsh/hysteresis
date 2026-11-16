@@ -28,6 +28,9 @@ def main():
           f"- vigour: log(vj + 0.01) median {nm['vj']['median']:.3f}, MAD x 1.4826 {nm['vj']['mad']:.3f}; log(vl + 0.01) median {nm['vl']['median']:.3f}, {nm['vl']['mad']:.3f}; PC1 loadings {nm['vigour']['loadings'][0]:.3f}, {nm['vigour']['loadings'][1]:.3f}, PC1 sd {nm['vigour']['sd']:.3f}, eigenvalues {nm['vigour']['eigenvalues'][0]:.3f} / {nm['vigour']['eigenvalues'][1]:.3f} (PC1 share {nm['vigour']['eigenvalues'][1] / sum(nm['vigour']['eigenvalues']):.3f}).",
           f"- accent: A (p95 |a|) {nm['accent']['A']:.3f} m/s^2, J (p95 |jerk|) {nm['accent']['J']:.2f} m/s^3.", f"- lead: p90 of |w| per joint {[round(x, 1) for x in nm['p90_abs_w']]} deg/s.", f"- tokens used: {nm['n_tokens']} ({nm['n_windows']} windows).", ""]
     # ----------------------------------------------------------------------------------- 0b
+    fx = json.loads((OUT / "look" / "fix1.json").read_text())
+    L += [f"Height (fix 1, rules addendum 2): usable workspace z in [-0.569, 0.770] m from the v2p body (`make_arm_v2p.margins >= 0`, 2,187,000-pose grid, 1,523,956 clear). Report-only: FineDance-train z_mean p1 / p99 = {fx['zp1']:.3f} / {fx['zp99']:.3f} m. "
+          f"Pairs whose clips changed against the first version (height bounds 0.11..0.77): {', '.join('P%02d' % (n + 1) for n in fx['changed'])}; unchanged: " + ", ".join("P%02d" % (n + 1) for n in range(15) if n not in fx["changed"]) + " (all 30 clips re-rendered).", ""]
     L += ["## 1b. Headline numbers (all taken from the tables below)", ""]
     for ds in DS:
         b = json.loads((OUT / "stats" / f"b_{ds}.json").read_text())
