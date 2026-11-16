@@ -94,7 +94,15 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-16 ~16:25 (clock) — newest
+## UPDATE 2026-11-16 ~16:50 (clock) — newest
+
+Notes of both viewings checked against controls (job tmp ov/notes.py). Brief docs/PLANNER_BRIEF_VIEWINGS.md (body 747f820) SENT:
+energy perceived = vigour + sharpness; flicky = V2 copies (5.75 Hz cutoff; sharp 1.5-2.5x V1; both flicky notes on V2); vigour = size;
+quiet music under low-vigour/pause excerpts; 2 unexplained notes. Q1 copy as A domain input, generate V1 [rec]; Q2 keep sharpness, ask
+"abrupt/flicky" [rec]; Q3 excerpts at RMS >= song median [rec]; Q4 record open [rec]; Q5 7.75 + data go (overseer inferred from look
+check; Kosta may veto). WO45 prompt updated (all 4 datasets on; copy-input switch default off pending 7.75). WO45/WO46 NOT SENT.
+
+## UPDATE 2026-11-16 ~16:25 (clock)
 
 Look check DONE (body b603712, docs/T0_PHANTOM_LOOK_RESULT.md): PhantomDance 6/6 yes, Motorica 5 yes 1 partly ("tiny"). Notes: some
 clips too flicky/energetic (proportion mismatch), one too low. Server stopped. Open: Kosta's explicit go for PhantomDance + Motorica in A
