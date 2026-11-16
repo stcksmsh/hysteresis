@@ -28,6 +28,16 @@ def main():
           f"- vigour: log(vj + 0.01) median {nm['vj']['median']:.3f}, MAD x 1.4826 {nm['vj']['mad']:.3f}; log(vl + 0.01) median {nm['vl']['median']:.3f}, {nm['vl']['mad']:.3f}; PC1 loadings {nm['vigour']['loadings'][0]:.3f}, {nm['vigour']['loadings'][1]:.3f}, PC1 sd {nm['vigour']['sd']:.3f}, eigenvalues {nm['vigour']['eigenvalues'][0]:.3f} / {nm['vigour']['eigenvalues'][1]:.3f} (PC1 share {nm['vigour']['eigenvalues'][1] / sum(nm['vigour']['eigenvalues']):.3f}).",
           f"- accent: A (p95 |a|) {nm['accent']['A']:.3f} m/s^2, J (p95 |jerk|) {nm['accent']['J']:.2f} m/s^3.", f"- lead: p90 of |w| per joint {[round(x, 1) for x in nm['p90_abs_w']]} deg/s.", f"- tokens used: {nm['n_tokens']} ({nm['n_windows']} windows).", ""]
     # ----------------------------------------------------------------------------------- 0b
+    L += ["## 1b. Headline numbers (all taken from the tables below)", ""]
+    for ds in DS:
+        b = json.loads((OUT / "stats" / f"b_{ds}.json").read_text())
+        c = json.loads((OUT / "stats" / f"c_{ds}.json").read_text())
+        s = json.loads((OUT / "stats" / f"s_{ds}.json").read_text())["tokens"]
+        top = sorted(((abs(v["spearman"][0]), k, v["spearman"][0]) for k, v in c["within"].items() if k.endswith("|0")), reverse=True)[:3]
+        L.append(f"- {TITLE[ds]}: redundant pairs (|r| > 0.7 Pearson or Spearman) = {', '.join(k.replace('|', ' x ') for k in b['redundant'])}. Sharpness undefined in {b['nan_share']['sharp']:.3f} of tokens, pause_prob is 0 in "
+                 f"{(np.array(b['dist']['pause_prob']['hist'])[0] / sum(b['dist']['pause_prob']['hist'])):.3f} of tokens (first histogram bin). Strongest within-song lag-0 Spearman: " + "; ".join(f"{k.split('|')[0]} x {k.split('|')[1]} {v:.3f}" for _, k, v in top)
+                 + f". Motion boundaries within +-1 token of a music boundary: {s['hit_rate']:.3f} against {s['chance_rate']:.3f} by chance.")
+    L.append("")
     L += ["## 2. Step 0b: numeric validation", ""]
     for ds in DS:
         b = json.loads((OUT / "stats" / f"b_{ds}.json").read_text())

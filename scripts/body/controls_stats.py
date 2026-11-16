@@ -88,7 +88,7 @@ def cmd_table():
             r["split"] = np.full(n * 40, SPLITS.index(str(z["split"])))
             r["group"] = np.full(n * 40, str(z["group"]), dtype=object)
             r["lane"] = np.full(n * 40, lk, dtype=object)
-            r["file"] = np.full(n * 40, fi)
+            r["fidx"] = np.full(n * 40, fi)
             for ii in range(1, 6):
                 r[f"vjoint{ii}"] = z["vjoint"].reshape(n * 40, 5)[:, ii - 1]
             rows.append(r)
@@ -344,8 +344,8 @@ def cmd_struct():
             c_nov = []
             mb = []
             mrep = []
-            for fidx in np.unique(t["file"]):
-                r = np.flatnonzero(t["file"] == fidx)
+            for fidx in np.unique(t["fidx"]):
+                r = np.flatnonzero(t["fidx"] == fidx)
                 lk, g = t["lane"][r[0]], t["gid"][r[0]]
                 nv, pk, rp = mf[lk]
                 n_tok = len(nv)

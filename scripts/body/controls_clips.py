@@ -26,7 +26,7 @@ CLIP_TOK, STEP, SHORTLIST, PAIRS, MAXNAN = 16, 4, 20, 3, 0.25
 def candidates():
     t = np.load(OUT / "tables" / "finedance.npz")
     m = np.flatnonzero(np.isin(t["split"], (1, 2)) & np.isin(t["copy"], (0, 1)))
-    key = t["file"][m] * 100000 + t["win"][m]
+    key = t["fidx"][m] * 100000 + t["win"][m]
     out = []
     for kk in np.unique(key):
         r = m[key == kk]
@@ -36,7 +36,7 @@ def candidates():
             x = np.stack([t[c][r[s:s + CLIP_TOK]] for c in CONTROLS], 1)
             if (np.isnan(x).mean(0) > MAXNAN).any():
                 continue
-            out.append(dict(file=int(t["file"][r[0]]), win=int(t["win"][r[0]]), start=s, copy=int(t["copy"][r[0]]), group=str(t["group"][r[0]]), lane=str(t["lane"][r[0]]), val=np.nanmean(x, 0)))
+            out.append(dict(file=int(t["fidx"][r[0]]), win=int(t["win"][r[0]]), start=s, copy=int(t["copy"][r[0]]), group=str(t["group"][r[0]]), lane=str(t["lane"][r[0]]), val=np.nanmean(x, 0)))
     return out
 
 
