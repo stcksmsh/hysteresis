@@ -45,7 +45,7 @@ with human gestures does it stay at the control's level (then it sits in gesture
 ## Tests
 
 `scripts/body/test_diag.py`: swapping a token sequence with itself changes nothing; swap (i) then (ii) of two sequences are complementary
-(posture of one, gesture of the other, exact field equality); HJ rebuilt by the diag path equals WO44's A1 rows exactly for one song.
+(posture of one, gesture of the other, exact field equality); HJ rebuilt by the diag path matches WO44's stored A1 rows for one song (tolerance 1e-3 deg, float noise).
 
 ## Outputs
 
