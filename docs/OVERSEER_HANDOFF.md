@@ -94,7 +94,19 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-16 ~10:40 (clock) — newest
+## UPDATE 2026-11-16 ~11:15 (clock) — newest
+
+WO43 CONTROLS READY 8a3e9f6 (body-controls, NOT merged). Rules 2269182 pushed 10:25 before compute; addendum 1 (lead onset rule only,
+measured-only) after a first compute, before stats. Overseer recompute (job tmp ov/ctl_check.py, ctl_stats.py): vj/vl/height/pause/sharp
+exact on 3 files 800 tokens; FD between-song shares + vigour x accent Spearman 0.829 match. ERROR FOUND: height lower bound 0.11 m from old
+m3f table body; realised stage is v2p (pillar, FLOOR -0.947, lamp limit -0.837); FD z_mean min -0.344, 16.6 % FD tokens clipped to 0
+(AIOZ 5.3, Phantom 13.2, Motorica 7.0). Fix prompt docs/BUILDER_PROMPT_WO43_FIX1.md (body 9e22700) NOT SENT (waiting Kosta's "send").
+Notes for the planner brief later: redundant |r|>0.7 in all datasets: vigour x vj/vl/accent_mean, pause_prob x activity; accent_mean ~
+vigour (Spearman 0.80-0.86) so vigour pairs differ in accent by 1.7-2.0 sd and accent pairs in vigour by 1.5-1.7 sd; between-song shares
+small (FD vigour 0.16, height 0.05); within-song control x acoustics Spearman <= 0.19; motion/music boundary hit - chance 0.015-0.059.
+WO44: rules JOIN_RULES 8f72ba2 (10:24) before run; run2 done ~11:05, agent 2 building tables.
+
+## UPDATE 2026-11-16 ~10:40 (clock)
 
 7.73 RECORDED (body ee944ec): planner redesign, control representation first (A = motor grammar conditioned on measured controls,
 B = listener predicting controls; E1b and V-fam/V-data/V-hd dropped). 7.72 (answer to PLANNER_BRIEF_E1_RESULTS) NEVER RECEIVED: asked
