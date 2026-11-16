@@ -37,8 +37,10 @@ run to a zero-token song). Night log `docs/NIGHT_LOG_body-grammar.md`. Keep mess
      statistics of step 2) vs requested controls; the weight of the auxiliary term stated and fixed;
    - control dropout 15 % (whole vector); control corruption sampled from realistic JOINT control distributions (state the sampler, e.g.
      whole control vectors drawn from other training tokens or a fitted joint model; never independent per control);
-   - data: FineDance + AIOZ (calibrated keep list); PhantomDance and Motorica only after the overseer passes Kosta's look-check result (7.74
-     note); a switch, default off. Splits as T0. Song-level bootstrap everywhere;
+   - data: FineDance + AIOZ (calibrated keep list) + PhantomDance + Motorica (Kosta's look check 2026-11-16: 11 yes, 1 partly,
+     `docs/T0_PHANTOM_LOOK_RESULT.md`; a per-dataset switch, all on). Splits as T0. Song-level bootstrap everywhere. Keep the copy
+     (V1 / V2 / mirror) of every token available as a possible conditioning input (V2 copies are markedly sharper,
+     `docs/PLANNER_BRIEF_VIEWINGS.md` Q1); whether A uses it waits for 7.75: build it as a switch, default off;
    - decoder A1 (7.74 Q4) for every trajectory; realised stage for every motion measure;
    - 3 seeds (7.68.9), early stopping and epoch cap, train/validation per head per epoch;
    - the A checks (step 6) with exact formulas, fixed before training.
@@ -55,6 +57,6 @@ run to a zero-token song). Night log `docs/NIGHT_LOG_body-grammar.md`. Keep mess
    - control substitution: one song's start, several control sequences (own, other performance's, shuffled, constant); does the output
      follow each (control match per sequence);
    - jitter and frozen share against re-joined human A1 (7.74 Q4 reference).
-7. **S-B clip candidates** (not served): human vs A with own oracle controls vs other performance's controls vs shuffled vs constant, held-out
+7. **S-B clip candidates** (not served; excerpt choice per 7.75 Q3 once ruled): human vs A with own oracle controls vs other performance's controls vs shuffled vs constant, held-out
    FineDance songs, 8 s, rendered as WO43 did; manifest only. Night log "SB CLIPS READY".
 8. **Done when:** `docs/A_REPORT.md` and "A READY <commit>" in the night log, pushed; all tests pass. Then STOP.
