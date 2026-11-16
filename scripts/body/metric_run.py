@@ -121,7 +121,7 @@ def phase_results(ev, win_pass, beats, lk, ds, par, off, dur):
     wp = np.asarray(win_pass, bool)
     for name, t_all in ev.items():
         win = (t_all * 50).astype(int) // 1000
-        for setname, t in (("ALL", t_all), ("PASS", t_all[(win < len(wp)) & wp[np.minimum(win, len(wp) - 1)]])):
+        for setname, t in (("ALL", t_all), ("PASS", t_all[(win < len(wp)) & wp[np.minimum(win, len(wp) - 1)]] if len(wp) else t_all[:0])):
             t = t[(t >= beats[0]) & (t < beats[-1])]
             r = dict(n=len(t), off_med=float(np.median(M.signed_offset(t, beats))) if len(t) else np.nan)
             r["real"] = stats_for_grid(t, beats, par, off) if len(t) else None
@@ -266,6 +266,15 @@ def structure(ds, lk, S, ok, rng):
 
 # ---------------------------------------------------------------------------------------------------- per sequence
 def run_one(args):
+    try:
+        return _run_one(args)
+    except Exception as e:                                                     # logged with the name, run goes on
+        with open(OUT / "run_failed.txt", "a") as f:
+            f.write(f"{args[0]} {args[1].name} {type(e).__name__}: {e}\n")
+        return args[1].name, "failed"
+
+
+def _run_one(args):
     ds, path = args
     dst = RES / "results" / ds / (path.stem + ".pkl")
     if dst.exists():
