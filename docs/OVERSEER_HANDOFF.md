@@ -94,7 +94,14 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-16 ~19:30 (clock) — newest
+## UPDATE 2026-11-16 23:50 (clock) — newest
+
+A TRAINING DONE (agent 1 old session hit usage limit after addendum 1 6f2eb5f + training): 3 seeds hit the 40-epoch cap, still improving
+(val 18.417 / 18.469 / 18.446; no-controls 21.7-21.8; code1 4.84 vs chance 6.93). New sessions: agent 1 [8fd2af], agent 2 [550216].
+SENT: WO45B docs/BUILDER_PROMPT_WO45B_A_CHECKS.md (body c22473d) to agent 1 (checks, S-B clips, report; stop A READY); WO47
+(1caed2e) to agent 2 (V2 BAS + V3 sync first, V1, V4 clicks; stop CLICKS READY). For the planner later: A stopped at cap while improving.
+
+## UPDATE 2026-11-16 ~19:30 (clock)
 
 7.75 + 7.77 RECORDED (body e36867e). GO for A sent to agent 1 [9fd0d6] with addendum items (direction-change rate + base-rotation speed;
 per-song style sampling, sharpness-matched V1 vs V2 in S-B; excerpt rule; posture/gesture split check = overseer addition, report-only,
