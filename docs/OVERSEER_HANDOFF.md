@@ -94,12 +94,19 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-17 ~00:15 (clock) — newest
+## UPDATE 2026-11-17 ~00:35 (clock) — newest
+
+Kosta: audio clicks hard to hear -> VISUAL flash clips (agent 2, CLICKS VISUAL READY 23e1391, merged into body). Old audio session (1
+answer) moved to beatv/clicks/session_2026-11-17_discarded_audio (not counted). NEW session SERVED http://127.0.0.1:8769/ unit
+hyst-wo47-flashview, /secondary/hyst-data/body/beatv/clicks_visual/session_2026-11-17 (20 singles, seed 47202, "Is the flash on the
+beat?", key/answers 404 checked). Score: grid proj vs lib per song from key.json.
+
+## UPDATE 2026-11-17 ~00:15 (clock)
 
 WO47 BEATV READY 1f632f8 VERIFIED (13 tests; overseer: grid 8-beat residual project 79 ms vs librosa 8.4 ms confirmed; raw BAS 0.218-0.227
 = published 0.2120 (Lodge CVPR 2024 Table 1, overseer fetched) = own chance 0.214-0.225; no sync offset; yaw "lock" = period lock in
 fast-rotation windows, song-specific phase, overseer's 19-song recompute not significant) and MERGED (body 92fb144). V4 click check
-SERVED http://127.0.0.1:8769/ unit hyst-wo47-clickview, session /secondary/hyst-data/body/beatv/clicks/session_2026-11-17 (20 singles,
+SERVED (audio clicks, replaced) http://127.0.0.1:8769/ unit hyst-wo47-clickview, session /secondary/hyst-data/body/beatv/clicks/session_2026-11-17 (20 singles,
 seed 47201; key/answers 404 checked). Section-boundary spot check (metric/spotcheck, wav excerpts + boundary times) NOT served: no
 question form yet. Agent 1 WO45B checks running (seed 2/3 at 00:04), SB CLIPS READY 1250e2c. Next: A report verify; combined planner
 brief (BEATV + A + cap-while-improving).
