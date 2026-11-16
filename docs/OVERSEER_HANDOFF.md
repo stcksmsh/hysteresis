@@ -100,7 +100,7 @@ You are the overseer for Hysteresis. You do not implement. You:
 parallel with style embedding (dataset + V1/V2 + genre) + motif state (2 s) + coherence check; control refinements report-only; B/lookahead/
 teacher refined; music-fit critic deferred. 7.75 (viewings brief) STILL UNANSWERED (number kept). Prompts revised (body, see git log):
 WO45 = A + 7.76.2/7.76.3 (stops at A ESTIMATE; GO after WO46 Part 1 + 7.75); WO46 = diagnostic, then 7.76.1 metrical analysis + 10-song
-spot-check prep. Kosta clearing both agents; send on "send".
+spot-check prep. BOTH SENT ~17:20 (agent 1 [9fd0d6] WO45, agent 2 [985d16] WO46), notify_when_idle.
 
 ## UPDATE 2026-11-16 ~16:50 (clock)
 
