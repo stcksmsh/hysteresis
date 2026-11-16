@@ -4,6 +4,7 @@
 --timing N: N training steps and one validation pass, prints seconds per step, extrapolated epoch time and peak memory, writes nothing else (no checkpoint).
 """
 import json
+import os
 import resource
 import sys
 import time
@@ -31,6 +32,9 @@ class Data:
 
     def __init__(self, split, stats, vocab, sel=None):
         z = GD.load(split)
+        use = [GD.DS.index(d) for d in os.environ.get("HYST_A_DATASETS", ",".join(GD.DS)).split(",")]      # per-dataset switch, all on by default
+        keep = np.isin(z["dsid"], use)
+        z = {k: v[keep] for k, v in z.items()}
         if sel is not None:
             z = {k: v[sel(z)] for k, v in z.items()}
         self.n = len(z["code1"])
