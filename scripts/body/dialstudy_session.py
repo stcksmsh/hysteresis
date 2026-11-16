@@ -70,7 +70,7 @@ def build(manifest_path, out, seed=None, parts=None):
     items, key = [], {}
     for clip in clips:
         meta = {k: clip.get(k) for k in ("id", "set", "intent", "effector", "dials", "part", "setting", "round1_id", "song", "excerpt_start_s", "arousal_raw", "arousal_std", "ear_energy",
-                                                                       "kind", "variant", "variants", "clip", "genre", "source_seq", "window_start_s", "csv", "music_credit", "control", "high_first")}
+                                                                       "kind", "variant", "variants", "clip", "genre", "source_seq", "window_start_s", "csv", "music_credit", "control", "high_first", "grid")}
         if not (clip.get("set") == "D" or clip.get("files")):
             meta["file"] = clip.get("file") or clip.get("round1_file")
         if clip.get("set") == "D" or clip.get("files"):
@@ -86,7 +86,7 @@ def build(manifest_path, out, seed=None, parts=None):
                          "first_hand_speed": speeds[0], "second_hand_speed": speeds[1]}
         else:
             c = place(clip.get("file") or clip["round1_file"])
-            item = {"code": c, "kind": "single", "clips": [c], **({"q": FOLLOW_Q if follow else LOOK_Q["single"]} if look else {})}
+            item = {"code": c, "kind": "single", "clips": [c], **({"q": clip.get("question") or (FOLLOW_Q if follow else LOOK_Q["single"])} if look else {})}
             key[c] = meta
         items.append(item)
     rng.shuffle(items)
