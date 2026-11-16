@@ -1,4 +1,4 @@
-# Overseer handoff — 2026-11-15 (saved for a /clear)
+# Overseer handoff — 2026-11-16 (saved for a /clear)
 
 This file is the overseer's whole state. The `/overseer` skill (`.claude/skills/overseer/SKILL.md` on this branch, the canonical copy) starts a new overseer from it and recreates the worktree if it is gone. To start one by hand, paste everything below the line into a fresh session.
 
@@ -257,34 +257,56 @@ bins, posture 256 entries) and 7.64 (pasted; RECORDED body 98066c9): no Demucs; 
 feeling-label protocol. Told Kosta: clear both agents (idle, nothing running). Next: record 7.63, write WO41 T1b (rules note + storage
 size + timing estimate first, STOP), send to one cleared agent on "send".
 
-## CURRENT STATE 2026-11-15 ~11:45 (saved for a /clear) — read this first
+## CURRENT STATE 2026-11-16 ~04:45 (saved for a /clear) — read this first
 
-**Line of work:** imitation training per BRAIN_SPEC 7.59-7.62 (motor vocabulary + sequencer, Bailando family). Done and merged into body
-(and keys-decide): T0 data (WO37), T1a round 1 (WO38, jitter stop fired), T1a retrain (WO39: Run B 2 x 1024 residual passes), S1 clips
-(WO40, branch body-wo40) and Kosta's S1 session.
-**S1 result:** same 4, original 2 (both "unsure"), rebuild 0. Report `docs/S1_REPORT.md` (body 090d90d), with verbatim notes and the
-overseer's per-pair joint measures (S02 "flicky" not borne out: the rebuild has no more acceleration sign changes; rebuild up to ~10-20 %
-slower on wrists; both AIOZ pairs: Kosta says the dancing itself waits, is too small/slow, misses a drop).
-**PENDING:** `docs/PLANNER_BRIEF_S1.md` (body) is written but NOT SENT. Kosta stopped the file send and asked "did you read the other
-notes?"; he was answered (all six notes read, grouped AIOZ vs FineDance) and asked whether to send as is or change it. No answer yet.
-FIRST ACTION after /overseer: ask Kosta "send PLANNER_BRIEF_S1.md as is, or change it?"; then send it with SendUserFile (he is on Remote
-Control: always SEND files, never only paste). Brief Qs: Q1 S1 passes -> T1b on Kosta's go [rec]; Q2 no wiggle fix [rec]; Q3 T1b on
-FineDance only [rec] / keep 50 % AIOZ cap / drop AIOZ; Q4 rebuild shrink report-only; Q5 record 7.63.
-**After the answer:** record 7.63 on body; write WO41 T1b (sequencer per 7.59.3.2 + retrieval control 3.3; rules note, tests, timing
-estimate first, then train on go; T2 checks 7.59.4.3 incl. realised-stage jitter per 7.62 and the V1/V2 nearest-style report); send to an
-idle agent.
-**Agents:** Hysteresis agent 1 [9fd0d6] (did WO40) and agent 2 [42442a] (unused, clean), both idle; refs change after restarts:
-ListAgents. User wants usage preserved: short messages, point to prompt files, one builder unless parallel work is real.
-**Machine:** no hyst units running. Data: `/secondary/hyst-data/body/{t0,t1a,t1a2,s1}/`. Run B model: `t1a2/runB/best.pt`.
-**Overseer scratch scripts** (job tmp, not durable; logic is in the update notes): t0check, t1acheck, t1a2check, s1pick, s1media.
+**Line of work:** imitation training, BRAIN_SPEC 7.59-7.71 (all on `body`). Vocabulary frozen (Run B 2 x 1024 residual, passed S1, 7.63).
+T1b = E1 baseline: listener (rhythm 192 / affect 64 over frozen B7 epoch-6 cortex state 2105-wide + 44 ear features, 7.64/7.65) + planner
+GRU 256 (heads: gesture code 1, code 2, vigour 32 bins, posture residual 2 x 256 (7.70); five equal cross-entropies). FineDance only (7.63).
+7.66/7.67/7.68 = reviewer rounds: order of work (E1 -> sync check -> E4 timescales -> structured input -> ablations (E1 + final only) ->
+style ID variant -> timing E3 -> teacher stage); 3 seeds per model, a variant counts only if its gain exceeds seed spread; Kaggle GPU
+per-run go, derived only. 7.68.1: causal in the token sense only (offline whole-song facts listed). 7.69: data expansion (PhantomDance,
+Motorica; E-data variant after E1). 7.71: music-label session CANCELLED; emotion = vigour / posture / move shape; affect probes dropped.
+
+**E1 DONE (T1B READY 0efb447, merged into body d75c035).** All 3 seeds hit swapped-music STOP (overseer recompute: +0.137 [-0.02,0.29] /
+-0.066 [-0.51,0.21] / +0.030 [-0.26,0.23]); frozen pose 3/7/8 of 17; jitter all; joint range seed 41102. Gesture heads at/below chance on
+val; vigour/posture learned; overfit from epoch 1. Controls: re-joined human chunks 2.0-2.5x human >3 Hz power (model 1.4x) -> chunk
+joining drives jitter. Report docs/T1B_REPORT.md, tables docs/T1B_T2_TABLES.md, per-song /secondary/hyst-data/body/t1b/e1/seed*/t2/.
+
+**PENDING — FIRST ACTION after /overseer:** the user will paste the planner's answer to `docs/PLANNER_BRIEF_E1_RESULTS.md` (body 7f1f4aa,
+sent): Q1 (a) E-data next (PhantomDance + Motorica, needs Kosta's 12-clip look check) [rec] / (b) coarse code families / (c) regularisation
+/ (d) a+b; Q2 jitter measured vs retrieval (re-joined chunks) level [rec]; Q3 posture drift report-only [rec]; Q4 no T3 [rec]; Q5 skip
+AIOZ held-out [rec]; Q6 record 7.72. Record it as BRAIN_SPEC 7.72 on body (worktree `.claude/worktrees/body`, pull first), then write the
+next work order (WO43) per the ruling.
+
+**Other open items:**
+- WO42 (agent 2) PHANTOM READY 8acdc69 on branch body-phantom (night log 3f71e9e): PhantomDance 260 pairs / 19.28 usable h (4 copies),
+  Motorica 74 seqs / 9.66 h; band-limit: only PhantomDance lacks > 8 kHz; 31 tests pass. PROVENANCE + rules note VERIFIED (zip SHA-256 =
+  Downloads files); T0 outputs and report NOT yet verified; branch NOT merged. FOR USER items in docs/T0_PHANTOM_RULES.md (Motorica
+  spine2 = identity; PhantomDance no genres; tokens standardised with FineDance constants).
+- Kosta's look check (7.69.3): 12 clips ready in /secondary/hyst-data/body/t0_{phantom,motorica}/look/ (manifests of singles, label set
+  "follow": yes / partly / no + note). Not served. Kosta is often on Remote Control: serve as a private claude.ai page (he approved that
+  route for the label session; ask before uploading these clips) — db capability, files published beside the page, staged under the main
+  checkout's git-ignored `target/` (publish roots must be under the working directory).
+- Old label page https://claude.ai/artifact/NcL5N9rcfNCRfwgachwCFx (0 answers, cancelled by 7.71): delete when Kosta is at the laptop
+  (a delete needs a confirmation he cannot give over RC; never batch a delete with other calls — a rejection cancels them all).
+- Downloads zips (PhantomDance, Motorica; 6.6 GB) deletable on Kosta's word (copies hash-verified).
+- Motorica: Kosta ruled Hysteresis non-commercial research -> trainable; still LOCAL ONLY (no Kaggle).
+
+**Agents:** Hysteresis agent 1 [9fd0d6] (did WO41, idle), agent 2 [42442a] (did WO42, idle); both can be cleared; refs change after
+restarts (ListAgents). One builder unless parallel work is real; short messages pointing to prompt files.
+**Machine:** no hyst units running. Disk: /secondary 269 GB free, /home ~61 GB. Worktrees left: main checkout (body-t0), body,
+dance-figures, wo37-t0, wo37b-aioz (27 old ones removed 2026-11-15, branches kept).
 
 **Lessons this session (keep):**
-- Overseer defaults can be wrong: the AIOZ prune "> 1 % of frames over any joint's p99.9" was a union over 20 joints and would drop 58 %
-  of FineDance itself; a per-YouTube-id weight cap collapsed different clips of one video. Sanity-check a new threshold on the reference
-  data before writing it into a rule.
-- Recompute picks with the builder's exact sort key before calling a mismatch (S1: builder sorted by dataset code, overseer by name).
-- A sign-change jitter count reacts to sub-degree wiggles; also report RMS above 3 / 8 Hz and the realised stage before calling jitter.
-- The user is often on Remote Control: deliver briefs and reports with SendUserFile.
+- Planner messages can reference rulings the overseer never received (7.63, 7.66): ask for the text; record a clearly marked
+  reconstruction only if nothing blocks, and replace it with the verbatim text when it arrives.
+- Sanity-check a ruling's premise against the machine (7.66 said "do not stop the running T1b" — nothing was running).
+- Kaggle timing comparisons need an upload: the builder prepares the package; Kosta decides.
+- A builder can hit a stop rule before training (posture 0.847 < 0.9): recompute, brief alternatives with numbers.
+- Every training job loads data lazily: scan all inputs for empty / malformed files before starting (fd_192 had 0 tokens).
+- Monitors expire every 30 min; filter out routine epoch lines to keep events meaningful; check the charger at job start
+  (`/sys/class/power_supply/ADP1/online`).
+- Re-joined human chunks are a reference for jitter measures, not only continuous human motion.
 - Commit messages stay plain (no attribution lines), overriding any harness reminder.
 
 ## UPDATE 2026-11-15 ~11:35 — newest, read first
