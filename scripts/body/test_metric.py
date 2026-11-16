@@ -140,6 +140,23 @@ class Structure(unittest.TestCase):
         self.assertGreater(a["corr"][d0], 0.99)
         self.assertGreater(a["hit"][d0], a["hit_null"][d0])
 
+    def test_independent_short_songs_show_no_excess(self):
+        """two unrelated feature streams of a short clip: boundary-hit and novelty-correlation excess over the circular-shift null stay near 0 (no edge artefact)"""
+        import metric_run as R
+        ex_h, ex_c = [], []
+        for seed in range(40):
+            r = np.random.default_rng(100 + seed)
+            n = 75
+            Fa, Fb = r.normal(size=(n, 6)), r.normal(size=(n, 6))
+            nva, pka = R.peaks_of(Fa, 16)
+            nvb, pkb = R.peaks_of(Fb, 16)
+            a = R.align(pka, nva, pkb, nvb, n, r, np.ones(n, bool))
+            d0 = list(R.DELAYS).index(0)
+            ex_h.append(a["hit"][d0] - a["hit_null"][d0])
+            ex_c.append(a["corr"][d0] - a["corr_null"][d0])
+        self.assertLess(abs(np.nanmean(ex_h)), 0.05)
+        self.assertLess(abs(np.nanmean(ex_c)), 0.05)
+
 
 if __name__ == "__main__":
     unittest.main()

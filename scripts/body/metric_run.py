@@ -199,30 +199,52 @@ def ranked(x):
     return r
 
 
+TRIM = 16                                                                                    # tokens cut at both song ends (the widest novelty kernel half-width): edge profiles are not shared with the null
+
+
+def dshift(y, d):
+    """out[k] = y[k + d], NaN where k + d is outside (no wrap)"""
+    out = np.full(len(y), np.nan)
+    if d >= 0:
+        out[:len(y) - d] = y[d:]
+    else:
+        out[-d:] = y[:len(y) + d]
+    return out
+
+
 def align(mot_pk, mot_curve, mus_pk, mus_curve, n, rng, tok_ok, rep_m=None, rep_u=None):
-    """per delay: boundary hit share (real, circular-shift null mean), novelty Pearson (real, null mean, null 2.5/97.5), repetition Spearman (same)"""
-    shifts = [int(rng.integers(10, max(n - 10, 11))) for _ in range(N_CIRC)]
-    mp_ = np.asarray([k for k in mot_pk if tok_ok[k]], int)
-    res = dict(n_mot=len(mp_), n_mus=len(mus_pk))
+    """per delay: boundary hit share (real, circular-shift null mean), novelty Pearson (real, null mean, null 2.5/97.5), repetition Spearman (same).
+    Everything is cut to tokens TRIM..n-TRIM and the null rotates the music inside that interval (rules section 6, amended before any result was reported)."""
+    m = n - 2 * TRIM
+    if m < 30:
+        return None
+    sl = slice(TRIM, n - TRIM)
+    shifts = [int(rng.integers(10, m - 9)) for _ in range(N_CIRC)]
+    ok = np.asarray(tok_ok)[sl]
+    mp_ = np.asarray([k - TRIM for k in mot_pk if TRIM <= k < n - TRIM and tok_ok[k]], int)
+    up = np.asarray([k - TRIM for k in mus_pk if TRIM <= k < n - TRIM], int)
+    xm, ym = np.asarray(mot_curve, float)[sl], np.asarray(mus_curve, float)[sl]
+    res = dict(n_mot=len(mp_), n_mus=len(up))
     hit_r, hit_n, c_r, c_n, c_lo, c_hi, r_r, r_n = [], [], [], [], [], [], [], []
+    x = np.where(ok, xm, np.nan)
+    if rep_m is not None:
+        xr = ranked(np.where(ok, np.asarray(rep_m, float)[sl], np.nan))
+        ru = ranked(np.asarray(rep_u, float)[sl])
     for d in DELAYS:
         def hit(bset):
             if len(mp_) == 0 or len(bset) == 0:
                 return np.nan
             tgt = np.asarray(bset) - d
             return float(np.mean([np.abs(tgt - k).min() <= 1 for k in mp_]))
-        hit_r.append(hit(mus_pk))
-        hit_n.append(np.nanmean([hit((np.asarray(mus_pk) + s) % n) for s in shifts[:100]]) if len(mus_pk) and len(mp_) else np.nan)
-        x = np.where(tok_ok, mot_curve, np.nan)
-        idx = (np.arange(n)[None] - (np.asarray(shifts)[:, None] - d)) % n
-        c_r.append(corr_many(x, np.roll(mus_curve, -d)[None])[0])
-        cn = corr_many(x, mus_curve[idx])
+        hit_r.append(hit(up))
+        hit_n.append(np.nanmean([hit((up + s) % m) for s in shifts[:100]]) if len(up) and len(mp_) else np.nan)
+        c_r.append(corr_many(x, dshift(ym, d)[None])[0])
+        Y = np.stack([dshift(np.roll(ym, s), d) for s in shifts])
+        cn = corr_many(x, Y)
         c_n.append(np.nanmean(cn)), c_lo.append(np.nanpercentile(cn, 2.5)), c_hi.append(np.nanpercentile(cn, 97.5))
         if rep_m is not None:
-            xr = ranked(np.where(tok_ok, rep_m, np.nan))
-            ru = ranked(rep_u)
-            r_r.append(corr_many(xr, np.roll(ru, -d)[None])[0])
-            r_n.append(np.nanmean(corr_many(xr, ru[idx])))
+            r_r.append(corr_many(xr, dshift(ru, d)[None])[0])
+            r_n.append(np.nanmean(corr_many(xr, np.stack([dshift(np.roll(ru, s), d) for s in shifts[:100]]))))
     res.update(hit=np.array(hit_r), hit_null=np.array(hit_n), corr=np.array(c_r), corr_null=np.array(c_n), corr_lo=np.array(c_lo), corr_hi=np.array(c_hi))
     if rep_m is not None:
         res.update(rep=np.array(r_r), rep_null=np.array(r_n))
@@ -260,7 +282,9 @@ def structure(ds, lk, S, ok, rng):
             for kind, curve_fn in (("control", lambda h: peaks_of(S[:m], h)), ("motif", lambda h: novelty_blocks(Xb[:m], h))):
                 nv_m, pk_m = curve_fn(half)
                 for setname, tok_ok in (("ALL", np.ones(m, bool)), ("PASS", ok[:m])):
-                    out[(setname, mname, kind, half)] = align(pk_m, nv_m, pk_u, nv_u, m, rng, tok_ok, rep_m[:m] if half == SCALES[0] else None, rep_u if half == SCALES[0] else None)
+                    a = align(pk_m, nv_m, pk_u, nv_u, m, rng, tok_ok, rep_m[:m] if half == SCALES[0] else None, rep_u if half == SCALES[0] else None)
+                    if a is not None:
+                        out[(setname, mname, kind, half)] = a
     return out
 
 

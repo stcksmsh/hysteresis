@@ -83,6 +83,9 @@ Event time = sample index / 50 s. Per-joint onsets are not defined (E3_j only).
   **200 circular shifts** (>= 10 tokens, seeded 46105) of the music boundaries over the song (chance); excess = real - mean of circular shifts. Novelty-curve Pearson correlation and repetition-curve
   Spearman correlation between motion (control and motif) and music, at each delay, against the same circular-shift null (mean and 95 % band). Bootstrap by song, 2,000, seed 46106.
   Music-side for FineDance reported separately for ear and cortex features.
+  **Amendment (before any result was reported; first run showed an edge artefact, short AIOZ clips gave implausibly large excess):** all boundary/curve statistics are cut to tokens 16..n-16 (16 = widest kernel half-width, so
+  novelty/repetition edge profiles are removed), the null rotates the music inside that interval (no wrap into the edge region), sequences with fewer than 62 tokens give no structure result; the sum of
+  the novelty kernel at the edges is never compared across real and null. Test: unrelated feature streams of a 75-token clip give excess ~0.
 - **Side table: WO43 Step 0c on whole songs.** Controls (vigour, vj, vl, height, sharp, pause_prob, accent_mean, dir_z) against the acoustic token measures of `controls_stats.acoustic` (RMS, spectral flux,
   onset strength, low-band, high-band, centroid, local dynamic range, beat strength for FineDance and for the others now from the new grids), Pearson and Spearman: global, within-song (song mean removed),
   per-song Spearman median/quartiles/share positive (songs with >= 60 tokens), lags -2..+2 tokens (control of token k against measure of token k+L), bootstrap by song (seed 46107, 200).

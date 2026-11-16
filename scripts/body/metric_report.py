@@ -74,7 +74,7 @@ def phase_tables(rs):
                         def f(r, k=0):
                             x = r["phase"].get((st, ty))
                             return None if x is None or x["real"] is None or x["n"] < 30 else x
-                        gk, Rr = by_group(sub, lambda r: (lambda x: None if x is None else np.array([x["real"][0][li], x["real"][1][li], x["n"]]))(f(r)))
+                        gk, Rr = by_group(sub, lambda r: (lambda x: None if x is None else np.array([x["real"][0][li], x["real"][0][li] * np.cos(2 * np.pi * x["real"][1][li]), x["real"][0][li] * np.sin(2 * np.pi * x["real"][1][li]), x["n"]]))(f(r)))
                         _, Rs = by_group(sub, lambda r: (lambda x: None if x is None or x.get("shuf") is None else x["shuf"][0][li])(f(r)))
                         _, Rd = by_group(sub, lambda r: (lambda x: None if x is None or x.get("donor") is None else x["donor"][0][li])(f(r)))
                         if not len(gk):
@@ -82,12 +82,12 @@ def phase_tables(rs):
                             continue
                         ev = float(np.median([r["numbers"]["rate"][ty] for r in sub]))
                         Rg = Rr[:, 0]
-                        vec = Rr[:, 0] * np.exp(2j * np.pi * Rr[:, 1])
+                        vec = Rr[:, 1] + 1j * Rr[:, 2]                                # group mean of the per-sequence mean-resultant vectors (circular quantities are never averaged as numbers)
                         pref = (np.angle(np.nanmean(vec)) / (2 * np.pi)) % 1
-                        spread = float(abs(np.nanmean(np.exp(2j * np.pi * Rr[:, 1]))))
+                        spread = float(abs(np.nanmean(vec / np.maximum(abs(vec), 1e-12))))
                         exs = Rg - Rs if len(Rs) == len(Rg) else np.full(len(Rg), np.nan)
                         exd = Rg - Rd if len(Rd) == len(Rg) else np.full(len(Rg), np.nan)
-                        L.append(f"| {ty if ty[:2] != 'E3' else 'E3 ' + JN[int(ty[3])]} | {len(gk)} | {ev:.0f} | {fmt(boot(Rg))} | {fmt(boot(exs))} | {fmt(boot(exd))} | {pref:.2f} | {spread:.2f} | {1 / np.sqrt(np.nanmedian(Rr[:, 2])):.3f} |")
+                        L.append(f"| {ty if ty[:2] != 'E3' else 'E3 ' + JN[int(ty[3])]} | {len(gk)} | {ev:.0f} | {fmt(boot(Rg))} | {fmt(boot(exs))} | {fmt(boot(exd))} | {pref:.2f} | {spread:.2f} | {1 / np.sqrt(np.nanmedian(Rr[:, 3])):.3f} |")
                     L.append("")
     return L
 
