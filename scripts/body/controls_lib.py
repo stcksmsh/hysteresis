@@ -17,6 +17,11 @@ DIR_MIN = 0.02                    # m/s, below it the direction is the zero vect
 SMOOTH = 5                        # accent smoothing box, samples
 PROX, DIST = (0, 1), (3, 4)       # movement lead: base yaw, shoulder | wrist bend, wrist roll
 ONSET_FRAC, REST_FRAC, REST_N, PAIR_N = 0.25, 0.125, 10, 25
+VERSION = 1                       # 1 = WO43 controls (finalise output unchanged); 2 = BRAIN_SPEC 7.74 controls (WO45, docs/A_RULES.md section 1): finalise adds the "ctl" vector
+ACC_MEAN_MIN = 1e-3               # v2: accent token mean below this (normalised units) = no accent pattern in the token: pattern 1 (flat), flag 0
+CTL_NAMES = ["vigour", "height"] + [f"acc{i}" for i in range(NSLOT)] + ["sharp", "dir_x", "dir_y", "dir_z", "pause", "sharp_ok", "dir_ok", "acc_ok"]
+CTL_DIM = len(CTL_NAMES)          # 18
+CTL_CLIP = 6.0                    # vigour z clipped to +-6 (never reached by train: p99.9 is below 4)
 
 
 def _grad(x):
@@ -125,8 +130,15 @@ def fit_norm(raws):
     return out
 
 
-def finalise(r, norm):
-    """raw_window dict + constants -> the controls per token (arrays with leading NTOK axis)"""
+def finalise(r, norm, version=None):
+    """raw_window dict + constants -> the controls per token (arrays with leading NTOK axis); version 2 adds key "ctl" (ctl_v2)"""
+    c = _finalise1(r, norm)
+    if (VERSION if version is None else version) == 2:
+        c["ctl"] = ctl_v2(c)
+    return c
+
+
+def _finalise1(r, norm):
     zs = [(np.log(r[k] + EPS_V) - norm[k]["median"]) / norm[k]["mad"] for k in ("vj", "vl")]
     vig = (zs[0] * norm["vigour"]["loadings"][0] + zs[1] * norm["vigour"]["loadings"][1]) / norm["vigour"]["sd"]
     u = r["a_slots"] / norm["accent"]["A"] + r["j_slots"] / norm["accent"]["J"]
@@ -135,3 +147,18 @@ def finalise(r, norm):
                 height=np.clip((r["z_mean"] - Z_LO) / (Z_HI - Z_LO), 0, 1), z_mean=r["z_mean"],
                 accent_slots=u, accent_mean=mean_u, accent_peak=np.where(mean_u > 0, u.max(1) / np.maximum(mean_u, 1e-12), np.nan),
                 sharp=r["sharp"], dir=r["dir"], dir_ok=r["dir_ok"], pause_prob=r["pause_prob"], activity=r["activity"], lead=r["lead"], acc_rms=r["acc_rms"])
+
+
+def ctl_v2(c):
+    """finalise() dict (any leading shape) -> v2 control vector (..., CTL_DIM). Rules (docs/A_RULES.md section 1): accent = slot / token mean (8 values, mean 1; a token whose mean
+    is < ACC_MEAN_MIN gets the flat pattern and acc_ok 0); sharp undefined (acceleration RMS < ACC_FLOOR, NaN) -> 0 and sharp_ok 0; direction unit vector or zero with dir_ok 0 (flag
+    from the stored dir_ok); height in [0, 1]; pause probability in [0, 1]. Activity and accent level are not controls."""
+    m = np.asarray(c["accent_mean"], float)
+    ok_a = m >= ACC_MEAN_MIN
+    pat = np.where(ok_a[..., None], np.asarray(c["accent_slots"]) / np.maximum(m, ACC_MEAN_MIN)[..., None], 1.0)
+    sh = np.asarray(c["sharp"], float)
+    ok_s = np.isfinite(sh)
+    out = np.concatenate([np.clip(np.asarray(c["vigour"], float), -CTL_CLIP, CTL_CLIP)[..., None], np.asarray(c["height"], float)[..., None], pat,
+                          np.where(ok_s, sh, 0.0)[..., None], np.asarray(c["dir"], float), np.asarray(c["pause_prob"], float)[..., None],
+                          ok_s[..., None], np.asarray(c["dir_ok"])[..., None] > 0, ok_a[..., None]], -1)
+    return out.astype(np.float32)
