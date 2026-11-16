@@ -94,7 +94,16 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-17 ~00:35 (clock) — newest
+## UPDATE 2026-11-17 ~01:00 (clock) — newest
+
+A READY d3b0d94 (agent 1 [8fd2af]) reviewed, NOT merged. Good: A jitter at human level (lamp p_gt3 ratio to HJ 1.05-1.10, frozen ~0),
+substitution follows requests (own 0.41 vs other 0.81), intervention vigour 2.5 / height 4.5 / sharp 0.6-0.7 sd with cross-talk (vigour ->
+dirchg 1.3, basespeed 1.6; sharp -> acccom -0.2..-0.4), residual stage MI 1.10 nats / decoded effect 0.167, motif ablation lowers 4 s
+family repeat (0.72-0.91 of human). Defects sent to agent 1 (fix 1): pause intervention never ran (p10=p90=0), S-B V1/V2 sharpness
+match on requests not realised, coherence ratio of per-song ratios, per-start values not saved. Click/flash check at 8769 waiting for
+Kosta. Planner brief (BEATV + A + 40-epoch cap still improving) after fix 1.
+
+## UPDATE 2026-11-17 ~00:35 (clock)
 
 Kosta: audio clicks hard to hear -> VISUAL flash clips (agent 2, CLICKS VISUAL READY 23e1391, merged into body). Old audio session (1
 answer) moved to beatv/clicks/session_2026-11-17_discarded_audio (not counted). NEW session SERVED http://127.0.0.1:8769/ unit
