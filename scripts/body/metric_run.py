@@ -259,7 +259,8 @@ def structure(ds, lk, S, ok, rng):
             nv_u, pk_u = peaks_of(Fm, half)
             for kind, curve_fn in (("control", lambda h: peaks_of(S[:m], h)), ("motif", lambda h: novelty_blocks(Xb[:m], h))):
                 nv_m, pk_m = curve_fn(half)
-                out[(mname, kind, half)] = align(pk_m, nv_m, pk_u, nv_u, m, rng, ok[:m], rep_m[:m] if half == SCALES[0] else None, rep_u if half == SCALES[0] else None)
+                for setname, tok_ok in (("ALL", np.ones(m, bool)), ("PASS", ok[:m])):
+                    out[(setname, mname, kind, half)] = align(pk_m, nv_m, pk_u, nv_u, m, rng, tok_ok, rep_m[:m] if half == SCALES[0] else None, rep_u if half == SCALES[0] else None)
     return out
 
 
