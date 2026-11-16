@@ -94,7 +94,13 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-16 ~15:50 (clock) — newest
+## UPDATE 2026-11-16 ~16:10 (clock) — newest
+
+Control viewing DONE and scored (body 1857bd1, docs/CONTROLS_VIEWING_RESULT.md): 11/12 correct, 1 same (P10 continuity), 0 wrong;
+vigour/height/sharpness 3/3, continuity 2/3. Kosta read "sharper" as "energetic/flicky"; several excerpts on unmusical/quiet bits.
+Server hyst-wo43-view-1116 STOPPED. Look check (8768, hyst-wo42-look-1116) still running, 0 answers. WO45/WO46 still NOT SENT.
+
+## UPDATE 2026-11-16 ~15:50 (clock)
 
 7.74 RECORDED (body 04ffe1a): accent = pattern only, continuity = pause only, joining closed (A1), diagnostic before A, A + whole-song
 0c in parallel, lookahead selection planned (not built), 7.72 replaced by Q6. KOSTA SESSIONS SERVED (loopback):
