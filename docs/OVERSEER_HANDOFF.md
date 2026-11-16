@@ -94,7 +94,17 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-16 23:50 (clock) — newest
+## UPDATE 2026-11-17 ~00:15 (clock) — newest
+
+WO47 BEATV READY 1f632f8 VERIFIED (13 tests; overseer: grid 8-beat residual project 79 ms vs librosa 8.4 ms confirmed; raw BAS 0.218-0.227
+= published 0.2120 (Lodge CVPR 2024 Table 1, overseer fetched) = own chance 0.214-0.225; no sync offset; yaw "lock" = period lock in
+fast-rotation windows, song-specific phase, overseer's 19-song recompute not significant) and MERGED (body 92fb144). V4 click check
+SERVED http://127.0.0.1:8769/ unit hyst-wo47-clickview, session /secondary/hyst-data/body/beatv/clicks/session_2026-11-17 (20 singles,
+seed 47201; key/answers 404 checked). Section-boundary spot check (metric/spotcheck, wav excerpts + boundary times) NOT served: no
+question form yet. Agent 1 WO45B checks running (seed 2/3 at 00:04), SB CLIPS READY 1250e2c. Next: A report verify; combined planner
+brief (BEATV + A + cap-while-improving).
+
+## UPDATE 2026-11-16 23:50 (clock)
 
 A TRAINING DONE (agent 1 old session hit usage limit after addendum 1 6f2eb5f + training): 3 seeds hit the 40-epoch cap, still improving
 (val 18.417 / 18.469 / 18.446; no-controls 21.7-21.8; code1 4.84 vs chance 6.93). New sessions: agent 1 [8fd2af], agent 2 [550216].
