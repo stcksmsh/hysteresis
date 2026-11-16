@@ -94,7 +94,15 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-16 ~19:15 (clock) — newest
+## UPDATE 2026-11-16 ~19:30 (clock) — newest
+
+7.75 + 7.77 RECORDED (body e36867e). GO for A sent to agent 1 [9fd0d6] with addendum items (direction-change rate + base-rotation speed;
+per-song style sampling, sharpness-matched V1 vs V2 in S-B; excerpt rule; posture/gesture split check = overseer addition, report-only,
+not explicitly ruled). WO47 prompt docs/BUILDER_PROMPT_WO47_BEAT_VERIFY.md (V2 BAS anchor + V3 sync first, then V1 local locking, V4
+click material) written, NOT SENT (agent 2 to be cleared?). Kosta to-do: AIST++ registration; 10-song spot check + click check (V4) when
+material ready.
+
+## UPDATE 2026-11-16 ~19:15 (clock)
 
 WO46 METRIC READY 7bab263 + SPOTCHECK READY, VERIFIED (19 tests pass; overseer independent checks: grids on music, ear onset aligned,
 realised and RAW FineDance mocap both weakly phase-locked ~ chance; scripts in scripts/body/overseer/) and MERGED (body cc0ff9e, a1df46a).
