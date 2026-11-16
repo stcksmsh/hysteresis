@@ -2769,3 +2769,73 @@ Standing rules unchanged.
 4. **Overseer notes (operational, not rulings):** the private page (claude.ai artifact NcL5N9rcfNCRfwgachwCFx, 0 answers) is closed for use; deleting it needs Kosta to confirm on the laptop (not possible over Remote Control); the local
    session folder `t1b/labels_session_2026-11-15` and the clips stay on disk unused. WO41 step 5's label clips and the T2 wait for labels
    are void; T2 no longer waits for labels.
+
+### 7.73 Redesign: control representation first; A = motor grammar conditioned on measured controls, B = listener predicting controls; 2026-11-16, via Kosta + planner (refined after external review)
+
+Recorded as 7.73 because no earlier 7.73 was recorded; this replaces the planner's earlier redesign draft (never received by the
+overseer). Planner text, verbatim:
+
+KEPT from 7.73: root cause (E1 asked to predict WHICH move; music determines HOW/WHEN); A = motor grammar trained on all retargeted
+motion, conditioned on control signals measured from the motion; B = listener predicting those controls from music; teacher tunes B only;
+A frozen after training. Dropped: E1b and V-fam/V-data/V-hd.
+
+NEXT MILESTONE = THE CONTROL REPRESENTATION (before any A or B training).
+
+Step 0a, define (fixed in rules before computing), per 0.5 s token, from REALISED or target trajectories of retargeted human motion:
+- vigour: angular speed RMS over joints AND lamp (end-effector) speed RMS, kept separately; combined vigour = first principal component;
+  global robust normalisation from training data.
+- height: absolute lamp height normalised to the usable workspace (also replaces posture-as-change; posture vocabulary rebuilt on
+  absolute posture).
+- accent pattern: continuous motion-accent strength (normalised lamp acceleration + jerk, smoothed) aggregated into 8 sub-slots (62.5 ms).
+- sharpness: dimensionless, independent of speed: share of high-frequency acceleration energy in total movement energy (builder states
+  band edges).
+- direction: mean lamp velocity direction (unit 3-D vector, workspace frame).
+- continuity: movement-activity measure + pause probability (lamp speed below a stated threshold for > 0.25 s).
+
+Measured only, not yet a control: movement lead (proximal vs distal onset order).
+Slow structure (separate, not per-token controls): phrase start/end probability, repetition relation, contrast; see Step 0c.
+
+Step 0b, validate numerically on FineDance + PhantomDance + Motorica (after Kosta's look check) + AIOZ: distributions per dataset,
+pairwise correlations between controls (report any |r| > 0.7 as redundant), within-song vs between-song variance.
+
+Step 0b', Kosta's visual validation (~15 min, blind): for each of vigour, height, sharpness, continuity, accent density: 3 pairs of real
+retargeted human clips (rendered on the arm) at low vs high values of that control with the others matched where possible; question
+"which looks [bigger/faster | higher | sharper | more continuous | more accented]?" + "same". A control that Kosta cannot see is dropped or
+redefined.
+
+Step 0c, music side (report-only diagnostics on HUMAN data): relation of each control to acoustic measures (RMS, spectral flux, onset
+strength, low/high band energy, spectral centroid, local dynamic range, beat strength): global, within-song (song mean removed), per song,
+and over lags -1..+1 s. Musical structure layer: beat (existing grid), onsets, phrase boundaries and repetition from a self-similarity
+(novelty) analysis of the cortex/ear features; no source separation, no instrument labels (pending Kosta's OK).
+
+THEN (each reported before the next):
+- A: GRU 256 grammar over gesture codes + absolute posture; inputs: previous tokens, controls for the current token and the next 1-2 s
+  (small temporal convolution), dataset/domain embedding. Loss: token likelihood + auxiliary control loss (expected controls of the
+  predicted code distribution, using per-code control statistics precomputed from the vocabulary, vs requested). Control dropout 15 %
+  (whole vector); control corruption sampled from realistic joint control distributions. Analyse residual-code utilisation and
+  conditional entropy before keeping the residual stage in A.
+- A checks: intervention matrix (same start, vary one control at a time incl. held-out combinations; output controls must move in the
+  expected direction, report effect sizes); S-B blind look: human vs A with own oracle controls vs other performance's controls vs
+  shuffled vs constant.
+- Control substitution: same music, several control sequences into A; does A express the differences.
+- B: listener (frozen cortex + ear + structure layer) predicts a categorical over a learned joint CONTROL vocabulary (k-means on control
+  vectors, size by the 7.61 rule) per token, plus phrase events at the slow scale. S-A comparisons: true vs tempo-matched swapped vs random
+  music, persistence baseline (previous control), ear-only, without cortex. Bootstrap by song.
+- S-C: true music -> B -> A vs swapped music vs shuffled B controls vs random plausible controls vs oracle controls; several samples per
+  condition; Kosta blind, feeling labels on clear-feeling songs.
+
+Parallel task: chunk joining (decode whole token sequences with overlap) so re-joined human chunks reach human-level high-frequency power;
+report before S-B.
+
+Avoid: training B on unpaired data; independent sampling of controls; artist feedback into A; GAN critic.
+Kosta to-do: 12-clip look check (PhantomDance/Motorica); later the ~15 min control validation.
+Standing rules unchanged.
+
+**Overseer notes (operational, not rulings):**
+- 7.72 (the answer to `docs/PLANNER_BRIEF_E1_RESULTS.md`) never reached the overseer and is not recorded. Q1 of that brief is answered by
+  this redesign. Q2 (jitter measured against the re-joined-chunk level), Q3 (posture drift report-only), Q4 (no T3) and Q5 (AIOZ held-out
+  skipped) have no recorded answer; the verbatim 7.72 text replaces this note when it arrives.
+- Work split for the next milestone: WO43 (agent 1) = Steps 0a, 0b, 0c and the clip candidates for 0b' (not served; the overseer serves
+  Kosta's session). WO44 (agent 2) = the parallel chunk-joining task. Nothing of A or B is trained under either.
+- Step 0b on PhantomDance and Motorica uses the WO42 T0 outputs (`/secondary/hyst-data/body/t0_{phantom,motorica}/`); their numbers are
+  computed and reported separately and marked "look check pending" until Kosta has done the 12-clip look check (7.69.3).
