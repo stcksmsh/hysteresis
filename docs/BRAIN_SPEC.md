@@ -2839,3 +2839,46 @@ Standing rules unchanged.
   Kosta's session). WO44 (agent 2) = the parallel chunk-joining task. Nothing of A or B is trained under either.
 - Step 0b on PhantomDance and Motorica uses the WO42 T0 outputs (`/secondary/hyst-data/body/t0_{phantom,motorica}/`); their numbers are
   computed and reported separately and marked "look check pending" until Kosta has done the 12-clip look check (7.69.3).
+
+### 7.74 Controls fixed (accent pattern, pause), joining closed, whole-song 0c, lookahead selection planned; 7.72 replaced; 2026-11-16, via Kosta + planner (answering `docs/PLANNER_BRIEF_CONTROLS.md`)
+
+Planner text, verbatim:
+
+Q6 / 7.72 (short, replaces the lost reply): record E1 results as reported; all STOP rules fired; posture-as-accumulated-change was a
+planner spec error (drift); no Kosta viewing of E1; AIOZ held-out skipped. All other parts of the lost reply are superseded by 7.73.
+
+Q1 (a): accent control = PATTERN only (8 sub-slots divided by their token mean). Vigour carries the level. Accent pairs leave the 0b'
+viewing.
+
+Q2 (a): continuity control = pause probability only; activity dropped.
+
+Q3 (a): serve the 12 pairs (vigour, height, sharpness, continuity) to Kosta now; report that vigour pairs also differ in accent level by
+1.5-1.6 sd, so a "seen" vigour counts as vigour + accent level.
+
+Q4 (a): chunk-joining task closed (target met by A1 and B). Use decoder A1; re-joined human A1 is the jitter reference in S-B. Before A,
+report-only: contribution of posture knots vs gesture codes to lamp power above 3 Hz and to the frozen share (decoded retrieval with human
+posture knots, and vice versa). Record the finding: the model's excess is in token sequences that do not form one human movement, not in
+the joins.
+
+Q5 (c): proceed to A; in parallel on separate cores, Step 0c on whole songs (not 20 s windows), including phrase-scale boundary alignment.
+B's S-A results are reported against these human values, not an absolute bar. Record: within-song control-music relations in human data
+are weak (|rho| <= 0.19 at token scale), so the datasets can teach B little; the teacher stage is expected to carry more of the musical
+shaping.
+
+PLANNED STAGE, recorded, not a build order (Kosta's proposal): LOOKAHEAD SELECTION between B and A (receding-horizon planning). Each 0.5 s:
+sample N futures (e.g. 32) of 2-4 s from A given B's control distribution; score each by A log-likelihood (human-likeness) + match to B's
+controls over the horizon (later horizon steps down-weighted) + kinematic feasibility (limits, clearance) + later the teacher preference
+model; sample the next token from the top-k futures (not argmax, to keep variety); execute one token; compare realised vs predicted state;
+replan. Brain mapping (simplified): basal ganglia selection/gating among cortically simulated candidates; cerebellum forward model for
+predicted vs realised state. Built only after S-B shows A follows controls; evaluated against plain sampling.
+
+Kosta to-do: 12-clip PhantomDance/Motorica look check; the 12-pair control viewing.
+Standing rules unchanged.
+
+**Overseer notes (operational, not rulings):**
+- The 7.73 overseer note on the missing 7.72 is closed by Q6 above.
+- Controls as of 7.74 (definitions in `docs/CONTROLS_RULES.md` with addenda 1-2): vigour (combined, level), height (v2p bounds
+  [-0.569, 0.770] m), accent pattern (8 sub-slots / token mean), sharpness, direction, pause probability. Activity and accent level are not
+  controls.
+- A trains on retargeted motion. PhantomDance and Motorica enter only after Kosta's 12-clip look check (7.69.3); until then FineDance +
+  AIOZ.
