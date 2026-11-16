@@ -9,3 +9,4 @@
 - A ESTIMATE: 3 seeds in parallel, 2 threads each, cores 6-13 (refine job sharing them): 74 / 105 / 88 s per epoch (206 steps of 64 windows, 13,179 train / 1,397 validation windows). Epoch cap 40 = about 70 min worst case; early stopping expected well before. Peak memory 0.58 GB per run (limit 10G). Total about 0.5-1.2 h.
 - FOR USER: see docs/A_RULES.md FOR USER list. STOPPED at A ESTIMATE, waiting for the overseer's GO.
 - REFINE DONE (docs/CONTROLS_REFINE_REPORT.md, 300 windows per dataset, report only, nothing adopted).
+- SB CLIPS READY: 6 FineDance excerpts x 7 clips (human, A own / other / shuffled / constant, sharpness-matched V1 / V2) rendered to grammar/look/clips, manifest grammar/look/manifest.json (not served). Excerpt rule: RMS >= song median, not in first/last 10 s.
