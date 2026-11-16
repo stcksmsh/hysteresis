@@ -17,6 +17,15 @@ PRE = 150
 
 
 def sim_file(args):
+    try:
+        return _sim_file(args)
+    except Exception as e:                                                     # logged with the name, run goes on
+        with open(OUT.parent / "sim_failed.txt", "a") as f:
+            f.write(f"{args[0]} {args[1].name} {type(e).__name__}: {e}\n")
+        return args[1].name, -1.0
+
+
+def _sim_file(args):
     ds, path = args
     dst = OUT / ds / path.name
     if dst.exists():
@@ -37,6 +46,8 @@ def sim_file(args):
     G, _ = P.guard(np.concatenate([pre, tg]) - sh)
     q50, _ = FX.simulate_goals(M.spinal(G))
     q50 = np.asarray(q50, float)
+    if q50.ndim != 2 or q50.shape[1] != 5 or len(q50) < 100:
+        raise ValueError(f"simulate_goals returned shape {q50.shape} for targets {tg.shape}")
     lamp = R.fk_points(q50)[:, 5]
     dst.parent.mkdir(parents=True, exist_ok=True)
     tmp = dst.with_suffix(".tmp.npz")
