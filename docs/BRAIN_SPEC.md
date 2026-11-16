@@ -2933,3 +2933,61 @@ Standing rules unchanged.
 - The 10-song by-ear spot check is Kosta's; the builder prepares the songs and boundary times, the overseer serves them.
 - Work split: WO46 (agent 2) = the 7.74 Q4 posture-vs-gesture diagnostic, then step 1 (replacing the 7.74 Q5 whole-song 0c plan, whose
   control-vs-acoustics part is folded into step 1). WO45 (agent 1) = A with point 2, plus point 3 report-only before training.
+
+### 7.75 Viewings: controls validated by eye; PhantomDance + Motorica enter A; V1/V2 as style; energy = vigour + sharpness; excerpt choice; GO for A; 2026-11-16, via Kosta + planner (answering `docs/PLANNER_BRIEF_VIEWINGS.md` and `docs/PLANNER_BRIEF_DIAG.md` Q1)
+
+Planner text, verbatim:
+
+Controls validated by eye: 11/12 correct, 0 wrong (vigour 3/3, height 3/3, sharpness 3/3, continuity 2/3 + 1 same). Look check:
+PhantomDance 6/6 yes, Motorica 5 yes + 1 partly ("tiny"). Kosta confirms: PhantomDance + Motorica enter A.
+
+Q1 (a, modified): keep V1, V2 and mirrors in A; copy (V1/V2) part of A's domain/style embedding. NO V1 default: style chosen per song at
+generation (sampled), sharpness from the controls (B, later the teacher). S-B reports sharpness-matched V1 vs V2; if V2 still looks flicky
+at matched low sharpness, re-filter V2 (needs a ruling). Record: V1/V2 sharpness difference comes from the T0 low-pass cutoffs (2.50 vs
+5.75 Hz), not arm proportions.
+
+Q2 (a): sharpness stays its own control; perceived energy = vigour + sharpness. Viewings ask "more abrupt / flicky?".
+
+Q3 (a): viewing excerpts where song RMS >= its own median, not in the first/last 10 s, same excerpt across conditions; S-C music-fit
+viewings add 1-2 deliberately quiet excerpts per session, flagged.
+
+Q4 (a): finding 5 open; A's intervention matrix also reports direction-change rate and base-rotation speed.
+
+Diagnostic brief Q1: GO for A's training (3 seeds) as 7.73/7.74/7.76 point 2.
+
+### 7.77 Beat coupling not accepted as a finding yet: verification V1-V4; B's first targets; cortex only as a variant; 2026-11-16, via Kosta + planner (answering `docs/PLANNER_BRIEF_METRIC.md`)
+
+Planner text, verbatim:
+
+Planner reading: no beat-phase locking in professional dance data contradicts published ground-truth beat-alignment results and is
+consistent with a MEASUREMENT cause: a grid tempo error of up to 4 % drifts about 2 beats per minute, which erases whole-song phase locking
+while keeping power at the beat period (observed). Not accepted as a finding yet.
+
+Verification (report-only, before B's accent design):
+- V1 local phase locking: per song, sliding windows of 8 beats with local tempo/phase re-estimated per window (from the grid AND from
+  librosa), event phase concentration vs shuffled within-window controls; median over windows and songs, bootstrap by song.
+- V2 published anchor: compute the standard beat-alignment score (BAS, as defined in the FineDance / Bailando evaluation code; state the
+  source) on RAW FineDance ground truth and on our retargeted realised motion; compare with the value FineDance reports for ground truth. If
+  our raw-data value is far from the published one, the pipeline is suspect; find why before anything else.
+- V3 per-file sync: per FineDance file, cross-correlation of motion energy with the onset envelope over shifts -1..+1 s; report the offset
+  distribution and any drift between first and last minute.
+- V4 Kosta's grid click check (Q2 a), 10 songs, "are the clicks on the beat?".
+
+Q1 (c, modified): B's first version predicts tempo (event rate per beat), slow controls (vigour, height, sharpness, pause over 2-8 s) and
+phrase-level change probability. Beat-relative accent timing is NOT decided: after V1-V4, either learned (if locking appears) or an
+authored rule tuned by the teacher, stated as authored in every write-up. AIST++ check when Kosta's registration arrives.
+Q2 (a). Q3 (a): B's first version uses ear features + beat grid + onset/density features; the cortex enters only as a variant that must
+beat it. Record for Kosta: if the cortex adds nothing to B either, it does not drive the dance and must not be shown on the monitor as
+driving it.
+Q4 (a): yaw lock report-only.
+Standing rules unchanged.
+
+**Overseer notes (operational, not rulings):**
+- Fact for V1's interpretation: the grids are per-beat lists from the tracker (local inter-beat intervals), not one constant tempo, so a
+  global tempo error does not accumulate along the song. The overseer's check with librosa beats in 20 s windows (25 FineDance songs,
+  realised lamp-speed minima) gave R 0.177 against 0.159 / 0.165 with shifted beats; raw FineDance mocap gave whole-song R 0.079 against
+  0.060. V1-V3 are still run as ruled; these numbers go next to them.
+- V2 needs the published BAS code: no download is allowed for builders. The builder reimplements BAS from the paper's definition (FineDance /
+  Bailando, stated with its formula and sigma) and the overseer checks it against the published formula; the published ground-truth value
+  is quoted from the paper with its citation. If the code itself is needed, that is a download for Kosta to approve.
+- V4 material (clicks on the grid) is prepared by the builder and served by the overseer, together with the 10-song section spot check.
