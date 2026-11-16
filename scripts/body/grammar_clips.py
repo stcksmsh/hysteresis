@@ -123,11 +123,15 @@ def cmd_work(seed):
                 tok = {a: t[a][0].numpy() for a in t}
                 q, lamp = realise(tok, GD.COPIES[cp])
                 sh = C.raw_window(q, lamp)["sharp"][s:s + EXC]
-                pool[(cp, j)] = (q, float(np.nanmean(sh)))
+                pool[(cp, j)] = (q, float(np.nanmean(sh)), tok["c1"])
         S.te.copy[ii[k]] = int(z["copy"][i])
         best = min(((abs(pool[(0, a)][1] - pool[(1, b)][1]), a, b) for a in range(K) for b in range(K)))
         qs["P"], qs["Q"] = (pool[(0, best[1])][0], "V1"), (pool[(1, best[2])][0], "V2")
-        sharps = dict(P=pool[(0, best[1])][1], Q=pool[(1, best[2])][1], abs_diff=best[0])
+        v1s, v2s = [pool[(0, a)][1] for a in range(K)], [pool[(1, a)][1] for a in range(K)]
+        rq = own[k, s:s + EXC]
+        sharps = dict(P=pool[(0, best[1])][1], Q=pool[(1, best[2])][1], abs_diff=best[0], matched_on="realised sharpness of the realised q50 of each candidate (token mean over the excerpt)",
+                      requested_sharp_own_controls=float(rq[rq[:, 15] > 0, 10].mean()) if (rq[:, 15] > 0).any() else None, pool_realised_sharp_v1=v1s, pool_realised_sharp_v2=v2s,
+                      pool_mean_v1=float(np.mean(v1s)), pool_mean_v2=float(np.mean(v2s)), n_pairs_searched=K * K, code1_tokens_differ_share_v1_vs_v2_sample0=float((pool[(0, 0)][2] != pool[(1, 0)][2]).mean()))
         wav = FD / "music_wav" / f"{g.split('_', 1)[1]}.wav"
         for c, (q, var) in qs.items():
             cid = f"S{k + 1:02d}{c}"

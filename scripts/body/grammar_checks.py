@@ -113,7 +113,8 @@ class Setup:
         tr = GD.load("train")
         raw = tr["ctl"].reshape(-1, GD.CD).astype(np.float64)
         v = GD.valid_mask(raw)
-        self.q = {j: np.percentile(raw[v[:, j], j], [10, 90]) for j in (0, 1, 10, 14)}
+        self.q = {j: np.percentile(raw[v[:, j], j], [10, 90]) for j in (0, 1, 10)}
+        self.q[14] = np.array([0.0, 1.0, float(np.percentile(raw[:, 14], 99))])      # addendum 2: pause low 0, high 1.0, extra level train p99
         self.tr_sd = raw.std(0)
         te = GT.Data(("validation", "test"), self.stats, self.voc)
         self.te = te
@@ -202,6 +203,19 @@ def boot(vals, groups, rng=None):
     return [float(sm.mean()), float(np.percentile(b, 2.5)), float(np.percentile(b, 97.5))]
 
 
+def boot_ratio(num, den, groups):
+    """ratio of the means over songs (per-song means first) with a song-bootstrap interval of the ratio (addendum 2.3)"""
+    rng = np.random.default_rng(SEED_BOOT)
+    gs = np.unique(groups)
+    sn = np.array([np.nanmean(np.asarray(num, float)[groups == g]) for g in gs])
+    sd = np.array([np.nanmean(np.asarray(den, float)[groups == g]) for g in gs])
+    m = np.isfinite(sn) & np.isfinite(sd)
+    sn, sd = sn[m], sd[m]
+    ix = rng.integers(0, len(sn), (NB, len(sn)))
+    b = sn[ix].mean(1) / sd[ix].mean(1)
+    return [float(sn.mean() / sd.mean()), float(np.percentile(b, 2.5)), float(np.percentile(b, 97.5))]
+
+
 def run_sims(pool, S, toks, tag, log):
     """toks: dict of (n, 40) tensors/arrays for the starts; each start repeated NSAMP times upstream -> list of sim_job results"""
     n = len(toks["c1"])
@@ -245,10 +259,14 @@ def check_all(seed, procs, log):
     S = Setup(seed)
     n = len(S.idx)
     res = {}
+    V = {}
     OUT.mkdir(exist_ok=True)
     rep = lambda x: np.concatenate([x] * NSAMP)
     rep_t = lambda t: {k: torch.cat([v] * NSAMP) for k, v in t.items()}
     with mp.get_context("spawn").Pool(procs, initializer=worker_init) as pool:
+
+        def keep(name, sm):
+            V[f"{name}__wm"], V[f"{name}__ws"], V[f"{name}__tm"] = win_meas(sm), sm["ws"], sm["tm"]
 
         def condition(name, raw):
             cn = S.to_cn(raw)
@@ -256,6 +274,7 @@ def check_all(seed, procs, log):
             toks = {k: torch.cat([t[k] for t in toks]) for k in toks[0]}
             r = run_sims(pool, S, {k: v.numpy() for k, v in toks.items()}, name, log)
             sm = summarise(r, S, n)
+            keep(name, sm)
             sm["tok"] = toks
             log(f"{name} done")
             return sm
@@ -265,7 +284,9 @@ def check_all(seed, procs, log):
         ii = torch.from_numpy(S.idx)
         hum_tok = {k: np.concatenate([getattr(d, k)[ii].numpy()] * NSAMP) for k in ("c1", "c2", "v", "p1", "p2")}
         hj = summarise(run_sims(pool, S, hum_tok, "HJ", log), S, n)
+        keep("HJ", hj)
         base = condition("own", S.raw)
+        V["groups"], V["dsid"], V["idx"], V["human_raw_ctl"] = np.array([str(g) for g in S.groups]), d.z["dsid"][S.idx], S.idx, S.raw
         res["groups"] = [str(g) for g in S.groups]
         res["dsid"] = d.z["dsid"][S.idx].tolist()
         human_meas = ctl_measures(S.raw)
@@ -299,7 +320,12 @@ def check_all(seed, procs, log):
         for c in CTLS:
             lo, hi = condition(f"iv_{c}_lo", with_control(raw0, c, 0)), condition(f"iv_{c}_hi", with_control(raw0, c, 1))
             diff = win_meas(hi) - win_meas(lo)
+            V[f"iv_{c}__diff"] = diff / sd_h[None]
             iv[c] = dict(effect={m: boot(diff[:, k] / sd_h[k], S.groups) for k, m in enumerate(MEAS)})
+        hi99 = condition("iv_pause_p99", with_control(raw0, "pause", 2))
+        diff99 = win_meas(hi99) - V["iv_pause_lo__wm"]
+        V["iv_pause_p99__diff"] = diff99 / sd_h[None]
+        iv["pause_high_p99"] = dict(effect={m: boot(diff99[:, k] / sd_h[k], S.groups) for k, m in enumerate(MEAS)})
         res["intervention"] = iv
         combos = (("vigour", "height"), ("vigour", "sharp"), ("height", "pause"), ("sharp", "pause"))
         cb = {}
@@ -309,6 +335,8 @@ def check_all(seed, procs, log):
                 for lb in (0, 1):
                     ms[(la, lb)] = win_meas(condition(f"cb_{a}{la}_{b}{lb}", with_control(with_control(raw0, a, la), b, lb)))
             ka, kb = MEAS.index({"sharp": "sharp"}.get(a, a)), MEAS.index({"sharp": "sharp"}.get(b, b))
+            for (la, lb), m_ in ms.items():
+                V[f"cb_{a}{la}_{b}{lb}__wm"] = m_
             cb[f"{a}x{b}"] = dict(**{f"effect_{a}_at_{b}_{'lo' if lb == 0 else 'hi'}": boot((ms[(1, lb)][:, ka] - ms[(0, lb)][:, ka]) / sd_h[ka], S.groups) for lb in (0, 1)},
                                   **{f"effect_{b}_at_{a}_{'lo' if la == 0 else 'hi'}": boot((ms[(la, 1)][:, kb] - ms[(la, 0)][:, kb]) / sd_h[kb], S.groups) for la in (0, 1)})
         res["combinations"] = cb
@@ -341,6 +369,7 @@ def check_all(seed, procs, log):
             for k2, o2 in outs.items():
                 realised = ctl_measures(o2["ctl"].mean(0))[:, HIST:] if False else np.nanmean(np.stack([ctl_measures(c_) for c_ in o2["ctl"]]), 0)[:, HIST:]
                 err = np.nanmean(np.abs(req - realised) / np.maximum(S.tr_sd[[0, 1, 10, 14, 13, 13]][None, None], 1e-6) * 1.0, (1, 2))
+                V[f"sub_err__request_{k}__output_{k2}"] = err
                 sub[f"request_{k}__output_{k2}"] = dict(std_abs_err=boot(err, S.groups))
             if k != "constant":
                 realised = np.nanmean(np.stack([ctl_measures(c_) for c_ in outs[k]["ctl"]]), 0)[:, HIST:]
@@ -353,6 +382,7 @@ def check_all(seed, procs, log):
                         if m.sum() > 5 and a_[m].std() > 1e-9 and b_[m].std() > 1e-9:
                             cs.append(np.corrcoef(a_[m], b_[m])[0, 1])
                     rr.append(np.mean(cs) if cs else np.nan)
+                V[f"sub_pearson__request_{k}"] = np.array(rr)
                 sub[f"request_{k}__pearson_with_own_request"] = boot(np.array(rr), S.groups)
         res["substitution"] = sub
 
@@ -362,6 +392,8 @@ def check_all(seed, procs, log):
         mix["A_posture_human_gesture"] = {**{k: hum_tok[k] for k in ("c1", "c2", "v")}, "p1": tk["p1"].numpy(), "p2": tk["p2"].numpy()}
         mix["human_posture_A_gesture"] = {**{k: tk[k].numpy() for k in ("c1", "c2", "v")}, "p1": hum_tok["p1"], "p2": hum_tok["p2"]}
         mixr = {k: summarise(run_sims(pool, S, v, k, log), S, n) for k, v in mix.items()}
+        for k_, v_ in mixr.items():
+            keep(k_, v_)
         conds = dict(A=base, HJ=hj, **mixr)
         jf = {}
         for k, sm in conds.items():
@@ -397,7 +429,11 @@ def check_all(seed, procs, log):
         coh_r = {}
         for name, ctlv, c1 in (("A", base["ctl"].mean(0), base["tok"]["c1"][:n_].numpy()), ("A_motif_ablated", abl["ctl"].mean(0), abl["tok"]["c1"][:n_].numpy())):
             o = coh(ctlv, c1)
-            coh_r[name] = {k: dict(value=boot(v, S.groups), ratio_to_human=boot(v / np.where(np.abs(hum_c[k]) > 1e-9, hum_c[k], np.nan), S.groups)) for k, v in o.items()}
+            for k, v in o.items():
+                V[f"coh__{name}__{k}"] = v
+            coh_r[name] = {k: dict(value=boot(v, S.groups), ratio_to_human=boot_ratio(v, hum_c[k], S.groups)) for k, v in o.items()}
+        for k, v in hum_c.items():
+            V[f"coh__human__{k}"] = v
         coh_r["human"] = {k: dict(value=boot(v, S.groups)) for k, v in hum_c.items()}
         res["coherence"] = coh_r
 
@@ -440,6 +476,7 @@ def check_all(seed, procs, log):
         res["residual"] = dict(stage2_codes_used_share=float((p2 > 0).mean()), stage2_perplexity=float(np.exp(H2)), H_c2_nats=H2, H_c2_given_c1_nats=float(Hcond), mutual_information_nats=float(H2 - Hcond),
                                model_mean_entropy_c2_head_nats=float(torch.stack(ent).mean()), decoded_stage2_rms_ratio_median=float(np.median(rg)), decoded_stage2_rms_ratio_quartiles=np.percentile(rg, [25, 75]).tolist(),
                                note="plug-in conditional entropy from train counts: biased downward for rare c1 codes")
+    res["_values"] = V
     return res
 
 
@@ -451,6 +488,8 @@ def main():
     f = open(G / "logs" / f"checks{seed}.log", "a")
     log = lambda s: (f.write(s + "\n"), f.flush())
     r = check_all(seed, procs, log)
+    V = r.pop("_values")
+    np.savez_compressed(OUT / f"seed{seed}_values.npz", **V)
     (OUT / f"seed{seed}.json").write_text(json.dumps(r, indent=1))
     log("CHECKS DONE")
 

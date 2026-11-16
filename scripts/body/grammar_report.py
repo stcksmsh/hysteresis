@@ -102,7 +102,12 @@ def main():
     if refs.exists():
         L += ["## 3. S-B clip candidates", "", "Manifest `grammar/look/manifest.json` (not served). Excerpts (song, token start, song time, V1/V2 sharpness match):", ""]
         for m in json.loads(refs.read_text()):
-            L.append(f"- E{m['excerpt']:02d} {m['song']} window {m['window']} token {m['token_start']} t = {m['song_time_s']:.1f} s; V1 vs V2 sharpness {m['v1_v2_matching']['P']:.3f} vs {m['v1_v2_matching']['Q']:.3f} (|diff| {m['v1_v2_matching']['abs_diff']:.3f})")
+            v = m["v1_v2_matching"]
+            L.append(f"- E{m['excerpt']:02d} {m['song']} window {m['window']} token {m['token_start']} t = {m['song_time_s']:.1f} s; V1 vs V2 matched on {v.get('matched_on', 'requested controls')}: chosen pair realised sharpness {v['P']:.5f} vs {v['Q']:.5f} "
+                     f"(|diff| {v['abs_diff']:.5f}, best of {v.get('n_pairs_searched', 64)} pairs); the 8 V1 samples span {min(v['pool_realised_sharp_v1']):.3f}-{max(v['pool_realised_sharp_v1']):.3f} (mean {v['pool_mean_v1']:.3f}), the 8 V2 samples "
+                     f"{min(v['pool_realised_sharp_v2']):.3f}-{max(v['pool_realised_sharp_v2']):.3f} (mean {v['pool_mean_v2']:.3f}); requested-control sharpness {v['requested_sharp_own_controls']}; gesture code-1 tokens differing between a V1 and a V2 sample: {v['code1_tokens_differ_share_v1_vs_v2_sample0']:.2f}"
+                     if "pool_mean_v1" in v else f"- E{m['excerpt']:02d} {m['song']} (old match fields)")
+        L += ["", "A |diff| that rounds to 0.000 at three decimals is the minimum over 64 pairs of continuous values (about 1e-3 expected), so it is small by construction; the realised-sharpness spread of the candidates (above) shows the match is on motion produced, not on requested controls."]
     (HERE.parents[1] / "docs" / "A_REPORT.md").write_text("\n".join(L) + "\n")
     print("report written")
 
