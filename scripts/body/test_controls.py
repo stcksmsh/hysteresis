@@ -31,12 +31,14 @@ def test_constant_speed_vigour():
 
 
 def test_height_workspace_bounds():
-    c = C.finalise(raw(lamp_line([0, 0, 0], z0=0.11)), NORM)
+    c = C.finalise(raw(lamp_line([0, 0, 0], z0=-0.569)), NORM)
     assert np.allclose(c["height"], 0.0)
     c = C.finalise(raw(lamp_line([0, 0, 0], z0=0.77)), NORM)
     assert np.allclose(c["height"], 1.0)
-    c = C.finalise(raw(lamp_line([0, 0, 0], z0=0.44)), NORM)
+    c = C.finalise(raw(lamp_line([0, 0, 0], z0=0.1005)), NORM)
     assert np.allclose(c["height"], 0.5)
+    c = C.finalise(raw(lamp_line([0, 0, 0], z0=-0.2)), NORM)               # below the old 0.11 m bound, clear of the v2p floor
+    assert np.all((c["height"] > 0) & (c["height"] < 1))
 
 
 def test_direction_known_line():

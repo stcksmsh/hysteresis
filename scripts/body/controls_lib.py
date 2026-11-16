@@ -10,7 +10,7 @@ from scipy.signal import butter, filtfilt
 
 FS, TOK, NTOK, NSLOT = 50, 25, 40, 8
 EPS_V = 0.01                      # log offset, deg/s for joints and m/s for the lamp
-Z_LO, Z_HI = 0.11, 0.77           # usable workspace height (m): floor clearance gate, straight-up reach
+Z_LO, Z_HI = -0.569, 0.77          # usable workspace height (m) from the v2p body (rules addendum 2)
 SHARP_HZ, ACC_FLOOR = 3.0, 0.05   # sharpness cutoff (Hz), minimum lamp acceleration RMS (m/s^2)
 PAUSE_V, PAUSE_RUN = 0.05, 13     # pause: lamp speed < 0.05 m/s for >= 13 samples (> 0.25 s)
 DIR_MIN = 0.02                    # m/s, below it the direction is the zero vector

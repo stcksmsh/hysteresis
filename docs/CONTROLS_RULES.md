@@ -124,3 +124,10 @@ The movement-lead onset rule of section 4 ("|w_j| stayed below 0.125 p90 for at 
 of V1, a rest of 0.2 s is practically absent in dance). Changed, for the lead only and nothing else: an onset of joint j is an upward crossing of |w_j| through 0.25 x p90_j **after |w_j| dipped below
 0.125 x p90_j at some sample within the preceding 0.2 s** (10 samples). Pairing (+-0.5 s), proximal/distal sets and token assignment unchanged. On a 1/6 sample of FineDance V1 windows the new rule gives about 4,600 proximal and
 7,200 distal onsets, 6,853 pairs. The five controls and every other measure are untouched; the FineDance controls files were recomputed with the new lead rule.
+
+## Addendum 2 (2026-11-16, fix 1, pushed before recomputing)
+
+Height bounds come from the v2p body the realised stage simulates (`make_arm_v2p.py`: column top z = 0.053 m, floor 1.0 m below it at z = -0.947 m, link margin 0.05 m, hand margin 0.11 m), not from the old table body.
+Usable workspace = the lamp z range over joint poses with `make_arm_v2p.margins(q) >= 0`, computed on a grid: yaw 0..345 deg step 15, shoulder / elbow / wrist bend -110..110 deg step 5 (roll does not move the lamp point),
+2,187,000 poses, 1,523,956 clear. Result **z_lo = -0.569 m, z_hi = 0.770 m** (grid resolution 5 deg; z_lo is the lowest clear lamp point). `height = clip((z_mean - z_lo) / (z_hi - z_lo), 0, 1)`.
+Report-only: FineDance-train p1 / p99 of z_mean next to these bounds. Nothing else in the rules changes (section 3.2's 0.11 m is superseded; Z_LO in `controls_lib.py` = -0.569).
