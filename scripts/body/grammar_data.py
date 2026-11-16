@@ -128,7 +128,7 @@ def load(split=None, ds=None):
         parts.append(z)
     out = {k: np.concatenate([p[k] for p in parts]) for k in parts[0]}
     if split is not None:
-        m = out["split"] == split
+        m = np.isin(out["split"], [split] if isinstance(split, str) else list(split))
         out = {k: v[m] for k, v in out.items()}
     return out
 

@@ -37,6 +37,7 @@ class Data:
         z = {k: v[keep] for k, v in z.items()}
         if sel is not None:
             z = {k: v[sel(z)] for k, v in z.items()}
+        self.z = z
         self.n = len(z["code1"])
         L = lambda a: torch.from_numpy(np.asarray(a).astype(np.int64))
         self.c1, self.c2, self.v, self.p1, self.p2 = L(z["code1"]), L(z["code2"]), L(z["vbin"]), L(z["p1"]), L(z["p2"])
