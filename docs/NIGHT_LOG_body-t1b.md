@@ -75,3 +75,7 @@ Units hyst-wo41-e1b-s1, -s2, -s3 (seeds 41101-41103, cores 6-9 / 10-13 / 14-17),
 All three seeds early-stopped (patience 5): seed 41101 10 epochs (best epoch 4), 41102 and 41103 11 epochs (best epoch 5); best validation total 25.659 / 25.661 / 25.642; train-subset gap at best 1.87 / 2.65 / 2.58, widening afterwards (about 4 by the end).
 Best-epoch validation per head (seed 41101): code1 6.673, code2 7.060, vigour 2.664, posture1 4.448, posture2 4.815. Chance (uniform): 6.931, 6.931, 3.466, 5.545, 5.545. Code 1 is barely better than chance, code 2 is worse than uniform (7.06-7.12 on validation, 6.1-6.3 on train): the model overfits the gesture code stages and does not predict them from the music; vigour and posture heads learned.
 Next: T2 per seed (t1b_t2_run.sh IDX), then report.
+
+## T1B READY 0efb447 (2026-11-16)
+
+docs/T1B_REPORT.md (every STOP with value and threshold, all reports, curves), docs/T1B_T2_TABLES.md, per-song values in t1b/e1/seed*/t2/. STOPs fired: swapped music (all 3 seeds, interval includes 0), jitter (power above 3 Hz about 3-4x human on several joints, all 3 seeds), frozen pose (3, 7, 8 of 17 songs), joint range (seed 41102 only, base yaw 0.48 of human). Not run: AIOZ held-out and AIOZ-only code share. No clips, no viewing, no T3. Stopping.
