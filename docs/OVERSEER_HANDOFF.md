@@ -94,7 +94,16 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-16 17:32 (clock; earlier entries today had guessed times, real clock was ~1 h earlier) — newest
+## UPDATE 2026-11-16 ~19:15 (clock) — newest
+
+WO46 METRIC READY 7bab263 + SPOTCHECK READY, VERIFIED (19 tests pass; overseer independent checks: grids on music, ear onset aligned,
+realised and RAW FineDance mocap both weakly phase-locked ~ chance; scripts in scripts/body/overseer/) and MERGED (body cc0ff9e, a1df46a).
+Headline: beat-phase locking at chance everywhere (yaw +0.03 only); structure weak (+0.03-0.06); cortex adds nothing over ear.
+Brief docs/PLANNER_BRIEF_METRIC.md SENT: Q1 B targets = slow controls + tempo, timing authored [rec] + (b) sync check/AIST++; Q2 add click
+track to spot check [rec]; Q3 cortex only as variant [rec]; Q4 yaw report-only [rec]; Q5 7.75 + DIAG still open. Spot check material
+/secondary/hyst-data/body/metric/spotcheck/ (10 songs, manifest; not served). Agents: 1 waits at A ESTIMATE, 2 done (stopped).
+
+## UPDATE 2026-11-16 17:32 (clock; earlier entries today had guessed times, real clock was ~1 h earlier)
 
 WO45 (agent 1) STOPPED at A ESTIMATE (fa606ee): rules 9280ce4 before training; posture vocab absolute 0.975/0.973 (stage 1 0.869/0.860);
 scan 17,863 windows 0 bad; 3 seeds ~0.5-1.2 h total; REFINE DONE (docs/CONTROLS_REFINE_REPORT.md, not yet read by overseer). GO waits on
