@@ -60,8 +60,7 @@ Songs are not dropped; the test-only M rows use the 17 test songs and the interv
 ## 6. Tests (`scripts/body/test_join.py`)
 
 1. Raw rows cut at one point and re-joined (A0 and C): identical to the original everywhere (jump is zero, ramp adds nothing).
-2. Decoded sequence cut into two token halves and joined by B overlap on a shared range equals the one-pass B decode away from the join, and B equals A1 further
-   than 30 rows from every 40-token block border and from the sequence ends (the decoder reach is 24 rows).
+2. B equals A1 (blocks) away from every window edge (every 1000 rows, margin 60 rows; the decoder reach is 24 rows), tolerance 0.05 deg.
 3. A constant token sequence decoded by B gives gesture speed power above 3 Hz no larger than the same sequence decoded by A1 (1 % tolerance).
 4. A1 reproduces `t1b_t2.decode_rows` exactly; C on a continuous-with-jump toy removes the jump (value at join equals the continuation).
 
