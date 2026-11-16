@@ -2882,3 +2882,54 @@ Standing rules unchanged.
   controls.
 - A trains on retargeted motion. PhantomDance and Motorica enter only after Kosta's 12-clip look check (7.69.3); until then FineDance +
   AIOZ.
+
+### 7.76 Third external review (ChatGPT, Gemini): beat-relative coupling first; A additions; control refinements; B, lookahead, teacher refined; 2026-11-16, via Kosta + planner
+
+Planner text, verbatim:
+
+Record as BRAIN_SPEC 7.76: third external review (ChatGPT, Gemini) of the redesign + lookahead idea. Both: redesign sound; measure
+beat-relative coupling first.
+
+1. NEXT EXPERIMENT (decides B's targets; report-only):
+ Beat-phase / metrical analysis of HUMAN motion, all paired datasets, whole songs (not 20 s windows), realised lamp trajectory and each
+ joint/axis separately.
+ - Motion events by several definitions (stated in rules before computing): lamp-speed local minima, lamp-acceleration peaks, joint
+   angular-velocity peaks, direction reversals, movement onsets (threshold + minimum separation).
+ - Phase of each event relative to beat, half-beat (double-time), half-time and bar; circular phase concentration (mean resultant length)
+   and preferred phase per level; lead/lag scan +-250 ms, reported (not silently maximised).
+ - Controls: same events vs time-shuffled beats and vs other songs' beat grids (tempo-matched).
+ - Tempo/density: motion-event rate vs tempo and onset density; pause occupancy/duration vs rhythmic density and pulse clarity.
+ - Uncertainty by song (bootstrap by song).
+ - Whole-song structure: change points in control distributions and movement motifs vs music novelty and repetition, delays -2..+2 s;
+   spot-check 10 songs' section boundaries by ear.
+2. A (motor grammar) proceeds in parallel (needs no music), with additions:
+ - persistent STYLE / MOVEMENT-MODE embedding at sequence level (dataset + V1/V2 + genre where labelled), sampled per song at generation;
+ - persistent MOTIF state (latent, updated every 2 s, not every token) for 2-4 s coherence;
+ - accent input stays token-relative for A; beat-relative accent timing will be B's output, converted at run time.
+ A checks as 7.73/7.74 (intervention matrix, S-B), plus coherence over 2-4 s.
+3. Control refinements, report-only before adoption: vigour split into amplitude (lamp path extent per token) and speed; sharpness 3 Hz
+   threshold checked against filtered human vs realised robot motion and against noise; pause as occupancy/duration at 2-8 s scale.
+4. B (after step 1): predicts a joint temporal distribution over controls at matched timescales (accent timing beat-relative;
+   vigour/sharpness short; height/pause longer; repetition/change phrase-level). Compare cortex against simple baselines
+   (beat/onset/density/standard audio features); keep the cortex only if it adds measurable value.
+5. Lookahead selection (later, after A passes): feasibility = hard constraint; grammar likelihood = minimum-plausibility threshold, not
+   main score; main score = fit of the DECODED, REALISED controls to B's joint distribution; variety by clustering the good pool on movement
+   path, gesture family, posture and timing, then sampling among clusters; persistent intention state; horizon 2 s vs 4 s, N 16/32/64.
+   Compared against plain sampling on control adherence, diversity, smoothness and Kosta's preference.
+6. Teacher stage: small regularised logistic preference model over control trajectories x music features; active, controlled comparisons
+   (one control varied), uncertainty-targeted, ties allowed, repeats, and a held-out set of comparisons.
+7. Music-fit critic: DEFERRED (selection can still be gamed by beat-hitting with dull movement). If ever built: harder negatives (same song
+   wrong segment, shifted alignment, similar beat different structure) and a shortcut test.
+
+Open framing for Kosta (no decision now): if step 1 shows coupling mostly in timing, the music-character to movement-character mapping
+comes from the teacher (artist-authored), described as such.
+Standing rules unchanged.
+
+**Overseer notes (operational, not rulings):**
+- Numbering: no 7.75 is recorded. `docs/PLANNER_BRIEF_VIEWINGS.md` (V2 sharpness, energy = vigour + sharpness, excerpt choice, two
+  unexplained notes, data go) is still unanswered and keeps the number 7.75. Point 2 (style embedding includes V1/V2) partly covers its Q1.
+- Beat grids: FineDance has stored offline grids (`t1b/cortex/beats/`); AIOZ, PhantomDance and Motorica have none. Step 1 uses the
+  repository's existing offline beat tracker on their audio (no installs), checked first against FineDance's stored grids.
+- The 10-song by-ear spot check is Kosta's; the builder prepares the songs and boundary times, the overseer serves them.
+- Work split: WO46 (agent 2) = the 7.74 Q4 posture-vs-gesture diagnostic, then step 1 (replacing the 7.74 Q5 whole-song 0c plan, whose
+  control-vs-acoustics part is folded into step 1). WO45 (agent 1) = A with point 2, plus point 3 report-only before training.
