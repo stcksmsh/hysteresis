@@ -94,7 +94,18 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-16 ~01:40 (clock) — newest
+## UPDATE 2026-11-16 ~04:30 (clock) — newest
+
+T1B READY 0efb447 (night log 6dbefd5), body-t1b MERGED into body (d75c035). E1 best epochs 4/5/5; gesture code heads at/below chance on val
+(code1 6.67 vs 6.93, code2 7.06-7.12), vigour/posture learned; overfit from epoch 1. STOPs: swapped music all 3 (overseer recompute
++0.137 [-0.02,0.29] / -0.066 [-0.51,0.21] / +0.030 [-0.26,0.23]), frozen 3/7/8 of 17, jitter all, joint range seed 41102. Controls
+(overseer, job tmp t2check.py): retrieval 2.0x and random chunks 2.5x human >3 Hz power vs model 1.4x -> chunk joining drives jitter;
+retrieval frozen 5 songs. Brief docs/PLANNER_BRIEF_E1_RESULTS.md (body 7f1f4aa) SENT: Q1 (a) E-data next (needs Kosta's 12-clip look) [rec]
+/ (b) coarse code families / (c) regularisation / (d) a+b; Q2 jitter vs retrieval level [rec]; Q3 posture drift report-only [rec]; Q4 no
+T3 [rec]; Q5 skip AIOZ held-out [rec]; Q6 7.72. WO42 PHANTOM READY not yet verified/merged. Label page NcL5... still to delete (Kosta at
+laptop). No units running. Agent 1 idle (could be cleared), agent 2 idle (done).
+
+## UPDATE 2026-11-16 ~01:40 (clock)
 
 E1b epoch 3 (01:38, ~15 min/epoch): val code1 6.68-6.71 (chance 6.93), code2 7.02 (ABOVE chance), vigour 2.67 (3.47), posture1 4.50-4.53
 (5.55); train/val gap 0.25 -> 0.45 -> 1.33-1.43: strong overfitting on ~150 songs (7.63 caveat). Not a stop rule; early stopping keeps the
