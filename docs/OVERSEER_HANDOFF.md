@@ -94,7 +94,13 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-16 ~16:10 (clock) — newest
+## UPDATE 2026-11-16 ~16:25 (clock) — newest
+
+Look check DONE (body b603712, docs/T0_PHANTOM_LOOK_RESULT.md): PhantomDance 6/6 yes, Motorica 5 yes 1 partly ("tiny"). Notes: some
+clips too flicky/energetic (proportion mismatch), one too low. Server stopped. Open: Kosta's explicit go for PhantomDance + Motorica in A
+(7.69.3) -> WO45 data switch. WO45/WO46 still NOT SENT.
+
+## UPDATE 2026-11-16 ~16:10 (clock)
 
 Control viewing DONE and scored (body 1857bd1, docs/CONTROLS_VIEWING_RESULT.md): 11/12 correct, 1 same (P10 continuity), 0 wrong;
 vigour/height/sharpness 3/3, continuity 2/3. Kosta read "sharper" as "energetic/flicky"; several excerpts on unmusical/quiet bits.
