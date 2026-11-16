@@ -94,7 +94,19 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-16 ~12:10 (clock) — newest
+## UPDATE 2026-11-16 ~15:50 (clock) — newest
+
+7.74 RECORDED (body 04ffe1a): accent = pattern only, continuity = pause only, joining closed (A1), diagnostic before A, A + whole-song
+0c in parallel, lookahead selection planned (not built), 7.72 replaced by Q6. KOSTA SESSIONS SERVED (loopback):
+- 12-pair control viewing http://127.0.0.1:8767/ unit hyst-wo43-view-1116, session /secondary/hyst-data/body/controls/look/session_2026-11-16
+  (manifest12.json, seed 43001; answers first/second/same; per-pair question). Report: vigour pairs also differ in accent level 1.5-1.6 sd.
+- 12-clip PhantomDance/Motorica look check http://127.0.0.1:8768/ unit hyst-wo42-look-1116, session
+  /secondary/hyst-data/body/t0_look_combined/session_2026-11-16 (seed 42003, yes/partly/no). Key/answers 404 checked on both.
+After Kosta: score answers.csv against key/key.json; look check result gates PhantomDance/Motorica into A (WO45 switch).
+Prompts body b1832d5: WO45 docs/BUILDER_PROMPT_WO45_GRAMMAR_A.md (agent 1, body-grammar, cores 6-13; stops at A ESTIMATE for overseer GO
+= WO46 Part 1 report + look check) and WO46 docs/BUILDER_PROMPT_WO46_DIAG_SONG0C.md (agent 2, body-diag, cores 14-19). NOT SENT yet.
+
+## UPDATE 2026-11-16 ~12:10 (clock)
 
 WO43 fix 1 VERIFIED (height bounds [-0.569, 0.770] m from v2p, overseer grid identical; height exact; pytest 8/8) and MERGED (body 892fd18).
 WO44 JOIN READY VERIFIED (ratios recomputed from measures.json, all match; pytest 5/5) and MERGED (body ecd95fb). Key: decoded human chunks
