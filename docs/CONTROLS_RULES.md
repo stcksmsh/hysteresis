@@ -117,3 +117,10 @@ control values change only if an input sample inside token + stated support chan
 5. Pause threshold 0.05 m/s, run >= 13 samples; direction zero below 0.02 m/s.
 6. 8 s clips, 3 pairs per control, shortlist of 20; V1/V2 only, no mirrors in the look pairs.
 7. Beat strength FineDance only (no stored beat grid elsewhere); cortex-based structure FineDance only.
+
+## Addendum 1 (2026-11-16, after the FineDance controls were computed once, before any statistic was read)
+
+The movement-lead onset rule of section 4 ("|w_j| stayed below 0.125 p90 for at least 0.2 s before the crossing") never fired on the realised dance trajectories (lead was NaN for all 101,760 FineDance tokens
+of V1, a rest of 0.2 s is practically absent in dance). Changed, for the lead only and nothing else: an onset of joint j is an upward crossing of |w_j| through 0.25 x p90_j **after |w_j| dipped below
+0.125 x p90_j at some sample within the preceding 0.2 s** (10 samples). Pairing (+-0.5 s), proximal/distal sets and token assignment unchanged. On a 1/6 sample of FineDance V1 windows the new rule gives about 4,600 proximal and
+7,200 distal onsets, 6,853 pairs. The five controls and every other measure are untouched; the FineDance controls files were recomputed with the new lead rule.

@@ -43,11 +43,11 @@ def pause_mask(speed):
 
 
 def onsets(x, p90):
-    """sample indices where |w| crosses 0.25 p90 upward after >= REST_N samples below 0.125 p90"""
+    """sample indices where |w| crosses 0.25 p90 upward after dipping below 0.125 p90 within the preceding REST_N samples (rules addendum 1)"""
     th, lo = ONSET_FRAC * p90, REST_FRAC * p90
     out = []
     for i in range(REST_N, len(x)):
-        if x[i - 1] < th <= x[i] and (x[i - REST_N:i] < lo).all():
+        if x[i - 1] < th <= x[i] and x[i - REST_N:i].min() < lo:
             out.append(i)
     return np.array(out, int)
 

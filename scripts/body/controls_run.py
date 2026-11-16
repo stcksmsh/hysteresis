@@ -127,6 +127,8 @@ def cmd_controls(procs=8):
         ws = [np.load(p)["win"] for p in (OUT / ds).glob("*.npz")]
         cnt[ds] = dict(files=len(ws), windows=int(sum(len(w) for w in ws)), tokens=int(40 * sum(len(w) for w in ws)))
     (OUT / "counts.json").write_text(json.dumps(cnt, indent=1))
+    (OUT / "stats").mkdir(exist_ok=True)
+    (OUT / "stats" / "gate_agree.json").write_text(json.dumps({ds: float(np.concatenate([np.load(p)["gate_again"] for p in (OUT / ds).glob("*.npz")]).mean()) for ds in ROOTS}))
     print("CONTROLS COMPUTED", json.dumps(cnt), flush=True)
 
 
