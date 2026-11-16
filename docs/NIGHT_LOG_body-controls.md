@@ -7,3 +7,4 @@
 - FOR USER: realised stage as source; workspace z 0.11..0.77 m; log transform + eps 0.01 for vigour; sharpness 3 Hz cutoff; pause 0.05 m/s / 13 samples; 8 s clips, shortlist 20, V1/V2 only; beat strength and cortex structure FineDance only; lead rule relaxed (addendum 1); ear lanes are clipped at +-3 sd (un-standardised acoustic measures inherit the clip).
 - CONTROLS READY 20ef007 (report docs/CONTROLS_REPORT.md; tests: test_controls.py 8, test_dialstudy*.py 6, all pass). Stopped.
 - CONTROLS READY (fix 1): height bounds z in [-0.569, 0.770] m from the v2p body (rules addendum 2). Controls, 0b/0c, structure, clip selection recomputed with the same seeds; 14 of 15 pairs changed (only P09 sharpness kept), all clips re-rendered. look/clips holds 38 mp4: 30 used by the manifest plus 8 stale-variant renders from old work json (unused). Previous clips in look/clips_v1_old.
+- CONTROLS READY 91bf685 (fix 1)
