@@ -58,7 +58,7 @@ def sim_file(args):
         ok.append(bool(g["passed"]))
     dst.parent.mkdir(parents=True, exist_ok=True)
     tmp = dst.with_suffix(".tmp.npz")
-    np.savez_compressed(tmp, win=keep.astype(np.int32), q50=np.array(qs, np.float32).reshape(len(keep), -1, 5), lamp=np.array(lamps, float).reshape(len(keep), -1, 3),
+    np.savez_compressed(tmp, win=keep.astype(np.int32), q50=np.array(qs, np.float32).reshape(len(keep), 1001, 5), lamp=np.array(lamps, float).reshape(len(keep), 1001, 3),
                         gate_again=np.array(ok, bool), split=str(z["split"]), group=str(z["group"]), weight=float(z["weight"]))
     tmp.replace(dst)
     return path.name, len(keep), time.time() - t0

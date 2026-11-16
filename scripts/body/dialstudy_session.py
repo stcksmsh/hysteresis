@@ -70,7 +70,7 @@ def build(manifest_path, out, seed=None, parts=None):
     items, key = [], {}
     for clip in clips:
         meta = {k: clip.get(k) for k in ("id", "set", "intent", "effector", "dials", "part", "setting", "round1_id", "song", "excerpt_start_s", "arousal_raw", "arousal_std", "ear_energy",
-                                                                       "kind", "variant", "variants", "clip", "genre", "source_seq", "window_start_s", "csv", "music_credit")}
+                                                                       "kind", "variant", "variants", "clip", "genre", "source_seq", "window_start_s", "csv", "music_credit", "control", "high_first")}
         if not (clip.get("set") == "D" or clip.get("files")):
             meta["file"] = clip.get("file") or clip.get("round1_file")
         if clip.get("set") == "D" or clip.get("files"):
@@ -81,7 +81,7 @@ def build(manifest_path, out, seed=None, parts=None):
                 first, second = second, first
                 sets.reverse(); speeds.reverse()
             codes = [place(first), place(second)]
-            item = {"code": code(), "kind": "pair", "clips": codes, **({"q": LOOK_Q["pair"]} if look else {})}
+            item = {"code": code(), "kind": "pair", "clips": codes, **({"q": clip.get("question") or LOOK_Q["pair"]} if look else {})}
             key[item["code"]] = {**meta, "first": first, "second": second, "first_setting": sets[0], "second_setting": sets[1],
                          "first_hand_speed": speeds[0], "second_hand_speed": speeds[1]}
         else:
