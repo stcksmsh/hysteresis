@@ -14,7 +14,7 @@ You are the overseer for Hysteresis. You do not implement. You:
 
 - **Builders** are other Claude sessions: "Hysteresis agent 1" and "Hysteresis agent 2".
   - Find them with ListAgents. If several sessions share a name, use the one started most recently, with its `[ref]` (e.g. `Hysteresis agent 1 [3159c7]`).
-  - **Message a builder only when the user says so.** The user often clears builders first, to save context and usage. When told to send, use SendMessage with notify_when_idle. If a builder is offline, give the user the prompt to paste.
+  - **Message a builder only when the user says so** — EXCEPT crash/failure reports of a running job: send those at once, no asking (Kosta 2026-11-16: "whats the holdup?"). The user often clears builders first, to save context and usage. When told to send, use SendMessage with notify_when_idle. If a builder is offline, give the user the prompt to paste.
   - Every prompt stands alone, written for a fresh session: name the commits, files and data paths to read.
   - Builders' transcripts (for progress checks) live under `~/.claude-alt/projects/*/`. They are often filed under an unexpected project folder (e.g. `-secondary-Programming-Github-platform`). Find them by grepping for the builder's job id or recent B-step words; timestamps in them are UTC.
 - **The planning agent** is a separate web agent that rules on design questions.
