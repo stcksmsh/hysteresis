@@ -22,6 +22,8 @@ from pathlib import Path
 LABELS = ["tense", "heavy", "calm", "angry", "light", "nothing, glitching", "something, can't name it"]
 LABELS2 = ["calm", "sad", "tense", "energetic", "light", "nothing, glitching", "something, can't name it"]  # WO29B, motor-network manifests
 LOOK_LABELS = ["yes", "sort of", "no"]  # WO32A, retarget look test (manifest items with kind "single" / "pair")
+FOLLOW_LABELS = ["yes", "partly", "no"]  # WO42: manifest "labels": "follow" on every single -> "Does the dancer follow the music?", answers yes / partly / no (+ note)
+FOLLOW_Q = "Does the dancer follow the music?"
 LOOK_Q = {"single": "Does this look like dancing?", "pair": "Which looks more like a person dancing?"}
 PAIR_LABELS = ["first", "second", "neither"]
 LOOK_PAIR_LABELS = ["first", "second", "same"]  # WO36: look-test pairs (kind "pair" manifests) answer first / second / same; every other mode keeps "neither"
@@ -41,6 +43,7 @@ def build(manifest_path, out, seed=None, parts=None):
             raise SystemExit(f"no manifest items with part in {sorted(parts)}")
     look = any(c.get("kind") in ("single", "pair") for c in clips)
     v2 = any("part" in c for c in clips) and not look
+    follow = look and all(c.get("labels") == "follow" and c.get("kind") == "single" for c in clips)
     seed = secrets.randbits(32) if seed is None else int(seed)
     rng = random.Random(seed)
     (out / "clips").mkdir(parents=True)
@@ -83,13 +86,13 @@ def build(manifest_path, out, seed=None, parts=None):
                          "first_hand_speed": speeds[0], "second_hand_speed": speeds[1]}
         else:
             c = place(clip.get("file") or clip["round1_file"])
-            item = {"code": c, "kind": "single", "clips": [c], **({"q": LOOK_Q["single"]} if look else {})}
+            item = {"code": c, "kind": "single", "clips": [c], **({"q": FOLLOW_Q if follow else LOOK_Q["single"]} if look else {})}
             key[c] = meta
         items.append(item)
     rng.shuffle(items)
     (out / "key" / "key.json").write_text(json.dumps({"seed": seed, "key": key}, indent=1))
     (out / "order.json").write_text(json.dumps(items))
-    (out / "labels.json").write_text(json.dumps(custom or (LOOK_LABELS if look else LABELS2 if v2 else LABELS)))
+    (out / "labels.json").write_text(json.dumps(custom or (FOLLOW_LABELS if follow else LOOK_LABELS if look else LABELS2 if v2 else LABELS)))
     if look:
         (out / "pair_labels.json").write_text(json.dumps(LOOK_PAIR_LABELS))
     (out / "answers.csv").write_text("")
