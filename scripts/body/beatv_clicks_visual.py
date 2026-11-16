@@ -103,7 +103,7 @@ def check():
     t_click = (np.argmax(np.abs(a) > 0.2)) / SR
     v = subprocess.run(["ffmpeg", "-loglevel", "error", "-i", str(mp4), "-vf", "scale=64:36,format=gray", "-f", "rawvideo", "-"], capture_output=True).stdout
     fr = np.frombuffer(v, np.uint8).reshape(-1, 36, 64).mean((1, 2))
-    t_flash = int(np.argmax(fr > 100)) / FPS
+    t_flash = int(np.argmax(fr > 40)) / FPS
     pr = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "stream=codec_type,start_time", "-of", "csv=p=0", str(mp4)], capture_output=True, text=True).stdout.split()
     print(f"click at {t_click:.4f} s, first flash frame at {t_flash:.4f} s, difference {(t_flash - t_click) * 1000:+.1f} ms; stream start times {pr}; frames {len(fr)}")
     json.dump(dict(t_click=t_click, t_flash=t_flash, diff_ms=(t_flash - t_click) * 1000, start_times=pr), open(OUT / "sync_check.json", "w"))
