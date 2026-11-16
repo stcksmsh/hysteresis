@@ -94,7 +94,14 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-16 ~00:15 (clock) — newest
+## UPDATE 2026-11-16 ~01:40 (clock) — newest
+
+E1b epoch 3 (01:38, ~15 min/epoch): val code1 6.68-6.71 (chance 6.93), code2 7.02 (ABOVE chance), vigour 2.67 (3.47), posture1 4.50-4.53
+(5.55); train/val gap 0.25 -> 0.45 -> 1.33-1.43: strong overfitting on ~150 songs (7.63 caveat). Not a stop rule; early stopping keeps the
+best epoch. Report first thing in the morning (likely a planner question: regularisation / smaller model / more data E-data). Monitor
+re-armed every 30 min; charger on.
+
+## UPDATE 2026-11-16 ~00:15 (clock)
 
 E1 seed 41102 crashed 00:07: fd_192 ("cheers_part2", 17 s < one 20 s T0 window) has 0 tokens. Fix 3128eea (loader skips zero-token songs,
 prints names; 153 train / 26 val / 23 test songs). All 3 seeds RESTARTED from scratch as hyst-wo41-e1b-s1/s2/s3 (same seeds, cores, logs).
