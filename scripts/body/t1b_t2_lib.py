@@ -110,12 +110,17 @@ def bootstrap_mean_ci(d, n=2000, seed=36202):
 def detect_events(ear, hz=100):
     """events from the standardised 44-feature lane (T, 44) at 100 Hz, causal-free offline detection (report only):
     onsets = col 40 local maxima within +-0.1 s above the song's 95th percentile; energy jumps = col 41 (RMS) 3 s trailing mean minus the previous 3 s mean > 6 dB-equivalent
-    (the lane is standardised, so: > 1.0 sd); returns (onset frames, energy-jump frames)"""
+    (the lane is standardised with corpus constants, so: the 3 s mean rises by more than 1.0 corpus sd of the RMS column); returns (onset frames, energy-jump frames)"""
     o = ear[:, 40]
     thr = np.percentile(o, 95)
     w = int(0.1 * hz)
     from scipy.ndimage import maximum_filter1d
-    on = np.flatnonzero((o >= thr) & (o == maximum_filter1d(o, 2 * w + 1)))
+    cand = np.flatnonzero((o >= thr) & (o == maximum_filter1d(o, 2 * w + 1)))
+    on = []
+    for c in cand:                                              # plateau ties (clipped values) and neighbours closer than 0.1 s count once: keep the first
+        if not on or c - on[-1] >= w:
+            on.append(c)
+    on = np.array(on, int)
     r = np.cumsum(np.r_[0, ear[:, 41]])
     n = 3 * hz
     i = np.arange(2 * n, len(ear))
