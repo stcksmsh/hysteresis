@@ -119,7 +119,7 @@ def cmd_work(seed):
         for cp in (0, 1):
             S.te.copy[ii[k]] = cp
             for j in range(K):
-                t = S.generate(S.to_cn(own), seed * 1000 + 10 * k + j, idx=S.idx[k:k + 1])
+                t = S.generate(S.to_cn(own[k:k + 1]), seed * 1000 + 10 * k + j, idx=S.idx[k:k + 1])
                 tok = {a: t[a][0].numpy() for a in t}
                 q, lamp = realise(tok, GD.COPIES[cp])
                 sh = C.raw_window(q, lamp)["sharp"][s:s + EXC]

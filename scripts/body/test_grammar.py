@@ -161,3 +161,20 @@ def test_aux_loss_zero_when_expected_equals_request_and_respects_masks():
 def test_parameter_counts_printable():
     c = GM.Grammar(n_genre=8).counts()
     assert c["total"] == sum(v for k, v in c.items() if k != "total")
+
+
+def test_generate_batch_sizes():
+    import grammar_checks as GC
+    torch.manual_seed(0)
+    d = tiny_data(n=5)
+    m = GM.Grammar(n_genre=2)
+    m.eval()
+    fake = SimpleNamespace(model=m, te=d, idx=np.arange(5))
+    for idx in (np.arange(5), np.array([2]), np.array([1, 3])):
+        t = GC.Setup.generate(fake, d.cn[idx], 1, idx=idx)
+        assert t["c1"].shape == (len(idx), 40)
+    try:
+        GC.Setup.generate(fake, d.cn, 1, idx=np.array([2]))
+    except AssertionError:
+        return
+    raise AssertionError("mismatched batch accepted")

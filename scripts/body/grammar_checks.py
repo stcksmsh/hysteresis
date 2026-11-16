@@ -148,6 +148,7 @@ class Setup:
         m, d = self.model, self.te
         ii = torch.from_numpy(self.idx if idx is None else idx)
         n = len(ii)
+        assert cn.shape[0] == n, f"controls for {cn.shape[0]} windows, {n} starts"
         gen = torch.Generator().manual_seed(seed)
         style = m.style_vec(d.ds[ii], d.copy[ii], d.genre[ii])
         feat = m.ctl_feat(cn, torch.ones(n, GM.N_TOKENS))
