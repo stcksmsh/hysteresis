@@ -94,7 +94,19 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-16 ~04:30 (clock) — newest
+## UPDATE 2026-11-16 ~10:40 (clock) — newest
+
+7.73 RECORDED (body ee944ec): planner redesign, control representation first (A = motor grammar conditioned on measured controls,
+B = listener predicting controls; E1b and V-fam/V-data/V-hd dropped). 7.72 (answer to PLANNER_BRIEF_E1_RESULTS) NEVER RECEIVED: asked
+Kosta for its text; overseer note in 7.73 lists Q2-Q5 as unanswered. WO42 body-phantom MERGED into body (156607c; dialstudy label-set
+conflict resolved keeping WO41 `custom` + WO42 `follow`; test_t0_phantom + dialstudy tests 5/5 OK; T0_PHANTOM_REPORT numbers NOT
+recomputed). Prompts on body 5ecb2cd: docs/BUILDER_PROMPT_WO43_CONTROLS.md (agent 1 [9fd0d6], branch body-controls, cores 6-13: Steps
+0a/0b/0c + 0b' clip candidates, stop at CONTROLS READY) and docs/BUILDER_PROMPT_WO44_CHUNK_JOINING.md (agent 2 [985d16], branch
+body-join, cores 14-19, stop at JOIN READY). BOTH SENT ~10:40 with notify_when_idle. Overseer's E1 check script now in git:
+scripts/body/overseer/e1_t2check.py. Next: verify CONTROLS_RULES / JOIN_RULES when pushed (before results); Kosta's 12-clip look check
+(PhantomDance/Motorica) still not served; later serve the 0b' control viewing (~15 min). Label page NcL5... still to delete.
+
+## UPDATE 2026-11-16 ~04:30 (clock)
 
 T1B READY 0efb447 (night log 6dbefd5), body-t1b MERGED into body (d75c035). E1 best epochs 4/5/5; gesture code heads at/below chance on val
 (code1 6.67 vs 6.93, code2 7.06-7.12), vigour/posture learned; overfit from epoch 1. STOPs: swapped music all 3 (overseer recompute
