@@ -69,3 +69,9 @@ Fix: song_index skips zero-token songs and prints their names. All three units s
 ## E1 RESTARTED
 
 Units hyst-wo41-e1b-s1, -s2, -s3 (seeds 41101-41103, cores 6-9 / 10-13 / 14-17), reason: fd_192 zero-token crash. Old units hyst-wo41-e1-s* stopped.
+
+## E1 DONE (2026-11-16)
+
+All three seeds early-stopped (patience 5): seed 41101 10 epochs (best epoch 4), 41102 and 41103 11 epochs (best epoch 5); best validation total 25.659 / 25.661 / 25.642; train-subset gap at best 1.87 / 2.65 / 2.58, widening afterwards (about 4 by the end).
+Best-epoch validation per head (seed 41101): code1 6.673, code2 7.060, vigour 2.664, posture1 4.448, posture2 4.815. Chance (uniform): 6.931, 6.931, 3.466, 5.545, 5.545. Code 1 is barely better than chance, code 2 is worse than uniform (7.06-7.12 on validation, 6.1-6.3 on train): the model overfits the gesture code stages and does not predict them from the music; vigour and posture heads learned.
+Next: T2 per seed (t1b_t2_run.sh IDX), then report.
