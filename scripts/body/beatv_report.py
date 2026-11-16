@@ -106,7 +106,7 @@ def real_tables():
                     ck = per_group(sub, lambda r: r["bas"][(sn, gn, "kin")][1])
                     L.append(f"| {ds} | {var} | {sn} | {gn} | {fmt(boot(b, np.mean))} | {fmt(boot(c, np.mean))} | {fmt(boot(b - c, np.mean))} | {np.mean(bk):.3f} | {np.mean(ck):.3f} |")
     L += ["", "### V1 local phase locking (windows of 8 beats, hop 2): per-song median of (R real - mean R of the x1.13 / x0.87 period controls); dataset value = median over song groups [95 % boot]; second excess against permuted-interval controls", "",
-          "| dataset | variant | events | grid | songs | windows (median per seq) | median excess vs period controls | median excess vs permuted intervals | mean R real | mean R control | chance R | share windows R > control | median line-fit residual ms | whole-song R (project grid) |", "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
+          "| dataset | variant | events | grid | songs | windows (median per seq) | median excess vs period controls | median excess vs permuted intervals | mean R real | mean R control | chance R | share windows R > control | median line-fit residual ms | whole-song R (project grid) | pooled preferred phase | spread of per-song phases (R) |", "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for ds in DS:
         for var in ("V1", "V2"):
             sub = [r for r in rs if r["ds"] == ds and r["var"] == var]
@@ -125,7 +125,12 @@ def real_tables():
                     ex = pg("exc_med")
                     nw = np.median([s["n_win"] for g, s in S])
                     wr = per_group(sub, lambda r: r["whole_R"][e])
-                    L.append(f"| {ds} | {var} | {e} | {gn} | {len(ex)} | {nw:.0f} | {fmt(boot(ex))} | {fmt(boot(pg('exc_perm_med')))} | {pg('R').mean():.3f} | {pg('ctl').mean():.3f} | {pg('chance').mean():.3f} | {pg('share_gt').mean():.3f} | {np.median(pg('resid_med')) * 1000:.1f} | {np.nanmean(wr):.3f} |")
+                    dv = {}
+                    for g, s_ in S:
+                        dv.setdefault(g, []).append(s_["vec"])
+                    u = np.array([np.mean(v) / max(abs(np.mean(v)), 1e-12) for v in dv.values()])
+                    pref, spread = (np.angle(u.mean()) / (2 * np.pi)) % 1, abs(u.mean())
+                    L.append(f"| {ds} | {var} | {e} | {gn} | {len(ex)} | {nw:.0f} | {fmt(boot(ex))} | {fmt(boot(pg('exc_perm_med')))} | {pg('R').mean():.3f} | {pg('ctl').mean():.3f} | {pg('chance').mean():.3f} | {pg('share_gt').mean():.3f} | {np.median(pg('resid_med')) * 1000:.1f} | {np.nanmean(wr):.3f} | {pref:.2f} | {spread:.2f} |")
     return L, rs
 
 
