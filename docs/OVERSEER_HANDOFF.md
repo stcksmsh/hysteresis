@@ -94,7 +94,15 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-16 ~17:40 (clock) — newest
+## UPDATE 2026-11-16 17:32 (clock; earlier entries today had guessed times, real clock was ~1 h earlier) — newest
+
+WO45 (agent 1) STOPPED at A ESTIMATE (fa606ee): rules 9280ce4 before training; posture vocab absolute 0.975/0.973 (stage 1 0.869/0.860);
+scan 17,863 windows 0 bad; 3 seeds ~0.5-1.2 h total; REFINE DONE (docs/CONTROLS_REFINE_REPORT.md, not yet read by overseer). GO waits on
+planner answers: 7.75 (VIEWINGS) + DIAG Q1. WO46 (agent 2): sim crash (1-D q50) -> per-file catch, relaunched hyst-wo46-sim-172200;
+2800/4778 at 17:30, 236 failures ALL aioz "simulate_goals returned shape (0,)" -> agent 2 told to find cause/coverage. Grids done (1138).
+Monitor byvyay37j re-armed. Charger on since ~16:40.
+
+## UPDATE 2026-11-16 ~17:40 (clock)
 
 WO46 DIAG READY 0761c93 VERIFIED (rules ab8dd5e before run; 9 rows recomputed from diag/measures.json, all match; pytest 4/4) and MERGED
 (body fast-forward 0761c93). Most lamp >3 Hz excess and frozen share in the change-based posture-knot sequence (model 4.43 -> 1.71 with
