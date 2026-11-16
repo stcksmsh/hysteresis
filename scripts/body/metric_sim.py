@@ -34,6 +34,8 @@ def _sim_file(args):
     import motornet as M
     import retarget as RT
     import retarget_limiter as FX
+    import retarget_run as RR
+    RR.patch_gates()                                                           # 1.5 s warm-up (not 10 s) and the v2p body, as controls_run.sim_file
     import m3f_report as R
     t0 = time.time()
     z = np.load(path)
