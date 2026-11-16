@@ -94,7 +94,17 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-16 ~11:15 (clock) — newest
+## UPDATE 2026-11-16 ~12:10 (clock) — newest
+
+WO43 fix 1 VERIFIED (height bounds [-0.569, 0.770] m from v2p, overseer grid identical; height exact; pytest 8/8) and MERGED (body 892fd18).
+WO44 JOIN READY VERIFIED (ratios recomputed from measures.json, all match; pytest 5/5) and MERGED (body ecd95fb). Key: decoded human chunks
+at human level (A1 0.88, B 0.86); model/decoded controls 2.4-4.5x whatever the joining -> excess is in token sequences, not joins.
+Brief docs/PLANNER_BRIEF_CONTROLS.md (body 994ef52) SENT: Q1 accent as pattern only [rec]; Q2 pause only [rec]; Q3 serve 12 pairs
+(vigour/height/sharpness/continuity) [rec]; Q4 close joining + posture-vs-gesture diagnostic [rec]; Q5 proceed to A [rec]; Q6 resend
+7.72 or confirm superseded; Q7 record 7.74. Waiting for the planner's answer. Look clips for 0b': /secondary/hyst-data/body/controls/look/
+(manifest.json, 30 clips used, 8 stale extra renders). Both agents idle; overseer recompute scripts in job tmp ov/ (not durable).
+
+## UPDATE 2026-11-16 ~11:15 (clock)
 
 WO43 CONTROLS READY 8a3e9f6 (body-controls, NOT merged). Rules 2269182 pushed 10:25 before compute; addendum 1 (lead onset rule only,
 measured-only) after a first compute, before stats. Overseer recompute (job tmp ov/ctl_check.py, ctl_stats.py): vj/vl/height/pause/sharp
