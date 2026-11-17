@@ -5,4 +5,4 @@
 - FOR USER: pause factor floored at 1 (Phantom); validation / early stopping unweighted by pause.
 - A2 TRAIN DONE: seeds 49101/49102/49103 early-stopped at epochs 78/80/74 (best val total 18.315 / 18.277 / 18.295; A1 18.42-18.47).
 - A2 CHECKS DONE (all A_RULES section 6 + addenda 1-2, per-start values saved) and S-B CLIPS: 6 excerpts x 7 clips rendered (42), manifest grammar2/look/manifest.json (not served; no motor-clock pairs yet).
-- A2 READY (report docs/A2_REPORT.md)
+- A2 READY f12e8fd (report docs/A2_REPORT.md)
