@@ -171,6 +171,14 @@ later. Old label page claude.ai artifact NcL5N9rcfNCRfwgachwCFx still to delete 
 - Planner numbering can skip (7.75 arrived after 7.76 was asked for); record what arrives, note gaps.
 - Overseer check scripts live in `scripts/body/overseer/` (durable); job tmp is not.
 
+## UPDATE 2026-11-17 ~12:00 (clock)
+
+AIST BAS DONE, VERIFIED (overseer recomputed from bas/per_sequence.csv; music-ID bootstrap matches) and MERGED (body e430c42,
+fast-forward). Music: 60 wavs + 5 pairs, alignment 0.0 ms, corr >= 0.9995. BAS (V2 code, keypoints3d_optim, 1363 seq after ignore list):
+full +0.036 over chance [by music ID +0.017, +0.055]; literal frame constants +0.067 [+0.047, +0.088]; raw keypoints3d +0.016
+[+0.001, +0.032]. crossmodal_test (20 seq): raw BAS 0.317 (main) / 0.311 (literal) vs published GT 0.2374 (Bailando T1): does NOT
+reproduce; intervals wide. Contrast: FineDance at chance. For the planner: combine with WO48 results in one brief (not yet written).
+
 ## UPDATE 2026-11-17 ~11:30 (clock)
 
 Kosta AGREED to AIST Dance DB terms and filled the AIST form (2026-11-17), said "do it". AIST music needs no login: Google's
