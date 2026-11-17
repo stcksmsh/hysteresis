@@ -171,6 +171,16 @@ later. Old label page claude.ai artifact NcL5N9rcfNCRfwgachwCFx still to delete 
 - Planner numbering can skip (7.75 arrived after 7.76 was asked for); record what arrives, note gaps.
 - Overseer check scripts live in `scripts/body/overseer/` (durable); job tmp is not.
 
+## UPDATE 2026-11-17 ~14:00 (clock)
+
+WO49 A2 READY c1c5972 VERIFIED (intervention diagonal recomputed with song bootstrap from grammar2/checks/seed*_values.npz, 178 starts /
+105 songs, matches within 0.01 sd; p99 pause == 0/1 because train p99 = 1.0) and MERGED (body e098cc3; 11 tests). Pause 0.04 -> 0.10 sd,
+still weak; cross-talk as A1; jitter human-level; S-B pairs now matched on realised sharpness. S-B candidates
+/secondary/hyst-data/body/grammar2/look/manifest.json (6 excerpts, not served). Brief docs/PLANNER_BRIEF_A2.md SENT: Q1 accept A2, stillness
+in motor clock [rec]; Q2 S-B after motor clock [rec]; Q3 motor clock WO after PULSE_AIST Q1/Q2 ruled, default seed 49102 [rec].
+Open planner answers: PULSE_AIST, A2. Kosta: flash check 8770 (0 answers). Agent 1 idle. Next WO = motor clock (not written).
+Report typo: A2_REPORT per-epoch table header says "seed 45101" (means 49101).
+
 ## UPDATE 2026-11-17 ~13:20 (clock)
 
 WO49 TRAINING DONE, converged before cap 100: 49101 ep78 val 18.315, 49102 ep80 18.277, 49103 ep74 18.295 (old A: 18.42-18.47 at
