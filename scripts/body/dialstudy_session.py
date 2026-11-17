@@ -87,6 +87,8 @@ def build(manifest_path, out, seed=None, parts=None):
         else:
             c = place(clip.get("file") or clip["round1_file"])
             item = {"code": c, "kind": "single", "clips": [c], **({"q": clip.get("question") or (FOLLOW_Q if follow else LOOK_Q["single"])} if look else {})}
+            if clip.get("questions"):  # WO48: several questions per single, each {"q", "labels"}; answered together, stored joined by "|"
+                item["qs"] = [{"q": x["q"], "labels": list(x["labels"])} for x in clip["questions"]]
             key[c] = meta
         items.append(item)
     rng.shuffle(items)
@@ -126,7 +128,11 @@ class Session:
         with self.lock:
             item = next((i for i in self.items if i["code"] == code), None)
             allowed = self.pair_labels if item and item["kind"] == "pair" else self.labels
-            if item is None or ans not in allowed:
+            if item and item.get("qs"):
+                if not (isinstance(ans, list) and len(ans) == len(item["qs"]) and all(x in q["labels"] for x, q in zip(ans, item["qs"]))):
+                    return 400
+                ans = "|".join(ans)
+            elif item is None or ans not in allowed:
                 return 400
             if code in self.answered():
                 return 409
@@ -163,10 +169,17 @@ async function load() {
   const labels = it.kind === 'pair' ? st.pairLabels : st.labels;
   $('buttons').innerHTML = '';
   if (it.kind === 'pair') { $('bar').textContent += ' (two clips: ' + (it.q || 'which one fits the music?') + ')'; }
-  else if (it.q) { $('bar').textContent += ' - ' + it.q; }
+  else if (it.q && !it.qs) { $('bar').textContent += ' - ' + it.q; }
   const replay = document.createElement('button'); replay.textContent = it.kind === 'pair' ? 'play again from first' : 'replay';
   replay.onclick = () => { replays++; show(0); }; $('buttons').appendChild(replay);
   if (it.kind === 'pair') { const other = document.createElement('button'); other.textContent = 'show the other'; other.onclick = () => { replays++; show(which ? 0 : 1); }; $('buttons').appendChild(other); }
+  if (it.qs) {
+    const pick = it.qs.map(() => null), go = document.createElement('button'); go.textContent = 'send'; go.disabled = true;
+    it.qs.forEach((q, j) => { const row = document.createElement('div'); row.style.width = '100%'; row.style.textAlign = 'center'; row.append(q.q + ' ');
+      q.labels.forEach(l => { const b = document.createElement('button'); b.textContent = l; b.onclick = () => { pick[j] = l; [...row.querySelectorAll('button')].forEach(x => x.style.outline = x === b ? '2px solid #9cf' : ''); go.disabled = pick.includes(null); }; row.appendChild(b); });
+      $('buttons').appendChild(row); });
+    go.onclick = () => send(it.code, pick); $('buttons').appendChild(go);
+  } else
   labels.forEach(l => { const b = document.createElement('button'); b.textContent = l; b.onclick = () => send(it.code, l); $('buttons').appendChild(b); });
 }
 function show(i) {
