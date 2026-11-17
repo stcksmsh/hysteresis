@@ -23,15 +23,16 @@ def disc_mask():
     return np.clip((110 - r) / 1.5, 0, 1).astype(np.float32)[..., None]
 
 
-def intensity(t, beats):
-    """1 at the first frame at/after a beat (frame time t >= beat), linear to 0 over FADE_S; the latest beat at or before t decides"""
+def intensity(t, beats, bright=None):
+    """1 at the first frame at/after a beat (frame time t >= beat), linear to 0 over FADE_S; the latest beat at or before t decides.
+    bright (optional, one value per beat, WO51): the peak intensity of that beat's flash instead of 1"""
     i = np.searchsorted(beats, t, side="right") - 1
     if i < 0:
         return 0.0
-    return max(0.0, 1.0 - (t - beats[i]) / FADE_S)
+    return max(0.0, 1.0 - (t - beats[i]) / FADE_S) * (1.0 if bright is None else float(bright[i]))
 
 
-def render(wav, beats_rel, dst, n_frames=int(LEN * FPS)):
+def render(wav, beats_rel, dst, n_frames=int(LEN * FPS), bright=None):
     """beats_rel = beat times in seconds from the excerpt start; wav = audio file; -> mp4 (video from raw frames on stdin, audio from wav)"""
     m = disc_mask()
     bg = np.broadcast_to(BG, (H, W, 3))
@@ -40,7 +41,7 @@ def render(wav, beats_rel, dst, n_frames=int(LEN * FPS)):
            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "14", "-preset", "fast", "-c:a", "aac", "-b:a", "192k", "-shortest", str(dst)]
     p = subprocess.Popen(cmd, stdin=subprocess.PIPE)
     for f in range(n_frames):
-        v = intensity(f / FPS, beats_rel)
+        v = intensity(f / FPS, beats_rel, bright)
         fr = bg * (1 - m * v) + white * (m * v)
         p.stdin.write(fr.astype(np.uint8).tobytes())
     p.stdin.close()
