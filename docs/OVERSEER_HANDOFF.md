@@ -171,6 +171,16 @@ later. Old label page claude.ai artifact NcL5N9rcfNCRfwgachwCFx still to delete 
 - Planner numbering can skip (7.75 arrived after 7.76 was asked for); record what arrives, note gaps.
 - Overseer check scripts live in `scripts/body/overseer/` (durable); job tmp is not.
 
+## UPDATE 2026-11-17 ~20:00 (clock)
+
+WO51 PULSE2 READY + VIEW READY fb3eacd VERIFIED (switches/min 1.25 / q90 2.56, within-6 % 0.80, 3:2 share 0.257 recomputed from
+pulse2/songs/*.json) and MERGED (body; 20 tests). v1 -> v2: switches 1.87 -> 1.25/min, 3/2 share 0.142 -> 0.086, deviation from librosa
+local tempo 9.0 % -> 1.3 %. 15/20 viewing excerpts unchanged; 3 of 4 flash2 3/2 excerpts keep v1 ratio. Confidence LOW on real songs
+(median 0.20; drive coherence term; COH_FULL 0.6 set on synthetic) -> most flashes near 0.15 brightness. Confidence norm differs from the
+prompt default (FOR USER).
+VIEWING SERVED http://127.0.0.1:8772/ unit hyst-wo51-view, session /secondary/hyst-data/body/pulse2/view/session_2026-11-17 (40 items,
+key/answers 404 checked). Score: scripts/body/pulse2_score.py SESSION_DIR (7.80 decision rule). WO50 still NOT SENT.
+
 ## UPDATE 2026-11-17 ~19:20 (clock)
 
 7.80 RECORDED (body dca8076): pulse = TEMPO only (criteria right speed + stability, not "on beat"); pulse v2 = harmonic readout + stability
