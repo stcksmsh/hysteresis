@@ -67,7 +67,7 @@ def score(session, view=VIEW, earlier_map=EARLIER):
     complete = p["items"] == 20 and l["items"] == 20
     res = dict(counts=counts, complete=complete, rule="pulse v2 >= librosa on count of 'right' and on count of 'yes' (steady), over the 20 excerpts",
                speed_ok=p["right"] >= l["right"], steady_ok=p["steady_yes"] >= l["steady_yes"], rows=rows)
-    res["passes"] = bool(res["speed_ok"] and res["steady_ok"])
+    res["passes"] = bool(complete and res["speed_ok"] and res["steady_ok"])   # not decided until all 40 items are answered
     L = ["# Pulse v2 viewing score (BRAIN_SPEC 7.80 decision rule)", "", f"Session `{session}`; answered items {p['items'] + l['items']} of 40" + ("" if complete else " (INCOMPLETE)") + ".", "",
          "| source | right | too fast | too slow | steady yes | switches |", "|---|---|---|---|---|---|"]
     for s in ("pulse2", "lib"):
@@ -75,7 +75,7 @@ def score(session, view=VIEW, earlier_map=EARLIER):
         L.append(f"| {s} | {c['right']} | {c['too_fast']} | {c['too_slow']} | {c['steady_yes']} | {c['switches']} |")
     L += ["", f"Right speed: pulse v2 {p['right']} vs librosa {l['right']} -> {'pulse v2 >= librosa' if res['speed_ok'] else 'pulse v2 < librosa'}.",
           f"Steady: pulse v2 {p['steady_yes']} vs librosa {l['steady_yes']} -> {'pulse v2 >= librosa' if res['steady_ok'] else 'pulse v2 < librosa'}.",
-          f"Decision rule: {'MET' if res['passes'] else 'NOT MET'}" + ("" if complete else " (on an incomplete session)") + ".", "",
+          f"Decision rule: {('MET' if res['passes'] else 'NOT MET') if complete else 'NOT DECIDED (session incomplete)'}.", "",
           "| id | check | song | source | speed | steady | note | earlier (source) | earlier answer (on beat / speed) | earlier note |", "|---|---|---|---|---|---|---|---|---|---|"]
     for r in rows:
         L.append(f"| {r['id']} | {r['check']} | {r['song'][:26]} | {r['source']} | {r['speed']} | {r['steady']} | {r['note']} | {r['earlier_source']} | {r['earlier_answer']} | {r['earlier_note']} |")

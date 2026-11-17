@@ -61,5 +61,39 @@ def main():
     print("PULSE2 VIEW DONE", len(clips), flush=True)
 
 
+def check():
+    """every clip: video and audio stream about 30 s; flash count in key.json = events in the window; for pulse v2 items the decoded disc
+    brightness at each flash's first frame matches 0.15 + 0.85 x confidence (correlation over all flashes of the item) -> view/check.json"""
+    import subprocess
+    key = json.loads((OUT / "key.json").read_text())["items"]
+    out, bad = {}, []
+    for cid, k in sorted(key.items()):
+        f = OUT / f"{cid}.mp4"
+        pr = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "stream=codec_type,duration", "-of", "csv=p=0", str(f)], capture_output=True, text=True).stdout.split()
+        d = {s.split(",")[0]: float(s.split(",")[1]) for s in pr}
+        if k["source"] == "pulse2":
+            z = np.load(B / "pulse2/songs" / f"{k['song']}.npz")
+            ev, br = z["events"], brightness(z["event_conf"])
+        else:
+            ev = R.load_beats(B / "beatv/librosa" / f"{k['song']}.json"); br = np.ones(len(ev))
+        m = (ev >= k["start_s"]) & (ev < k["start_s"] + V.LEN)
+        row = dict(video_s=d.get("video"), audio_s=d.get("audio"), n_key=k["n_flashes"], n_events=int(m.sum()))
+        v = subprocess.run(["ffmpeg", "-loglevel", "error", "-i", str(f), "-vf", "crop=60:60:290:150,format=gray", "-f", "rawvideo", "-"], capture_output=True).stdout
+        fr = np.frombuffer(v, np.uint8).reshape(-1, 60, 60).mean((1, 2))
+        idx = np.minimum(np.ceil((ev[m] - k["start_s"]) * V.FPS - 1e-9).astype(int), len(fr) - 1)
+        lum = (fr[idx] - V.BG.mean()) / (255 - V.BG.mean())
+        want = np.array([V.intensity(i / V.FPS, ev[m] - k["start_s"], br[m]) for i in idx])    # incl. the fade to that frame
+        row["brightness_corr"] = float(np.corrcoef(lum, want)[0, 1]) if k["source"] == "pulse2" and np.std(want) > 0 else None
+        row["brightness_mae"] = float(np.mean(np.abs(lum - want)))
+        ok = abs((d.get("video") or 0) - V.LEN) < 0.05 and abs((d.get("audio") or 0) - V.LEN) < 0.1 and row["n_key"] == row["n_events"] and row["brightness_mae"] < 0.1
+        row["ok"] = bool(ok)
+        if not ok:
+            bad.append(cid)
+        out[cid] = row
+        print(cid, row, flush=True)
+    (OUT / "check.json").write_text(json.dumps(dict(bad=bad, items=out), indent=1))
+    print("PULSE2 VIEW CHECK", len(out), "items,", len(bad), "bad", bad, flush=True)
+
+
 if __name__ == "__main__":
-    main()
+    check() if sys.argv[1:] == ["check"] else main()

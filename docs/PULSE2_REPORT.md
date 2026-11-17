@@ -84,6 +84,16 @@ beat = periodicity >= 0.5 and none of the others; from 10 s on).
   three keep their v1 ratio (ph_157, aioz_ULrc, fd_100 at 1.23-1.52); only mo_gPO funk moves to librosa's level.
 - Median confidence inside the excerpts is 0.09-0.67 (median about 0.18): most pulse v2 flashes will show near the 0.15 floor.
 
+## Viewing material (prepared, NOT served)
+
+`/secondary/hyst-data/body/pulse2/view/`: Q00..Q39 (the 20 excerpts x pulse v2 / librosa, seed 51101), `manifest.json` (two questions:
+"Is it the right speed?" right / too fast / too slow; "Is it steady?" yes / switches), `key.json` (source, song, check, start, flashes, median
+brightness; 8 Motorica items `local_only`), `check.json`. Pulse v2 flash brightness = 0.15 + 0.85 x event confidence; librosa 1.
+Check (`pulse2_view.py check`): all 40 clips 30.0 s video and audio, flash count = events in the window, decoded disc brightness at each
+flash matches the intended value (mean absolute error below 0.01, correlation above 0.999 on pulse v2 items); 0 bad.
+Session `/secondary/hyst-data/body/pulse2/view/session_2026-11-17` built with `dialstudy_session.py --seed 51102`, **not served**.
+Score after answering: `pulse2_score.py /secondary/hyst-data/body/pulse2/view/session_2026-11-17` (says "not decided" until all 40 are answered).
+
 ## What the numbers say (no verdict)
 
 1. Fewer level switches (median 1.87 -> 1.25 per minute) and a steadier rate (share within 6 %: 0.73 -> 0.80).

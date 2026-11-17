@@ -6,3 +6,5 @@
 - Headline: level switches per minute median 1.87 -> 1.25; 3:2 share vs librosa 0.327 -> 0.257; confidence median beat 0.38, silence 0.13,
   beatless 0.18, dropout 0.17; per-song median confidence 0.20 (drive term limits).
 - PULSE2 READY (commit: see next line of git log, "WO51 PULSE2 READY").
+- View unit hyst-wo51-view1: 40 items in `/secondary/hyst-data/body/pulse2/view/`, check 0 bad; session `session_2026-11-17` (seed 51102) built, not served.
+- PULSE2 VIEW READY. Scorer `pulse2_score.py` tested on synthetic answers; all tests pass (28 incl. v1 pulse and dialstudy). Stopped.
