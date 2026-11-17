@@ -171,6 +171,11 @@ later. Old label page claude.ai artifact NcL5N9rcfNCRfwgachwCFx still to delete 
 - Planner numbering can skip (7.75 arrived after 7.76 was asked for); record what arrives, note gaps.
 - Overseer check scripts live in `scripts/body/overseer/` (durable); job tmp is not.
 
+## UPDATE 2026-11-17 ~13:20 (clock)
+
+WO49 TRAINING DONE, converged before cap 100: 49101 ep78 val 18.315, 49102 ep80 18.277, 49103 ep74 18.295 (old A: 18.42-18.47 at
+cap 40). Agent 1 nudged to continue checks + S-B candidates, told to pin cores 6-13. Flash check 8770: 0 answers yet.
+
 ## UPDATE 2026-11-17 ~12:40 (clock)
 
 WO48 PULSE READY 5e27e29 VERIFIED (overseer recomputed summary from pulse/songs/*.json; regularity/tempo/gap spot-checked from npz
