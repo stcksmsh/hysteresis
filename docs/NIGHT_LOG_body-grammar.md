@@ -11,3 +11,4 @@
 - REFINE DONE (docs/CONTROLS_REFINE_REPORT.md, 300 windows per dataset, report only, nothing adopted).
 - SB CLIPS READY: 6 FineDance excerpts x 7 clips (human, A own / other / shuffled / constant, sharpness-matched V1 / V2) rendered to grammar/look/clips, manifest grammar/look/manifest.json (not served). Excerpt rule: RMS >= song median, not in first/last 10 s.
 - A READY 1250e2c (+ this commit): docs/A_REPORT.md; checks grammar/checks/seed4510{1,2,3}.json; clips grammar/look. Tests: test_grammar.py 9 pass.
+- A READY 59b8444+ (fix 1): addendum 2 (pause 0/1, realised-sharpness V1/V2 match reported, coherence ratio of means, per-start values saved); checks rerun all 3 seeds; clips unchanged (CSV hashes identical), no re-render.

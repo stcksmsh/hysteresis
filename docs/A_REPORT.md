@@ -59,7 +59,8 @@ The controls help: validation total without controls is higher by 3.37, 3.27, 3.
 | accent | 0.04 [0.01, 0.07] | 0.08 [0.06, 0.11] | 0.08 [0.04, 0.12] | -0.03 [-0.07, -0.01] | 0.02 [-0.09, 0.13] | 0.06 [-0.06, 0.18] | 0.18 [0.13, 0.24] | -0.11 [-0.20, -0.02] |
 | sharp | 0.10 [0.07, 0.14] | -0.00 [-0.03, 0.03] | 0.61 [0.56, 0.66] | -0.01 [-0.04, 0.03] | -0.02 [-0.15, 0.10] | -0.23 [-0.34, -0.12] | 0.54 [0.47, 0.60] | -0.27 [-0.38, -0.16] |
 | direction | -0.07 [-0.10, -0.04] | 0.04 [-0.01, 0.08] | 0.00 [-0.05, 0.05] | 0.02 [-0.03, 0.06] | 0.30 [0.15, 0.45] | -0.06 [-0.20, 0.08] | 0.00 [-0.07, 0.07] | -0.13 [-0.23, -0.05] |
-| pause | 0.00 [0.00, 0.00] | 0.00 [0.00, 0.00] | 0.00 [0.00, 0.00] | 0.00 [0.00, 0.00] | 0.00 [0.00, 0.00] | 0.00 [0.00, 0.00] | 0.00 [0.00, 0.00] | 0.00 [0.00, 0.00] |
+| pause | 0.23 [0.18, 0.28] | -0.04 [-0.07, -0.01] | 0.55 [0.50, 0.60] | 0.05 [0.02, 0.09] | 0.03 [-0.11, 0.17] | -0.22 [-0.34, -0.10] | 0.69 [0.60, 0.78] | -0.91 [-1.05, -0.77] |
+| pause_high_p99 | 0.23 [0.18, 0.28] | -0.04 [-0.07, -0.01] | 0.55 [0.50, 0.60] | 0.05 [0.02, 0.09] | 0.03 [-0.11, 0.17] | -0.22 [-0.34, -0.10] | 0.69 [0.60, 0.78] | -0.91 [-1.05, -0.77] |
 
 **seed 45102**
 
@@ -70,7 +71,8 @@ The controls help: validation total without controls is higher by 3.37, 3.27, 3.
 | accent | 0.03 [-0.00, 0.05] | 0.01 [-0.02, 0.04] | 0.10 [0.06, 0.14] | -0.04 [-0.08, -0.01] | -0.05 [-0.17, 0.07] | 0.13 [0.02, 0.25] | 0.19 [0.12, 0.25] | -0.15 [-0.25, -0.06] |
 | sharp | 0.14 [0.10, 0.17] | -0.06 [-0.09, -0.03] | 0.70 [0.65, 0.74] | -0.02 [-0.05, 0.02] | 0.00 [-0.11, 0.12] | -0.41 [-0.53, -0.30] | 0.54 [0.47, 0.61] | -0.26 [-0.36, -0.15] |
 | direction | -0.06 [-0.08, -0.03] | 0.05 [0.02, 0.09] | -0.02 [-0.07, 0.04] | 0.01 [-0.02, 0.05] | 0.30 [0.16, 0.44] | -0.19 [-0.32, -0.07] | 0.10 [0.03, 0.17] | -0.20 [-0.29, -0.11] |
-| pause | 0.00 [0.00, 0.00] | 0.00 [0.00, 0.00] | 0.00 [0.00, 0.00] | 0.00 [0.00, 0.00] | 0.00 [0.00, 0.00] | 0.00 [0.00, 0.00] | 0.00 [0.00, 0.00] | 0.00 [0.00, 0.00] |
+| pause | 0.72 [0.67, 0.77] | -0.17 [-0.21, -0.13] | 0.44 [0.38, 0.49] | 0.05 [0.02, 0.09] | 0.00 [-0.13, 0.13] | -0.05 [-0.17, 0.06] | 0.30 [0.22, 0.38] | -0.05 [-0.21, 0.11] |
+| pause_high_p99 | 0.72 [0.67, 0.77] | -0.17 [-0.21, -0.13] | 0.44 [0.38, 0.49] | 0.05 [0.02, 0.09] | 0.00 [-0.13, 0.13] | -0.05 [-0.17, 0.06] | 0.30 [0.22, 0.38] | -0.05 [-0.21, 0.11] |
 
 **seed 45103**
 
@@ -81,7 +83,8 @@ The controls help: validation total without controls is higher by 3.37, 3.27, 3.
 | accent | 0.05 [0.02, 0.07] | 0.02 [-0.01, 0.05] | 0.07 [0.03, 0.11] | -0.05 [-0.08, -0.02] | -0.00 [-0.12, 0.10] | 0.05 [-0.07, 0.16] | 0.14 [0.08, 0.21] | -0.04 [-0.14, 0.06] |
 | sharp | 0.15 [0.11, 0.19] | -0.06 [-0.09, -0.03] | 0.68 [0.63, 0.74] | -0.02 [-0.08, 0.04] | 0.04 [-0.09, 0.18] | -0.25 [-0.35, -0.15] | 0.56 [0.49, 0.63] | -0.34 [-0.44, -0.25] |
 | direction | -0.02 [-0.05, 0.01] | 0.10 [0.07, 0.14] | 0.00 [-0.05, 0.05] | -0.01 [-0.07, 0.03] | 0.28 [0.14, 0.43] | -0.01 [-0.13, 0.10] | 0.03 [-0.05, 0.10] | -0.13 [-0.19, -0.07] |
-| pause | 0.00 [0.00, 0.00] | 0.00 [0.00, 0.00] | 0.00 [0.00, 0.00] | 0.00 [0.00, 0.00] | 0.00 [0.00, 0.00] | 0.00 [0.00, 0.00] | 0.00 [0.00, 0.00] | 0.00 [0.00, 0.00] |
+| pause | 0.70 [0.64, 0.76] | 0.17 [0.14, 0.21] | 0.62 [0.56, 0.67] | 0.02 [-0.00, 0.04] | 0.03 [-0.10, 0.16] | -0.17 [-0.31, -0.04] | 0.83 [0.75, 0.91] | -1.02 [-1.17, -0.88] |
+| pause_high_p99 | 0.70 [0.64, 0.76] | 0.17 [0.14, 0.21] | 0.62 [0.56, 0.67] | 0.02 [-0.00, 0.04] | 0.03 [-0.10, 0.16] | -0.17 [-0.31, -0.04] | 0.83 [0.75, 0.91] | -1.02 [-1.17, -0.88] |
 
 Held-out combinations (effect of the first control at the other's low / high level, and of the second at the first's low / high):
 
@@ -98,13 +101,13 @@ Held-out combinations (effect of the first control at the other's low / high lev
 | vigourxsharp | effect_sharp_at_vigour_lo | 0.34 [0.31, 0.38] |
 | vigourxsharp | effect_sharp_at_vigour_hi | 0.75 [0.71, 0.80] |
 | heightxpause | effect_height_at_pause_lo | 4.49 [4.44, 4.54] |
-| heightxpause | effect_height_at_pause_hi | 4.49 [4.44, 4.54] |
-| heightxpause | effect_pause_at_height_lo | 0.00 [0.00, 0.00] |
-| heightxpause | effect_pause_at_height_hi | 0.00 [0.00, 0.00] |
+| heightxpause | effect_height_at_pause_hi | 3.94 [3.89, 4.01] |
+| heightxpause | effect_pause_at_height_lo | 0.04 [-0.00, 0.07] |
+| heightxpause | effect_pause_at_height_hi | -0.00 [-0.04, 0.03] |
 | sharpxpause | effect_sharp_at_pause_lo | 0.63 [0.58, 0.68] |
-| sharpxpause | effect_sharp_at_pause_hi | 0.63 [0.58, 0.68] |
-| sharpxpause | effect_pause_at_sharp_lo | 0.00 [0.00, 0.00] |
-| sharpxpause | effect_pause_at_sharp_hi | 0.00 [0.00, 0.00] |
+| sharpxpause | effect_sharp_at_pause_hi | 0.34 [0.28, 0.40] |
+| sharpxpause | effect_pause_at_sharp_lo | 0.07 [0.02, 0.13] |
+| sharpxpause | effect_pause_at_sharp_hi | 0.04 [0.01, 0.06] |
 
 **seed 45102**
 
@@ -119,13 +122,13 @@ Held-out combinations (effect of the first control at the other's low / high lev
 | vigourxsharp | effect_sharp_at_vigour_lo | 0.54 [0.50, 0.58] |
 | vigourxsharp | effect_sharp_at_vigour_hi | 0.71 [0.66, 0.75] |
 | heightxpause | effect_height_at_pause_lo | 4.50 [4.45, 4.55] |
-| heightxpause | effect_height_at_pause_hi | 4.50 [4.45, 4.55] |
-| heightxpause | effect_pause_at_height_lo | 0.00 [0.00, 0.00] |
-| heightxpause | effect_pause_at_height_hi | 0.00 [0.00, 0.00] |
+| heightxpause | effect_height_at_pause_hi | 4.34 [4.27, 4.40] |
+| heightxpause | effect_pause_at_height_lo | 0.06 [0.01, 0.10] |
+| heightxpause | effect_pause_at_height_hi | -0.00 [-0.06, 0.04] |
 | sharpxpause | effect_sharp_at_pause_lo | 0.69 [0.65, 0.74] |
-| sharpxpause | effect_sharp_at_pause_hi | 0.69 [0.65, 0.74] |
-| sharpxpause | effect_pause_at_sharp_lo | 0.00 [0.00, 0.00] |
-| sharpxpause | effect_pause_at_sharp_hi | 0.00 [0.00, 0.00] |
+| sharpxpause | effect_sharp_at_pause_hi | 0.28 [0.23, 0.33] |
+| sharpxpause | effect_pause_at_sharp_lo | 0.08 [0.04, 0.14] |
+| sharpxpause | effect_pause_at_sharp_hi | 0.03 [-0.01, 0.08] |
 
 **seed 45103**
 
@@ -140,13 +143,13 @@ Held-out combinations (effect of the first control at the other's low / high lev
 | vigourxsharp | effect_sharp_at_vigour_lo | 0.48 [0.44, 0.53] |
 | vigourxsharp | effect_sharp_at_vigour_hi | 0.69 [0.65, 0.74] |
 | heightxpause | effect_height_at_pause_lo | 4.51 [4.46, 4.56] |
-| heightxpause | effect_height_at_pause_hi | 4.51 [4.46, 4.56] |
-| heightxpause | effect_pause_at_height_lo | 0.00 [0.00, 0.00] |
-| heightxpause | effect_pause_at_height_hi | 0.00 [0.00, 0.00] |
+| heightxpause | effect_height_at_pause_hi | 4.77 [4.72, 4.83] |
+| heightxpause | effect_pause_at_height_lo | 0.02 [-0.01, 0.05] |
+| heightxpause | effect_pause_at_height_hi | -0.02 [-0.04, 0.00] |
 | sharpxpause | effect_sharp_at_pause_lo | 0.69 [0.64, 0.74] |
-| sharpxpause | effect_sharp_at_pause_hi | 0.69 [0.64, 0.74] |
-| sharpxpause | effect_pause_at_sharp_lo | 0.00 [0.00, 0.00] |
-| sharpxpause | effect_pause_at_sharp_hi | 0.00 [0.00, 0.00] |
+| sharpxpause | effect_sharp_at_pause_hi | 0.52 [0.47, 0.57] |
+| sharpxpause | effect_pause_at_sharp_lo | 0.03 [-0.00, 0.07] |
+| sharpxpause | effect_pause_at_sharp_hi | 0.01 [-0.02, 0.05] |
 
 ### 2.3 Control substitution (std abs error between request and realised output, lower = closer; Pearson of the realised output with the request)
 
@@ -225,8 +228,8 @@ Control cosine = mean cosine between the standardised (vigour, height, sharpness
 | human | 0.367 [0.335, 0.400] | 0.310 [0.274, 0.346] | 0.065 [0.057, 0.075] | 0.053 [0.043, 0.063] |
 | A | 0.378 [0.346, 0.409] | 0.315 [0.278, 0.351] | 0.056 [0.049, 0.065] | 0.057 [0.049, 0.065] |
 | A_motif_ablated | 0.361 [0.329, 0.393] | 0.300 [0.265, 0.336] | 0.046 [0.040, 0.052] | 0.044 [0.037, 0.051] |
-| ratio A / human | -1.04 [-5.22, 1.10] | 1.12 [0.74, 1.57] | 0.98 [0.82, 1.15] | 1.02 [0.85, 1.18] |
-| ratio ablated / human | -0.87 [-4.75, 1.12] | 1.13 [0.32, 1.71] | 0.87 [0.73, 1.03] | 0.77 [0.62, 0.95] |
+| ratio A / human | 1.03 [0.99, 1.08] | 1.02 [0.95, 1.09] | 0.86 [0.72, 1.01] | 1.08 [0.90, 1.32] |
+| ratio ablated / human | 0.98 [0.94, 1.04] | 0.97 [0.91, 1.04] | 0.70 [0.59, 0.84] | 0.84 [0.70, 1.00] |
 
 **seed 45102**
 
@@ -235,8 +238,8 @@ Control cosine = mean cosine between the standardised (vigour, height, sharpness
 | human | 0.367 [0.335, 0.400] | 0.310 [0.274, 0.346] | 0.065 [0.057, 0.075] | 0.053 [0.043, 0.063] |
 | A | 0.375 [0.344, 0.408] | 0.312 [0.279, 0.345] | 0.055 [0.047, 0.065] | 0.055 [0.047, 0.065] |
 | A_motif_ablated | 0.357 [0.327, 0.388] | 0.290 [0.253, 0.326] | 0.056 [0.048, 0.066] | 0.045 [0.037, 0.055] |
-| ratio A / human | 0.08 [-1.92, 1.13] | 1.06 [0.66, 1.42] | 0.98 [0.82, 1.16] | 1.02 [0.86, 1.20] |
-| ratio ablated / human | -0.34 [-3.07, 1.06] | 1.06 [0.79, 1.33] | 0.94 [0.79, 1.12] | 0.72 [0.58, 0.87] |
+| ratio A / human | 1.02 [0.98, 1.07] | 1.01 [0.95, 1.07] | 0.84 [0.70, 1.00] | 1.05 [0.86, 1.31] |
+| ratio ablated / human | 0.97 [0.93, 1.02] | 0.94 [0.88, 0.99] | 0.86 [0.71, 1.04] | 0.86 [0.67, 1.11] |
 
 **seed 45103**
 
@@ -245,25 +248,25 @@ Control cosine = mean cosine between the standardised (vigour, height, sharpness
 | human | 0.367 [0.335, 0.400] | 0.310 [0.274, 0.346] | 0.065 [0.057, 0.075] | 0.053 [0.043, 0.063] |
 | A | 0.369 [0.341, 0.399] | 0.306 [0.270, 0.340] | 0.056 [0.049, 0.064] | 0.053 [0.046, 0.061] |
 | A_motif_ablated | 0.354 [0.325, 0.384] | 0.293 [0.260, 0.326] | 0.054 [0.047, 0.062] | 0.050 [0.043, 0.057] |
-| ratio A / human | 0.34 [-1.10, 1.10] | 1.14 [0.84, 1.46] | 0.98 [0.81, 1.15] | 0.97 [0.80, 1.17] |
-| ratio ablated / human | -1.65 [-6.99, 1.05] | 0.83 [0.30, 1.24] | 0.93 [0.79, 1.09] | 0.91 [0.76, 1.08] |
+| ratio A / human | 1.01 [0.96, 1.05] | 0.99 [0.94, 1.05] | 0.85 [0.71, 1.02] | 1.01 [0.83, 1.25] |
+| ratio ablated / human | 0.96 [0.92, 1.01] | 0.94 [0.89, 1.01] | 0.82 [0.69, 0.97] | 0.95 [0.78, 1.18] |
 
 ## 3. S-B clip candidates
 
 Manifest `grammar/look/manifest.json` (not served). Excerpts (song, token start, song time, V1/V2 sharpness match):
 
-- E01 fd_099 window 4 token 20 t = 90.0 s; V1 vs V2 sharpness 0.019 vs 0.019 (|diff| 0.000)
-- E02 fd_102 window 6 token 12 t = 126.0 s; V1 vs V2 sharpness 0.022 vs 0.022 (|diff| 0.000)
-- E03 fd_093 window 1 token 20 t = 30.0 s; V1 vs V2 sharpness 0.020 vs 0.020 (|diff| 0.000)
-- E04 fd_130 window 6 token 20 t = 130.0 s; V1 vs V2 sharpness 0.022 vs 0.022 (|diff| 0.000)
-- E05 fd_136 window 0 token 20 t = 10.0 s; V1 vs V2 sharpness 0.041 vs 0.041 (|diff| 0.000)
-- E06 fd_144 window 1 token 8 t = 24.0 s; V1 vs V2 sharpness 0.028 vs 0.028 (|diff| 0.000)
+- E01 fd_099 window 4 token 20 t = 90.0 s; V1 vs V2 matched on realised sharpness of the realised q50 of each candidate (token mean over the excerpt): chosen pair realised sharpness 0.01903 vs 0.01878 (|diff| 0.00026, best of 64 pairs); the 8 V1 samples span 0.019-0.035 (mean 0.028), the 8 V2 samples 0.019-0.036 (mean 0.027); requested-control sharpness 0.0467983924318105; gesture code-1 tokens differing between a V1 and a V2 sample: 0.90
+- E02 fd_102 window 6 token 12 t = 126.0 s; V1 vs V2 matched on realised sharpness of the realised q50 of each candidate (token mean over the excerpt): chosen pair realised sharpness 0.02193 vs 0.02197 (|diff| 0.00004, best of 64 pairs); the 8 V1 samples span 0.019-0.039 (mean 0.028), the 8 V2 samples 0.022-0.029 (mean 0.026); requested-control sharpness 0.0730395044083707; gesture code-1 tokens differing between a V1 and a V2 sample: 0.90
+- E03 fd_093 window 1 token 20 t = 30.0 s; V1 vs V2 matched on realised sharpness of the realised q50 of each candidate (token mean over the excerpt): chosen pair realised sharpness 0.02022 vs 0.01989 (|diff| 0.00033, best of 64 pairs); the 8 V1 samples span 0.020-0.037 (mean 0.028), the 8 V2 samples 0.020-0.037 (mean 0.024); requested-control sharpness 0.03258666588226333; gesture code-1 tokens differing between a V1 and a V2 sample: 0.88
+- E04 fd_130 window 6 token 20 t = 130.0 s; V1 vs V2 matched on realised sharpness of the realised q50 of each candidate (token mean over the excerpt): chosen pair realised sharpness 0.02192 vs 0.02183 (|diff| 0.00008, best of 64 pairs); the 8 V1 samples span 0.015-0.032 (mean 0.025), the 8 V2 samples 0.020-0.035 (mean 0.027); requested-control sharpness 0.02931791932496708; gesture code-1 tokens differing between a V1 and a V2 sample: 0.90
+- E05 fd_136 window 0 token 20 t = 10.0 s; V1 vs V2 matched on realised sharpness of the realised q50 of each candidate (token mean over the excerpt): chosen pair realised sharpness 0.04110 vs 0.04092 (|diff| 0.00018, best of 64 pairs); the 8 V1 samples span 0.019-0.067 (mean 0.036), the 8 V2 samples 0.022-0.063 (mean 0.038); requested-control sharpness 0.055227622389793396; gesture code-1 tokens differing between a V1 and a V2 sample: 0.85
+- E06 fd_144 window 1 token 8 t = 24.0 s; V1 vs V2 matched on realised sharpness of the realised q50 of each candidate (token mean over the excerpt): chosen pair realised sharpness 0.02802 vs 0.02802 (|diff| 0.00000, best of 64 pairs); the 8 V1 samples span 0.022-0.035 (mean 0.029), the 8 V2 samples 0.021-0.049 (mean 0.031); requested-control sharpness 0.03498737787595019; gesture code-1 tokens differing between a V1 and a V2 sample: 0.90
 
-## 4. Notes and limits (as measured, no verdict)
+A |diff| that rounds to 0.000 at three decimals is the minimum over 64 pairs of continuous values (about 1e-3 expected), so it is small by construction; the realised-sharpness spread of the candidates (above) shows the match is on motion produced, not on requested controls.
 
-- Effects in 2.2 are in sd of the human starts' own window means (not of tokens); the large height effect (about 4.5) and vigour effect (about 2.6) mean the request moves the realised output by several human-spread units. Cross-talk is in the off-diagonal cells.
-- 2.1 conditional entropy is a plug-in from train counts (biased low for rare code 1); the model's own code-2 entropy is next to it.
-- All three seeds hit the 40-epoch cap while still improving (validation total falling by about 0.01 per epoch at the end); no longer run was made (no new training under WO45B).
-- Checks pin the style triple to the held-out window's own; the S-B clips sample the V1 / V2 style per the addendum with the sharpness match stated in section 3.
-- Realised stage, human window = re-joined by A1 with the same window-relative posture decoding (HJ), not the raw human rows.
-- Check failures per item were counted by the runner (`grammar/logs/checks*.log`); none logged an item failure besides empty-slice warnings for tokens 0-3 (history tokens carry no generated measure).
+## 5. Fix 1 (A_RULES addendum 2)
+
+1. Pause intervention now runs with low 0 / high 1.0 (rows `pause` and `pause_high_p99` of 2.2; the train p99 of pause is 1.0, so the two rows are identical by construction). The realised pause probability moves by only about 0.05 sd of the human spread (seed 45101: 0.05 [0.02, 0.09]) for a full pause request, while a full pause request lowers base-rotation speed (-0.9 to -1.0 sd) and raises direction-change rate; pause is the control A follows least. Numbers per seed in 2.2.
+2. S-B V1 vs V2: matched on the realised sharpness of the realised q50 (as in the first run: a |diff| printed as 0.000 at three decimals was the best of 64 pairs, about 1e-3 by chance; now printed to five decimals with the candidate spread, the requested-control sharpness and the share of differing gesture tokens). V1 and V2 samples are different token sequences (about 0.9 of code-1 tokens differ). The selection is unchanged: all 42 clip CSVs are byte-identical to the first run, so no clip was re-rendered; only `excerpts.json` gained fields.
+3. Coherence ratios are the ratio of the means over songs with the song-bootstrap interval of that ratio (section 2.5).
+4. Per-start / per-song values behind every check: `grammar/checks/seed<S>_values.npz` (window measures `*__wm` (n, 8: vigour, height, sharp, pause, dirz, acccom, dirchg, basespeed), scalars `*__ws` (dirchg, base speed, lamp p_gt3, frozen flag, frozen share), token measures `*__tm` (n, 40, 6), intervention differences `iv_*__diff` in human-spread units, substitution `sub_err__*` / `sub_pearson__*`, coherence `coh__*`, `groups`, `dsid`, `idx`, `human_raw_ctl`). The first-run JSONs are kept in `grammar/checks_v1/`.
