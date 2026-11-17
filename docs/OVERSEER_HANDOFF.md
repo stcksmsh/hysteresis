@@ -171,6 +171,15 @@ later. Old label page claude.ai artifact NcL5N9rcfNCRfwgachwCFx still to delete 
 - Planner numbering can skip (7.75 arrived after 7.76 was asked for); record what arrives, note gaps.
 - Overseer check scripts live in `scripts/body/overseer/` (durable); job tmp is not.
 
+## UPDATE 2026-11-17 ~19:20 (clock)
+
+7.80 RECORDED (body dca8076): pulse = TEMPO only (criteria right speed + stability, not "on beat"); pulse v2 = harmonic readout + stability
++ confidence output (no gate); viewing 40 items (20 excerpts x v2/librosa), "right speed?" + "steady?", brightness = confidence; DECISION
+RULE: v2 >= librosa on right-speed count AND steady count, else stop tuning and ask Kosta for tempo-source ruling. Event detector
+requirement: distinct relative to recent context, sparse. WO50 proceeds with pulse v1 (not waiting).
+WO51 prompt docs/BUILDER_PROMPT_WO51_PULSE_V2.md (body b48cc6a) LAUNCHED as Opus subagent (branch body-pulse2, cores 14-19, material
+not served). WO50 still NOT SENT (agent 1). Planner still has CORTEX_EVENTS (3 Qs) and A2 open.
+
 ## UPDATE 2026-11-17 ~19:00 (clock)
 
 FLASH2 SCORED (body 955e42f, docs/PULSE_FLASH2_RESULT.md): on beat pulse 1/8/1, librosa 6/3/1; speed right 6/10 each. 3/2 group FAILS
