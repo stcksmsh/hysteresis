@@ -171,6 +171,17 @@ later. Old label page claude.ai artifact NcL5N9rcfNCRfwgachwCFx still to delete 
 - Planner numbering can skip (7.75 arrived after 7.76 was asked for); record what arrives, note gaps.
 - Overseer check scripts live in `scripts/body/overseer/` (durable); job tmp is not.
 
+## UPDATE 2026-11-17 ~17:40 (clock)
+
+7.79 RECORDED (body b71bb37): "fits the music" = tempo / events / character / structure as scoring terms of LOOKAHEAD SELECTION;
+beat-phase not a goal; MOTOR CLOCK PAUSED (7.78 2.2-2.3 on hold). Step 1 factorial viewing (T x P x E, 6 excerpts x 8 = 48 + 4 repeats,
+ratings 1-5). Step 2 cortex surprisal as event detector (report-only). Pulse Q1 (d) second flash, Q2 (b) arm cap from A, Q3 (a) amend
+1.1 dataset-dependent, Q4 exclude < 12 s. Planner asked for the A2 brief (given to Kosta; 3 Qs, Q2/Q3 affected by the hold).
+WO50 prompt docs/BUILDER_PROMPT_WO50_FACTORIAL.md (body a9cb03f) -> agent 1, branch body-factorial, cores 6-13: NOT SENT (wait "send").
+SUBAGENTS LAUNCHED (cores 14-19): flash2 (Sonnet, branch body-flash2: 8 songs at 2/3 or 3/2 + 2 failures, material + session built, not
+served) and cortexev (Opus, branch body-cortexev: rules, report, Kosta ear-check sheet; stops if no precomputed surprisal).
+If the overseer restarts: subagents die; check origin/body-flash2, origin/body-cortexev and relaunch.
+
 ## UPDATE 2026-11-17 ~17:10 (clock)
 
 PULSE FLASH CHECK SCORED (body 74b18bc, docs/PULSE_FLASH_RESULT.md): on beat pulse 6/3/1, librosa 7/3/0; speed right pulse 8/10, librosa
