@@ -2991,3 +2991,88 @@ Standing rules unchanged.
   Bailando, stated with its formula and sigma) and the overseer checks it against the published formula; the published ground-truth value
   is quoted from the paper with its citation. If the code itself is needed, that is a download for Kosta to approve.
 - V4 material (clicks on the grid) is prepared by the builder and served by the overseer, together with the 10-song section spot check.
+
+### 7.78 Timing by entrainment (internal pulse, motor clock, coupling); B's first version; A retrain; 2026-11-17, via Kosta + planner (answering `docs/PLANNER_BRIEF_A_BEATV.md`)
+
+Recorded as received (no earlier 7.78 draft reached the overseer). Planner text, verbatim:
+
+== 1. FINDINGS RECORDED ==
+1.1 Beat timing in human data:
+ - BAS on raw FineDance (0.22) matches the published ground truth (0.212, Lodge CVPR 2024 Table 1), but equals its own shifted-beat
+   chance level (+0.003 [-0.003, 0.009]). Published ground-truth BAS is at chance.
+ - Dancers carry TEMPO (movement period power at the beat period, periodic base rotation), not beat-phase accent timing.
+ - Caveat: evaluation-code variant not confirmed; AIST++ cross-check when Kosta's registration arrives. Possible thesis finding; verify
+   before any claim.
+1.2 Beat trackers fail in human-obvious ways (Kosta's V4 flash check):
+ - project grid: dropouts, local irregularity (79 ms median residual);
+ - librosa: wrong metrical level on slow songs, chases the fastest element (hats).
+ Neither is used as a timing source from here.
+1.3 A works:
+ - human-level smoothness;
+ - frozen share ~0;
+ - follows vigour, height and sharpness;
+ - 2-4 s coherence via the motif state.
+ Pause is not followed; the accent pattern is only weakly followed; all seeds hit the epoch cap while still improving.
+1.4 Perception (PLOS One 2019, audiovisual synchrony of human motion to music): temporal integration window ~300-450 ms total width;
+observers judge from movement landings (lowest points, reach ends) and predict them. Exact on-beat placement is not needed; tempo matters
+more than precise phase. Consistent with 1.1.
+
+== 2. TIMING REDESIGN (Kosta: rethink, no patch stack) ==
+Timing comes from ENTRAINMENT, not from an external beat grid or an authored accent rule.
+2.1 INTERNAL PULSE:
+ - A bank of nonlinear oscillators (resonance model of beat perception, after Large et al.; builder cites the exact model, equations and
+   parameters used), log-spaced over 0.5-4 Hz, ~50-100 oscillators, driven by the onset envelope from the ear features with low-band
+   (kick/rim) weighting.
+ - Pulse = the oscillator with the highest amplitude x a preferred-tempo prior (centred ~2 Hz, stated), restricted to rates the arm can
+   physically move at (servo basis stated: shoulder/base acceleration limits).
+ - Required properties, to be verified: persists through dropouts and quiet sections; picks a sensible metrical level; stable within a
+   section; follows genuine tempo changes.
+ - All parameters fixed in the rules before any result; no per-song tuning.
+ - Check (report): pulse vs librosa vs project grid on the 10 V4 songs (tempo, level, gaps, local regularity). Then Kosta's flash check
+   of the pulse on the same 10 songs: blind, same protocol, questions "on the beat?" and "right speed?".
+2.2 MOTOR CLOCK:
+ - A's tokens are time-scaled so each token spans one pulse period, or two periods when one period is shorter than the arm's comfortable
+   token duration (rule and threshold stated).
+ - Token starts are aligned to pulse phase through the coupling in 2.3.
+ - The decoder resamples its 25 Hz control points to the token duration.
+ - Vigour and sharpness are measured AFTER scaling; A's control requests are compensated for the time-scaling (builder states the method).
+ - Gates at 1.25 apply after scaling.
+2.3 COUPLING:
+ - One parameter for how tightly token phase follows the pulse: 0 = free-running at the pulse period, 1 = fully phase-locked. Default
+   0.7, fixed in the rules. The teacher tunes it later.
+ - Phase target: movement landings (lamp-speed minima / reach ends) within +-150 ms of the pulse. Precision beyond that is not a goal.
+ - Report: landing-to-pulse phase distribution, share within +-150 ms, jitter and smoothness vs re-joined human level.
+2.4 Dropped as timing mechanisms: librosa and the project grid as timing sources for B and for generation; the half-time selection rule;
+the rate-cap rule; the time-warp layer; the accent pattern as a timing lever (it stays a measured A control).
+2.5 Framing for every write-up: "it learned to move from dancers; it keeps time the way humans do, by entraining to the music; how tightly,
+its teacher shaped." The entrainment mechanism is designed (a model of a human mechanism, like the cortex), not choreography.
+
+== 3. B (first version) ==
+ - Tempo comes from the internal pulse.
+ - B predicts slow controls (vigour, height, sharpness, pause over 2-8 s) and phrase-change probability, from ear features + pulse state +
+   onset/density features.
+ - Cortex only as a variant that must beat this.
+ - Later variant: the cortex's beat band driven by the internal pulse instead of the project grid (its beat input currently comes from the
+   flawed grid; this may be why it adds nothing). Evaluated against B without the cortex.
+
+== 4. A RETRAIN AND OTHER QUESTIONS ==
+Q3 (a): retrain A to convergence (cap 100, early stopping as ruled), 3 seeds; rerun all checks.
+Q4 (a): up-weight windows containing pauses (factor stated in the rules); the pause request gets the same corruption and dropout treatment
+as the other controls; report the pause intervention again.
+Q5 (a): cross-talk report-only; judge by eye in S-B.
+Q6 (a): keep the residual gesture stage.
+Q7 (a): S-B viewing after the retrain, on the new A, with the prepared conditions (human; A with own / other / shuffled / constant
+controls; V1 vs V2 matched on realised sharpness). Add per excerpt: A with motor clock (coupling 0.7) vs A at fixed 0.5 s tokens, with
+music. Excerpts per 7.75 Q3. Answers A / B / tie / both poor + confidence.
+
+== 5. ORDER ==
+1 internal pulse + numeric check; 2 Kosta's pulse flash check; 3 A retrain (may run in parallel with 1-2); 4 motor clock on the new A;
+5 S-B viewing; 6 B first version.
+
+Standing rules unchanged.
+
+**Overseer notes (operational, not rulings):**
+- Work split: WO48 (agent 2) = 2.1 internal pulse + numeric check + flash-check material (served by the overseer). WO49 (agent 1) = 4 A
+  retrain (Q3, Q4) + all checks rerun. The motor clock (2.2/2.3) and the S-B viewing follow as later work orders.
+- The pulse bank's citation and equations are reconstructed by the builder from the published papers (no downloads); the overseer checks
+  them against the papers before results are read.
