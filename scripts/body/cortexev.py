@@ -268,7 +268,8 @@ def song_set():
 
 
 def mmss(t):
-    return f"{int(t // 60):02d}:{t % 60:04.1f}"
+    d = int(round(t * 10))
+    return f"{d // 600:02d}:{d % 600 // 10:02d}.{d % 10}"
 
 
 def v4_sheet(per, v4, mans):
