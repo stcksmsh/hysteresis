@@ -102,7 +102,7 @@ carries the tempo (period power, periodic base rotation), not beat-phase accents
 
 **Q1. Beat-relative accent timing (the decision 7.77 deferred to after V1-V4).**
 - (a) **Authored rule**, tuned by the teacher and stated as authored in every write-up. B's first version predicts tempo, slow controls and
-  phrase change (7.77 Q1). Beat times come from librosa (regular), (Q2, Q2b). **[rec]**
+  phrase change (7.77 Q1). Beat times per Q2 and Q2b. **[rec]**
 - (b) Wait for AIST++ (Kosta's registration) and V4 before deciding.
 - (c) Learn timing from the yaw period-locking only.
 
