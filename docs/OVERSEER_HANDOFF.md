@@ -1,4 +1,4 @@
-# Overseer handoff — 2026-11-16 (saved for a /clear)
+# Overseer handoff — 2026-11-17 (saved for an overseer restart)
 
 This file is the overseer's whole state. The `/overseer` skill (`.claude/skills/overseer/SKILL.md` on this branch, the canonical copy) starts a new overseer from it and recreates the worktree if it is gone. To start one by hand, paste everything below the line into a fresh session.
 
@@ -94,7 +94,84 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-17 (7.78) — newest
+## CURRENT STATE 2026-11-17 (saved for an overseer restart) — READ THIS FIRST
+
+**Line of work (all on branch `body`, worktree `.claude/worktrees/body`; rulings in `docs/BRAIN_SPEC.md` 7.73-7.78):**
+- 7.73/7.74: redesign. A = motor grammar conditioned on controls measured from motion; B = listener predicting those controls; teacher tunes
+  B only.
+- 7.74 controls: vigour (level), height (v2p bounds [-0.569, 0.770] m), accent pattern (8 slots / token mean), sharpness, direction, pause
+  probability.
+- 7.75: viewings ruled; PhantomDance + Motorica in A; V1/V2 copy part of the style embedding (no V1 default); energy = vigour + sharpness;
+  viewing excerpts at RMS >= song median, not first/last 10 s.
+- 7.76: third review; beat-relative coupling measured first; A additions (style embedding, 2 s motif state, coherence check).
+- 7.77: beat verification V1-V4.
+- 7.78 (NEWEST, read in full): timing by ENTRAINMENT. Internal pulse = oscillator bank (Large et al.) on low-band-weighted onsets, within
+  arm limits. Motor clock: A's tokens time-scaled to the pulse; coupling 0.7; landings within +-150 ms. librosa and the project grid are
+  dropped as timing sources. B v1 = slow controls + phrase change from ear + pulse + onset features; cortex only as a variant. A retrain
+  (cap 100, pause up-weight). Order: pulse -> Kosta pulse flash check -> (A retrain in parallel) -> motor clock -> S-B viewing -> B v1.
+
+**Done and verified (all merged into `body`):**
+- WO43 controls (+ fix 1, height bounds).
+- WO44 chunk joining: decoded human chunks at human level; excess in token sequences.
+- WO46: posture-vs-gesture diagnostic (most excess in change-based posture knots); METRIC (beat locking at chance).
+- WO47 beat verification:
+  - raw FineDance BAS 0.218-0.227 = published 0.2120 (Lodge CVPR 2024 Table 1, overseer fetched it) = its own chance;
+  - no sync offset;
+  - project grid locally irregular (79 ms residual vs librosa 8.4 ms);
+  - yaw period-lock only.
+- V4 flash check (Kosta): librosa 8/2/0, project 3/6/1. librosa doubles slow songs (never < 80 BPM over 1,341 songs); the project grid has
+  dropouts (8.8 s gap). `docs/BEATV_V4_RESULT.md`.
+- WO45/45B A (`docs/A_REPORT.md`, fix 1 via addendum 2):
+  - smoothness at human level (lamp p_gt3 ratio of means 0.92-0.96, frozen ~0);
+  - follows vigour / height / sharpness / direction; pause NOT followed;
+  - all 3 seeds stopped at the 40-epoch cap while improving;
+  - per-start values in `grammar/checks/seed*_values.npz`;
+  - S-B clips in `grammar/look/` (not served).
+- Kosta viewings, all scored:
+  - control viewing 11/12 (`docs/CONTROLS_VIEWING_RESULT.md`);
+  - look check PhantomDance/Motorica 11 yes 1 partly (`docs/T0_PHANTOM_LOOK_RESULT.md`);
+  - V4 flash check.
+
+**PENDING — FIRST ACTION after /overseer:**
+- Prompts written, NOT SENT, waiting for Kosta's "send" (he is clearing both agents):
+  - `docs/BUILDER_PROMPT_WO48_PULSE.md` -> Hysteresis agent 2 (branch body-pulse, cores 14-19): internal pulse + numeric check + pulse
+    flash material.
+  - `docs/BUILDER_PROMPT_WO49_A_RETRAIN.md` -> Hysteresis agent 1 (branch body-grammar2, cores 6-13): A retrain + all checks + S-B
+    candidates.
+  - On "send": ListAgents (refs change after clears), SendMessage each a one-line pointer to its prompt file (commit 5ee426d on body),
+    notify_when_idle.
+- Then watch both with Monitor (re-arm every 30 min; it reports unit appeared/gone/failed, power), and nudge an idle builder when its unit
+  ends cleanly.
+- Verify each rules note is pushed before results. Check WO48's model equations against the published Large et al. papers (WebFetch is
+  allowed for the overseer). Verify results by recomputing from saved per-item values.
+- Next after these: motor-clock work order (7.78 2.2/2.3) on the new A; S-B viewing (7.78 Q7, answers A / B / tie / both poor +
+  confidence); B v1.
+
+**Kosta to-dos:** AIST++ registration (for the 7.78 1.1 cross-check); the pulse flash check when WO48 material is ready; S-B viewing
+later. Old label page claude.ai artifact NcL5N9rcfNCRfwgachwCFx still to delete (at the laptop, not over Remote Control).
+
+**Serving Kosta's sessions:**
+- `dialstudy_session.py --clips MANIFEST --out DIR --seed N` builds a session, then serve it with
+  `systemd-run --user --unit=hyst-<name> -p MemoryMax=1G ... --out DIR --serve --port 87xx`.
+- Check that `/` returns 200 and `/key/key.json` and `/answers.csv` return 404.
+- Score answers.csv against key/key.json; read every note.
+- Kosta prefers VISUAL markers over audio clicks (a flash disc).
+- Stop the server after scoring.
+
+**Lessons this session (keep):**
+- Crash / failure reports to a builder go out AT ONCE, without asking Kosta (he asked "whats the holdup?"). New work orders still wait for
+  "send". Memory: feedback_crash_notices_no_ask.
+- Builders go idle while units run and do not notice when a unit ends: nudge them on a clean end.
+- Check percentile-based test levels for sparse controls (pause p10 = p90 = 0 silently disabled the pause intervention).
+- Require per-item values saved for every check (needed to recompute).
+- A "matched" pair with identical values means the match used the request, not the realised output.
+- A ratio of per-song ratios with small denominators gives nonsense; ask for the ratio of means.
+- Published reference numbers quoted from a builder's memory: fetch the paper (WebFetch) and confirm.
+- Builders cannot download: anything needing published code becomes a "FOR USER" download question.
+- Planner numbering can skip (7.75 arrived after 7.76 was asked for); record what arrives, note gaps.
+- Overseer check scripts live in `scripts/body/overseer/` (durable); job tmp is not.
+
+## UPDATE 2026-11-17 (7.78)
 
 7.78 RECORDED (body 5f08a17): timing by entrainment (oscillator-bank internal pulse, motor clock, coupling 0.7), librosa/project grid
 dropped as timing sources, B v1 (slow controls + phrase change from ear + pulse + onset features), A retrain (cap 100, pause up-weight),
