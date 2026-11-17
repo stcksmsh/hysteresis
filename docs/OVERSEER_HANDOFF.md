@@ -171,6 +171,11 @@ later. Old label page claude.ai artifact NcL5N9rcfNCRfwgachwCFx still to delete 
 - Planner numbering can skip (7.75 arrived after 7.76 was asked for); record what arrives, note gaps.
 - Overseer check scripts live in `scripts/body/overseer/` (durable); job tmp is not.
 
+## UPDATE 2026-11-17 ~12:05 (clock)
+
+WO49 SENT to Hysteresis agent 1 [8fd2af] (not cleared; 13 h old session), pointer to docs/BUILDER_PROMPT_WO49_A_RETRAIN.md,
+notify_when_idle. Watch hyst-wo49-* units (cores 6-13).
+
 ## UPDATE 2026-11-17 ~12:00 (clock)
 
 AIST BAS DONE, VERIFIED (overseer recomputed from bas/per_sequence.csv; music-ID bootstrap matches) and MERGED (body e430c42,
