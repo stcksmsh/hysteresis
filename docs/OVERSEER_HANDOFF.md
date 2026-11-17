@@ -171,6 +171,16 @@ later. Old label page claude.ai artifact NcL5N9rcfNCRfwgachwCFx still to delete 
 - Planner numbering can skip (7.75 arrived after 7.76 was asked for); record what arrives, note gaps.
 - Overseer check scripts live in `scripts/body/overseer/` (durable); job tmp is not.
 
+## UPDATE 2026-11-17 ~11:30 (clock)
+
+Kosta AGREED to AIST Dance DB terms and filled the AIST form (2026-11-17), said "do it". AIST music needs no login: Google's
+downloader.py fetches https://aistdancedb.ongaaccel.jp/v1.0.0/video/10M/<name>.mp4 (list
+storage.googleapis.com/aist_plusplus_public/20121228/video_list.txt). Sonnet subagent launched (worktree, branch body-aist, cores 0-5):
+60 videos (one c01 per music ID) + 5 pair-checks for alignment -> /secondary/hyst-data/datasets/aist/music/<ID>.wav; then
+docs/AIST_BAS_RULES.md (pushed first) + BAS with WO47 V2 code, chance, full set + test split; docs/AIST_BAS_REPORT.md.
+PUBLISHED REFERENCE (overseer read the PDF, Bailando CVPR 2022 arXiv 2203.13055v2, Table 1, AIST++ test set, 40 pieces, 20 s, sigma 3):
+Ground Truth Beat Align Score 0.2374 (FACT 0.2209, Bailando 0.2332). Compare the subagent's test-split raw BAS to 0.2374.
+
 ## UPDATE 2026-11-17 ~11:15 (clock)
 
 Kosta: only ONE builder agent now (agent 1); overseer may run proper subagents (Sonnet/Opus, its call) for other work. WO48 (pulse)
