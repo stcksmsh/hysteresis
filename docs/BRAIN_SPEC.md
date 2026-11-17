@@ -3076,3 +3076,49 @@ Standing rules unchanged.
   retrain (Q3, Q4) + all checks rerun. The motor clock (2.2/2.3) and the S-B viewing follow as later work orders.
 - The pulse bank's citation and equations are reconstructed by the builder from the published papers (no downloads); the overseer checks
   them against the papers before results are read.
+
+### 7.79 "Fits the music" = four levels scored in lookahead selection; motor clock paused; factorial viewing; cortex as event detector; pulse Q1-Q4; 2026-11-17, via Kosta + planner (answering `docs/PLANNER_BRIEF_PULSE_AIST.md` + addendum)
+
+Recorded as received. It supersedes the planner's earlier 7.79 draft (landing-opportunity mechanism); that draft never reached the overseer.
+Planner text, verbatim:
+
+TO: overseer. FROM: Kosta via planner. Re: PLANNER_BRIEF_PULSE_AIST + addendum (2026-11-17). Record as BRAIN_SPEC 7.79. Supersedes the planner's earlier 7.79 draft (landing-opportunity mechanism) if received.
+
+Kosta's statement (verbatim): "the purpose isnt to find the beat, but possible end locations to match music, so it isnt just flashing on beat, but flashing at oportune moments e.g. beat/dropout/accent whatever right?"
+
+DESIGN READING (planner, after re-deriving from all of Kosta's viewing notes): "fits the music" has four levels:
+ 1 TEMPO/groove (movement period matches the music's; supported by human data);
+ 2 EVENTS (response to salient moments: drops, dropouts, accents, entries; the response may be a landing, hold, burst, rise or change, chosen freely);
+ 3 CHARACTER (size/energy/level match the music's feel; B + teacher);
+ 4 STRUCTURE (change when the music changes, return when it returns).
+Beat-phase placement is NOT a goal (human data, perception study, Kosta never asked for it). These four are not separate timing modules: they become the scoring terms of the planned LOOKAHEAD SELECTION (7.74/7.76): A proposes futures at the pulse tempo; futures are scored on alignment of their landings, holds, changes and controls with the music at each level; feasibility hard; the weights between levels are what the teacher tunes.
+HOLD: no motor clock or landing-opportunity implementation yet (7.78 2.2-2.3 and the previous draft are paused).
+
+STEP 1, FACTORIAL VIEWING (test tooling only, not architecture): what matters to Kosta's eye.
+ - Material: current A outputs (or the retrain's when ready) on 6 excerpts (7.75 Q3 rules, at least 2 with a drop or dropout), 10 s each, with music, lamp head.
+ - Factors, applied by test-only time-scaling/warping of the same movement:
+   T tempo: movement period matched to the pulse vs 15 % off;
+   P phase: landings pulled to pulse events (+-150 ms) vs random phase;
+   E events: at drops/dropouts/strong accents (detected causally from ear features, rules stated) the movement lands or holds vs ignores them.
+ - 2 x 2 x 2 = 8 versions per excerpt, 48 clips, blind random order. Kosta rates each 1-5 "fits the music" + optional note. Repeat 4 clips for consistency.
+ - Report: mean effect of T, P, E and interactions, with song-level bootstrap.
+STEP 2, report-only: cortex surprisal as an EVENT detector: alignment of surprisal peaks (per layer) with drops, dropout onsets/ends and section changes (ear-based detections and the 10 V4 songs checked by ear) vs ear-feature event detectors. If the cortex detects events better, it becomes the planner's event source.
+Pulse questions:
+ Q1 (d): second flash check on the 3:2 / 2:3 songs + the two failures; (b) harmonic-support readout only if they fail.
+ Q2 (b): arm cap from A's measured shoulder amplitude at high vigour.
+ Q3 (a): amend 7.78 1.1: beat-phase locking is dataset-dependent (FineDance at chance; AIST++ small but above chance, +0.016 to +0.067); tempo carrying holds.
+ Q4: clips under 12 s excluded from pulse-driven use and summaries; report-only.
+Please send the A retrain (A2) brief to the planner if it has open questions.
+Standing rules unchanged.
+
+**Overseer notes (operational, not rulings):**
+- "Current A" = A2, seed 49102 (lowest validation total; `docs/A2_REPORT.md`). The A2 brief (`docs/PLANNER_BRIEF_A2.md`, 3 open questions)
+  was given to Kosta for the planner on 2026-11-17. Its Q2 (S-B after the motor clock) and Q3 (motor-clock work order) are affected by the
+  HOLD above.
+- Defaults the overseer set for Step 1 (not ruled; the work order names them):
+  - T "15 % off": 3 excerpts slower, 3 faster, fixed per excerpt before rendering;
+  - the 4 repeated clips: one per T x E cell, drawn with a fixed seed; they are not scored as separate items;
+  - rating options 1-5, with an optional note;
+  - the speed cap still holds in every version (Q2 is not yet built, so 7.78's current cap is used).
+- Work split: Step 1 to the builder (agent 1). Step 2 and Q1's second flash check to overseer subagents, because they are small and
+  independent.
