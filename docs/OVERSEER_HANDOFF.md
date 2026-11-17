@@ -171,6 +171,15 @@ later. Old label page claude.ai artifact NcL5N9rcfNCRfwgachwCFx still to delete 
 - Planner numbering can skip (7.75 arrived after 7.76 was asked for); record what arrives, note gaps.
 - Overseer check scripts live in `scripts/body/overseer/` (durable); job tmp is not.
 
+## UPDATE 2026-11-17 ~17:10 (clock)
+
+PULSE FLASH CHECK SCORED (body 74b18bc, docs/PULSE_FLASH_RESULT.md): on beat pulse 6/3/1, librosa 7/3/0; speed right pulse 8/10, librosa
+7/10. Pulse fails when 8-25 % slow (aioz_8JQ0, aioz_SZhU); only 2 items near 2:3, Q1 undecided. Kosta's PURPOSE (verbatim in the
+result doc): flash/landings at opportune moments (beat/dropout/accent), not just beat. Server hyst-wo48-flashview2 STOPPED.
+Brief PULSE_AIST addendum (body 91eef0d) SENT: Q1 revised -> (d) second flash on 3:2 songs, then harmonic readout [rec]; Q5 landing
+candidates = pulse events + dropout onsets/ends + low-band accents, dropout -> hold [rec]. Unknown whether Kosta already pasted the
+briefs to the planner ("All done" was ambiguous).
+
 ## UPDATE 2026-11-17 ~14:00 (clock)
 
 WO49 A2 READY c1c5972 VERIFIED (intervention diagonal recomputed with song bootstrap from grammar2/checks/seed*_values.npz, 178 starts /
