@@ -109,3 +109,29 @@ The pulse is within 3 % of Kosta's level on 5 of the 8 songs where he stated one
      time for a number nobody uses.
 4. **Very short clips.** Should clips under 12 s be excluded from pulse-driven use and from summaries? **Recommendation: yes; report-only for
    now.**
+
+## Addendum (2026-11-17, after Kosta's flash check; `docs/PULSE_FLASH_RESULT.md`)
+
+**Result.** On beat yes / partly / no: pulse 6 / 3 / 1, librosa 7 / 3 / 0. Speed right / too fast / too slow: pulse 8 / 0 / 2, librosa
+7 / 3 / 0.
+- The pulse's failures are songs where it runs 8-25 % slower than the beat (aioz_8JQ0 0.92, aioz_SZhU 0.75).
+- On fd_018, where librosa chases the hats, the pulse at 0.61 of librosa was judged the right speed.
+- Only two items are near 2:3, so the check cannot settle Q1.
+- Both sources continue through beat dropouts; Kosta noted this as a miss 4 times.
+- Kosta, verbatim: "the purpose isnt to find the beat, but possible end locations to match music, so it isnt just flashing on beat, but
+  flashing at oportune moments e.g. beat/dropout/accent whatever right?"
+
+**Q1, revised.** Options:
+- (a) keep the pulse as ruled;
+- (b) the harmonic-support readout;
+- (c) a 3:2 prior;
+- (d) a second flash check on 10 songs drawn from the 3:2 / 2:3 group, plus the two failures.
+
+**Recommendation: (d), then (b) if those fail.** The pulse is usable as is: 8 / 10 judged right speed against librosa's 7 / 10.
+
+**Q5 (new).** Kosta's purpose statement: landings at opportune moments (beat, dropout, accent), not a beat flash. Options:
+- (a) the motor clock targets pulse events only, as ruled in 7.78;
+- (b) the motor clock targets a candidate set: pulse events, plus dropout onsets and ends, plus strong low-band accents, all from the ear,
+  causal. Landings choose among these within ±150 ms, and a dropout gives a hold.
+
+**Recommendation: (b).** It matches the statement, uses the same ear features, and gives A2's weak pause a musical trigger (A2 brief Q1).
