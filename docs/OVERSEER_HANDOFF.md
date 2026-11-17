@@ -171,6 +171,16 @@ later. Old label page claude.ai artifact NcL5N9rcfNCRfwgachwCFx still to delete 
 - Planner numbering can skip (7.75 arrived after 7.76 was asked for); record what arrives, note gaps.
 - Overseer check scripts live in `scripts/body/overseer/` (durable); job tmp is not.
 
+## UPDATE 2026-11-17 ~18:15 (clock)
+
+CORTEXEV VERIFIED (pooled F1 + shift chance recomputed from cortexev/per_song.json, match +-0.002) and MERGED (body 1cca7ba). L2 / total
+above ear detectors at +-0.5 s (section changes: L2 +0.050 vs ear <= +0.006); ear wins drops and E-change wins at +-1 s; reference
+circular. Brief docs/PLANNER_BRIEF_CORTEX_EVENTS.md SENT (Q1 event source after Kosta ear check, hybrid default [rec]; Q2 dropout = low
+band only [rec, already in WO50]; Q3 ear-check page [rec]). WO50 prompt amended (dropout rule), still NOT SENT.
+FLASH2 MERGED (body 5738d76; clips 30 s with audio spot-checked; ratios match song jsons) and SERVED http://127.0.0.1:8771/ unit
+hyst-flash2-view, session /secondary/hyst-data/body/pulse/flash2/session_2026-11-17 (20 items, key/answers 404 checked). Score against
+pulse/flash2/key.json items (source pulse/lib), as for flash 1 (job tmp fs.py pattern). Failure excerpts overlap the first check by 16-20 s.
+
 ## UPDATE 2026-11-17 ~17:40 (clock)
 
 7.79 RECORDED (body b71bb37): "fits the music" = tempo / events / character / structure as scoring terms of LOOKAHEAD SELECTION;
