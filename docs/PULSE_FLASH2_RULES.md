@@ -27,7 +27,9 @@ Candidate starts on a 1 s grid, from 10 s up to duration - 40 s (so the excerpt 
    whole-song nearest level.
 The chosen start is the kept candidate whose window ratio is closest to the whole-song ratio (absolute log ratio of the two), the earliest on a tie.
 If no candidate passes rule 3, rule 3 is dropped and the closest ratio still decides (reported in the material note).
-For the 2 failures the start must also differ from the first check's start by at least 30 s (no overlap with the excerpt already seen).
+For the 2 failures the start must also differ from the first check's start (24 s for both) by at least 10 s. Amendment (found at the second run):
+both songs are 65 s long, so with the 10 s margins the only admissible starts are 10-25 s; a 30 s non-overlap with the first excerpt (24-54 s) is
+impossible, and the overlap with the first excerpt is therefore 16-20 s. The tests were run on the very first check's excerpt in part; the report says so.
 
 ## Rendering and order
 

@@ -34,7 +34,7 @@ def pick_start(key, avoid=None):
     best = None
     for s in range(10, int(j["duration_s"] - 40) + 1):
         lo, hi = float(s), s + 30.0
-        if avoid is not None and abs(s - avoid) < 30:
+        if avoid is not None and abs(s - avoid) < 10:
             continue
         if float(np.median(rms[int(lo * 100):int(hi * 100)])) < med:
             continue
