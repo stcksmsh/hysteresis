@@ -6,6 +6,7 @@
 Window = 40 tokens of 0.5 s (T0 20 s window, kept = win_pass). Token k covers rows [50 k, 50 k + 50) of the 100 Hz gesture / posture rows of its window.
 """
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -14,7 +15,8 @@ import numpy as np
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 B = Path("/secondary/hyst-data/body")
-G = B / "grammar"
+G = B / "grammar"                           # WO45 data and first-run models: read-only for WO49
+OUT = Path(os.environ.get("HYST_A_OUT", str(B / "grammar2")))   # WO49 outputs (runs, checks, logs, look)
 ROOTS = {"finedance": B / "t0/seq/finedance", "aioz": B / "t0/seq/aioz", "phantom": B / "t0_phantom/seq", "motorica": B / "t0_motorica/seq"}
 DS = list(ROOTS)
 COPIES = ["V1", "V2", "V1m", "V2m"]

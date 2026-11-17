@@ -178,3 +178,28 @@ def test_generate_batch_sizes():
     except AssertionError:
         return
     raise AssertionError("mismatched batch accepted")
+
+
+def test_pause_weight_factor_makes_pause_windows_half_per_dataset():
+    w = np.array([1.0, 1.0, 1.0, 1.0, 2.0, 2.0, 1.0])
+    ds = np.array([0, 0, 0, 0, 1, 1, 1])
+    hp = np.array([True, False, False, False, False, True, False])
+    w2, f = GT.pause_weights(w, ds, hp)
+    assert f[0] == 3.0 and f[1] == 1.5 and GT.pause_weights(np.array([1.0, 3.0]), np.zeros(2, int), np.array([False, True]))[1][0] == 1.0                                   # other weight / pause weight
+    for d in (0, 1):
+        m = ds == d
+        assert np.isclose(w2[m & hp].sum(), w2[m & ~hp].sum())          # half of the effective weight
+    assert (w2[~hp] == w[~hp]).all()
+
+
+def test_pause_request_gets_the_same_corruption_and_dropout_as_other_controls():
+    g = torch.Generator().manual_seed(7)
+    ctl = torch.zeros(300, 40, GM.CD)
+    pool = torch.rand(500, GM.CD) + 1.0
+    out, pres = GM.corrupt_controls(ctl, pool, GT.P_DROP, GT.P_CORR, g)
+    corrupted = out[..., 14] != 0
+    assert ((out[..., 0] != 0) == corrupted).all()                       # same tokens: pause is replaced with the whole vector, never alone
+    assert abs(corrupted.float().mean().item() - GT.P_CORR) < 0.01
+    ctl_p = GT.valid_from_fed(out)
+    assert ctl_p[..., 14].all() and ctl_p[..., 0].all()                 # pause and vigour always defined in the auxiliary loss; dropout (present 0) removes the whole vector, pause included
+    assert abs((1 - pres.mean().item()) - GT.P_DROP) < 0.01

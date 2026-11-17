@@ -23,14 +23,26 @@ G = GD.G
 LAMBDA = 1.0                 # weight of the auxiliary control loss (fixed, docs/A_RULES.md 3)
 P_DROP, P_CORR, P_NOISE = 0.15, 0.10, 0.10
 BATCH, LR, WD, CLIP = 64, 1e-3, 0.01, 1.0
-PATIENCE, EPOCH_CAP = 5, 40
+PATIENCE, EPOCH_CAP = 5, 100                     # WO49: cap 100 (A_RULES addendum 3)
 HEADS = ("code1", "code2", "vigour", "posture1", "posture2")
 
 
-class Data:
-    """windows of one split as tensors; controls standardised (undefined entries -> 0, flags untouched)"""
+def pause_weights(w, dsid, has_pause):
+    """addendum 3: windows with any pause token get the factor that makes them half of the effective weight of their dataset (factor = weight of the other windows / weight of the pause windows, at least 1)"""
+    w = np.asarray(w, np.float64).copy()
+    f = {}
+    for d in np.unique(dsid):
+        m = dsid == d
+        wp, wn = w[m & has_pause].sum(), w[m & ~has_pause].sum()
+        f[int(d)] = max(1.0, float(wn / wp)) if wp > 0 else 1.0      # up-weight only: never below 1 (a dataset already above half keeps its weights)
+        w[m & has_pause] *= f[int(d)]
+    return w, f
 
-    def __init__(self, split, stats, vocab, sel=None):
+
+class Data:
+    """windows of one split as tensors; controls standardised (undefined entries -> 0, flags untouched). boost: apply the pause up-weighting (training only)"""
+
+    def __init__(self, split, stats, vocab, sel=None, boost=False):
         z = GD.load(split)
         use = [GD.DS.index(d) for d in os.environ.get("HYST_A_DATASETS", ",".join(GD.DS)).split(",")]      # per-dataset switch, all on by default
         keep = np.isin(z["dsid"], use)
@@ -51,7 +63,11 @@ class Data:
         self.cn = torch.from_numpy(cn.astype(np.float32))
         self.ds, self.copy = L(z["dsid"]), L(z["copy"])
         self.genre = L([vocab["genres"].index(g) for g in z["genre"]])
-        self.w = torch.from_numpy(z["weight"].astype(np.float32))
+        w = z["weight"].astype(np.float64)
+        self.pause_factor = None
+        if boost:
+            w, self.pause_factor = pause_weights(w, z["dsid"], (ctl[..., 14] > 0).any(1))
+        self.w = torch.from_numpy(w.astype(np.float32))
 
 
 def valid_dims(ctl):
@@ -145,11 +161,12 @@ def train(seed, threads=2, timing=0, epochs=EPOCH_CAP):
     torch.set_num_threads(threads)
     stats = dict(np.load(G / "stats.npz"))
     model, voc = build(seed)
-    tr, va = Data("train", stats, voc), Data("validation", stats, voc)
+    tr, va = Data("train", stats, voc, boost=True), Data("validation", stats, voc)
+    print("PAUSE WEIGHT FACTORS per dataset", {GD.DS[k]: round(v, 3) for k, v in tr.pause_factor.items()}, flush=True)
     means = norm_means(stats)
     pool = tr.cn.reshape(-1, GM.CD)
     sub = torch.from_numpy(np.random.default_rng(seed).choice(tr.n, min(1500, tr.n), replace=False))
-    out = G / "runs" / f"seed{seed}"
+    out = GD.OUT / "runs" / f"seed{seed}"
     out.mkdir(parents=True, exist_ok=True)
     opt = torch.optim.AdamW(model.parameters(), lr=LR, weight_decay=WD)
     sched = torch.optim.lr_scheduler.ReduceLROnPlateau(opt, factor=0.5, patience=1)
