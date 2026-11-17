@@ -19,7 +19,7 @@ sys.path.insert(0, str(HERE))
 import grammar_checks as GC  # noqa: E402
 import grammar_data as GD  # noqa: E402
 
-LOOK = GD.G / "look"
+LOOK = GD.OUT / "look"
 FD = Path("/secondary/hyst-data/datasets/finedance/data/finedance")
 N_EX, EXC, K = 6, 16, 8
 CONDS = ["H", "O", "T", "F", "K", "P", "Q"]          # human, own, other, shuffled, constant, V1 sample, V2 sample

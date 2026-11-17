@@ -20,7 +20,7 @@ import grammar_model as GM  # noqa: E402
 import grammar_train as GT  # noqa: E402
 
 G = GD.G
-OUT = G / "checks"
+OUT = GD.OUT / "checks"
 HIST, NB, SEED_START, SEED_BOOT = 4, 2000, 45003, 45002
 MEAS = ["vigour", "height", "sharp", "pause", "dirz", "acccom", "dirchg", "basespeed"]
 CTLS = ["vigour", "height", "accent", "sharp", "direction", "pause"]
@@ -106,7 +106,7 @@ class Setup:
         self.stats = dict(np.load(G / "stats.npz"))
         self.voc = json.loads((G / "vocab.json").read_text())
         self.model = GM.Grammar(n_genre=len(self.voc["genres"]))
-        self.model.load_state_dict(torch.load(G / "runs" / f"seed{seed}" / "best.pt"))
+        self.model.load_state_dict(torch.load(GD.OUT / "runs" / f"seed{seed}" / "best.pt"))
         self.model.eval()
         self.gm, self.gs = self.stats["global_mean"], np.maximum(self.stats["global_sd"], 1e-3)
         self.seed = seed
@@ -484,8 +484,9 @@ def main():
     a = sys.argv[1:]
     assert a[0] == "run"
     seed, procs = int(a[1]), int(a[2]) if len(a) > 2 else 8
-    OUT.mkdir(exist_ok=True)
-    f = open(G / "logs" / f"checks{seed}.log", "a")
+    OUT.mkdir(parents=True, exist_ok=True)
+    (GD.OUT / "logs").mkdir(exist_ok=True)
+    f = open(GD.OUT / "logs" / f"checks{seed}.log", "a")
     log = lambda s: (f.write(s + "\n"), f.flush())
     r = check_all(seed, procs, log)
     V = r.pop("_values")
