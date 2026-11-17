@@ -171,6 +171,18 @@ later. Old label page claude.ai artifact NcL5N9rcfNCRfwgachwCFx still to delete 
 - Planner numbering can skip (7.75 arrived after 7.76 was asked for); record what arrives, note gaps.
 - Overseer check scripts live in `scripts/body/overseer/` (durable); job tmp is not.
 
+## UPDATE 2026-11-17 ~12:40 (clock)
+
+WO48 PULSE READY 5e27e29 VERIFIED (overseer recomputed summary from pulse/songs/*.json; regularity/tempo/gap spot-checked from npz
+events; equation + params checked against Velasco & Large ISMIR 2011 PDF Eq. 3 / §2.1) and MERGED (body 80ef3d1; 16 tests pass).
+Key: pulse most regular (2.1 ms), 5/8 V4 songs within 3 % of Kosta's level, BUT ~1/3 songs lock 3:2 / 2:3 to librosa. Note: 7.9 % < 80
+BPM uses oscillator rate (8 short AIOZ clips with 0-1 events inflate it; event tempo gives 3.5 %).
+PULSE FLASH CHECK SERVED http://127.0.0.1:8770/ unit hyst-wo48-flashview2, session /secondary/hyst-data/body/pulse/flash/session_2026-11-17
+(20 items, seed 48201, two questions; answers stored "a|b"; key/answers 404 checked). Serve form: --out DIR --serve (no --clips).
+Brief docs/PLANNER_BRIEF_PULSE_AIST.md (body) SENT: Q1 3:2 locking -> wait flash, then harmonic-support readout [rec]; Q2 arm swing from
+A's measured amplitude [rec]; Q3 amend 7.78 1.1 dataset-dependent [rec]; Q4 exclude clips < 12 s report-only [rec].
+WO49 training running (3 seeds) WITHOUT core pinning (affinity 0-19); asked Kosta whether to tell agent 1.
+
 ## UPDATE 2026-11-17 ~12:05 (clock)
 
 WO49 SENT to Hysteresis agent 1 [8fd2af] (not cleared; 13 h old session), pointer to docs/BUILDER_PROMPT_WO49_A_RETRAIN.md,
