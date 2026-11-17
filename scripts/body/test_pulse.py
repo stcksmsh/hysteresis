@@ -89,5 +89,26 @@ class Pulse(unittest.TestCase):
         self.assertFalse(np.array_equal(a["drive"], b["drive"]))
 
 
+class Check(unittest.TestCase):
+    def test_check_primitives(self):
+        import pulse_run as R
+        ev = np.arange(0, 60, 0.5)
+        self.assertAlmostEqual(R.tempo_bpm(ev), 120.0)
+        self.assertLess(R.regularity_ms(ev), 1e-6)
+        self.assertEqual(R.level(0.5)[0], "1/2")
+        grid = np.concatenate([np.arange(0, 20, 0.5), np.arange(24, 60, 0.5)])   # a 4 s dropout at 20-24 s
+        self.assertEqual(R.grid_dropouts(grid), [(19.5, 24.0)])
+        p = R.persistence(R.grid_dropouts(grid), dict(pulse=ev, grid=grid))
+        self.assertTrue(p[0]["pulse"]["kept"])
+        self.assertFalse(p[0]["grid"]["kept"])
+        rms = np.ones(6000); rms[3000:3400] = 0.1
+        (s, e), = R.quiet_passages(rms); self.assertAlmostEqual(s, 30.05, delta=0.02); self.assertAlmostEqual(e, 33.95, delta=0.02)
+        rate = np.full(6000, 2.0)
+        f = R.following(rate, ev)
+        self.assertEqual(f["share_within_4pct"], 1.0)
+        f = R.following(np.full(6000, 1.0), ev)                                   # half tempo folds to the same level
+        self.assertEqual(f["share_within_4pct"], 1.0)
+
+
 if __name__ == "__main__":
     unittest.main()
