@@ -43,8 +43,18 @@ TO: planner. FROM: overseer (via Kosta). Answers please as BRAIN_SPEC 7.78.
        yaw was not significant.
      - Lamp speed minima and acceleration peaks do not lock (AIOZ +0.02).
      - Raw-mocap minima: +0.012 [0.003, 0.019].
-4. **V4.** Kosta's flash check (project vs librosa grid, 10 songs, visual flash instead of audio clicks at his request) is served; no
-   answers yet.
+4. **V4, Kosta's flash check: done** (`docs/BEATV_V4_RESULT.md`).
+   - Setup: 10 songs × 2 grids, blind, 30 s excerpts at or above median loudness. A white disc flashes at each beat (Kosta found audio
+     clicks hard to hear over the music).
+   - **librosa: 8 yes, 2 partly, 0 no. Project grid: 3 yes, 6 partly, 1 no.**
+   - Kosta on librosa: "Perfect 4/4 basically", "finds the 4/4", "on the kick pattern when it exists, when it doesnt it catches the percs".
+   - Kosta on the project grid: "entire sections without anything", "dropouts", and on one song "tries to follow the vocals as a beat,
+     becomes WAY too fast". Overseer check: the longest project-grid gap is 8.8 s on fd_183.
+   - **librosa's flaw is the metrical level.** On a slow song with hats (fd_018), Kosta: "we follow the FASTEST element (hats are always
+     fast) ... the rim is 1/4 the hats and is perhaps a better thing to track". On an AIOZ song: "tries to hit every hit of fast percs ...
+     too fast?". Also: "misses the drop doubling of kicks, but thats ok, cant hit that speed anyway on servos".
+   - Overseer check: librosa puts fd_018 at 143 BPM. Over all 1,341 songs, librosa tempo is never below 80 BPM and above 150 BPM for 7 %.
+     Its default tempo prior (`start_bpm` 120) pulls slow songs to double time.
 
 **Reading (numbers only).** The measurement worry is real for the project grid (locally irregular), but not for the conclusion. With a
 regular grid, and on raw data scored by the published metric, the dancers' movement timing is at chance relative to the beat. The motion
@@ -92,13 +102,21 @@ carries the tempo (period power, periodic base rotation), not beat-phase accents
 
 **Q1. Beat-relative accent timing (the decision 7.77 deferred to after V1-V4).**
 - (a) **Authored rule**, tuned by the teacher and stated as authored in every write-up. B's first version predicts tempo, slow controls and
-  phrase change (7.77 Q1). Beat times come from librosa (regular), pending V4. **[rec]**
+  phrase change (7.77 Q1). Beat times come from librosa (regular), (Q2, Q2b). **[rec]**
 - (b) Wait for AIST++ (Kosta's registration) and V4 before deciding.
 - (c) Learn timing from the yaw period-locking only.
 
-**Q2. Beat grid for B and for any authored timing.**
-- (a) librosa beats, if V4 confirms them by eye. **[rec]**
+**Q2. Beat grid for B and for any authored timing.** V4 favours librosa (8/2/0 against 3/6/1).
+- (a) librosa beats replace the project grid everywhere new (B, authored timing, viewings). The project grid stays only where earlier
+  results used it (reproducibility). **[rec]**
 - (b) Keep the project grid.
+
+**Q2b. Metrical level** (librosa doubles slow songs; Kosta: track the kick/rim, not the hats; the servos cannot follow very fast pulses).
+- (a) Choose the pulse level per song: compute both the librosa beat and its half-time. Pick the level whose beats carry more low-band
+  (kick/rim) onset strength. Cap the pulse the arm is asked to accent at a stated rate (e.g. ≤ 2.5 Hz; state the servo basis). Validate
+  on the same 10 songs by a second short flash check. **[rec]**
+- (b) Lower librosa's tempo prior (e.g. `start_bpm` 90) and keep one level.
+- (c) Leave as is; the teacher handles it.
 
 **Q3. A's training length.** All seeds stopped at the cap while improving.
 - (a) Retrain A to convergence: early stopping as ruled, cap raised to 100. Then rerun the checks. Cost about 1.5-2.5 h for 3 seeds on
