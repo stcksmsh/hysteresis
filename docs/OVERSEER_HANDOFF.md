@@ -94,7 +94,15 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-17 ~01:00 (clock) — newest
+## UPDATE 2026-11-17 ~02:00 (clock) — newest
+
+A READY fix 1 dc7052c VERIFIED (per-start values recomputed: vigour/height/pause effects, jitter ratio of means 0.92-0.96) and MERGED
+(body f76624e). Pause now tested: NOT followed (+0.02-0.07 sd; raises vigour/sharpness). Clips unchanged (same pairs). Brief
+docs/PLANNER_BRIEF_A_BEATV.md SENT: Q1 authored beat timing [rec]; Q2 librosa grid if V4 confirms [rec]; Q3 retrain A to convergence
+(cap 100) [rec]; Q4 pause up-weight in retrain [rec]; Q5 cross-talk report-only [rec]; Q6 keep residual [rec]; Q7 S-B after retrain [rec].
+Flash check still waiting for Kosta (8769). Both agents idle.
+
+## UPDATE 2026-11-17 ~01:00 (clock)
 
 A READY d3b0d94 (agent 1 [8fd2af]) reviewed, NOT merged. Good: A jitter at human level (lamp p_gt3 ratio to HJ 1.05-1.10, frozen ~0),
 substitution follows requests (own 0.41 vs other 0.81), intervention vigour 2.5 / height 4.5 / sharp 0.6-0.7 sd with cross-talk (vigour ->
