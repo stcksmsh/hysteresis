@@ -94,7 +94,14 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-17 (clock) — newest
+## UPDATE 2026-11-17 (7.78) — newest
+
+7.78 RECORDED (body 5f08a17): timing by entrainment (oscillator-bank internal pulse, motor clock, coupling 0.7), librosa/project grid
+dropped as timing sources, B v1 (slow controls + phrase change from ear + pulse + onset features), A retrain (cap 100, pause up-weight),
+order: pulse -> Kosta pulse flash -> (A retrain parallel) -> motor clock -> S-B -> B. Prompts WO48 (pulse, agent 2, cores 14-19) and WO49
+(A retrain, agent 1, cores 6-13) written, NOT SENT (waiting "send").
+
+## UPDATE 2026-11-17 (clock)
 
 V4 flash check DONE (body ad961bb, docs/BEATV_V4_RESULT.md): librosa 8 yes/2 partly/0 no, project 3/6/1; notes: project grid dropouts
 (longest gap 8.8 s fd_183), librosa doubles slow songs (fd_018 143 BPM on hats; librosa never < 80 BPM over 1,341 songs, 7 % > 150).
