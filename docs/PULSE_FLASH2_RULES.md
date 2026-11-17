@@ -15,6 +15,9 @@ same two questions as `pulse_flash.py`).
 - Plus the 2 songs that failed in the first check: aioz_8JQ0zHmZBIg_05_0_1950 and aioz_SZhU9XTCUiM_13_0_1950. Total 10 songs, 20 items
   (each song: one item with flashes at the pulse events, one at librosa's beats).
 
+Amendment (found at the first run): a drawn song with no admissible excerpt under the rules below (ph_187, 55 s, its only window below the
+song's median RMS) is skipped and the next song of the same shuffled pool is drawn; skips are printed in the log.
+
 ## Excerpts (30 s)
 
 Candidate starts on a 1 s grid, from 10 s up to duration - 40 s (so the excerpt is not in the first or last 10 s). A candidate is kept when:

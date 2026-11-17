@@ -70,7 +70,14 @@ def choose():
         for ds in DS_ORDER:
             pool = sorted(pools[(lev, ds)])
             rng.shuffle(pool)
-            songs.append(dict(song=pool[0], dataset=ds, role=f"new {lev}", pool=len(pool)))
+            for k in pool:  # first song of the shuffled pool that has an admissible excerpt
+                try:
+                    st = pick_start(k)
+                except RuntimeError:
+                    print("skipped (no admissible excerpt)", k, flush=True)
+                    continue
+                songs.append(dict(song=k, dataset=ds, role=f"new {lev}", pool=len(pool), **st))
+                break
     for k in FAILS:
         songs.append(dict(song=k, dataset="aioz", role="failure", avoid=first[k]))
     return songs
@@ -81,7 +88,8 @@ def main():
     wavs = {kk: w for ds, kk, w in R.songs()}
     sel = choose()
     for s in sel:
-        s.update(pick_start(s["song"], s.get("avoid")))
+        if "start" not in s:
+            s.update(pick_start(s["song"], s.get("avoid")))
         print(s, flush=True)
     (OUT / "selection.json").write_text(json.dumps(sel, indent=1))
     items = []
