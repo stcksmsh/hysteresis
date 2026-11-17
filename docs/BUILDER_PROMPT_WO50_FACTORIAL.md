@@ -61,7 +61,9 @@ You are a builder for Hysteresis. Work alone and unattended. Where a choice is o
        within [0.7, 1.4]. If a warp would break a limit, relax it and count the relaxations.
    - **Event detector** (causal, from the ear features, stated as rules):
      - drop: a low-band flux rise after at least 1 s of reduced low-band energy;
-     - dropout: low-band and onset energy below a stated fraction of the running median for at least 0.4 s; onset and end are both events;
+     - dropout: low-band (kick) energy below a stated fraction of the running median for at least 0.4 s, whether or not hats or vocals
+       continue. Do NOT also require onset energy to fall: the cortex-events run (`docs/CORTEX_EVENTS_REPORT.md`) showed that this misses
+       Kosta's beat dropouts. Onset and end are both events;
      - strong accent: an onset-strength peak above the song's p95 with a low-band share above a stated value;
      - a minimum spacing between events.
      - Report its hits on the 10 V4 songs against Kosta's notes (`docs/BEATV_V4_RESULT.md`, `docs/PULSE_FLASH_RESULT.md`), for information
