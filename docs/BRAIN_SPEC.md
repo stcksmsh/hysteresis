@@ -3122,3 +3122,32 @@ Standing rules unchanged.
   - the speed cap still holds in every version (Q2 is not yet built, so 7.78's current cap is used).
 - Work split: Step 1 to the builder (agent 1). Step 2 and Q1's second flash check to overseer subagents, because they are small and
   independent.
+
+### 7.80 Pulse = tempo source only; pulse v2 (harmonic readout, stability, confidence) with a fixed decision rule; event selectivity requirement; 2026-11-17, via Kosta + planner (answering `docs/PLANNER_BRIEF_PULSE_FLASH2.md`)
+
+Recorded as received. Planner text, verbatim:
+
+TO: overseer. FROM: Kosta via planner. Re: PLANNER_BRIEF_PULSE_FLASH2 (2026-11-17). Record as BRAIN_SPEC 7.80.
+
+Role clarified (7.79): the pulse is the TEMPO source only (period, phase, confidence), not a landing clock. "On the beat?" is no longer a criterion for the pulse; criteria are right speed and stability.
+Q1: pulse v2, one work order, rules fixed before results:
+ (b) harmonic-support readout (candidate amplitude + amplitudes at 2f and f/2, after Large's metrical readout).
+ (s) stability: a level change needs sustained evidence (hold and margin stated, longer/higher than 2 s / 20 %), preferably at a large novelty or phrase boundary (detector stated).
+ (c) CONFIDENCE output instead of the (g) gate: the pulse always runs; it outputs period, phase and confidence (oscillator amplitude relative to the bank, normalised; stated). Low-band periodic drive absent -> confidence falls; state keeps running so the beat resumes in phase. Holds in breaks are a movement choice made by the planner (event level), not a pulse output.
+ Numeric check as before plus: level switches per minute, confidence during silence/beatless/dropout passages vs beat passages.
+ Viewing: same 40 items (both checks), pulse v2 vs librosa, blind; questions "right speed?" (right / too fast / too slow) and "steady?" (yes / switches); flashes shown with brightness = confidence. Scored per item against Kosta's earlier answers.
+ DECISION RULE (fixed now): pulse v2 must match or beat librosa on "right speed" and on stability across the 40 items. If not, stop tuning the oscillator bank and report for a Kosta ruling on the tempo source.
+Q2 (a): the pulse stays the tempo source; events come from the event detector. Kosta's note "catch the distinct stuff" = event selectivity relative to context; record it as the requirement for the event detector (surprise-like: distinct relative to recent context, sparse). Event-only flash check once the event source is ruled. Send the CORTEX_EVENTS brief to the planner if it has open questions.
+7.79 STEP 1 (factorial viewing T x P x E) proceeds with whichever pulse is current; it does not wait for pulse v2.
+Standing rules unchanged.
+
+**Overseer notes (operational, not rulings):**
+- **"Same 40 items":** the 20 song-excerpts of the two flash checks (10 each). Each is shown once with pulse v2 and once with librosa, so
+  there are 40 items in the session. The librosa items are re-rendered with the new question set, so both sources get the same questions.
+- **Decision rule as the overseer will score it:**
+  - right speed = count of "right" over the 20 excerpts, pulse v2 vs librosa;
+  - stability = count of "yes" to "steady?";
+  - "match or beat" means pulse v2 ≥ librosa on both counts.
+- **Who builds:** pulse v2 (WO51) goes to an overseer subagent, because the one builder (agent 1) takes WO50. WO50 uses pulse v1, as 7.80
+  allows.
+- **The CORTEX_EVENTS brief** (3 open questions) was given to Kosta for the planner on 2026-11-17.
