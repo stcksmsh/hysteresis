@@ -80,8 +80,8 @@ beat = periodicity >= 0.5 and none of the others; from 10 s on).
 
 - 15 of 20 excerpts have the same tempo as v1 (within 1 %); 5 change: mo_gPO funk 3/2 -> 1, aioz_iOoW 2/3 -> 1, aioz_SZhU (flash2) 1/2 -> 2/3,
   fd_034 and mo_gLH 2/3 -> about 1/2.
-- Three of the four 3/2 excerpts Kosta judged too fast (fd_100 was judged right but "too fast" in its note) keep their v1 ratio
-  (ph_157, aioz_ULrc, fd_100 at 1.23-1.52); only mo_gPO funk moves to librosa's level.
+- Of the four 3/2 excerpts (v1 pulse judged too fast on ph_157, aioz_ULrc and mo_gPO funk; "right" on fd_100, with the note "Too fast"),
+  three keep their v1 ratio (ph_157, aioz_ULrc, fd_100 at 1.23-1.52); only mo_gPO funk moves to librosa's level.
 - Median confidence inside the excerpts is 0.09-0.67 (median about 0.18): most pulse v2 flashes will show near the 0.15 floor.
 
 ## What the numbers say (no verdict)
