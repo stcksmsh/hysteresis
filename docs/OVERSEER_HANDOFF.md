@@ -171,6 +171,13 @@ later. Old label page claude.ai artifact NcL5N9rcfNCRfwgachwCFx still to delete 
 - Planner numbering can skip (7.75 arrived after 7.76 was asked for); record what arrives, note gaps.
 - Overseer check scripts live in `scripts/body/overseer/` (durable); job tmp is not.
 
+## UPDATE 2026-11-17 ~11:15 (clock)
+
+Kosta: only ONE builder agent now (agent 1); overseer may run proper subagents (Sonnet/Opus, its call) for other work. WO48 (pulse)
+launched as an Opus background subagent in an isolated worktree, branch body-pulse, cores 14-19, all 3 parts, stop after flash material
+(not served). WO49 (A retrain) stays for agent 1 [8fd2af], waiting Kosta's "send" (he may clear it first). A subagent dies with this
+session: if the overseer restarts, check origin/body-pulse + docs/NIGHT_LOG_body-pulse.md and relaunch from there.
+
 ## UPDATE 2026-11-17 (7.78)
 
 7.78 RECORDED (body 5f08a17): timing by entrainment (oscillator-bank internal pulse, motor clock, coupling 0.7), librosa/project grid
