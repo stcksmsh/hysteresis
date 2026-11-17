@@ -3,6 +3,7 @@
     controls_run.py sim [PROCS]        body env: realised q50 (50 Hz) + lamp of every kept window of every copy -> controls/q50/<dataset>/<name>.npz  (resumable)
     controls_run.py norm               brain env: constants from FineDance train kept tokens -> controls/norm.json
     controls_run.py controls [PROCS]   brain env: the six controls per token -> controls/<dataset>/<name>.npz  (resumable)
+    controls_run.py v2                 brain env (WO45): the 7.74 control vector per token (controls_lib.ctl_v2) from the stored controls -> grammar/ctl/<dataset>/<name>.npz + grammar/ctl_counts.json
 """
 import json
 import multiprocessing as mp
@@ -132,6 +133,31 @@ def cmd_controls(procs=8):
     print("CONTROLS COMPUTED", json.dumps(cnt), flush=True)
 
 
+def cmd_v2():
+    import controls_lib as C
+    G = B / "grammar"
+    cnt = {}
+    for ds in ROOTS:
+        (G / "ctl" / ds).mkdir(parents=True, exist_ok=True)
+        tot = dict(files=0, tokens=0, empty_files=0, flat_accent=0, sharp_undefined=0, dir_zero=0, nonfinite=0)
+        for p in sorted((OUT / ds).glob("*.npz")):
+            z = np.load(p)
+            if len(z["win"]) == 0:
+                tot["empty_files"] += 1
+                continue
+            ctl = C.ctl_v2({k: z[k] for k in ("vigour", "height", "accent_slots", "accent_mean", "sharp", "dir", "dir_ok", "pause_prob")})
+            tot["files"] += 1
+            tot["tokens"] += ctl.shape[0] * ctl.shape[1]
+            tot["flat_accent"] += int((ctl[..., -1] == 0).sum())
+            tot["sharp_undefined"] += int((ctl[..., -3] == 0).sum())
+            tot["dir_zero"] += int((ctl[..., -2] == 0).sum())
+            tot["nonfinite"] += int((~np.isfinite(ctl)).sum())
+            np.savez_compressed(G / "ctl" / ds / p.name, win=z["win"], ctl=ctl, split=z["split"], group=z["group"])
+        cnt[ds] = tot
+    (G / "ctl_counts.json").write_text(json.dumps(cnt, indent=1))
+    print("CONTROLS V2", json.dumps(cnt), flush=True)
+
+
 if __name__ == "__main__":
     a = sys.argv[1:]
-    {"sim": cmd_sim, "norm": cmd_norm, "controls": cmd_controls}[a[0]](*[int(x) for x in a[1:]])
+    {"sim": cmd_sim, "norm": cmd_norm, "controls": cmd_controls, "v2": cmd_v2}[a[0]](*[int(x) for x in a[1:]])
