@@ -94,7 +94,13 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-17 ~02:00 (clock) — newest
+## UPDATE 2026-11-17 (clock) — newest
+
+V4 flash check DONE (body ad961bb, docs/BEATV_V4_RESULT.md): librosa 8 yes/2 partly/0 no, project 3/6/1; notes: project grid dropouts
+(longest gap 8.8 s fd_183), librosa doubles slow songs (fd_018 143 BPM on hats; librosa never < 80 BPM over 1,341 songs, 7 % > 150).
+Server stopped. Brief docs/PLANNER_BRIEF_A_BEATV.md UPDATED with V4 + Q2 (librosa) + Q2b metrical level, re-sent. Waiting for 7.78.
+
+## UPDATE 2026-11-17 ~02:00 (clock)
 
 A READY fix 1 dc7052c VERIFIED (per-start values recomputed: vigour/height/pause effects, jitter ratio of means 0.92-0.96) and MERGED
 (body f76624e). Pause now tested: NOT followed (+0.02-0.07 sd; raises vigour/sharpness). Clips unchanged (same pairs). Brief
