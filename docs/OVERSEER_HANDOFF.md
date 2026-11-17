@@ -171,6 +171,15 @@ later. Old label page claude.ai artifact NcL5N9rcfNCRfwgachwCFx still to delete 
 - Planner numbering can skip (7.75 arrived after 7.76 was asked for); record what arrives, note gaps.
 - Overseer check scripts live in `scripts/body/overseer/` (durable); job tmp is not.
 
+## UPDATE 2026-11-17 ~19:00 (clock)
+
+FLASH2 SCORED (body 955e42f, docs/PULSE_FLASH2_RESULT.md): on beat pulse 1/8/1, librosa 6/3/1; speed right 6/10 each. 3/2 group FAILS
+(pulse too fast 3/4; lib right 4/4) -> 7.79 Q1 condition for (b) met. 2/3 group favours pulse level (3/4 vs lib 1/4). Notes: pulse
+switches level mid-excerpt (5), both flash through silence/beatless (4). Server hyst-flash2-view STOPPED. Subagent flash2 stopped
+(TaskStop; it looped re-sending its report). Brief docs/PLANNER_BRIEF_PULSE_FLASH2.md SENT: Q1 pulse v2 = harmonic readout + stability
++ beat-presence gate in one WO [rec]; Q2 "distinct stuff" = events level, not pulse [rec].
+Open planner answers: A2, CORTEX_EVENTS, PULSE_FLASH2. WO50 NOT SENT.
+
 ## UPDATE 2026-11-17 ~18:15 (clock)
 
 CORTEXEV VERIFIED (pooled F1 + shift chance recomputed from cortexev/per_song.json, match +-0.002) and MERGED (body 1cca7ba). L2 / total
