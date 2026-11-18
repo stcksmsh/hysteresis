@@ -2,7 +2,7 @@
 
     rhythm_events.py scan [PROCS]       inputs present and readable -> rhythm/scan.json
     rhythm_events.py extract [PROCS]    per-window rhythm, per-token response raws, music events -> rhythm/{windows,tokens}_<ds>.npz, events.json
-    rhythm_events.py analyse [PROCS]    analyses A and B -> rhythm/results.json, lock_<ds>.npz, hist.png
+    rhythm_events.py analyse [PROCS]    analyses A and B -> rhythm/results.json, lock_<ds>.npz (histograms as counts in results.json; no PNG: matplotlib is not in the env)
 Report only; nothing upstream is recomputed.
 """
 import json
@@ -590,38 +590,70 @@ def analyse_B(procs):
     return res, dict(D_posture_deg=D, vigour_sd=vsd)
 
 
-def hist_png(hist):
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-    x = np.arange(-3, 3, 0.05) + 0.025
-    fig, axs = plt.subplots(2, 4, figsize=(16, 6), sharex=True)
-    for i, src in enumerate(("librosa", "pulse2")):
-        for j, ds in enumerate(DS):
-            h = np.asarray(hist[f"{ds}|{src}|lamp"], float)
-            ax = axs[i, j]
-            ax.bar(x, h / max(h.sum(), 1), width=0.05, color="#4a6fa5")
-            for v in (-1, 0, 1):
-                ax.axvline(v, color="#c0504d", lw=0.8)
-            ax.set_title(f"{ds} / {src}", fontsize=9)
-            if i == 1:
-                ax.set_xlabel("log2(movement period / beat period)")
-    fig.tight_layout()
-    fig.savefig(OUT / "hist.png", dpi=110)
-
-
 def analyse(procs):
     resA, hist = analyse_A(procs)
     resB, th = analyse_B(procs)
     (OUT / "results.json").write_text(json.dumps(dict(A=resA, B=resB, hist=hist, thresholds=th), indent=1))
-    hist_png(hist)
     print("ANALYSE DONE", flush=True)
+
+
+def tables(procs=None):
+    """results.json -> rhythm/tables.md (markdown, aggregates only)"""
+    r = json.loads((OUT / "results.json").read_text())
+    A, Bx = r["A"], r["B"]
+    f = lambda x: f"{x:.3f}"  # noqa: E731
+    fc = lambda v, k: f"{v[k]:+.3f} [{v[k + '_ci'][0]:+.3f}, {v[k + '_ci'][1]:+.3f}]"  # noqa: E731
+    L = []
+    for sig, var, sub in [("lamp", "main", "all"), ("lamp", "narrow", "all"), ("lamp", "W4", "all"), ("joint", "main", "all"), ("yaw", "main", "all"),
+                          ("lamp", "main", "V1"), ("lamp", "main", "V2"), ("lamp", "main", "conf>=0.3"), ("lamp", "main", "conf<0.3")]:
+        L += [f"### Ratio bins: signal {sig}, variant {var}, subset {sub}", "",
+              "| dataset | source | groups | windows | rhythmic share | 1/2 | 1 | 2 | other | cluster share | chance 1 (similar tempo) | excess 1 [95 % CI] | groups out (1) | chance 2 (shuffled) | excess 2 [95 % CI] | C | C excess 1 [CI] | C excess 2 [CI] |",
+              "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
+        for ds in list(DS) + ["all"]:
+            for src in ("librosa", "pulse2"):
+                v = A.get(f"{ds}|{src}|{sig}|{var}|{sub}")
+                if v is None:
+                    continue
+                b = v["bin_share_rhythmic"]
+                L.append(f"| {ds} | {src} | {v['groups']} | {v['windows']} | {f(1 - v['bin_share_all']['none'])} | {f(b['1/2'])} | {f(b['1'])} | {f(b['2'])} | {f(b['other'])} | {f(v['cluster'])} | "
+                         f"{f(v['c1']['cluster_chance'])} | {fc(v['c1'], 'excess')} | {v['c1']['groups_left_out']} | {f(v['c2']['cluster_chance'])} | {fc(v['c2'], 'excess')} | "
+                         f"{f(v['conc'])} | {fc(v['c1'], 'conc_excess')} | {fc(v['c2'], 'conc_excess')} |")
+        L.append("")
+    L += ["### log2 ratio histogram (lamp, main, rhythmic windows), share per 1/6-octave bin from -2 to +2 (outside counted at the ends)", "",
+          "| dataset / source | " + " | ".join(f"{-2 + i / 6:+.2f}" for i in range(24)) + " |", "|---|" + "---|" * 24]
+    for ds in DS:
+        for src in ("librosa", "pulse2"):
+            h = np.asarray(r["hist"][f"{ds}|{src}|lamp"], float)
+            c = np.arange(-3, 3, 0.05) + 0.025
+            j = np.clip(np.floor((c + 2) * 6).astype(int), 0, 23)
+            hh = np.bincount(j, h, 24) / max(h.sum(), 1)
+            L.append(f"| {ds} / {src} | " + " | ".join(f"{x:.3f}" for x in hh) + " |")
+    L.append("")
+    L += [f"### Response rates (per s of covered motion); thresholds: posture D = {r['thresholds']['D_posture_deg']:.2f} deg, vigour sd = {r['thresholds']['vigour_sd']:.3f}", "",
+          "| dataset | " + " | ".join(RESP) + " |", "|---|" + "---|" * len(RESP)]
+    for ds in list(DS) + ["all"]:
+        L.append(f"| {ds} | " + " | ".join(f"{Bx[f'{ds}|{x}|rate_per_s']:.3f}" for x in RESP) + " |")
+    L.append("")
+    for ds in list(DS) + ["all"]:
+        L += [f"### Event lock, {ds}: peak excess (responses/s) at lag (bin centre, s) [95 % CI], ratio to chance, max-stat p; mean excess over -0.3..+0.3 s [CI]; events", "",
+              "| response | " + " | ".join(EVENTS) + " |", "|---|" + "---|" * len(EVENTS)]
+        for x in RESP:
+            row = []
+            for e in EVENTS:
+                v = Bx[f"{ds}|{x}|{e}"]
+                row.append("no events" if not v.get("events") else
+                           f"{v['peak_excess']:+.3f} @ {v['peak_lag']:+.2f} [{v['peak_excess_ci'][0]:+.3f}, {v['peak_excess_ci'][1]:+.3f}], x{v['peak_ratio']:.2f}, p {v['p_max']:.3f}; "
+                           f"±0.3: {v['excess_pm03']:+.3f} [{v['excess_pm03_ci'][0]:+.3f}, {v['excess_pm03_ci'][1]:+.3f}]; n {v['events']}")
+            L.append(f"| {x} | " + " | ".join(row) + " |")
+        L.append("")
+    (OUT / "tables.md").write_text("\n".join(L))
+    print("TABLES", OUT / "tables.md", flush=True)
 
 
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else ""
     procs = int(sys.argv[2]) if len(sys.argv) > 2 else 6
-    if cmd in ("scan", "extract", "analyse"):
+    if cmd in ("scan", "extract", "analyse", "tables"):
         globals()[cmd](procs)
     else:
         print(__doc__)
