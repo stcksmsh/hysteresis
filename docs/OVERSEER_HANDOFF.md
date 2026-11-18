@@ -171,6 +171,15 @@ later. Old label page claude.ai artifact NcL5N9rcfNCRfwgachwCFx still to delete 
 - Planner numbering can skip (7.75 arrived after 7.76 was asked for); record what arrives, note gaps.
 - Overseer check scripts live in `scripts/body/overseer/` (durable); job tmp is not.
 
+## UPDATE 2026-11-18 ~12:30 (clock)
+
+WO52 RHYTHM READY f7dc5cf VERIFIED (bin shares vs shuffled recomputed from rhythm/windows_*.npz: pooled 0.398 vs 0.380, AIOZ +0.026)
+and MERGED (body; 8 tests). Movement period median 1.24 s = 2.2-2.7 beats; cluster excess vs similar-tempo chance ~0 -> rule says
+clusters ABSENT -> teacher shapes rhythm. Overseer histogram: weak harmonic modulation (1.11-1.16 at r = 1/2,1,2; 0.81-0.94 between).
+Events: hold x novelty ratio 1.78, hold x cortex L2 1.42, burst x dropout end 1.38; "change" ~ token grid (needs sparser def).
+Brief docs/PLANNER_BRIEF_RHYTHM_EVENTS.md SENT: Q1 continuous rhythm control as teacher knob [rec]; Q2 hold + burst, sparser change
+[rec]; Q3 lag correction report-only [rec]. Open: A2, CORTEX_EVENTS, RHYTHM_EVENTS. WO50 NOT SENT.
+
 ## UPDATE 2026-11-18 ~11:30 (clock)
 
 7.81 RECORDED (body 0bd8658): timing LEARNED, not hand-built. New A controls: movement rhythm (ratio to librosa beat, bins 1/2,1,2,
