@@ -128,7 +128,14 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `PLANNER_BRIEF_A2.md` (Q1 pause/stillness still open);
    - `PLANNER_BRIEF_CORTEX_EVENTS.md` (event source, dropout = low band, ear-check page);
    - `PLANNER_BRIEF_RHYTHM_EVENTS.md` (continuous rhythm control as a teacher knob, hold + burst, sparser change).
+   - `PLANNER_BRIEF_OVERSEER_QUESTIONS.md` (body d8601ad, sent 2026-11-18, optional for Kosta to forward). It covers:
+     (1) a mismatch test before A3 (human clips with own vs shifted/other music, paired);
+     (2) viewings robust to rater noise (paired forced choice, ≥ 20 % repeats, WO50 redesign to 36 pairs + 8 repeats);
+     (3) WO52's rhythm rerun on raw human joints;
+     (4) answering the open briefs in one combined ruling.
    - `PLANNER_BRIEF_TEMPO_SOURCE.md` was answered by 7.81.
+   - Kosta is clearing the overseer and will paste the planner's response into the fresh session: record it first (next BRAIN_SPEC 7.8x),
+     then act.
 2. **WO50** (`docs/BUILDER_PROMPT_WO50_FACTORIAL.md`, 7.79 Step 1 factorial viewing, now information only per 7.81 item 7) is written and
    NOT SENT; it waits for Kosta's "send" to agent 1. The dropout rule in it is amended to low band only.
 3. **Next likely work order after the answers:** A3 = A retrain with the rhythm + hold/burst controls (7.81 items 1 and 5); the intervention
