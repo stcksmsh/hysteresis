@@ -3151,3 +3151,32 @@ Standing rules unchanged.
 - **Who builds:** pulse v2 (WO51) goes to an overseer subagent, because the one builder (agent 1) takes WO50. WO50 uses pulse v1, as 7.80
   allows.
 - **The CORTEX_EVENTS brief** (3 open questions) was given to Kosta for the planner on 2026-11-17.
+
+### 7.81 Timing is learned, not hand-built: rhythm and event-response controls for A; trackers become B senses; timing mechanisms dropped; 2026-11-18, via Kosta + planner (answering `docs/PLANNER_BRIEF_TEMPO_SOURCE.md`)
+
+Recorded as received. It supersedes the planner's earlier 7.81 draft (librosa + confidence decision); that draft never reached the
+overseer. Planner text, verbatim:
+
+TO: overseer. FROM: Kosta via planner. Re: PLANNER_BRIEF_TEMPO_SOURCE (2026-11-18). Record as BRAIN_SPEC 7.81. Supersedes the planner's earlier 7.81 draft (librosa + confidence decision) if received.
+
+RETHINK (Kosta): since 7.78 timing was built as a hand-made layer on top of A (pulse -> motor clock -> coupling -> landing opportunities -> tracker choice), each round adding a rule. Stopped. Timing is LEARNED like the other controls:
+1. New A controls, measured from human motion (definitions fixed in rules before computing):
+ - MOVEMENT RHYTHM: per 2-4 s window, dominant period of lamp/joint velocity (autocorrelation), expressed as a ratio to the librosa beat period, binned {1/2, 1, 2, other/none}, plus a rhythm-strength value.
+ - EVENT RESPONSES: hold (pause onset), change (gesture-family or posture change), burst (vigour jump) per token, already partly measurable; stated.
+2. Trackers and oscillators become SENSES (B inputs only): librosa beat phase/period, pulse v2 phase/period/confidence, onset/density features, ear features, cortex surprise. No tracker drives the movement directly. B learns which help; ablations report each sense's contribution.
+3. Dropped as mechanisms: motor clock time-scaling, coupling parameter, landing-opportunity rules, tracker selection, anti-doubling rules. The pulse comparison closes with no winner declared: the viewing difference is within Kosta's between-session variability.
+4. FIRST (report-only): in the human data, distribution of movement-rhythm ratio to beat (does it cluster at 1/2, 1, 2?), per dataset, using librosa AND pulse v2 periods; and relation of hold/change/burst to music events (onset, dropout, novelty, cortex surprise), with lags +-1 s, bootstrap by song. Outcome decides whether rhythm is learned by B (clusters present) or shaped by the teacher (absent).
+5. A retrain (A2): add the rhythm and event-response controls if step 4 is ready before A2 starts; otherwise in the next A training. Intervention matrix includes rhythm (1/2 vs 1 vs 2) and hold requests.
+6. Lookahead planner (later): no timing rules; scores futures against B's predicted controls including rhythm and event responses.
+7. 7.79 STEP 1 factorial viewing: still run as information on what Kosta's eye weighs; nothing waits on it.
+Send the A2 brief to the planner if it has open questions.
+Standing rules unchanged.
+
+**Overseer notes (operational, not rulings):**
+- **A2 is already trained** (WO49, merged 2026-11-17, `docs/A2_REPORT.md`), so under item 5 the rhythm and event-response controls go into
+  the next A training (A3). The A2 brief (`docs/PLANNER_BRIEF_A2.md`) still has open questions: Q1 pause/stillness, now also covered by the
+  "hold" event response; Q2/Q3 were overtaken by 7.79-7.81. Kosta has it to forward again.
+- **Pulse v2 stays** in the repo as a sense (merged, fb3eacd). 7.78 2.2-2.3 and 7.80's decision rule are closed.
+- **Step 4** goes to an overseer subagent as WO52 (`docs/BUILDER_PROMPT_WO52_RHYTHM_EVENTS.md`).
+- **WO50** (the factorial viewing, item 7) still waits for Kosta's "send" to agent 1. Its warps are viewing tooling only and do not
+  conflict with item 3.
