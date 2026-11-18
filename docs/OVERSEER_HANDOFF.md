@@ -94,6 +94,19 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
+## UPDATE 2026-11-18 ~23:40 (clock) — NEWEST
+
+7.84 RECORDED (body 974d5c4), answering PLANNER_BRIEF_OVERSEER_QUESTIONS: mismatch test (20 pairs own music vs shifted 2-6 s / other song
+within 5 % tempo, + 5 repeats; rule real-pick >= 70 % of non-tie AND above flip rate) runs BEFORE WO50 and B; viewing protocol = paired
+forced choice, >= 20 % hidden repeats, min effect stated; WO50 restructured to 36 pairs + 8 repeats (prompt must be REWRITTEN before
+send); raw-joint rhythm rerun report-only; one combined "A3 controls and B senses" ruling after the planner sees A2 + CORTEX_EVENTS briefs.
+Order: mismatch + raw-joint rhythm (+ 7.83 data check) -> WO50 -> B. A3 may run in parallel.
+GAP: 7.82 and 7.83 are cited but NEVER reached the overseer; ask Kosta to paste them (7.83 data check unspecifiable until then).
+WO53 prompt docs/BUILDER_PROMPT_WO53_MISMATCH.md (body 66a4d49): part A mismatch material (branch body-mismatch, cores 14-16), part B
+raw-joint rhythm (branch body-rawrhythm, cores 17-19). Part B LAUNCHED as Opus overseer subagent. Part A launch DENIED by the auto-mode
+classifier; waiting for Kosta (relaunch as subagent, or "send" to agent 1 [130d83]). Builders agent 1 [130d83], agent 2 [45a635] idle.
+A3 WO not written: waits for the combined ruling.
+
 ## CURRENT STATE 2026-11-18 ~12:45 (saved for an overseer restart) — READ THIS FIRST
 
 **Line of work** (all on branch `body`, worktree `.claude/worktrees/body`; rulings in `docs/BRAIN_SPEC.md` 7.73-7.81, newest 7.81):
