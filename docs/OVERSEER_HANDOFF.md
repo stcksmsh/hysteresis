@@ -171,6 +171,14 @@ later. Old label page claude.ai artifact NcL5N9rcfNCRfwgachwCFx still to delete 
 - Planner numbering can skip (7.75 arrived after 7.76 was asked for); record what arrives, note gaps.
 - Overseer check scripts live in `scripts/body/overseer/` (durable); job tmp is not.
 
+## UPDATE 2026-11-18 ~11:00 (clock)
+
+REBOOT 2026-11-18 10:36 (no answers lost; viewing re-served as hyst-wo51-view2). PULSE2 VIEWING SCORED (body 9309750,
+docs/PULSE2_VIEW_RESULT.md): right speed v2 15 vs librosa 18, steady 19 vs 20 -> 7.80 DECISION RULE NOT MET -> stop tuning, Kosta
+ruling on tempo source. Test-retest: 10 speed answers changed on identical tempo across sessions (> the 3-item margin). Server stopped.
+Brief docs/PLANNER_BRIEF_TEMPO_SOURCE.md SENT: (c) librosa period/phase + pulse v2 confidence as beat-present signal [rec].
+Open planner answers: A2, CORTEX_EVENTS, TEMPO_SOURCE. WO50 NOT SENT (agent 1; check ListAgents after reboot).
+
 ## UPDATE 2026-11-17 ~20:00 (clock)
 
 WO51 PULSE2 READY + VIEW READY fb3eacd VERIFIED (switches/min 1.25 / q90 2.56, within-6 % 0.80, 3:2 share 0.257 recomputed from
