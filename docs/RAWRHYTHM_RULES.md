@@ -40,7 +40,8 @@ run and must equal WO52's point estimates (checked and reported).
   - **Motorica** raw BVH (`/secondary/hyst-data/motorica/raw/motion/motorica_dance_dataset/bvh/<name>.bvh`, path from
     `t0_motorica/catalogue.json`, 120 fps), decimated to every 4th frame exactly as `t0_phantom.motorica_rot` (the T0 time base), FK with
     **the file's own skeleton offsets** (cm -> m; Euler channels in the listed order, intrinsic, as `motorica_rot`; position channels used at
-    the root only, non-root position channels checked constant in the scan). Not approximate.
+    the root only; the non-root position channels are checked nearly constant in the scan: largest sd over frames < 1 cm, maximum
+    reported) (amendment before any result: a smoke run found sd 0.017 cm in the first file, so "constant" was made "< 1 cm"). Not approximate.
   - The raw sources of PhantomDance and Motorica live outside `/secondary/hyst-data/datasets/` (their T0 catalogues point there); read-only.
   - AIST++ is local but has no WO52 windows (not in A): not analysed.
 - **Speed:** each joint's 30 Hz position (m) is interpolated to the 50 Hz grid t = n / 50 by a cubic spline (`scipy.interpolate.CubicSpline`,
