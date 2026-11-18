@@ -94,7 +94,14 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-18 ~23:40 (clock) — NEWEST
+## UPDATE 2026-11-18 ~24:00 (clock) — NEWEST
+
+WO53 PART B RAWRHYTHM VERIFIED (all 20 raw/lamp x chance x source point estimates recomputed from rawrhythm/songs_*.npz, ratio of sums,
+exact match) and MERGED (body 5dd8d9f, 6 tests). Raw vs similar-tempo chance <= +0.012; vs shuffled +0.03..+0.11; lamp ~0 / <= +0.026.
+Raw 1/2-beat share 0.090 vs lamp 0.020. Brief docs/PLANNER_BRIEF_RAWRHYTHM.md (Q1 chance 1 decides -> not shown [rec]; Q2 report only,
+A3 matrix tests 1/2 [rec]; Q3 fold into combined ruling [rec]) - give to Kosta. Part A still waits for Kosta (classifier denied launch).
+
+## UPDATE 2026-11-18 ~23:40 (clock)
 
 7.84 RECORDED (body 974d5c4), answering PLANNER_BRIEF_OVERSEER_QUESTIONS: mismatch test (20 pairs own music vs shifted 2-6 s / other song
 within 5 % tempo, + 5 repeats; rule real-pick >= 70 % of non-tie AND above flip rate) runs BEFORE WO50 and B; viewing protocol = paired
