@@ -171,6 +171,16 @@ later. Old label page claude.ai artifact NcL5N9rcfNCRfwgachwCFx still to delete 
 - Planner numbering can skip (7.75 arrived after 7.76 was asked for); record what arrives, note gaps.
 - Overseer check scripts live in `scripts/body/overseer/` (durable); job tmp is not.
 
+## UPDATE 2026-11-18 ~11:30 (clock)
+
+7.81 RECORDED (body 0bd8658): timing LEARNED, not hand-built. New A controls: movement rhythm (ratio to librosa beat, bins 1/2,1,2,
+other/none + strength) and event responses (hold / change / burst). Trackers (librosa, pulse v2, onsets, ear, cortex) = B SENSES only.
+DROPPED: motor clock, coupling, landing rules, tracker selection, anti-doubling. Pulse comparison closed, no winner. Next A training
+(A3) gets rhythm + event controls (A2 already done). WO50 factorial still runs as info (needs "send").
+WO52 (step 4, report-only: rhythm-ratio clustering + event-locked responses in human data) LAUNCHED as Opus subagent, branch body-rhythm,
+cores 14-19, prompt docs/BUILDER_PROMPT_WO52_RHYTHM_EVENTS.md (febc6dd). Outcome decides: clusters -> B learns rhythm; absent ->
+teacher shapes it. A2 brief: Kosta to forward again (Q1 still open).
+
 ## UPDATE 2026-11-18 ~11:00 (clock)
 
 REBOOT 2026-11-18 10:36 (no answers lost; viewing re-served as hyst-wo51-view2). PULSE2 VIEWING SCORED (body 9309750,
