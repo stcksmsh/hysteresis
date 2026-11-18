@@ -219,7 +219,7 @@ def song_extract(args):
 
 
 def windows_by_seq(ds):
-    z = np.load(B / f"grammar/win_{ds}.npz")
+    z = {k: np.load(B / f"grammar/win_{ds}.npz")[k] for k in ("key", "win", "ctl", "code1", "group")}
     out = {}
     for i in range(len(z["key"])):
         key = str(z["key"][i])
