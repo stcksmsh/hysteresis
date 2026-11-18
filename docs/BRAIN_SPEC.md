@@ -3180,3 +3180,30 @@ Standing rules unchanged.
 - **Step 4** goes to an overseer subagent as WO52 (`docs/BUILDER_PROMPT_WO52_RHYTHM_EVENTS.md`).
 - **WO50** (the factorial viewing, item 7) still waits for Kosta's "send" to agent 1. Its warps are viewing tooling only and do not
   conflict with item 3.
+
+### 7.84 Mismatch test before WO50 and B; paired forced-choice viewing protocol; raw-joint rhythm rerun; one combined A3/B ruling later; 2026-11-18, via Kosta + planner (answering `docs/PLANNER_BRIEF_OVERSEER_QUESTIONS.md`)
+
+Recorded as received, before any result it scores. Planner text, verbatim:
+
+TO: overseer. FROM: Kosta via planner. Re: PLANNER_BRIEF_OVERSEER_QUESTIONS (2026-11-18). Record as BRAIN_SPEC 7.84.
+
+1. MISMATCH TEST: adopted, runs before WO50 and before any B work. A3 training may run in parallel (its controls serve as teacher knobs regardless).
+ - Material: retargeted human clips (FineDance + PhantomDance + Motorica, mix of V1/V2, realised stage, lamp head), 10 s, excerpts per 7.75 Q3.
+ - Pairs: same movement with its own music vs (a) the same song shifted by a random 2-6 s, or (b) a different song within 5 % tempo. Half of each kind. About 20 pairs + 5 repeats (>= 20 %); order and side randomised and checked.
+ - Question: "which fits the music better?" (first / second / same) + confidence.
+ - Decision rule stated in advance: Kosta picks the real pairing in >= 70 % of non-tie answers AND above his repeat-flip rate -> data carry visible fit; otherwise timing/fit is treated as teacher- and planner-shaped, and data-learned timing is deprioritised.
+ - Report separately for shifted vs different-song pairs.
+2. VIEWING PROTOCOL from now: paired forced choice wherever versions are compared; >= 20 % hidden repeats per session; minimum effect size stated in advance and larger than the measured test-retest flip rate. WO50 restructured as proposed: main effects T, P, E as paired comparisons (factor on vs off, others fixed), 6 excerpts x 3 x 2 orders = 36 pairs + 8 repeats; runs after the mismatch test.
+3. RAW-JOINT RHYTHM: adopted, report-only, with the mismatch test: rerun the rhythm part of WO52 on raw human joints (wrists, feet, pelvis, head) before retargeting; compare period distributions and beat-ratio clustering with the retargeted lamp. If raw joints cluster at 1/2, 1, 2 and the arm does not, record the arm/retarget as the bottleneck.
+4. CONSOLIDATION: one combined ruling "A3 controls and B senses" after the planner sees the A2 and CORTEX_EVENTS briefs (send both). Principles already fixed: hold/pause is an A control (7.82 Q2); all trackers, the pulse and the cortex are B senses (7.81); 7.83's free-dance positive control and data check stand.
+Order: mismatch test + raw-joint rhythm (and the 7.83 data check) -> WO50 -> B design. A3 in parallel.
+Standing rules unchanged.
+
+**Overseer notes (operational, not rulings):**
+- **Numbering gap:** 7.82 and 7.83 are cited above but are not recorded in this file; their texts never reached the overseer. They keep
+  their numbers and are recorded when Kosta pastes them. Until then "hold/pause is an A control" (7.82 Q2) is taken as stated here, and
+  the 7.83 data check cannot be specified.
+- **WO50** (`docs/BUILDER_PROMPT_WO50_FACTORIAL.md`, 48 rated items + 4 repeats) is superseded in its viewing design by item 2 (36 paired
+  items + 8 repeats) and must be rewritten before it is sent. It waits for the mismatch test's result.
+- **Repeat-flip rate** for the item 1 rule is measured within the mismatch session itself (the 5 hidden repeats), not taken from the
+  pulse2 test-retest.
