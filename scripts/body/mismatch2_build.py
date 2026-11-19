@@ -5,6 +5,7 @@
     mismatch2_build.py assemble    round-1 assembly (mismatch_build.cmd_assemble) into retime/b/, manifest gets the "intro" text
     mismatch2_build.py checks      round-1 clip checks + retime check + arm-only page check + overlap with round 1 -> clip_checks.json, retime_checks.json
     mismatch2_build.py order SESSION_DIR   round-1 order checks (mismatch_order) -> retime/b/order_checks.json
+    mismatch2_build.py synth SESSION_DIR   unchanged scorer on synthetic answers (temporary key copy) -> retime/b/scorer_synthetic.json
 Round-1 functions are reused unchanged; only what docs/MISMATCH2_RULES.md section 0 changes is new here. Nothing is served.
 """
 import json
@@ -240,5 +241,32 @@ def cmd_order(session):
     mismatch_order.main(session)
 
 
+def cmd_synth(session):
+    """rules section 8: the unchanged scorer on synthetic answers for this session's key, in a temporary copy of key/ (answers.csv of the
+    session is never opened) -> retime/b/scorer_synthetic.json"""
+    import shutil
+    import subprocess
+    import tempfile
+    skey = json.loads((Path(session) / "key/key.json").read_text())["key"]
+    mkey = json.loads((Path(session) / "key/material_key.json").read_text())["items"]
+    rng, res = random.Random(SEED + 1), {}
+    other = {"first": "second", "second": "first"}
+    plans = {"all_real": lambda c: mkey[skey[c]["id"]]["real_side"], "all_foil": lambda c: other[mkey[skey[c]["id"]]["real_side"]]}
+    plans.update({f"random_{n}": (lambda c: rng.choice(["first", "second", "same"])) for n in range(5)})
+    for name, f in plans.items():
+        with tempfile.TemporaryDirectory() as d:
+            shutil.copytree(Path(session) / "key", Path(d) / "key")
+            (Path(d) / "answers.csv").write_text("".join(f"{c},{f(c)}|medium,,2026-11-19T00:00:00,0\n" for c in sorted(skey)))
+            subprocess.run([sys.executable, str(Path(__file__).with_name("mismatch_score.py")), d], check=True, capture_output=True)
+            r = json.loads((Path(d) / "mismatch_result.json").read_text())
+            res[name] = {k: r[k] for k in ("rule_met", "real_pick_share", "n_non_tie", "lower95_one_sided", "flip_rate", "ties", "answered")}
+    (OUT / "scorer_synthetic.json").write_text(json.dumps(res, indent=1))
+    print(json.dumps(res, indent=1))
+
+
 if __name__ == "__main__":
-    {"plan": cmd_plan, "assemble": cmd_assemble, "checks": cmd_checks}.get(sys.argv[1], lambda: cmd_order(sys.argv[2]))()
+    cmds = {"plan": cmd_plan, "assemble": cmd_assemble, "checks": cmd_checks}
+    if sys.argv[1] in cmds:
+        cmds[sys.argv[1]]()
+    else:
+        {"order": cmd_order, "synth": cmd_synth}[sys.argv[1]](sys.argv[2])
