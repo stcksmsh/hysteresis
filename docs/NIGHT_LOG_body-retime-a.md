@@ -8,3 +8,7 @@
   reproduced exactly on one sequence.
 - Run unit `hyst-wo55a-r1` (cores 14-19, 5 workers, MemoryMax 10G): steps v3, rhythm, events, tokens, bas, report;
   logs `/secondary/hyst-data/body/retime/a/logs/`.
+- Chain finished, every step exit 0, no per-item failures (`failed.txt` absent). Reproductions exact (BAS 0.0, V3 raw offsets 0, WO52
+  analysis B 0, lamp rhythm 0 mismatches). Report `docs/RETIME_REPORT_A.md`, tables `docs/RETIME_TABLES_A.md`.
+- FOR USER items listed in the report (same L on metric/q50; tail rows dropped from both sides; tokens not re-cut; token-effect
+  defaults; V3 median bootstrap added; V1 shift = 18 samples).
