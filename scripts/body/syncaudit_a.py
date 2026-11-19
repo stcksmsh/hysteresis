@@ -26,13 +26,18 @@ WIN = {"syn_arm30": 0, "syn_arm50": 1, "syn_mixed30": 0, "syn_torso30": 0, "syn_
 
 
 def cmd_gen():
-    import soundfile as sf
+    import wave
+
+    def write16(path, a):
+        with wave.open(str(path), "wb") as f:
+            f.setnchannels(1); f.setsampwidth(2); f.setframerate(S.SR)
+            f.writeframes(np.round(np.clip(a, -1, 1) * 32767).astype("<i2").tobytes())
     (OUT / "syn").mkdir(parents=True, exist_ok=True)
     meta = {}
     for name, (fam, dur) in SEQS.items():
         ck = S.click_times(dur)
         np.save(OUT / "syn" / f"{name}.npy", S.synth_motion(ck, fam_of(fam), dur))
-        sf.write(str(OUT / "syn" / f"{name}.wav"), S.click_audio(ck, dur), S.SR, subtype="PCM_16")
+        write16(OUT / "syn" / f"{name}.wav", S.click_audio(ck, dur))
         meta[name] = dict(family=fam, dur_s=dur, clicks=ck, families=[fam_of(fam)(i) for i in range(len(ck))])
     (OUT / "syn" / "meta.json").write_text(json.dumps(meta, indent=1))
     print("gen", list(SEQS))
