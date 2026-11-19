@@ -14,6 +14,7 @@ Part 4 items point at a round-1 video (file, or round1_file; absolute path allow
 adds part, setting, round1_id, song. With --out left out, the session goes to <manifest folder>/../session_<date>.
 Answers are appended at once to SESSION_DIR/answers.csv (code,answer,note,timestamp,replays); a reload resumes at the first
 unanswered item. Manifest paths (file, files) are relative to the manifest's folder.
+Optional manifest field "intro" (WO55): an instruction text shown once before item 1 with a "start" button.
 """
 import argparse, csv, json, os, random, re, secrets, shutil, sys, threading, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -37,6 +38,7 @@ def build(manifest_path, out, seed=None, parts=None):
     data = json.loads(manifest_path.read_text())
     clips = data["clips"] if isinstance(data, dict) else data
     custom = data.get("labels") if isinstance(data, dict) else None          # WO41: optional label-set override (manifest object with "labels")
+    intro = data.get("intro") if isinstance(data, dict) else None            # WO55: optional instruction text, shown once before item 1
     if parts:
         clips = [c for c in clips if c.get("part") in parts]
         if not clips:
@@ -97,6 +99,8 @@ def build(manifest_path, out, seed=None, parts=None):
     (out / "labels.json").write_text(json.dumps(custom or (FOLLOW_LABELS if follow else LOOK_LABELS if look else LABELS2 if v2 else LABELS)))
     if look:
         (out / "pair_labels.json").write_text(json.dumps(LOOK_PAIR_LABELS))
+    if intro:
+        (out / "intro.json").write_text(json.dumps(str(intro)))
     (out / "answers.csv").write_text("")
     print(f"session built: {len(items)} items, seed {seed}, in {out}")
 
@@ -111,6 +115,8 @@ class Session:
         self.labels = json.loads(lf.read_text()) if lf.is_file() else LABELS
         pf = self.out / "pair_labels.json"
         self.pair_labels = json.loads(pf.read_text()) if pf.is_file() else PAIR_LABELS
+        nf = self.out / "intro.json"
+        self.intro = json.loads(nf.read_text()) if nf.is_file() else None
         self.path.touch()
 
     def answered(self):
@@ -121,7 +127,7 @@ class Session:
         done = self.answered()
         todo = [i for i in self.items if i["code"] not in done]
         return {"total": len(self.items), "done": len(self.items) - len(todo), "item": (todo[0] if todo else None),
-                "labels": self.labels, "pairLabels": self.pair_labels}
+                "labels": self.labels, "pairLabels": self.pair_labels, "intro": self.intro}
 
     def answer(self, body):
         code, ans, note = body.get("code"), body.get("answer"), str(body.get("note", ""))[:2000]
@@ -155,11 +161,13 @@ button:hover{background:#33424f}textarea{width:min(96vw,640px);height:3em;font:i
 <div id=bar></div><div id=stage></div><div id=buttons></div>
 <textarea id=note placeholder="note (optional)"></textarea>
 <script>
-let st, replays = 0, which = 0, vids = [];
+let st, replays = 0, which = 0, vids = [], started = false;
 const $ = id => document.getElementById(id);
 async function load() {
   st = await (await fetch('/api/state')).json();
   if (!st.item) { $('bar').textContent = 'all ' + st.total + ' done, thank you'; $('stage').innerHTML = ''; $('buttons').innerHTML = ''; $('note').style.display = 'none'; return; }
+  if (st.intro && !started && st.done === 0) { $('bar').textContent = ''; $('stage').innerHTML = ''; const p = document.createElement('p'); p.id = 'intro'; p.style.maxWidth = '40em'; p.textContent = st.intro; $('stage').appendChild(p);
+    $('buttons').innerHTML = ''; const b = document.createElement('button'); b.textContent = 'start'; b.onclick = () => { started = true; load(); }; $('buttons').appendChild(b); return; }
   $('bar').textContent = (st.done + 1) + ' of ' + st.total;
   $('note').value = ''; replays = 0; which = 0;
   const it = st.item;

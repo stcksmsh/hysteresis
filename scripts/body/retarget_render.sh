@@ -14,7 +14,7 @@ one() {
   python3 -I -c "import json,sys; sys.exit(0 if json.load(open('$W/$id.json'))['gates']['passed'] else 1)" || { echo "$id: gates failed, not rendered" >&2; return 1; }
   "$CARGO_TARGET_DIR/release/examples/ensemble_preview" "$W/pages/$id.raw.html" "$W/$clip.m4a" --implement lamp --joint-csv "$W/$id.csv" > "$W/pages/$id.log" 2>&1 || { echo "$id page failed" >&2; return 1; }
   sed -i 's/K5 policy//g; s/joint CSV//g' "$W/pages/$id.raw.html"
-  (cd "$HERE" && /secondary/hyst-env/body/bin/python -I retarget_page.py "$W/pages/$id.raw.html" "$W/pages/$id.html") || { echo "$id page patch failed" >&2; return 1; }
+  (cd "$HERE" && /secondary/hyst-env/body/bin/python -I "${RETARGET_PAGE:-retarget_page.py}" "$W/pages/$id.raw.html" "$W/pages/$id.html") || { echo "$id page patch failed" >&2; return 1; }
   HYST_FAST=1 node "$ROOT/scripts/author/record_ensemble.cjs" "$W/pages/$id.html" "$W/$clip.m4a" "$C/$id.mp4.part.mp4" > "$W/pages/$id.rec.log" 2>&1 && mv "$C/$id.mp4.part.mp4" "$C/$id.mp4" && echo "$id done"
 }
 export -f one; export W C ROOT HERE CARGO_TARGET_DIR O
