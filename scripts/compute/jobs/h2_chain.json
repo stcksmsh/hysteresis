@@ -1,0 +1,9 @@
+{
+  "id": "h2-chain",
+  "cmd": ["bash", "scripts/brain/h2_chain.sh"],
+  "cwd": "{REPO}",
+  "env": {"OMP_NUM_THREADS": "3"},
+  "wall_limit_s": 43200,
+  "idle_limit_s": 43200,
+  "grace_s": 60
+}

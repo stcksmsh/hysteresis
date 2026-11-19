@@ -1,0 +1,44 @@
+<mujoco model="hyst_arm">
+  <compiler angle="degree"/>
+  <option timestep="0.002" gravity="0 0 -9.81" integrator="implicitfast"/>
+  <worldbody>
+    <body name="base">
+      <geom type="box" size="0.05 0.05 0.01" pos="0 0 -0.01" mass="0.001" contype="0" conaffinity="0"/>
+      <body name="b0" pos="0 0 0">
+        <joint name="base_yaw" type="hinge" axis="0 0 1" armature="0.0119025"/>
+        <geom type="capsule" fromto="0 0 0 0 0 0.08" size="0.01" mass="0.0142848" contype="0" conaffinity="0" rgba="0.8 0.8 0.85 1"/>
+        <geom type="box" size="0.02260 0.01235 0.01750" pos="0 0 0.08" mass="0.055" contype="0" conaffinity="0" rgba="0.2 0.2 0.25 1"/>
+        <body name="b1" pos="0 0 0.08">
+          <joint name="shoulder" type="hinge" axis="0 1 0" armature="0.0119025" limited="true" range="-110 110"/>
+          <geom type="capsule" fromto="0 0 0 0.28 0 0" size="0.01" mass="0.0499968" contype="0" conaffinity="0" rgba="0.8 0.8 0.85 1"/>
+          <geom type="box" size="0.02260 0.01235 0.01750" pos="0.28 0 0" mass="0.055" contype="0" conaffinity="0" rgba="0.2 0.2 0.25 1"/>
+          <body name="b2" pos="0.28 0 0">
+            <joint name="elbow" type="hinge" axis="0 1 0" armature="0.0119025" limited="true" range="-110 110"/>
+            <geom type="capsule" fromto="0 0 0 0.22 0 0" size="0.01" mass="0.0392832" contype="0" conaffinity="0" rgba="0.8 0.8 0.85 1"/>
+            <geom type="box" size="0.02260 0.01235 0.01750" pos="0.22 0 0" mass="0.055" contype="0" conaffinity="0" rgba="0.2 0.2 0.25 1"/>
+            <body name="b3" pos="0.22 0 0">
+              <joint name="wrist_bend" type="hinge" axis="0 1 0" armature="0.0119025" limited="true" range="-110 110"/>
+              <geom type="capsule" fromto="0 0 0 0.08 0 0" size="0.01" mass="0.0142848" contype="0" conaffinity="0" rgba="0.8 0.8 0.85 1"/>
+              <geom type="box" size="0.02260 0.01235 0.01750" pos="0.08 0 0" mass="0.055" contype="0" conaffinity="0" rgba="0.2 0.2 0.25 1"/>
+              <body name="b4" pos="0.08 0 0">
+                <joint name="wrist_roll" type="hinge" axis="1 0 0" armature="0.0119025"/>
+                <geom type="capsule" fromto="0 0 0 0.11 0 0" size="0.01" mass="0.00685621" contype="0" conaffinity="0" rgba="0.8 0.8 0.85 1"/>
+                <body name="implement" pos="0.11 0 0">
+                  <inertial pos="0 0 0" mass="0.101895" diaginertia="0.000140524 0.000140524 0.000140524"/>
+                  <site name="hand" pos="0 0 0" size="0.005"/>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+  <actuator>
+    <position name="base_yaw" joint="base_yaw" kp="16.8564" kv="4.11491" forcerange="-2.94199 2.94199" forcelimited="true"/>
+    <position name="shoulder" joint="shoulder" kp="16.8564" kv="4.11483" forcerange="-2.94199 2.94199" forcelimited="true"/>
+    <position name="elbow" joint="elbow" kp="16.8564" kv="2.44229" forcerange="-2.94199 2.94199" forcelimited="true"/>
+    <position name="wrist_bend" joint="wrist_bend" kp="16.8564" kv="1.5704" forcerange="-2.94199 2.94199" forcelimited="true"/>
+    <position name="wrist_roll" joint="wrist_roll" kp="16.8564" kv="1.35169" forcerange="-2.94199 2.94199" forcelimited="true"/>
+  </actuator>
+</mujoco>

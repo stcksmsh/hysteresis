@@ -1,0 +1,10 @@
+{
+  "id": "bench-m3-t4-001",
+  "cmd": ["bash", "-c", "cd scripts/body && for e in 16 64 256; do python -u bench_m3.py --out {OUT} --envs $e --device cuda --procs 4 --threads 4 --fresh || true; done"],
+  "cwd": "{REPO}",
+  "env": {"OMP_NUM_THREADS": "4"},
+  "wall_limit_s": 3000,
+  "idle_limit_s": 1200,
+  "progress_file": "{OUT}/progress.json",
+  "grace_s": 60
+}

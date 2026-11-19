@@ -1,0 +1,9 @@
+{
+  "id": "bench-mjx-001",
+  "cmd": ["python", "-u", "scripts/body/bench_physics.py", "--out", "{OUT}", "--envs", "1,64,512,1024,4096", "--seconds", "60"],
+  "cwd": "{REPO}",
+  "wall_limit_s": 2700,
+  "idle_limit_s": 900,
+  "progress_file": "{OUT}/progress.json",
+  "grace_s": 30
+}

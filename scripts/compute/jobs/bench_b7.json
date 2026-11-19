@@ -1,0 +1,10 @@
+{
+  "id": "bench-b7-001",
+  "cmd": ["python", "-u", "scripts/brain/bench_b7.py", "--data", "{DATA}", "--out", "{OUT}", "--minutes", "20"],
+  "cwd": "{REPO}",
+  "env": {"OMP_NUM_THREADS": "4"},
+  "wall_limit_s": 3600,
+  "idle_limit_s": 900,
+  "progress_file": "{OUT}/progress.json",
+  "grace_s": 60
+}

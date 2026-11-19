@@ -1,0 +1,44 @@
+{
+ "definition": "hf_share.hf_share: joint velocity (central difference of the 50 Hz CSV), Welch 4 s Hann 50 % overlap mean removed, power above 3 Hz / power above 0 Hz summed over base_yaw, shoulder, elbow, wrist_bend",
+ "source": "v47 Off hexagon score of each danced song (ensemble_preview --ring 6,0.8 --score), hyst score-csv --mode off --agent 0..5, 50 Hz",
+ "songs": {
+  "instant-crush": {
+   "arms": [
+    0.0023808295978048452,
+    0.0024794446040923993,
+    0.002426579116855442,
+    0.0024780108242525795,
+    0.0024169753381776482,
+    0.002332212682159166
+   ],
+   "mean": 0.0024190086938903465,
+   "limit_1.25x": 0.003023760867362933
+  },
+  "five-years": {
+   "arms": [
+    0.002842053316479645,
+    0.0028328437400628676,
+    0.002805853861576651,
+    0.002829391948796487,
+    0.002802827637902825,
+    0.002857138646056291
+   ],
+   "mean": 0.0028283515251457943,
+   "limit_1.25x": 0.003535439406432243
+  },
+  "presence": {
+   "arms": [
+    0.0036228568747122773,
+    0.003778203979365878,
+    0.0037408617681795073,
+    0.003503383232747292,
+    0.0035740231382297466,
+    0.003750832439426799
+   ],
+   "mean": 0.0036616935721102504,
+   "limit_1.25x": 0.0045771169651378125
+  }
+ },
+ "reference_mean_of_song_means": 0.0029696845970487973,
+ "limit_1.25x": 0.0037121057463109968
+}

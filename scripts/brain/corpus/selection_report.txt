@@ -1,0 +1,12 @@
+licence-passing tracks 11582 (781.8 h), artists 1874
+held-out artists 187 of 1874; seed 20261030
+  split train: artists 1687, tracks 9971, hours 668.0
+  split heldout: artists 187, tracks 1611, hours 113.8
+window 60-600 s and in zip: 10105 tracks, 608.0 h
+DEAM-ID exclusion: 135 of the 750 overlap IDs fall in the windowed pool
+training side after window and DEAM IDs, hours by class: BY 323.7 (E/P/R 65.0), CC0 29.4 (E/P/R 0.0), PD 34.4 (E/P/R 1.1), BY-SA 135.9 (E/P/R 23.0)
+BY+CC0+PD alone: 387.5 h, E/P/R 66.1 h -> BY-SA INCLUDED
+selected: train 2875 tracks 178.2 h; heldout 355 tracks 20.0 h
+train by genre_top (hours): other 64.6, Electronic 49.3, Rock 35.0, Hip-Hop 6.2, Experimental 4.9, Pop 4.8, Classical 4.1, Old-Time / Historic 4.0, Instrumental 2.0, Folk 1.1, International 1.1, Jazz 0.5, Soul-RnB 0.4, Blues 0.2, Spoken 0.1, Easy Listening 0.1
+train by class (hours): BY 118.2, BY-SA 46.9, CC0 5.7, PD 7.4
+train artists 732; largest artist 6.4 h; top 5 21.3 h
