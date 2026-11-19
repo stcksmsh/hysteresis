@@ -94,7 +94,18 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-19 ~13:00 (clock) — NEWEST
+## UPDATE 2026-11-19 ~13:30 (clock) — NEWEST
+
+7.86 RECORDED (body 529b313): shifted-foil preference is SYSTEMATIC; rule outcome of 7.84 NOT applied; ALL coupling conclusions 7.74-7.85
+ON HOLD pending an end-to-end SYNC AUDIT (A1 synthetic click/impulse probe through the full pipeline, A2 AIST++ per-stage lag/BAS, A3 per-song
+lag diagnostic, A4 time-origin code review); a stage offset > 50 ms or a misaligned loader = finding -> fix, record touched results, rerun
+WO47 / WO52 / WO53 / mismatch round 2. Round 2 only after the audit (instruction page, offsets 4-6 s, foil from another dataset, 5 repeats).
+7.83 (Jyväskylä data check) proceeds in parallel, TEXT STILL MISSING. WO54 prompt docs/BUILDER_PROMPT_WO54_SYNC_AUDIT.md (body, pushed):
+agent 1 [28da29] = A1 + A4 (branch body-syncaudit-a, cores 6-13); agent 2 [ea25fc] = A2 + A3 (branch body-syncaudit-b, cores 14-19).
+Report only; the overseer orders any fix. NOT SENT: waits for Kosta's "send". Briefs awaiting forwarding: A2, CORTEX_EVENTS (for the combined
+ruling).
+
+## UPDATE 2026-11-19 ~13:00 (clock)
 
 MISMATCH TEST SCORED (session 2026-11-19, server hyst-wo53-view1 STOPPED): RULE NOT MET. Real picks 5 / foil 13 / ties 2 (share 0.278);
 shifted 0/8 non-tie (foil picked every time, p 0.008), different song 5/10; flip rate 3/5 = 0.60 (two flips are the confused items 2-3;
