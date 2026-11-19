@@ -94,7 +94,16 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-19 ~10:55 (clock) — NEWEST
+## UPDATE 2026-11-19 ~12:30 (clock) — NEWEST
+
+WO53 PART A VERIFIED + MERGED (body, both branches; 14 scorer/build tests pass; all 25 clips pass numeric checks recomputed from
+mismatch/clip_checks.json; order checks pass; 10 shifted + 10 different-song + 5 repeats). VIEWING SERVED http://127.0.0.1:8781/ unit
+hyst-wo53-view1, session /secondary/hyst-data/body/mismatch/session_2026-11-19 (key/answers/material_key 404 checked). Kosta viewing now.
+Score: scripts/body/mismatch_score.py SESSION_DIR (rule: real-pick >= 0.70 AND lower95 > 0.5 + flip/2); report shifted vs different song
+separately + test-retest (5 repeats). Then stop the unit (systemctl --user stop hyst-wo53-view1). Result -> BRAIN_SPEC note + planner brief.
+Machine is loaded by Kosta's kabl work (load 58); no hyst jobs running.
+
+## UPDATE 2026-11-19 ~10:55 (clock)
 
 WO53 PART A SENT (user: "make the part A, both agents ready and clear"). Split prompt docs/BUILDER_PROMPT_WO53A_SPLIT.md (body 77717f5):
 agent 1 [28da29] = material (branch body-mismatch, cores 6-13, pushes docs/MISMATCH_RULES.md with key/answers schema first);
