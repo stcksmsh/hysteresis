@@ -94,7 +94,15 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-18 ~24:00 (clock) — NEWEST
+## UPDATE 2026-11-19 (clock) — NEWEST
+
+7.85 RECORDED (body, answering PLANNER_BRIEF_RAWRHYTHM): Q1 (a) chance 1 decides, item 3 = "not shown", arm/retarget not the bottleneck for
+beat-ratio clustering; Q2 (a) report only, A3 matrix reports whether the arm makes 1/2-beat rhythm on request; Q3 (a) ONE combined
+"A3 controls and B senses" ruling after: mismatch test, 7.83 data check / free-dance positive control, A2 + CORTEX_EVENTS briefs at planner.
+Still open: WO53 part A launch (classifier denied subagent; Kosta to choose subagent relaunch or agent 1 [130d83]); 7.82/7.83 texts missing;
+Kosta to forward A2 + CORTEX_EVENTS briefs. WO50 rewrite (36 pairs + 8 repeats) waits for the mismatch result. A3 WO unwritten.
+
+## UPDATE 2026-11-18 ~24:00 (clock)
 
 WO53 PART B RAWRHYTHM VERIFIED (all 20 raw/lamp x chance x source point estimates recomputed from rawrhythm/songs_*.npz, ratio of sums,
 exact match) and MERGED (body 5dd8d9f, 6 tests). Raw vs similar-tempo chance <= +0.012; vs shuffled +0.03..+0.11; lamp ~0 / <= +0.026.
