@@ -3248,3 +3248,28 @@ Standing rules unchanged.
   reruns). Fixes never touch the frozen `src/` or `tools/`.
 - The 7.83 text has still not reached the overseer, so the Jyväskylä check cannot be specified; it is not part of WO54.
 - Sync audit work order: `docs/BUILDER_PROMPT_WO54_SYNC_AUDIT.md`.
+
+### 7.87 Body-path lag finding; re-time at read time; feedforward lag compensation as system design; arm-only viewings; 2026-11-19, via Kosta + planner (answering `docs/PLANNER_BRIEF_SYNCAUDIT.md`)
+
+Recorded as received, before any result it scores. Planner text, verbatim:
+
+TO: overseer. FROM: Kosta via planner. Re: PLANNER_BRIEF_SYNCAUDIT (2026-11-19). Record as BRAIN_SPEC 7.87.
+
+FINDING: the simulated body path lags the command by 0.2-0.35 s (spinal layer ~+80 ms; limiter + servo +100-200 ms; four-dataset lamp vs raw: V1 +0.35 s, V2 +0.28 s). Loaders, retarget, rendering and muxing are exact. Raw-joint results are unaffected and remain weakly coupled; the "choreography datasets weakly coupled" reading stands pending the 7.83 positive control. The lag does not by itself explain the shifted-foil preference.
+Q1 (a) for analysis and viewing: re-time at read time by a constant L per variant (V1 0.35 s, V2 0.28 s): measures shift lamp arrays earlier by L; viewing clips advance the movement by L (cut the joint CSV from window_offset + L). Residual +-50 ms recorded.
+ FOR THE SYSTEM (record as design): FEEDFORWARD LAG COMPENSATION: generated commands are issued L ahead of the music time they target (offline sidecars make future music known). Later refined by a forward model of the body (cerebellum role) predicting joint/amplitude-dependent lag; until then the constant L. The real arm's L is re-measured on hardware.
+Q2 (a): one constant per variant.
+Q3: order as recommended, plus:
+ - REMOVE from all viewing renders the hand-path look-ahead hint and the trail: viewings show the arm only. Record: the mismatch page drew a 1.5 s look-ahead of the hand path; possible confound for the shifted-foil preference (6/8 picked foils had later music); unproven.
+ - Then: (1) re-timed WO47 lamp BAS / V3, WO52 event locks, WO53 B lamp column (report-only); (2) mismatch round 2 on re-timed, arm-only clips with the 7.86 Q3 changes.
+Q4: yes: A3's data rebuild aligns controls to music by L (token alignment); overseer reports the token-level effect first.
+7.83 positive control (Jyväskylä free-dance data) proceeds; still the key test of the measures.
+Standing rules unchanged.
+
+**Overseer notes (operational, not rulings):**
+- Constants: L(V1) = 0.35 s, L(V2) = 0.28 s, one per variant, in one helper used by every re-timed measure and clip (WO55).
+- "Viewings show the arm only" applies to every future viewing render (hint and trail removed); earlier viewings and the mismatch round 1 clips
+  keep their record as drawn.
+- The 7.84 decision rule and the 7.86 Q3 round-2 changes stand for round 2; round 2 is the second and last round of this check.
+- 7.83 text still not received; its positive control is not in WO55.
+- Work order: `docs/BUILDER_PROMPT_WO55_RETIME.md` (part A analyses + token effect, part B arm-only re-timed mismatch round 2 material).
