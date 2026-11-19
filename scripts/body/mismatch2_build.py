@@ -65,6 +65,16 @@ def foil_candidates(rng, key, ds, lists, used):
     return other + same
 
 
+def balance_repeats(rng, kinds, side, rep):
+    """MISMATCH_RULES section 3: the 5 repeats (reversed sides) are balanced 2-3 / 3-2; round 1's draw does not enforce it, so redraw
+    the repeat choice (>= 2 per kind, none twice) with the same rng until the reversed sides split 2-3 or 3-2"""
+    while sum(side[i] == "first" for i in rep) not in (2, 3):
+        sh = [i for i, x in enumerate(kinds) if x == "shifted"]; di = [i for i, x in enumerate(kinds) if x == "different_song"]
+        rng.shuffle(sh); rng.shuffle(di)
+        rep = sh[:2] + di[:2] + [rng.choice(sh[2:] + di[2:])]
+    return rep
+
+
 def round1_songs():
     it = json.loads(R1KEY.read_text())["items"]
     return {s for x in it.values() for s in (x["song"], x["foil"]["song"])}
@@ -152,6 +162,7 @@ def cmd_plan():
             raise SystemExit(f"{ds}: could not fill {len(todo)} pairs")
     rng.shuffle(pairs)
     sides, rep = M.draw_sides_and_repeats(rng, [p["kind"] for p in pairs])
+    rep = balance_repeats(rng, [p["kind"] for p in pairs], sides, rep)
     items = {}
     for n, (p, sd) in enumerate(zip(pairs, sides), 1):
         pid = f"P{n:02d}"

@@ -85,3 +85,16 @@ def test_session_intro_option(tmp_path):
     man.write_text(json.dumps({"clips": [{"id": "P01", "file": "a.mp4", "kind": "single"}]}))
     D.build(man, tmp_path / "s2", 1)
     assert not (tmp_path / "s2/intro.json").exists() and D.Session(tmp_path / "s2").state()["intro"] is None
+
+
+def test_repeat_sides_balanced():
+    import mismatch_build as M
+    for seed in range(200):
+        rng = random.Random(seed)
+        kinds = ["shifted"] * 10 + ["different_song"] * 10
+        rng.shuffle(kinds)
+        side, rep = M.draw_sides_and_repeats(rng, kinds)
+        rep = M2.balance_repeats(rng, kinds, side, rep)
+        rev = ["second" if side[i] == "first" else "first" for i in rep]
+        assert rev.count("first") in (2, 3) and len(set(rep)) == 5
+        assert sum(kinds[i] == "shifted" for i in rep) >= 2 and sum(kinds[i] == "different_song" for i in rep) >= 2
