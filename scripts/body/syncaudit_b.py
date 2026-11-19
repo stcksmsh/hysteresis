@@ -256,8 +256,198 @@ def a3(procs=6):
         print("DONE", ds, len(rows), "failed", len(bad), flush=True)
 
 
+
+# ---------------------------------------------------------------------------------------------------- A2 (AIST++)
+AIST = Path("/secondary/hyst-data/datasets/aist")
+PRE = 150
+SEED_SEL, SEED_BOOT2 = 54201, 54202
+STAGES = ("kp_optim", "kp_raw", "angles", "commands", "lowpass", "target", "guard", "spinal", "limiter", "q50", "lamp")
+K2 = 75                                           # +-1.5 s
+PREV = dict(kp_raw="kp_optim", angles="kp_optim", commands="angles", lowpass="commands", target="lowpass", guard="target", spinal="guard",
+            limiter="spinal", q50="limiter", lamp="q50")
+
+
+def aist_seqs():
+    import aist_bas as AB
+    names, _ = AB.seq_names()
+    return names
+
+
+def select60():
+    """6 per genre over the 10 genres, seed 54201, ignore list excluded"""
+    names = [n for n in aist_seqs() if (AIST / "data/motions" / f"{n}.pkl").exists()]       # only 411 of 1408 have SMPL motions locally
+    rng = np.random.default_rng(SEED_SEL)
+    byg = {}
+    for n in names:
+        byg.setdefault(n.split("_")[0], []).append(n)
+    out = []
+    for g in sorted(byg):
+        v = sorted(byg[g])
+        out += [v[i] for i in rng.choice(len(v), min(6, len(v)), replace=False)]
+    return out
+
+
+def speed_cmd(y, fs):
+    return np.abs(np.gradient(np.asarray(y, float), axis=0) * fs).sum(1)
+
+
+def to50(x, fs):
+    n = int(np.floor((len(x) - 1) / fs * FS + 1e-9)) + 1
+    return np.interp(np.arange(n) / FS, np.arange(len(x)) / fs, x)
+
+
+def music_env_aist(mid, cache={}):
+    if mid not in cache:
+        import librosa
+        y, sr = librosa.load(str(AIST / "music" / f"{mid}.wav"), sr=22050)
+        on = librosa.onset.onset_strength(y=y, sr=sr, hop_length=441)
+        rms = librosa.feature.rms(y=y, frame_length=2048, hop_length=441)[0]
+        rms = np.convolve(rms, np.ones(25) / 25, "same")                 # 0.5 s at 50 Hz
+        cache[mid] = dict(onset=demean(on), energy=demean(rms))
+    return cache[mid]
+
+
+def aist_stage_signals(name, var, with_pipeline=True):
+    """name, 'V1'|'V2' -> {stage: (50 Hz speed signal, source fs)}; every stage's array starts at sequence time 0"""
+    import aist_bas as AB
+    from aist_load import load_pkl
+    out = {}
+    d = load_pkl(AIST / "data/keypoints3d" / f"{name}.pkl")
+    for st, key in (("kp_optim", "keypoints3d_optim"), ("kp_raw", "keypoints3d")):
+        sp = AB.speed(np.asarray(d[key], float))
+        sp[-1] = sp[-2]
+        out[st] = (to50(sp, 60), 60)
+    if not with_pipeline:
+        return out
+    import make_arm_v2p as P
+    import motornet as M
+    import retarget as RT
+    import retarget_limiter as FX
+    import retarget_run as RR
+    import m3f_report as R
+    import t0_aioz as A
+    import t0_chain as C
+    import t0_lib as T
+    RR.patch_gates()
+    m = load_pkl(AIST / "data/motions" / f"{name}.pkl")
+    arr = A.to_retarget_input(np.asarray(m["smpl_poses"], float), np.asarray(m["smpl_trans"], float))
+    rot, _ = T.rot_from_array(arr[::2])                                     # 60 -> 30 fps by taking every second frame (no shift)
+    v = T.angles_of(rot, var)
+    out["angles"] = (to50(speed_cmd(v, 30), 30), 30)
+    y, yf = C.stage1(rot, var)
+    out["commands"] = (to50(speed_cmd(y, 30), 30), 30)
+    out["lowpass"] = (to50(speed_cmd(yf, 30), 30), 30)
+    tg, _ = C.target(yf)
+    out["target"] = (to50(speed_cmd(tg, 100), 100), 100)
+    K = RT.to_commands(np.zeros((1, 5)), var)[0]
+    sh = np.zeros(5)
+    sh[[0, 4]] = (tg[0] - K)[[0, 4]]
+    G, _ = P.guard(np.concatenate([np.repeat(tg[:1], PRE, 0), tg]) - sh)
+    out["guard"] = (to50(speed_cmd(G[PRE:], 100), 100), 100)
+    S = M.spinal(G)
+    out["spinal"] = (to50(speed_cmd(S[PRE:], 100), 100), 100)
+    out["limiter"] = (to50(speed_cmd(FX.limiter_out(S)[PRE:], 100), 100), 100)
+    q50, _ = FX.simulate_goals(S)
+    out["q50"] = (to50(speed_cmd(q50, 50), 50), 50)
+    lamp = R.fk_points(np.asarray(q50, float))[:, 5]
+    out["lamp"] = (np.linalg.norm(np.gradient(lamp, axis=0) * FS, axis=1), 50)
+    return out
+
+
+def a2_bas(name, sp50, rng, mb):
+    import beatv_lib as BL
+    dur = len(sp50) / FS
+    kb = BL.kin_beats(sp50, FS, 5.0)
+    row = {}
+    for sg in (0.1, 0.05):
+        row[f"bas_music_{sg}"] = BL.bas(mb, kb, dur, sigma=sg, mode="music")
+        row[f"chance_music_{sg}"] = BL.bas_chance(mb, kb, dur, rng, sigma=sg, mode="music")
+    return row
+
+
+def a2_job(args):
+    import zlib
+    name, pipeline, genre_mids = args
+    try:
+        import aist_bas as AB
+        mid = name.split("_")[4]
+        mb = AB.music_beats(mid)
+        rng = np.random.default_rng(SEED_CH + zlib.crc32(name.encode()))
+        vars_ = ("V1", "V2") if pipeline else ("V1",)
+        res = {}
+        for var in vars_:
+            sig = aist_stage_signals(name, var, pipeline)
+            kp = sig["kp_optim"][0]
+            for st, (s50, fsrc) in sig.items():
+                if var == "V2" and st.startswith("kp"):
+                    continue                                       # the keypoint stages do not depend on the variant
+                tag = st if st.startswith("kp") else f"{var}|{st}"
+                n = len(s50)
+                m = demean(s50)
+                row = dict(n=n)
+                for mu, key in (("onset", "onset"), ("energy", "energy")):
+                    env = music_env_aist(mid)[key]
+                    lo, hi = K2, n - K2
+                    c = curve(m, env, base=0, lo=lo, hi=hi, kmax=K2)
+                    row[f"curve_{mu}"] = c
+                    row[f"peak_{mu}"] = peak(c, K2, K2)
+                    ch = []
+                    others = [x for x in genre_mids if x != mid]
+                    for j in rng.choice(len(others), NDRAW, replace=len(others) < NDRAW):
+                        ch.append(peak(curve(m, music_env_aist(others[j])[key], base=0, lo=lo, hi=hi, kmax=K2), K2, K2))
+                    row[f"chance_{mu}"] = np.array(ch)
+                k = min(len(kp), n)
+                ck = curve(m[:k], demean(kp[:k]), base=0, lo=K2, hi=k - K2, kmax=K2)    # c(L) = corr(stage(t), kp(t - L)): L > 0 stage later than the keypoints
+                row["curve_kp"] = ck
+                row["peak_kp"] = peak(ck, K2, K2)
+                pv = PREV.get(st)
+                if pv:                                         # against the previous stage: L > 0 this stage later than the previous one
+                    kk = min(len(sig[pv][0]), n)
+                    cp_ = curve(m[:kk], demean(sig[pv][0][:kk]), base=0, lo=K2, hi=kk - K2, kmax=K2)
+                    row["curve_prev"] = cp_
+                    row["peak_prev"] = peak(cp_, K2, K2)
+                row.update(a2_bas(name, s50, rng, mb))
+                res[tag] = row
+        return name, res, None
+    except Exception as e:  # noqa: BLE001
+        return name, None, repr(e)
+
+
+def a2(procs=6, full=False):
+    OUT.mkdir(parents=True, exist_ok=True)
+    (OUT / "a2").mkdir(exist_ok=True)
+    sel = select60()
+    names = aist_seqs()
+    bygenre = {}
+    for n in names:
+        bygenre.setdefault(n.split("_")[0], set()).add(n.split("_")[4])
+    jobs = [(n, True, sorted(bygenre[n.split("_")[0]])) for n in sel]
+    if full:
+        jobs += [(n, False, sorted(bygenre[n.split("_")[0]])) for n in names if n not in set(sel)]
+    (OUT / "a2_selection.json").write_text(json.dumps(sel))
+    with Pool(procs, initializer=_init_a2) as pool:
+        for i, (n, r, err) in enumerate(pool.imap_unordered(a2_job, jobs, chunksize=1)):
+            if err:
+                print("FAIL", n, err, flush=True)
+                continue
+            flat = {f"{t}|{k}": v for t, row in r.items() for k, v in row.items()}
+            np.savez_compressed(OUT / "a2" / f"{n}.npz", **flat)
+            if i % 10 == 0:
+                print("a2", i, "/", len(jobs), flush=True)
+    print("A2 DONE", len(jobs), flush=True)
+
+
+def _init_a2():
+    pass
+
+
 if __name__ == "__main__":
     cmd = sys.argv[1]
     procs = int(sys.argv[2]) if len(sys.argv) > 2 else 6
     if cmd == "a3":
         a3(procs)
+    elif cmd == "a2":
+        a2(procs, full="--full" in sys.argv)
+    elif cmd in ("a3report", "foil", "a2report"):
+        import syncaudit_report as SR
+        getattr(SR, cmd)()
