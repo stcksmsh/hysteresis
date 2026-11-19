@@ -78,6 +78,7 @@ def window_stages(tg, w, var):
     import retarget_run as RR
     RR.patch_gates()                                    # sim_file does this first: WARM_S = 1.5 s, v2p body
     PRE, WIN_ROWS = 150, 2000
+    tg = tg.astype(np.float32).astype(float)             # sim_file reads the targets back from the float32 T0 npz
     a = w * WIN_ROWS
     rows = tg[a:a + WIN_ROWS + 1]
     pre = tg[a - PRE:a] if a >= PRE else np.repeat(rows[:1], PRE, 0)
@@ -147,7 +148,7 @@ def cmd_chain():
                 z = np.load(dstq)
                 wi = int(np.flatnonzero(z["win"] == w)[0])
                 ws, q50, lamp = window_stages(tg, w, copy[:2])
-                assert np.allclose(q50, z["q50"][wi], atol=1e-3), "replicated window differs from controls_run.sim_file"
+                assert np.allclose(q50, z["q50"][wi], atol=1e-3), f"replicated window differs from controls_run.sim_file (max {np.abs(q50 - z['q50'][wi]).max():.4g} deg, tg float32)"
                 lo, hi = 20.0 * w, 20.0 * w + 20.0
                 for k, (t, X, rate, note) in ws.items():
                     res[k] = dict(**measure(t, X, clicks, max(lo, t[0]) + 0.75, min(hi, t[-1]) - 0.75), rate=rate, note=note)
