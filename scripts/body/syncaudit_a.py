@@ -247,5 +247,46 @@ def cmd_sine():
     (OUT / "sine.json").write_text(json.dumps(out, indent=1, default=float))
 
 
+ITEMS = [  # id, song, version, window, offset in window (s), foil kind, foil song, foil shift / start, real side
+    ("P01", "syn_arm30", "V1", 0, 9.5, "shifted", None, 3.0, "first"),
+    ("P02", "syn_arm50", "V1", 1, 5.0, "shifted", None, -3.0, "second"),
+    ("P03", "syn_torso30", "V1", 0, 9.5, "shifted", None, 4.0, "first"),
+    ("P04", "syn_pelvis30", "V2", 0, 9.5, "shifted", None, -4.0, "second"),
+    ("P05", "syn_arm30", "V2", 0, 9.5, "different_song", "syn_pelvis30", 9.5, "first")]
+
+
+def patch_mb():
+    import mismatch_build as MB
+    MB.B, MB.OUT = OUT, OUT
+    for ds in MB.LISTS:
+        MB.LISTS[ds] = OUT / f"lists_{ds}.json"
+    return MB
+
+
+def cmd_items():
+    """mismatch-style items on the synthetic q50: the real write_work (csv, m4a) and the key; paths patched to the probe's folder"""
+    MB = patch_mb()
+    meta = json.loads((OUT / "syn" / "meta.json").read_text())
+    for ds in MB.LISTS:
+        (OUT / f"lists_{ds}.json").write_text(json.dumps([dict(key=k, wav=str(OUT / "syn" / f"{k}.wav")) for k in SEQS] if ds == "finedance" else []))
+    items = {}
+    for pid, song, ver, w, o, kind, fsong, fval, side in ITEMS:
+        z = np.load(OUT / "controls/q50/finedance" / f"{song}__{ver}.npz")
+        qi = int(np.flatnonzero(z["win"] == w)[0])
+        start = 20.0 * w + o
+        foil = dict(song=song if kind == "shifted" else fsong, dataset="finedance", offset_s=fval if kind == "shifted" else None,
+                    excerpt_start_s=start + fval if kind == "shifted" else fval, tempo_bpm_real=None, tempo_bpm_foil=None, tempo_ratio=None)
+        items[pid] = dict(id=pid, repeat=False, repeat_of=None, kind=kind, real_side=side, dataset="finedance", version=ver, song=song, window=w, q_index=qi, window_offset_s=o,
+                          excerpt_start_s=start, excerpt_end_s=start + 10.0, foil=foil, foil_outside_q3=False, rms_real=0.0, rms_foil=0.0)
+    (OUT / "material_key.json").write_text(json.dumps(dict(version=1, seed=0, rule={}, items=items), indent=1))
+    MB.write_work(items, {ds: MB.songs_of(ds) for ds in MB.LISTS})
+    print("items", list(items))
+
+
+def cmd_assemble():
+    MB = patch_mb()
+    MB.cmd_assemble()
+
+
 if __name__ == "__main__":
-    {"gen": cmd_gen, "chain": cmd_chain, "sine": cmd_sine}[sys.argv[1]]()
+    {"gen": cmd_gen, "chain": cmd_chain, "sine": cmd_sine, "items": cmd_items, "assemble": cmd_assemble}[sys.argv[1]]()
