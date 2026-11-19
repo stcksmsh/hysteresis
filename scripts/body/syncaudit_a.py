@@ -288,5 +288,107 @@ def cmd_assemble():
     MB.cmd_assemble()
 
 
+def probe_json(path, *args):
+    return json.loads(subprocess.run(["ffprobe", "-v", "error", "-of", "json", *args, str(path)], capture_output=True, check=True).stdout)
+
+
+def gray_frames(path, w=320, h=180):
+    p = subprocess.run(["ffmpeg", "-v", "error", "-i", str(path), "-an", "-vf", f"scale={w}:{h}", "-pix_fmt", "gray", "-f", "rawvideo", "-"], capture_output=True, check=True)
+    return np.frombuffer(p.stdout, np.uint8).reshape(-1, h, w).astype(np.float32)
+
+
+def motion_energy(fr):
+    """mean |frame k - frame k-1| below the label rows, stamped at the midpoint (k - 0.5) / 30; returns (t, E)"""
+    d = np.abs(np.diff(fr[:, 12:, :], axis=0)).mean(axis=(1, 2))
+    return (np.arange(1, len(fr)) - 0.5) / 30.0, d
+
+
+def click_positions(a, sr=S.SR, thr=0.3):
+    """click centroid times (s) of the bursts above thr in a half of audio (sample resolution)"""
+    idx = np.flatnonzero(np.abs(a) > thr)
+    out, i = [], 0
+    while i < len(idx):
+        j = i
+        while j + 1 < len(idx) and idx[j + 1] - idx[j] < int(0.05 * sr):
+            j += 1
+        lo, hi = max(0, idx[i] - 60), idx[j] + 60
+        w = np.abs(a[lo:hi]).astype(float)
+        out.append(float((np.arange(lo, hi) * w).sum() / w.sum() / sr))
+        i = j + 1
+    return out
+
+
+def cmd_final():
+    MB = patch_mb()
+    key = json.loads((OUT / "material_key.json").read_text())["items"]
+    meta = json.loads((OUT / "syn" / "meta.json").read_text())
+    res = {}
+    for pid, it in key.items():
+        r = {}
+        song, start, side = it["song"], it["excerpt_start_s"], it["real_side"]
+        fo = it["foil"]
+        rel_real = [c - start for c in meta[song]["clicks"] if start <= c < start + 10.0]
+        fstart = fo["excerpt_start_s"]
+        rel_foil = [c - fstart for c in meta[fo["song"]]["clicks"] if fstart <= c < fstart + 10.0]
+        base_real, base_foil = (0.0, 11.5) if side == "first" else (11.5, 0.0)
+        # 11 csv
+        csvp = OUT / f"render_root/work/{pid}_{it['version']}.csv"
+        rows = np.array([[float(x) for x in l.split(",")] for l in csvp.read_text().splitlines() if l and l[0].isdigit()])
+        z = np.load(OUT / "controls/q50/finedance" / f"{song}__{it['version']}.npz")
+        a0 = int(round(it["window_offset_s"] * 50))
+        q = z["q50"][it["q_index"]][a0:a0 + 501].astype(float)
+        r["11 csv"] = dict(rows=int(len(rows)), time_col_max_err_s=float(np.abs(rows[:, 0] - np.arange(len(rows)) / 50.0).max()), q50_slice_max_err_deg=float(np.abs(rows[:, 1:] - q).max()),
+                           note="row k of the csv = q50 row (window_offset x 50 + k); t = k / 0.02 exactly: offset 0 ms against the q50 stage")
+        # 12 rendered frames vs q50 joint speed
+        vp = OUT / f"render_root/clips/{pid}_{it['version']}.mp4"
+        fr = gray_frames(vp)
+        tv, E = motion_energy(fr)
+        sp = np.abs(np.diff(q, axis=0)).sum(1) * 50.0
+        ref = np.interp(tv, (np.arange(len(sp)) + 0.5) / 50.0, sp)
+        lag, cor = S.xcorr_lag_s(ref, E, 1 / 30.0, 0.4)
+        r["12 rendered frames (render mp4)"] = dict(frames=int(len(fr)), lag_ms=1000 * lag, corr=cor, note="xcorr of frame-difference energy against q50 summed joint speed; positive = video later than the csv")
+        pr = probe_json(vp, "-show_entries", "stream=codec_type,start_time,start_pts,time_base,nb_frames,duration")
+        r["12b render container"] = pr["streams"]
+        # 13 final clip
+        cp = OUT / "clips_src" / f"{pid}.mp4"
+        au = MB.load_mono(cp, S.SR)
+        wavp = OUT / "work/wav" / f"{pid}.wav"
+        wv = MB.load_mono(wavp, S.SR)
+        cl = {}
+        for nm, base, rel in (("real", base_real, rel_real), ("foil", base_foil, rel_foil)):
+            exp = [base + c for c in rel]
+            cl[nm] = dict(expected_s=exp, pre_encode_wav_ms=S.summarise(S.audio_click_offsets_ms(wv, exp)), decoded_mp4_ms=S.summarise(S.audio_click_offsets_ms(au, exp)),
+                          decoded_mp4_per_click_ms=[None if np.isnan(x) else round(float(x), 4) for x in S.audio_click_offsets_ms(au, exp)])
+        fr2 = gray_frames(cp)
+        t2, E2 = motion_energy(fr2)
+        vid = {}
+        for nm, base, rel in (("real", base_real, rel_real), ("foil", base_foil, rel_foil)):
+            m = (t2 >= base) & (t2 < base + 10.0)
+            ref2 = np.interp(t2[m] - base, (np.arange(len(sp)) + 0.5) / 50.0, sp)
+            lg, cr = S.xcorr_lag_s(ref2, E2[m], 1 / 30.0, 0.4)
+            iso = [c for c in rel if all(abs(c - d) >= 1.5 for d in rel if d != c)]
+            c, pk = S.offsets_ms(t2[m] - base, E2[m], [x for x in iso], 0.6)
+            vid[nm] = dict(lag_vs_csv_ms=1000 * lg, corr=cr, video_energy_vs_click_centroid_ms=S.summarise(c), per_click_ms=[None if np.isnan(x) else round(float(x), 2) for x in c])
+        pc = probe_json(cp, "-show_entries", "stream=codec_type,start_time,start_pts,time_base,nb_frames,duration:format=start_time,duration")
+        r["13 final clip"] = dict(audio_clicks=cl, video=vid, container=pc, note="video_energy_vs_click: centroid of frame-difference energy within +-0.6 s of an isolated audio click time; the video series is speed-like so this includes the q50 latency")
+        # 14 foil construction
+        hr = wv[int(base_real * S.SR):int((base_real + 10) * S.SR)]
+        hf = wv[int(base_foil * S.SR):int((base_foil + 10) * S.SR)]
+        pr_, pf_ = click_positions(hr), click_positions(hf)
+        if it["kind"] == "shifted":
+            offs = []
+            for t in pf_:
+                m = [x for x in pr_ if abs((x - t) - (-fo["offset_s"])) < 0.01]   # real half time = foil half time + offset ... click c: real rel = c - start, foil rel = c - start - offset
+                if m:
+                    offs.append((m[0] - t) * S.SR)
+            r["14 shifted foil"] = dict(stated_offset_s=fo["offset_s"], clicks_real=len(pr_), clicks_foil=len(pf_), matched=len(offs), measured_offset_samples_minus_stated=[round(float(o + fo["offset_s"] * S.SR), 3) for o in offs],
+                                        measured_offset_s=[round(float(-o / S.SR), 6) for o in offs])
+        else:
+            r["14 different-song foil"] = dict(foil_song=fo["song"], foil_start_s=fo["excerpt_start_s"], clicks_foil=len(pf_), expected=len(rel_foil))
+        res[pid] = r
+        print(pid, "ok", flush=True)
+    (OUT / "final.json").write_text(json.dumps(res, indent=1, default=float))
+
+
 if __name__ == "__main__":
-    {"gen": cmd_gen, "chain": cmd_chain, "sine": cmd_sine, "items": cmd_items, "assemble": cmd_assemble}[sys.argv[1]]()
+    {"gen": cmd_gen, "chain": cmd_chain, "sine": cmd_sine, "items": cmd_items, "assemble": cmd_assemble, "final": cmd_final}[sys.argv[1]]()
