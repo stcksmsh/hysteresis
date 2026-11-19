@@ -94,7 +94,18 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-19 ~17:30 (clock) — NEWEST
+## UPDATE 2026-11-19 ~18:30 (clock) — NEWEST
+
+WO55 PART B VERIFIED + MERGED (body dd36b7b; 29 tests pass). Round 2 mismatch material: re-timed (CSV from window_offset + L, L V1 0.35 / V2 0.28;
+25/25 clips match q50, max err 5e-7 deg), arm only (hint + trail loops patched out at render time, no crates/ edit; 273 vs 415 stroke calls),
+20 pairs + 5 repeats (10 shifted at 4.0-6.0 s, 10 different-song, ALL foils from another dataset: 9 AIOZ + 1 PhantomDance), 0 songs overlap
+with round 1, instruction page (dialstudy_session.py new optional manifest field "intro"), repeats sides 2/3 enforced. Session
+/secondary/hyst-data/body/mismatch2/session_2026-11-19 (NOT served, answers.csv empty). Score: scripts/body/mismatch_score.py SESSION_DIR
+(7.84 rule unchanged; this is the SECOND AND LAST round). Serve with a fresh unit, port 8782 (pattern as hyst-wo53-view1). 7.87 order says
+part A analyses first; viewing can happen any time Kosta likes, results are read after the analyses. Part A (body-retime-a, subagent) still
+running at 18:30: retime.py is on origin/body-retime-a (1158ddf), merged copy already on body. Subagent dies if this session ends.
+
+## UPDATE 2026-11-19 ~17:30 (clock)
 
 7.87 RECORDED (body be51266): lag finding accepted; Q1 (a) re-time at read time, L(V1) 0.35 s, L(V2) 0.28 s, one constant per variant, residual
 +-50 ms recorded; DESIGN: feedforward lag compensation (commands issued L ahead of the music time they target; later a forward-model/
