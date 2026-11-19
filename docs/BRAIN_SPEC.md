@@ -3224,3 +3224,27 @@ Standing rules unchanged.
 - The combined ruling waits on four inputs: the mismatch test result (WO53 part A, not yet built), the 7.83 data check (7.83 text has
   not reached the overseer), and the planner seeing `PLANNER_BRIEF_A2.md` and `PLANNER_BRIEF_CORTEX_EVENTS.md` (Kosta to forward).
 - A3's work order stays unwritten until that ruling.
+
+### 7.86 Shifted-foil preference is systematic; coupling conclusions 7.74-7.85 on hold; end-to-end sync audit first; 2026-11-19, via Kosta + planner (answering `docs/PLANNER_BRIEF_MISMATCH.md`)
+
+Recorded as received, before any result it scores. Planner text, verbatim:
+
+TO: overseer. FROM: Kosta via planner. Re: PLANNER_BRIEF_MISMATCH (2026-11-19). Record as BRAIN_SPEC 7.86.
+
+Q1: neither (a) nor (c). Rule outcome NOT applied yet. The shifted-foil preference (8/8 non-tie, p ~0.008) is a systematic effect, not noise, and the most likely cause is a time offset between movement and music somewhere in the pipeline. Such an offset would also produce the weak-coupling results of 7.74-7.85 (beat phase at chance, V3 offsets spread +-1 s, weak events/structure). All coupling conclusions 7.74-7.85 are ON HOLD pending a sync audit.
+Q2 (extended): END-TO-END SYNC AUDIT, report-only, before anything else that uses music timing:
+ A1 synthetic probe: synthetic audio (clicks at known times) + synthetic human motion (sharp joint impulses at the same times, in the FineDance input format); run through the full pipeline exactly as used for the mismatch clips and for WO47/52/53 measures: loading, retarget, low-pass, spline, warm-up, spinal layer, limiter, servo, v2p body, CSV export, rendering, audio muxing. Report the offset between clicks and motion impulses at every stage's output, including the final video (audio track vs frames) and the arrays the measures read.
+ A2 known-aligned reference: AIST++ sequences (registration done) through the same pipeline; beat-alignment and onset-motion cross-correlation on raw keypoints vs after each stage.
+ A3 the overseer's per-song lag diagnostic (lamp speed and raw joints vs onset/energy envelope, lag distribution per dataset, bootstrap by song, vs shifted-song chance).
+ A4 code review of every place where time origins are set: dataset loaders (motion vs audio start, trimming, fps), the 10 s warm-up, window extraction, clip excerpt start times, muxing. List each with its offset handling.
+Outcome rules: if any stage introduces an offset > 50 ms or a dataset loader misaligns motion and audio, fix it, record which earlier results it touched, rerun WO47 (beat phase), WO52/53 (rhythm, events) and round 2 of the mismatch test on the fixed pipeline. If no offset is found anywhere, record the foil preference as an unexplained finding and apply the 7.84 rule outcome.
+Q3: round 2 of the mismatch test only after the audit; with the instruction page explaining shifted pairs, offsets 4-6 s, different-song foils from a different dataset when tempo allows, fresh excerpts, 5 repeats.
+7.83 (Jyväskylä data check / positive control) proceeds in parallel; it uses a fresh loader and is an independent check of the measures.
+Standing rules unchanged.
+
+**Overseer notes (operational, not rulings):**
+- The audit is report-only, but its outcome rule allows FIXES when a stage adds an offset above 50 ms or a loader misaligns motion and
+  audio. A fix needs the overseer's go-ahead first (the builder reports the finding; the overseer verifies and orders the fix and the
+  reruns). Fixes never touch the frozen `src/` or `tools/`.
+- The 7.83 text has still not reached the overseer, so the Jyväskylä check cannot be specified; it is not part of WO54.
+- Sync audit work order: `docs/BUILDER_PROMPT_WO54_SYNC_AUDIT.md`.
