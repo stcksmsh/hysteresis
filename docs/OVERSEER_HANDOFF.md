@@ -94,7 +94,16 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-19 (clock) — NEWEST
+## UPDATE 2026-11-19 ~10:55 (clock) — NEWEST
+
+WO53 PART A SENT (user: "make the part A, both agents ready and clear"). Split prompt docs/BUILDER_PROMPT_WO53A_SPLIT.md (body 77717f5):
+agent 1 [28da29] = material (branch body-mismatch, cores 6-13, pushes docs/MISMATCH_RULES.md with key/answers schema first);
+agent 2 [ea25fc] = scorer (waits for the rules note, branch body-mismatch-score, cores 14-15). Both sent with notify_when_idle.
+On their reports: verify (clip durations, order balance, sizes within 2 %, scorer synthetic tests), merge both into body, then Kosta views
+the session (serve under a fresh unit, 20 pairs + 5 repeats), score with mismatch_score.py, report separately for shifted vs different
+song. Nothing else running. If the overseer restarts: check origin/body-mismatch and origin/body-mismatch-score.
+
+## UPDATE 2026-11-19 (clock)
 
 7.85 RECORDED (body, answering PLANNER_BRIEF_RAWRHYTHM): Q1 (a) chance 1 decides, item 3 = "not shown", arm/retarget not the bottleneck for
 beat-ratio clustering; Q2 (a) report only, A3 matrix reports whether the arm makes 1/2-beat rhythm on request; Q3 (a) ONE combined
