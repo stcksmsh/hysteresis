@@ -94,7 +94,22 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-19 ~16:45 (clock) — NEWEST
+## UPDATE 2026-11-19 ~17:30 (clock) — NEWEST
+
+7.87 RECORDED (body be51266): lag finding accepted; Q1 (a) re-time at read time, L(V1) 0.35 s, L(V2) 0.28 s, one constant per variant, residual
++-50 ms recorded; DESIGN: feedforward lag compensation (commands issued L ahead of the music time they target; later a forward-model/
+cerebellum predicts the lag; real arm's L re-measured on hardware); EVERY future viewing render shows the ARM ONLY (hand-path look-ahead hint
++ trail removed; round 1 page drew a 1.5 s look-ahead, possible unproven confound: 6/8 picked foils had later music); order (1) re-timed
+WO47 lamp BAS/V3, WO52 event locks, WO53 B lamp column (report-only) then (2) mismatch round 2 (re-timed, arm-only, shifts 4-6 s, foil from
+another dataset, fresh excerpts, instruction page, 5 repeats); Q4 A3 data rebuild aligns controls to music by L after the overseer's token-
+level report. 7.83 positive control proceeds, TEXT STILL MISSING (it is "the key test of the measures").
+WO55 (docs/BUILDER_PROMPT_WO55_RETIME.md, body e5d2b29) LAUNCHED as two Opus overseer subagents (they die if this session ends; check
+origin/body-retime-a and -b): part A body-retime-a cores 14-19 (retime.py helper first, analyses, token effect), part B body-retime-b
+cores 6-13 (round 2 material, NOT served, waits for retime.py). After reports: verify, merge, then Kosta views round 2 (serve under a fresh
+unit; score with mismatch_score.py; analyses decide order per 7.87 but material may be built meanwhile). No Hysteresis builder sessions
+are live (agents 1/2 ended with Kosta's /exit).
+
+## UPDATE 2026-11-19 ~16:45 (clock)
 
 WO54 SYNC AUDIT DONE, VERIFIED, MERGED (body 15ad08b; builders' sessions ended with Kosta's /exit but both branches were pushed). FINDING:
 the realised arm (controls/q50 and everything cut from it: lamp, CSV, video, mismatch clips) trails its music by +0.18..0.29 s (A1 probe)
