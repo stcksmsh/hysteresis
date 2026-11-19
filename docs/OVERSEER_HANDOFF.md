@@ -102,7 +102,7 @@ lag diagnostic, A4 time-origin code review); a stage offset > 50 ms or a misalig
 WO47 / WO52 / WO53 / mismatch round 2. Round 2 only after the audit (instruction page, offsets 4-6 s, foil from another dataset, 5 repeats).
 7.83 (Jyväskylä data check) proceeds in parallel, TEXT STILL MISSING. WO54 prompt docs/BUILDER_PROMPT_WO54_SYNC_AUDIT.md (body, pushed):
 agent 1 [28da29] = A1 + A4 (branch body-syncaudit-a, cores 6-13); agent 2 [ea25fc] = A2 + A3 (branch body-syncaudit-b, cores 14-19).
-Report only; the overseer orders any fix. NOT SENT: waits for Kosta's "send". Briefs awaiting forwarding: A2, CORTEX_EVENTS (for the combined
+Report only; the overseer orders any fix. SENT 2026-11-19 ~13:40 to both (notify_when_idle on). Briefs awaiting forwarding: A2, CORTEX_EVENTS (for the combined
 ruling).
 
 ## UPDATE 2026-11-19 ~13:00 (clock)
