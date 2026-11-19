@@ -98,13 +98,13 @@ def window_stages(tg, w, var):
             "9 lamp point (50 Hz)": (20.0 * w + np.arange(len(q50)) * 0.02, np.asarray(lamp, float), 50, "")}, q50, lamp
 
 
-def measure(t, X, clicks, lo, hi):
+def measure(t, X, clicks, lo, hi, gap=1.5):
     """per channel of X: (a) matched-filter lag of the dense click block 3-8 s (normalised cross-correlation of |x - median| with the ideal bump train, lag over +-0.4 s,
     parabolic, positive = movement later) and (b) per-impulse centroid / parabolic-peak offsets of the isolated clicks (>= 1.5 s from any other) inside [lo, hi].
     main = the channel with the highest matched-filter correlation"""
     X = X.reshape(len(X), -1)
     ck = [c for c in clicks if lo <= c <= hi]
-    iso = S.isolated(clicks)
+    iso = S.isolated(clicks, gap)
     iso = [c for c in iso if lo <= c <= hi]
     dense = [c for c in clicks if 3.0 <= c <= 8.0]
     dt = float(t[1] - t[0])
@@ -140,6 +140,15 @@ def cmd_chain():
                 st, tg, rot, trans, meta, m = stage_rows(name, copy)
                 clicks = meta["clicks"]
                 res = {}
+                fams = meta["families"]
+
+                def put(key, t, X, lo, hi, rate, note=""):
+                    if meta["family"] == "mixed":        # each family's clicks on their own: the channel that answers differs
+                        for fam in MIXED:
+                            ck = [c for c, f in zip(clicks, fams) if f == fam]
+                            res[f"{key} [{fam}]"] = dict(**measure(t, X, ck, lo, hi, gap=1.4), rate=rate, note=note)
+                    else:
+                        res[key] = dict(**measure(t, X, clicks, lo, hi), rate=rate, note=note)
                 # 1 loaded: audio (the wav through the loader the dataset uses: ffmpeg decode at 44.1 k mono) and motion (rotation angle of the family's joints)
                 import mismatch_build as MB
                 a = MB.load_mono(OUT / "syn" / f"{name}.wav", S.SR)
@@ -150,9 +159,9 @@ def cmd_chain():
                 from scipy.spatial.transform import Rotation as Rot
                 for j in sorted({j for fam in set(meta["families"]) for j, _ in S.FAMILY_JOINTS[fam]}):
                     ang += np.degrees(np.linalg.norm(Rot.from_matrix(S._rows(R6[:, j])).as_rotvec(), axis=1))
-                res["1b loaded motion (30 Hz, family joints' rotation angle)"] = dict(**measure(np.arange(len(m)) / 30.0, ang[:, None], clicks, 0.75, len(m) / 30 - 0.75), rate=30)
+                put("1b loaded motion (30 Hz, family joints' rotation angle)", np.arange(len(m)) / 30.0, ang[:, None], 0.75, len(m) / 30 - 0.75, 30)
                 for k, (t, X, rate, note) in st.items():
-                    res[k] = dict(**measure(t, X, clicks, 0.75, t[-1] - 0.75), rate=rate, note=note)
+                    put(k, t, X, 0.75, t[-1] - 0.75, rate, note)
                 # windows: the stored q50 of controls_run.sim_file (real function) against the replication
                 n_win = T.n_windows(len(m))
                 w = WIN[name] if WIN[name] < n_win else 0
@@ -167,17 +176,17 @@ def cmd_chain():
                 assert np.allclose(q50, z["q50"][wi], atol=1e-3), f"replicated window differs from controls_run.sim_file (max {np.abs(q50 - z['q50'][wi]).max():.4g} deg, tg float32)"
                 lo, hi = 20.0 * w, 20.0 * w + 20.0
                 for k, (t, X, rate, note) in ws.items():
-                    res[k] = dict(**measure(t, X, clicks, max(lo, t[0]) + 0.75, min(hi, t[-1]) - 0.75), rate=rate, note=note)
+                    put(k, t, X, max(lo, t[0]) + 0.75, min(hi, t[-1]) - 0.75, rate, note)
                     if k.startswith("9"):
                         tl = t[1:]
                         sp = np.linalg.norm(np.diff(X, axis=0), axis=1) * 50
-                        res["9b lamp speed (50 Hz)"] = dict(**measure(tl, sp[:, None], clicks, lo + 0.75, hi - 0.75), rate=50, note="the WO52 signal")
+                        put("9b lamp speed (50 Hz)", tl, sp[:, None], lo + 0.75, hi - 0.75, 50, "the WO52 signal")
                 # 10 raw FK joints (WO53 B)
                 R = BL.local_rots(m.astype(float))
                 pos = BL.fk(R, m[:, :3].astype(float))
-                for nm, j in (("right wrist", 21), ("left wrist", 20), ("right ankle", 8), ("left ankle", 7), ("pelvis", 0), ("head", 15)):
+                for nm, j in (("right wrist", 21), ("left wrist", 20), ("right foot", 11), ("left foot", 10), ("right ankle", 8), ("left ankle", 7), ("pelvis", 0), ("head", 15)):
                     sp = np.linalg.norm(np.diff(pos[:, j], axis=0), axis=1) * 30
-                    res[f"10 raw FK speed {nm} (30 Hz)"] = dict(**measure(np.arange(1, len(m)) / 30.0 - 0.5 / 30, sp[:, None], clicks, 0.75, len(m) / 30 - 0.75), rate=30, note="diff between frames k-1 and k stamped at the midpoint")
+                    put(f"10 raw FK speed {nm} (30 Hz)", np.arange(1, len(m)) / 30.0 - 0.5 / 30, sp[:, None], 0.75, len(m) / 30 - 0.75, 30, "diff between frames k-1 and k stamped at the midpoint")
                 allres[tag] = dict(window=w, stages=res)
                 print(tag, "ok", flush=True)
             except Exception as e:  # noqa: BLE001
@@ -187,5 +196,56 @@ def cmd_chain():
     print("chain done")
 
 
+SINES = [(f, fam) for f in (0.5, 1.0, 2.0) for fam in ("arm", "torso")]
+
+
+def cmd_sine():
+    """small-amplitude continuous probe: 20 deg sinusoid of the family's joints at 0.5, 1, 2 Hz through the same stages; delay by demodulation at f over the steady part of the window"""
+    import controls_run as CR
+    import t0_lib as T
+    CR.OUT = OUT / "controls"
+    (OUT / "t0").mkdir(parents=True, exist_ok=True)
+    meta = {}
+    for f, fam in SINES:
+        name = f"sin_{fam}_{f}".replace(".", "p")
+        np.save(OUT / "syn" / f"{name}.npy", S.synth_sine(f, 30.0, fam))
+        meta[name] = dict(family=fam, dur_s=30.0, clicks=[], families=[])
+    old = json.loads((OUT / "syn" / "meta.json").read_text())
+    (OUT / "syn" / "meta.json").write_text(json.dumps({**old, **meta}, indent=1))
+    out = {}
+    for f, fam in SINES:
+        name = f"sin_{fam}_{f}".replace(".", "p")
+        for copy in ("V1", "V2"):
+            tag = f"{name}__{copy}"
+            try:
+                st, tg, rot, trans, mt, m = stage_rows(name, copy)
+                p = OUT / "t0" / f"{tag}.npz"
+                np.savez_compressed(p, targets=tg.astype(np.float32), win_pass=np.ones(T.n_windows(len(m)), bool), split="train", group="syn", weight=1.0)
+                dstq = OUT / "controls/q50/finedance" / f"{tag}.npz"
+                if not dstq.exists():
+                    CR.sim_file(("finedance", p))
+                ws, q50, lamp = window_stages(tg, 0, copy[:2])
+                res = {}
+                t30 = np.arange(len(m)) / 30.0
+                ang = np.zeros(len(m))
+                from scipy.spatial.transform import Rotation as Rot
+                R6 = m[:, 3:].reshape(len(m), 52, 6).astype(float)
+                for j, _ in S.FAMILY_JOINTS[fam]:
+                    ang += np.degrees(np.linalg.norm(Rot.from_matrix(S._rows(R6[:, j])).as_rotvec(), axis=1)) * np.sign(np.sin(2 * np.pi * f * t30) + 1e-12)
+                allst = {"1b loaded motion (signed family angle)": (t30, ang[:, None]), **{k: (t, X) for k, (t, X, r, n) in {**st, **ws}.items()}}
+                for k, (t, X) in allst.items():
+                    X = X.reshape(len(X), -1)
+                    lo = max(t[0], 5.0) if not k.startswith(("6", "7", "8", "9")) else 5.0
+                    best = max(range(X.shape[1]), key=lambda c: S.demod_lag(t, X[:, c], f, lo, 18.0)[1])
+                    tau, amp = S.demod_lag(t, X[:, best], f, lo, 18.0)
+                    res[k] = dict(channel=best, lag_ms=tau, amp=amp)
+                out[tag] = res
+                print(tag, "ok", flush=True)
+            except Exception as e:  # noqa: BLE001
+                out[tag] = dict(error=f"{type(e).__name__}: {e}")
+                print(tag, "FAILED", e, flush=True)
+    (OUT / "sine.json").write_text(json.dumps(out, indent=1, default=float))
+
+
 if __name__ == "__main__":
-    {"gen": cmd_gen, "chain": cmd_chain}[sys.argv[1]]()
+    {"gen": cmd_gen, "chain": cmd_chain, "sine": cmd_sine}[sys.argv[1]]()

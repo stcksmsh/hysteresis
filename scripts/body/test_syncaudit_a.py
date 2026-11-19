@@ -53,3 +53,12 @@ def test_synth_motion_format_and_peak_at_click():
     a = S._rows(r6[:, 19].astype(float))
     ang = np.degrees(np.linalg.norm(Rot.from_matrix(a).as_rotvec(), axis=1))
     assert abs(ang[90] - S.BUMP_DEG) < 0.1 and ang[:80].max() < 1e-3 and np.argmax(ang) in (90, 105)
+
+
+def test_demod_lag_sign_and_size():
+    t = np.arange(0, 20, 0.01)
+    for f in (0.5, 1.0, 2.0):
+        for tau in (-0.06, 0.0, 0.12, 0.2):
+            x = 3.0 * np.sin(2 * np.pi * f * (t - tau))
+            got, amp = S.demod_lag(t, x, f, 2, 18)
+            assert abs(got - 1000 * tau) < 1.0 and abs(amp - 3.0) < 0.05

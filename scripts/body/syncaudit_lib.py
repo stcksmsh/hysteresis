@@ -6,7 +6,8 @@ SR = 44100
 BUMP_S, BUMP_DEG = 0.30, 70.0
 REG_CLICKS = [3.0 + 0.5 * i for i in range(0, 11)]          # dense block: every 0.5 s from 3.0 to 8.0 (matched-filter lag)
 GAPS = [1.9, 2.17, 2.3, 1.73, 2.41, 1.88, 2.06, 2.33, 1.79, 2.12, 2.27, 1.95, 2.2, 1.7, 2.38, 1.85, 2.0, 2.25, 1.76, 2.15]   # then isolated clicks, gaps >= 1.7 s (per-impulse offsets)
-FAMILY_JOINTS = {"arm": ((17, (0, 0, 1)), (19, (0, 0, 1)), (21, (0, 0, 1))), "torso": ((9, (0, 1, 0)), (12, (0, 1, 0))), "pelvis": ((0, (0, 1, 0)),),
+_AX = tuple(np.array([0.6, 0.6, 0.5]) / np.linalg.norm([0.6, 0.6, 0.5]))      # off-axis: a pure yaw about y leaves the up vector and the head offset unchanged (found in the first run)
+FAMILY_JOINTS = {"arm": ((17, (0, 0, 1)), (19, (0, 0, 1)), (21, (0, 0, 1))), "torso": ((9, _AX), (12, _AX)), "pelvis": ((0, _AX),),
                  "feet": ((7, (1, 0, 0)), (8, (1, 0, 0)), (10, (1, 0, 0)), (11, (1, 0, 0)))}
 
 
@@ -17,6 +18,28 @@ def click_times(dur_s):
         if t > dur_s - 2.0:
             break
         out.append(round(t, 3)); t += g
+    return out
+
+
+def demod_lag(t, x, f, lo, hi):
+    """x ~ A sin(2 pi f (t - tau)): -> (tau in ms folded to (-T/2, T/2], amplitude A) by demodulation at f over [lo, hi]. positive = x later than sin(2 pi f t)"""
+    m = (t >= lo) & (t <= hi)
+    w = 2 * np.pi * f
+    z = np.sum((x[m] - x[m].mean()) * np.exp(-1j * w * t[m]))
+    phi = -np.pi / 2 - np.angle(z)
+    tau = ((phi / w) + 0.5 / f) % (1 / f) - 0.5 / f
+    return 1000 * float(tau), float(2 * abs(z) / m.sum())
+
+
+def synth_sine(f, dur_s, fam, amp_deg=20.0, fps=30):
+    """(T, 315) motion: the family's joints rotate by amp sin(2 pi f t) (same axes as the bumps)"""
+    T = int(round(dur_s * fps)); t = np.arange(T) / fps
+    r6 = np.tile(six_d(np.eye(3)), (T, 52, 1))
+    for j, ax in FAMILY_JOINTS[fam]:
+        R = Rot.from_rotvec(np.radians(amp_deg) * np.sin(2 * np.pi * f * t)[:, None] * np.array(ax, float)).as_matrix()
+        r6[:, j] = six_d(R @ _rows(r6[:, j]))
+    out = np.zeros((T, 315), np.float32)
+    out[:, 3:] = r6.reshape(T, 312)
     return out
 
 
