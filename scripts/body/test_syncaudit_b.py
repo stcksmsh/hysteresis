@@ -46,6 +46,17 @@ def test_chance_shift_changes_lag_not_sign_convention():
     assert h < 0.5 or abs(l - 0.5) > 0.2                       # the true lag does not survive the shift
 
 
+def test_foil_offset_convention():
+    # foil music = real music at t + offset  <=>  c_real at L = -offset equals c_foil at 0 (correction to the rules note)
+    env = _env(n=4000, seed=5)
+    m = env[1000:1500].copy()
+    off = int(round(3.4 * S.FS))
+    cr = S.curve(m, env, base=1000, lo=0, hi=500, kmax=300)
+    cf = S.curve(m, env, base=1000 + off, lo=0, hi=500, kmax=0)[0]
+    assert abs(cr[300 - off] - cf) < 1e-12
+    assert abs(S.peak(cr, 75, 300)[0]) < 1e-3
+
+
 def test_out_of_range_and_constant_are_nan():
     env = _env(n=400)
     assert np.isnan(S.curve(np.ones(400), env, lo=0, hi=300)).all()
