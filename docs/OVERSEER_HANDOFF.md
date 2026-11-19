@@ -94,7 +94,18 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-19 ~18:30 (clock) — NEWEST
+## UPDATE 2026-11-19 ~19:15 (clock) — NEWEST
+
+WO55 PART A VERIFIED + MERGED (body 75a0c50; 17 tests pass; headline cells recomputed from retime/a/tables.md). Re-timed (L V1 0.35, V2 0.28):
+BAS changes <= 0.017 (15/64 cells outside, Motorica V2 lib -0.008 -> +0.011), V3 offsets shift by exactly L, spread unchanged; WO52 hold/burst
+keep size (lags -0.1..-0.5), change responses shrink (all change x cortex_total +0.180 p .005 -> +0.077 p .045); WO53 B lamp rhythm unchanged
+(0/60 outside). Token level: tokens 0.5 s, L = 0.70 / 0.56 token; control-vs-music |r| <= 0.11. Brief docs/PLANNER_BRIEF_RETIME.md (body, give
+to Kosta): Q1 record "weak coupling stands after re-timing" [rec]; Q2 A3 rebuild aligned by exactly L [rec]; Q3 order. ROUND 2 SESSION READY (not
+served): /secondary/hyst-data/body/mismatch2/session_2026-11-19: serve with a fresh unit on port 8782 when Kosta says he can view; score with
+mismatch_score.py; second and last round. No builders or subagents running. Still missing: 7.82/7.83 texts (Jyväskylä data check); A2 +
+CORTEX_EVENTS briefs not forwarded.
+
+## UPDATE 2026-11-19 ~18:30 (clock)
 
 WO55 PART B VERIFIED + MERGED (body dd36b7b; 29 tests pass). Round 2 mismatch material: re-timed (CSV from window_offset + L, L V1 0.35 / V2 0.28;
 25/25 clips match q50, max err 5e-7 deg), arm only (hint + trail loops patched out at render time, no crates/ edit; 273 vs 415 stroke calls),
