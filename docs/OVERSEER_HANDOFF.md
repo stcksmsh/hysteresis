@@ -94,7 +94,19 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-19 ~13:05 (clock) — NEWEST (Kosta away ~13:15 onward)
+## UPDATE 2026-11-19 ~16:45 (clock) — NEWEST
+
+WO54 SYNC AUDIT DONE, VERIFIED, MERGED (body 15ad08b; builders' sessions ended with Kosta's /exit but both branches were pushed). FINDING:
+the realised arm (controls/q50 and everything cut from it: lamp, CSV, video, mismatch clips) trails its music by +0.18..0.29 s (A1 probe)
+/ +0.22..0.275 s (A2 AIST++) / lamp vs raw joints +0.25..0.39 s (A3, recomputed from a3_results.json). Cause: spinal layer +84 ms (analytic 74)
++ limiter/servo +44..200 ms. Raw-joint arrays carry 0 ms. Loaders, spline, low-pass, CSV, render, mux, foil construction: 0. Movement-vs-music
+cross-correlation is flat (cannot measure lag directly). Does NOT explain the 8/8 shifted-foil picks (lag << 2-6 s; A3 foil table no
+preference). Brief docs/PLANNER_BRIEF_SYNCAUDIT.md (body, sent to Kosta): Q1 fix route (a) re-time at read time V1 0.35 s / V2 0.28 s
+[rec] vs (b) re-simulate vs (c) leave; Q2 constant per variant [rec]; Q3 rerun order WO47/52/53 lamp measures then mismatch round 2 [rec];
+Q4 A3 token realignment [rec]. NO fix, NO rerun until the planner answers. No builders running. Still missing: 7.83 text; A2 +
+CORTEX_EVENTS briefs not forwarded.
+
+## UPDATE 2026-11-19 ~13:05 (clock)
 
 WO54 RUNNING. Agent 1 [28da29] (A1+A4, branch body-syncaudit-a, last push 13:00) and agent 2 [ea25fc] (A3 running as unit
 hyst-wo54b-a3x1, A2 next; branch body-syncaudit-b, last push 12:57) work unattended. Both push before runs; no reports yet. On their reports:
