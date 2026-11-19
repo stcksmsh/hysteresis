@@ -75,6 +75,8 @@ def window_stages(tg, w, var):
     import motornet as M
     import retarget_limiter as FX
     import m3f_report as R
+    import retarget_run as RR
+    RR.patch_gates()                                    # sim_file does this first: WARM_S = 1.5 s, v2p body
     PRE, WIN_ROWS = 150, 2000
     a = w * WIN_ROWS
     rows = tg[a:a + WIN_ROWS + 1]
