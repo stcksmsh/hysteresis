@@ -99,14 +99,30 @@ def window_stages(tg, w, var):
 
 
 def measure(t, X, clicks, lo, hi):
-    """per channel: centroid and parabolic-peak offsets (ms) of the clicks inside [lo, hi]; main = the channel with the largest peak-to-peak"""
+    """per channel of X: (a) matched-filter lag of the dense click block 3-8 s (normalised cross-correlation of |x - median| with the ideal bump train, lag over +-0.4 s,
+    parabolic, positive = movement later) and (b) per-impulse centroid / parabolic-peak offsets of the isolated clicks (>= 1.5 s from any other) inside [lo, hi].
+    main = the channel with the highest matched-filter correlation"""
+    X = X.reshape(len(X), -1)
     ck = [c for c in clicks if lo <= c <= hi]
-    X = np.atleast_2d(X.T).T if X.ndim == 1 else X
+    iso = S.isolated(clicks)
+    iso = [c for c in iso if lo <= c <= hi]
+    dense = [c for c in clicks if 3.0 <= c <= 8.0]
+    dt = float(t[1] - t[0])
+    m = (t >= 3.0 - 0.8) & (t <= 8.0 + 0.8) & (t >= lo - 0.8) & (t <= hi + 0.8)
+    ref = sum(S.bump(t[m], c) for c in dense) if m.any() and any(lo <= c <= hi for c in dense) else None
     res = {}
     for ch in range(X.shape[1]):
-        c, p = S.offsets_ms(t, X[:, ch], ck)
-        res[ch] = dict(ptp=float(np.ptp(X[:, ch])), centroid=S.summarise(c), peak=S.summarise(p), per_impulse_centroid_ms=[None if np.isnan(x) else round(float(x), 3) for x in c], clicks=ck)
-    main = max(res, key=lambda k: res[k]["ptp"])
+        r = dict(ptp=float(np.ptp(X[:, ch])))
+        if ref is not None:
+            x = np.abs(X[m, ch] - np.median(X[:, ch]))
+            lag, cor = S.xcorr_lag_s(ref, x, dt, 0.4)
+            r["train_lag_ms"], r["train_corr"] = 1000 * lag, cor
+        c, p = S.offsets_ms(t, X[:, ch], iso, 0.8)
+        r["centroid"], r["peak"] = S.summarise(c), S.summarise(p)
+        r["per_impulse_centroid_ms"] = [None if np.isnan(x) else round(float(x), 3) for x in c]
+        r["isolated_clicks"] = iso
+        res[ch] = r
+    main = max(res, key=lambda k: res[k].get("train_corr", res[k]["ptp"]))
     return dict(main_channel=int(main), main=res[main], channels=res)
 
 

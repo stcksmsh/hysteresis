@@ -4,17 +4,25 @@ from scipy.spatial.transform import Rotation as Rot
 
 SR = 44100
 BUMP_S, BUMP_DEG = 0.30, 70.0
-REG_CLICKS = [3.0 + 0.5 * i for i in range(0, 53)]          # every 0.5 s from 3.0
-IRREG = [7.23, 11.61, 14.07, 19.37, 23.91, 27.45, 33.13, 41.77, 46.29]
+REG_CLICKS = [3.0 + 0.5 * i for i in range(0, 11)]          # dense block: every 0.5 s from 3.0 to 8.0 (matched-filter lag)
+GAPS = [1.9, 2.17, 2.3, 1.73, 2.41, 1.88, 2.06, 2.33, 1.79, 2.12, 2.27, 1.95, 2.2, 1.7, 2.38, 1.85, 2.0, 2.25, 1.76, 2.15]   # then isolated clicks, gaps >= 1.7 s (per-impulse offsets)
 FAMILY_JOINTS = {"arm": ((17, (0, 0, 1)), (19, (0, 0, 1)), (21, (0, 0, 1))), "torso": ((9, (0, 1, 0)), (12, (0, 1, 0))), "pelvis": ((0, (0, 1, 0)),),
                  "feet": ((7, (1, 0, 0)), (8, (1, 0, 0)), (10, (1, 0, 0)), (11, (1, 0, 0)))}
 
 
 def click_times(dur_s):
-    """fixed list: 3.0 s and every 0.5 s up to dur - 2 s, the irregular ones, sorted, the irregular ones kept clear (>= 0.15 s) of the regular grid"""
-    reg = [t for t in REG_CLICKS if t <= dur_s - 2.0]
-    irr = [t for t in IRREG if t <= dur_s - 2.0 and min(abs(t - r) for r in reg) >= 0.15]
-    return sorted(reg + irr)
+    """3.0 s and every 0.5 s to 8.0 s, then isolated clicks from 10.0 s with the irregular gaps of GAPS, all <= dur - 2 s (never a click at 0)"""
+    out, t = [x for x in REG_CLICKS if x <= dur_s - 2.0], 10.0
+    for g in GAPS:
+        if t > dur_s - 2.0:
+            break
+        out.append(round(t, 3)); t += g
+    return out
+
+
+def isolated(clicks, gap=1.5):
+    """clicks with no other click within gap seconds"""
+    return [c for c in clicks if all(abs(c - d) >= gap for d in clicks if d != c)]
 
 
 def click_audio(times, dur_s, sr=SR):

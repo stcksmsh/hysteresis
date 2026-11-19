@@ -10,7 +10,7 @@ import syncaudit_lib as S  # noqa: E402
 
 def test_click_list_first_not_zero_and_sorted():
     c = S.click_times(30.0)
-    assert c[0] == 3.0 and c == sorted(c) and max(c) <= 28.0 and 7.23 in c
+    assert c[0] == 3.0 and c == sorted(c) and max(c) <= 28.0 and len(S.isolated(c)) >= 8
 
 
 def test_audio_click_centroid_exact():
