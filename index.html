@@ -3,15 +3,186 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>hysteresis</title>
+    <title>Hysteresis: the СИНТЕЗА visualizer</title>
+    <meta name="description" content="A music visualizer that reacts to structure (builds, drops, breaks) instead of the instant. The image accumulates its own history." />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   </head>
   <body>
-    <main>
-      <h1>hysteresis</h1>
-      <p>This site is built and deployed from the <code>website</code> branch of its own repository.</p>
-      <p id="built"></p>
+    <canvas id="viz" class="viz" aria-hidden="true"></canvas>
+    <div class="viz-poster" id="viz-poster" hidden></div>
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="top">
+      <a href="https://kostavukicevic.com/">kostavukicevic.com</a>
+      <nav aria-label="Sections">
+        <a href="#listen">Listen</a>
+        <a href="#structure">Structure</a>
+        <a href="#memory">Memory</a>
+        <a href="#layers">Layers</a>
+        <a href="#next">Next</a>
+        <a href="https://github.com/stcksmsh/hysteresis">Source</a>
+      </nav>
+    </header>
+
+    <main id="main">
+      <section class="hero" aria-labelledby="title">
+        <p class="eyebrow">the СИНТЕЗА visualizer</p>
+        <h1 id="title">HYSTERESIS</h1>
+        <p class="lede">
+          A music visualizer that reacts to <em>structure</em> (builds, drops, breaks, groove) instead of the
+          instantaneous amplitude. The image accumulates its own history: it winds up during a build, releases on
+          the drop and hangs suspended through a break.
+        </p>
+        <p class="lede dim">What's behind this text is the real thing, running in your browser. Play a track and watch it remember.</p>
+        <div class="hero-actions">
+          <a class="btn primary" href="#listen">Play a track</a>
+          <button type="button" class="btn" id="clear-btn" aria-pressed="false">Hide the text</button>
+        </div>
+        <p class="rm-note" id="rm-note" hidden>
+          The visualizer isn't running because your system asks for reduced motion.
+          <button type="button" class="btn" id="viz-start">Start it anyway</button>
+        </p>
+      </section>
+
+      <section id="listen" class="glass" aria-labelledby="listen-h">
+        <h2 id="listen-h">Listen</h2>
+        <p class="intro">
+          Five tracks of mine, streamed from SoundCloud. The embed gives no access to the audio itself, so the
+          visualizer runs in <b>position-only mode</b>: each track's precomputed sidecar (made offline from the
+          original master) drives the whole picture from the playback position alone.
+        </p>
+        <ol class="tracks" id="tracks"></ol>
+        <div class="transport">
+          <button type="button" class="btn icon" id="play-btn" aria-label="Play" disabled>▶</button>
+          <div class="pos"><span id="t-pos">0:00</span> / <span id="t-dur">0:00</span></div>
+          <span class="now" id="now">Nothing playing</span>
+        </div>
+        <iframe id="sc" class="sc" title="SoundCloud player" allow="autoplay; encrypted-media"
+          src="https://w.soundcloud.com/player/?url=https%3A%2F%2Fsoundcloud.com%2Fstcksmsh%2Fhysteresis&auto_play=false&hide_related=true&show_comments=false&show_reposts=false&show_teaser=false&visual=false"></iframe>
+
+        <div class="own">
+          <h3>Or bring your own track</h3>
+          <p>
+            Pick an audio file and it plays through a Web Audio graph with an <code>AnalyserNode</code>, the
+            <b>live analysis</b> mode: the feature worklet computes bands, centroid, flatness and novelty, and the
+            beat, build, drop and break detectors run on the fly. Nothing is uploaded; the file never leaves your
+            browser.
+          </p>
+          <label class="btn file">Choose an audio file<input type="file" id="file" accept="audio/*" /></label>
+          <audio id="audio" controls hidden></audio>
+        </div>
+        <div class="tier" role="group" aria-label="Render quality">
+          <span>Render tier</span>
+          <label><input type="radio" name="tier" value="full" checked /> full</label>
+          <label><input type="radio" name="tier" value="cheap" /> cheap</label>
+        </div>
+      </section>
+
+      <section id="structure" class="glass" aria-labelledby="structure-h">
+        <h2 id="structure-h">What the sidecar knows</h2>
+        <p class="intro">
+          <code>npm run analyze -- master.wav</code> turns one WAV master into a schema-2 sidecar: tempo, beats,
+          sections, structural events, onsets, and per-band, centroid and flatness envelopes at 20 frames a second.
+          This is the real one for the selected track. Click the strip to seek.
+        </p>
+        <div class="sc-meta" id="sc-meta"></div>
+        <div class="strip-wrap">
+          <canvas id="strip" class="strip" height="220" role="img" aria-label="Sidecar timeline for the selected track"></canvas>
+        </div>
+        <ul class="strip-legend">
+          <li><i class="k-energy"></i> energy</li>
+          <li><i class="k-sub"></i> sub</li>
+          <li><i class="k-presence"></i> presence</li>
+          <li><i class="k-build"></i> build section</li>
+          <li><i class="k-break"></i> break</li>
+          <li><i class="k-drop"></i> drop</li>
+          <li><i class="k-beat"></i> downbeats</li>
+        </ul>
+      </section>
+
+      <section id="memory" class="glass" aria-labelledby="memory-h">
+        <h2 id="memory-h">Why "hysteresis"</h2>
+        <p class="intro">
+          A system with hysteresis answers with its whole history, not just its current input. Most visualizers
+          follow the level, so a single hit and the top of a long build look the same at the same loudness. A
+          state with memory tells them apart: a short spike barely moves it, a long build winds it up, and it
+          carries through a short break. Drag the memory to compare.
+        </p>
+        <div class="mem">
+          <canvas id="mem" class="mem-canvas" height="240" role="img" aria-label="An input signal, an instant follower and a hysteretic state"></canvas>
+          <label class="slider">memory <output id="mem-o">4.0 s</output>
+            <input type="range" id="mem-r" min="0.2" max="10" step="0.1" value="4" />
+          </label>
+          <ul class="strip-legend">
+            <li><i class="k-input"></i> input level</li>
+            <li><i class="k-follow"></i> instant follower</li>
+            <li><i class="k-hyst"></i> hysteretic state</li>
+          </ul>
+          <p class="fine">An illustration of the principle, not the package's code. In the visualizer the memory is literal: a feedback field that keeps and decays the last few seconds of image.</p>
+        </div>
+      </section>
+
+      <section id="layers" class="glass" aria-labelledby="layers-h">
+        <h2 id="layers-h">Three layers</h2>
+        <div class="layers">
+          <article>
+            <span class="n">1</span>
+            <h3>Features</h3>
+            <p>An <code>AudioWorklet</code> with its own windowed FFT: perceptual bands (sub, low, mid, presence, air), spectral centroid, flatness, spectral-flux novelty, and a trigger-locked waveform ring buffer for the oscilloscope beam.</p>
+          </article>
+          <article>
+            <span class="n">2</span>
+            <h3>Musical state</h3>
+            <p>Beat tracking (tempo plus a phase-locked oscillator that free-runs through breaks), and build, drop and break detectors. Fused with the sidecar's structure when one is loaded; detail stays live either way.</p>
+          </article>
+          <article>
+            <span class="n">3</span>
+            <h3>Choreography and scene</h3>
+            <p>Spring-damper driven parameters render in WebGL2 on an <code>OffscreenCanvas</code> in a worker: a Julia-set substrate fed into a curl-noise feedback field (the memory), an oscilloscope beam on top, and earned symmetry that snaps full for one bar on a drop.</p>
+          </article>
+        </div>
+        <h3 class="sub">Embed it</h3>
+        <pre><code>import { init } from 'sinteza-viz'
+
+const viz = init(canvas, {
+  accent: [0.68, 0.2, 33],          // OKLCH
+  tier: 'full',
+  getAudioContext: () => bus?.ctx ?? null,
+  getAnalyser: () => bus?.analyser ?? null,
+})
+// transport and the sidecar URL arrive on a window
+// "player:transport" CustomEvent bus, not through this API
+viz.setAccent([0.7, 0.15, 200])</code></pre>
+        <p class="intro">
+          It owns nothing but the canvas: no routing, no player UI, no <code>AudioContext</code> of its own. That's how
+          it runs behind <a href="https://kostavukicevic.com/music/">kostavukicevic.com/music</a>, and on this page.
+        </p>
+        <h3 class="sub">Beyond the screen</h3>
+        <ul class="outs">
+          <li><a href="https://github.com/stcksmsh/hysteresis/blob/master/docs/patchbay-editor.md">Patchbay editor</a><span>a node graph from signal bus to targets</span></li>
+          <li><a href="https://github.com/stcksmsh/hysteresis/blob/master/docs/isf-shaders.md">ISF shaders</a><span>load a real <code>.fs</code> shader as the scene</span></li>
+          <li><a href="https://github.com/stcksmsh/hysteresis/blob/master/docs/osc.md">OSC out</a><span>TouchDesigner, VCV Rack, Ableton</span></li>
+          <li><a href="https://github.com/stcksmsh/hysteresis/blob/master/docs/dmx-out.md">DMX out</a><span>Art-Net, sACN, USB</span></li>
+          <li><a href="https://github.com/stcksmsh/hysteresis/blob/master/docs/midi.md">MIDI in</a><span>CC input, clock and beat sync</span></li>
+          <li><a href="https://github.com/stcksmsh/hysteresis/blob/master/docs/ilda.md">ILDA</a><span>laser files and the Ether Dream DAC</span></li>
+        </ul>
+      </section>
+
+      <section id="next" class="glass" aria-labelledby="next-h">
+        <h2 id="next-h">Where it's going</h2>
+        <p class="intro">
+          The browser version on this page is frozen: kept running, no longer developed. Hysteresis is being
+          rewritten natively in Rust as the brain of a physical installation: screen, DMX and LED lighting, and
+          servo-driven choreography, all from the same offline sidecars. The current focus is a single 3D arm that
+          dances to the song, planned automatically and executable on real servo hardware.
+        </p>
+      </section>
     </main>
+
+    <footer class="foot">
+      <a href="https://github.com/stcksmsh/hysteresis">github.com/stcksmsh/hysteresis</a>
+      <a href="https://kostavukicevic.com/projects/sinteza-viz/">Build log</a>
+      <a href="https://kostavukicevic.com/">Kosta Vukićević</a>
+    </footer>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

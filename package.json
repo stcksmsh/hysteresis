@@ -9,5 +9,8 @@
   },
   "devDependencies": {
     "vite": "^5.4.21"
+  },
+  "dependencies": {
+    "sinteza-viz": "github:stcksmsh/hysteresis#171897bfc319555515be0baa3dedfdccdd6f3d0b"
   }
 }
