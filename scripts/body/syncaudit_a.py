@@ -144,7 +144,7 @@ def cmd_chain():
                     CR.sim_file(("finedance", p))
                 z = np.load(dstq)
                 wi = int(np.flatnonzero(z["win"] == w)[0])
-                ws, q50, lamp = window_stages(tg, w, var)
+                ws, q50, lamp = window_stages(tg, w, copy[:2])
                 assert np.allclose(q50, z["q50"][wi], atol=1e-3), "replicated window differs from controls_run.sim_file"
                 lo, hi = 20.0 * w, 20.0 * w + 20.0
                 for k, (t, X, rate, note) in ws.items():
