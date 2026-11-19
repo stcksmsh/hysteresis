@@ -3207,3 +3207,20 @@ Standing rules unchanged.
   items + 8 repeats) and must be rewritten before it is sent. It waits for the mismatch test's result.
 - **Repeat-flip rate** for the item 1 rule is measured within the mismatch session itself (the 5 hidden repeats), not taken from the
   pulse2 test-retest.
+
+### 7.85 Raw-joint rhythm: item 3 "not shown"; retarget removes fast movement (report only); one combined A3/B ruling after four inputs; 2026-11-19, via Kosta + planner (answering `docs/PLANNER_BRIEF_RAWRHYTHM.md`)
+
+Recorded as received, before any result it scores. Planner text, verbatim:
+
+TO: overseer. FROM: Kosta via planner. Re: PLANNER_BRIEF_RAWRHYTHM (2026-11-18). Record as BRAIN_SPEC 7.85.
+
+Q1 (a): chance 1 (similar-tempo song) decides. Raw-joint beat-ratio clustering beyond tempo class is <= ~1 percentage point and mixed in sign; item 3 recorded as "not shown": the arm/retarget is not the bottleneck for beat-ratio clustering. Chance-2 results reported alongside, labelled as tempo-class effects.
+Q2 (a): report-only. Record: the retarget removes fast movement (1/2-beat share 0.090 -> 0.020; median period 1.07 -> 1.24 s). A3's intervention matrix reports whether the arm produces 1/2-beat rhythm on request.
+Q3 (a): one combined ruling "A3 controls and B senses" after: the mismatch test (7.84 item 1), the 7.83 data check / free-dance positive control, and the A2 and CORTEX_EVENTS briefs (send both to the planner).
+Standing rules unchanged.
+
+**Overseer notes (operational, not rulings):**
+- Numbers behind Q1/Q2 are in `docs/RAWRHYTHM_REPORT.md` (merged body 5dd8d9f); the overseer recomputed all 20 point estimates.
+- The combined ruling waits on four inputs: the mismatch test result (WO53 part A, not yet built), the 7.83 data check (7.83 text has
+  not reached the overseer), and the planner seeing `PLANNER_BRIEF_A2.md` and `PLANNER_BRIEF_CORTEX_EVENTS.md` (Kosta to forward).
+- A3's work order stays unwritten until that ruling.
