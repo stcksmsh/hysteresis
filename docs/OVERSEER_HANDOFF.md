@@ -94,7 +94,16 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-19 ~13:30 (clock) — NEWEST
+## UPDATE 2026-11-19 ~13:05 (clock) — NEWEST (Kosta away ~13:15 onward)
+
+WO54 RUNNING. Agent 1 [28da29] (A1+A4, branch body-syncaudit-a, last push 13:00) and agent 2 [ea25fc] (A3 running as unit
+hyst-wo54b-a3x1, A2 next; branch body-syncaudit-b, last push 12:57) work unattended. Both push before runs; no reports yet. On their reports:
+recompute headline offsets from /secondary/hyst-data/body/syncaudit/{a,b}/, check FINDINGs against the 50 ms rule, merge both branches
+into body, write a planner brief (PLANNER_BRIEF_SYNCAUDIT.md), and if a stage offset > 50 ms or a loader misalignment is found, hold the
+fix for Kosta + planner go (reruns: WO47, WO52/53, mismatch round 2). If the overseer restarts: check origin/body-syncaudit-a and -b and
+ListAgents. Machine load is high from Kosta's kabl work. Still missing: 7.83 text; A2 + CORTEX_EVENTS briefs not yet forwarded.
+
+## UPDATE 2026-11-19 ~13:30 (clock)
 
 7.86 RECORDED (body 529b313): shifted-foil preference is SYSTEMATIC; rule outcome of 7.84 NOT applied; ALL coupling conclusions 7.74-7.85
 ON HOLD pending an end-to-end SYNC AUDIT (A1 synthetic click/impulse probe through the full pipeline, A2 AIST++ per-stage lag/BAS, A3 per-song
