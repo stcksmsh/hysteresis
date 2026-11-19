@@ -69,7 +69,7 @@ def stage_rows(name, copy):
     return st, tg, rot, trans, meta, m
 
 
-def window_stages(tg, w):
+def window_stages(tg, w, var):
     """replicates controls_run.sim_file for window w step by step: -> stages dict and the q50, lamp (real code), asserts equal to the stored arrays"""
     import make_arm_v2p as P
     import motornet as M
@@ -79,7 +79,11 @@ def window_stages(tg, w):
     a = w * WIN_ROWS
     rows = tg[a:a + WIN_ROWS + 1]
     pre = tg[a - PRE:a] if a >= PRE else np.repeat(rows[:1], PRE, 0)
-    cat = np.concatenate([pre, rows])
+    import retarget as RT
+    K = RT.to_commands(np.zeros((1, 5)), var)[0]
+    sh = np.zeros(5)
+    sh[[0, 4]] = (rows[0] - K)[[0, 4]]                    # sim_file: yaw and roll shifted so the window starts at the centre
+    cat = np.concatenate([pre, rows]) - sh
     G, gs = P.guard(cat)
     Sp = M.spinal(G)
     q50, _ = FX.simulate_goals(Sp)
@@ -140,7 +144,7 @@ def cmd_chain():
                     CR.sim_file(("finedance", p))
                 z = np.load(dstq)
                 wi = int(np.flatnonzero(z["win"] == w)[0])
-                ws, q50, lamp = window_stages(tg, w)
+                ws, q50, lamp = window_stages(tg, w, var)
                 assert np.allclose(q50, z["q50"][wi], atol=1e-3), "replicated window differs from controls_run.sim_file"
                 lo, hi = 20.0 * w, 20.0 * w + 20.0
                 for k, (t, X, rate, note) in ws.items():
