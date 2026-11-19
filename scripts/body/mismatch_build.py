@@ -249,4 +249,145 @@ def write_work(items, lists):
 
 if __name__ == "__main__":
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-    {"plan": cmd_plan}[sys.argv[1]]()
+    if sys.argv[1] == "plan":
+        cmd_plan()
+
+
+# ------------------------------------------------------------------ assemble
+def run(*a):
+    subprocess.run([str(x) for x in a], check=True, capture_output=True)
+
+
+def read_wav_slice(wav, start, sr=SR_OUT):
+    a = load_mono(wav, sr)
+    return a[int(round(start * sr)):int(round(start * sr)) + HALF]
+
+
+def compose_audio(real, foil, side, ra, fa):
+    """-> (float32 array of TOTAL samples, gain_real, gain_foil): RMS match of the two halves to their mean, pure gain, peak < 0.99"""
+    target = 0.5 * (rms(real) + rms(foil))
+    gr, gf = target / rms(real), target / rms(foil)
+    peak = max(np.abs(real).max() * gr, np.abs(foil).max() * gf)
+    if peak >= 0.99:
+        k = 0.99 / peak; gr, gf = gr * k, gf * k
+    out = np.zeros(TOTAL, np.float32)
+    first, second = (real * gr, foil * gf) if side == "first" else (foil * gf, real * gr)
+    out[:HALF], out[SECOND_START:] = first, second
+    return out, float(gr), float(gf)
+
+
+def write_wav16(path, a):
+    import soundfile as sf
+    sf.write(str(path), a, SR_OUT, subtype="PCM_16")
+
+
+def cmd_assemble():
+    key = json.loads((OUT / "material_key.json").read_text())
+    items = key["items"]
+    lists = {ds: songs_of(ds) for ds in LISTS}
+    wavs = {k: w for d in lists.values() for k, w in d.items()}
+    W, R, CS = OUT / "work", OUT / "render_root/clips", OUT / "clips_src"
+    for d in (W / "wav", W / "half", CS):
+        d.mkdir(parents=True, exist_ok=True)
+    enc = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-r", "30", "-g", "30", "-an", "-map_metadata", "-1"]
+    run("ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "color=c=black:s=1280x720:r=30:d=1.5", *enc, W / "half/black.mp4")
+    for it in items.values():
+        orig = items[it["repeat_of"]] if it["repeat"] else it
+        half = W / "half" / f"{orig['id']}.mp4"
+        if not half.exists():
+            run("ffmpeg", "-v", "error", "-y", "-i", R / f"{orig['id']}_{orig['version']}.mp4", "-t", "10", *enc, half)
+        real = read_wav_slice(wavs[it["song"]], it["excerpt_start_s"])
+        foil = read_wav_slice(wavs[it["foil"]["song"]], it["foil"]["excerpt_start_s"])
+        a, gr, gf = compose_audio(real, foil, it["real_side"], None, None)
+        it["gain_real"], it["gain_foil"] = gr, gf
+        it["rms_real"], it["rms_foil"] = rms(real), rms(foil)
+        write_wav16(W / "wav" / f"{it['id']}.wav", a)
+        lst = W / "half" / f"{it['id']}.txt"
+        lst.write_text("".join(f"file '{p}'\n" for p in (half, W / "half/black.mp4", half)))
+        vid = W / "half" / f"{it['id']}_v.mp4"
+        run("ffmpeg", "-v", "error", "-y", "-f", "concat", "-safe", "0", "-i", lst, "-c", "copy", vid)
+        run("ffmpeg", "-v", "error", "-y", "-i", vid, "-i", W / "wav" / f"{it['id']}.wav", "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+            "-ar", str(SR_OUT), "-ac", "1", "-t", "21.5", "-map_metadata", "-1", "-fflags", "+bitexact", "-flags:v", "+bitexact", "-flags:a", "+bitexact", CS / f"{it['id']}.mp4")
+    (OUT / "material_key.json").write_text(json.dumps(key, indent=1, default=float))
+    man = [dict(id=i, file=f"clips_src/{i}.mp4", kind="single", questions=[Q_WHICH, Q_CONF]) for i in sorted(items)]
+    (OUT / "manifest.json").write_text(json.dumps(dict(clips=man), indent=1))
+    print("assembled", len(man))
+
+
+if __name__ == "__main__" and sys.argv[1] == "assemble":
+    cmd_assemble()
+
+
+# ------------------------------------------------------------------ checks
+def frames_gray(path, w=160, h=90):
+    p = subprocess.run(["ffmpeg", "-v", "error", "-i", str(path), "-vf", f"scale={w}:{h}", "-pix_fmt", "gray", "-f", "rawvideo", "-"], capture_output=True, check=True)
+    return np.frombuffer(p.stdout, np.uint8).reshape(-1, h, w)
+
+
+def xcorr_lag(a, ref, maxlag=2500):
+    """lag (samples, positive = a later than ref) of the correlation peak and the normalised correlation there"""
+    n = len(ref)
+    best = (0, -2.0)
+    r = ref - ref.mean(); rn = np.linalg.norm(r)
+    for lag in range(-maxlag, maxlag + 1, 1):
+        seg = a[max(0, lag):max(0, lag) + n] if lag >= 0 else np.concatenate([np.zeros(-lag, np.float32), a[:n + lag]])
+        if len(seg) < n:
+            continue
+        s = seg - seg.mean(); d = np.linalg.norm(s) * rn
+        c = float(s @ r / d) if d else 0.0
+        if c > best[1]:
+            best = (lag, c)
+    return best
+
+
+def limit_ratios(csv):
+    import arm_sim as M0
+    rows = np.array([[float(x) for x in l.split(",")[1:]] for l in Path(csv).read_text().splitlines() if l and l[0].isdigit()])
+    sp = np.abs(np.diff(rows, axis=0)) * 50; ac = np.abs(np.diff(rows, 2, axis=0)) * 2500
+    lim = np.array(M0.M.LIMITS, float)                 # (5, 2): speed deg/s, accel deg/s^2
+    return float((sp.max(0) / lim[:, 0]).max()), float((ac.max(0) / lim[:, 1]).max())
+
+
+def cmd_checks(session=None):
+    key = json.loads((OUT / "material_key.json").read_text())["items"]
+    lists = {ds: songs_of(ds) for ds in LISTS}
+    wavs = {k: w for d in lists.values() for k, w in d.items()}
+    res, W = {}, OUT / "work"
+    for i, it in sorted(key.items()):
+        c = {}
+        clip = OUT / "clips_src" / f"{i}.mp4"
+        pr = json.loads(subprocess.run(["ffprobe", "-v", "error", "-count_frames", "-show_entries", "stream=codec_type,nb_read_frames,duration,sample_rate:format=duration:format_tags:stream_tags", "-of", "json", str(clip)], capture_output=True, check=True).stdout)
+        v = next(s for s in pr["streams"] if s["codec_type"] == "video"); au = next(s for s in pr["streams"] if s["codec_type"] == "audio")
+        c["frames"] = int(v["nb_read_frames"]); c["frames_ok"] = c["frames"] == 645
+        c["format_duration_s"] = float(pr["format"]["duration"]); c["duration_ok"] = abs(c["format_duration_s"] - 21.5) <= 1 / 30 + 1e-3
+        c["metadata_tags"] = pr["format"].get("tags", {}); c["metadata_clean"] = not any(t for k, t in c["metadata_tags"].items() if k not in ("major_brand", "minor_version", "compatible_brands", "encoder", "handler_name"))
+        wav = load_mono(W / "wav" / f"{i}.wav", SR_OUT)
+        c["wav_samples"] = len(wav); c["wav_samples_ok"] = len(wav) == TOTAL
+        c["gap_wav_max_abs"] = float(np.abs(wav[GAP_START:SECOND_START]).max()); c["gap_digital_silence"] = c["gap_wav_max_abs"] == 0.0
+        g = frames_gray(clip)
+        c["gap_frame_mean_max"] = float(g[300:345].mean(axis=(1, 2)).max()); c["gap_black"] = c["gap_frame_mean_max"] < 2.0
+        c["halves_frames_identical"] = bool(np.array_equal(g[:300], g[345:645]))
+        dec = load_mono(clip, SR_OUT)
+        side = it["real_side"]
+        realwav = read_wav_slice(wavs[it["song"]], it["excerpt_start_s"]) * (it["gain_real"])
+        ra = 0 if side == "first" else SECOND_START
+        # sample-for-sample on the pre-encode wav (int16 quantisation <= 1/32768 + rounding)
+        c["real_half_max_abs_diff_wav"] = float(np.abs(wav[ra:ra + HALF] - realwav).max()); c["real_half_sample_exact"] = c["real_half_max_abs_diff_wav"] <= 2 / 32768
+        lag, cor = xcorr_lag(dec[ra:ra + HALF + 2600], realwav[:HALF])
+        c["aac_real_lag_samples"], c["aac_real_corr"] = lag, cor
+        c["aac_start_ok"] = abs(lag) <= 1024 and cor > 0.99
+        fa = SECOND_START if side == "first" else 0
+        fw = read_wav_slice(wavs[it["foil"]["song"]], it["foil"]["excerpt_start_s"]) * it["gain_foil"]
+        c["rms_ratio_halves"] = rms(wav[ra:ra + HALF]) / rms(wav[fa:fa + HALF]); c["rms_match_ok"] = abs(c["rms_ratio_halves"] - 1) <= 0.01
+        c["peak"] = float(np.abs(wav).max()); c["peak_ok"] = c["peak"] < 0.99
+        orig = key[it["repeat_of"]] if it["repeat"] else it
+        sp, ac = limit_ratios(OUT / f"render_root/work/{orig['id']}_{orig['version']}.csv")
+        c["speed_ratio_max"], c["accel_ratio_max"] = sp, ac; c["limits_ok"] = sp <= 1.0 + 1e-3 and ac <= 1.0 + 1e-3
+        c["pass"] = all(v for k, v in c.items() if k.endswith("_ok") or k in ("gap_digital_silence", "gap_black", "halves_frames_identical", "metadata_clean"))
+        res[i] = c
+    (OUT / "clip_checks.json").write_text(json.dumps(res, indent=1, default=float))
+    print("clip checks pass:", sum(c["pass"] for c in res.values()), "/", len(res))
+
+
+if __name__ == "__main__" and sys.argv[1] == "checks":
+    cmd_checks()
