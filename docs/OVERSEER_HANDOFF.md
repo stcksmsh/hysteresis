@@ -94,7 +94,18 @@ You are the overseer for Hysteresis. You do not implement. You:
    - `_B7_RESULTS.md` (sent 2026-11-03; waiting).
 7. `scripts/brain/B3_NOTES.md`, `B7_NOTES.md`.
 
-## UPDATE 2026-11-19 ~12:30 (clock) — NEWEST
+## UPDATE 2026-11-19 ~13:00 (clock) — NEWEST
+
+MISMATCH TEST SCORED (session 2026-11-19, server hyst-wo53-view1 STOPPED): RULE NOT MET. Real picks 5 / foil 13 / ties 2 (share 0.278);
+shifted 0/8 non-tie (foil picked every time, p 0.008), different song 5/10; flip rate 3/5 = 0.60 (two flips are the confused items 2-3;
+without them 1/3). Dropping Kosta's "confused first items" changes nothing. Key verified from audio (linear corr 1.00 at stated shift, all
+13 shifted clips). Overseer notes: possible constant movement-vs-music lag or loop music hides the shift (NOT verified). Brief
+docs/PLANNER_BRIEF_MISMATCH.md (body 6ea64ce, sent to Kosta): Q1 record outcome + flag foil preference [rec]; Q2 report-only lag
+diagnostic (lamp + raw joints vs music envelope) [rec]; Q3 round 2 only after Q2. Open for the combined ruling: 7.83 data check (text
+missing), A2 + CORTEX_EVENTS briefs, mismatch brief. WO50 rewrite and A3 WO still unwritten. Builders agent 1 [28da29] and agent 2
+[ea25fc] idle, no reports received (their branches are merged).
+
+## UPDATE 2026-11-19 ~12:30 (clock)
 
 WO53 PART A VERIFIED + MERGED (body, both branches; 14 scorer/build tests pass; all 25 clips pass numeric checks recomputed from
 mismatch/clip_checks.json; order checks pass; 10 shifted + 10 different-song + 5 repeats). VIEWING SERVED http://127.0.0.1:8781/ unit
