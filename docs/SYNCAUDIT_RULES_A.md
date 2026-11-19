@@ -72,3 +72,9 @@ Mark each "checked by A1" or "reading only"; things A2 covers are marked "A2".
 2. 30 s and 50 s synthetic songs; clicks at 3.0 s, every 0.5 s, plus 6 (9) irregular ones.
 3. A stage is "constant" below 5 ms sd and 1 ms / 10 s slope.
 4. PhantomDance and Motorica probed only where their loader accepts a synthetic file unedited; otherwise reviewed, not probed.
+
+## Deviations from this note (logged after the first runs)
+
+- Click list: dense block every 0.5 s from 3.0 to 8.0 s (matched-filter lag), then isolated clicks 1.7-2.4 s apart from 10.0 s (per-impulse offsets); the interleaved irregular clicks of section 2 contaminated each other (bump 0.30 s, spacing 0.5 s).
+- Torso, pelvis and feet families rotate about an off-axis vector (0.6, 0.6, 0.5), not about y or x only: a pure yaw leaves the V2 up vector and the head offset unchanged.
+- A small-amplitude sinusoid probe (20 deg at 0.5, 1, 2 Hz, demodulation) was added for the linear-regime delay; the lamp-pixel track (`syncaudit_lamppix.py`) was added for stage 12.
