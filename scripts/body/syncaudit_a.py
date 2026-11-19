@@ -378,11 +378,11 @@ def cmd_final():
         if it["kind"] == "shifted":
             offs = []
             for t in pf_:
-                m = [x for x in pr_ if abs((x - t) - (-fo["offset_s"])) < 0.01]   # real half time = foil half time + offset ... click c: real rel = c - start, foil rel = c - start - offset
+                m = [x for x in pr_ if abs((x - t) - fo["offset_s"]) < 0.01]   # click c: real rel x = c - start, foil rel t = c - start - offset, so x - t = offset
                 if m:
                     offs.append((m[0] - t) * S.SR)
-            r["14 shifted foil"] = dict(stated_offset_s=fo["offset_s"], clicks_real=len(pr_), clicks_foil=len(pf_), matched=len(offs), measured_offset_samples_minus_stated=[round(float(o + fo["offset_s"] * S.SR), 3) for o in offs],
-                                        measured_offset_s=[round(float(-o / S.SR), 6) for o in offs])
+            r["14 shifted foil"] = dict(stated_offset_s=fo["offset_s"], clicks_real=len(pr_), clicks_foil=len(pf_), matched=len(offs), measured_offset_samples_minus_stated=[round(float(o - fo["offset_s"] * S.SR), 3) for o in offs],
+                                        measured_offset_s=[round(float(o / S.SR), 6) for o in offs])
         else:
             r["14 different-song foil"] = dict(foil_song=fo["song"], foil_start_s=fo["excerpt_start_s"], clicks_foil=len(pf_), expected=len(rel_foil))
         res[pid] = r
