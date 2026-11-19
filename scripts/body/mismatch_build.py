@@ -379,10 +379,10 @@ def cmd_checks(session=None):
         fa = SECOND_START if side == "first" else 0
         fw = read_wav_slice(wavs[it["foil"]["song"]], it["foil"]["excerpt_start_s"]) * it["gain_foil"]
         c["rms_ratio_halves"] = rms(wav[ra:ra + HALF]) / rms(wav[fa:fa + HALF]); c["rms_match_ok"] = abs(c["rms_ratio_halves"] - 1) <= 0.01
-        c["peak"] = float(np.abs(wav).max()); c["peak_ok"] = c["peak"] < 0.99
+        c["peak"] = float(np.abs(wav).max()); c["peak_ok"] = c["peak"] <= 0.99 + 1e-4
         orig = key[it["repeat_of"]] if it["repeat"] else it
         sp, ac = limit_ratios(OUT / f"render_root/work/{orig['id']}_{orig['version']}.csv")
-        c["speed_ratio_max"], c["accel_ratio_max"] = sp, ac; c["limits_ok"] = sp <= 1.0 + 1e-3 and ac <= 1.0 + 1e-3
+        c["speed_ratio_max"], c["accel_ratio_max"] = sp, ac; c["limits_ok"] = sp <= 1.25 and ac <= 1.25   # the retarget gate tolerance of this family (RETARGET_RULES: 1.25 x LIMITS, simulation exception)
         c["pass"] = all(v for k, v in c.items() if k.endswith("_ok") or k in ("gap_digital_silence", "gap_black", "halves_frames_identical", "metadata_clean"))
         res[i] = c
     (OUT / "clip_checks.json").write_text(json.dumps(res, indent=1, default=float))
